@@ -45,3 +45,6 @@ backend/uploads/
 
 # Playwright-MCP-Artefakte
 .playwright-mcp/
+
+# Worktrees paralleler Spuren
+.teams/
