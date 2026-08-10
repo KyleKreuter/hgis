@@ -9,7 +9,8 @@ nicht in Java.
 ein- und ausblenden, umsortieren, umbenennen und löschen. Die Attributtabelle zeigt die
 Daten mit Filter und Sortierung, Karte und Tabelle teilen sich eine Selektion, und ein
 Klick auf die Karte liefert die Attribute des getroffenen Objekts. Geometrien lassen sich
-zeichnen, verschieben und löschen; gespeichert wird als Batch in einer Transaktion.
+zeichnen, verschieben und löschen — mit Einrasten an vorhandenen Geometrien; gespeichert
+wird als Batch in einer Transaktion.
 252 Backend- und 56 Frontend-Tests decken die Kette vom Upload bis zur Kachel ab.
 
 ## Architektur in drei Sätzen
@@ -69,7 +70,7 @@ docker compose exec db psql -U hgis -d hgis -c "\dt gis_data.*"
 cd frontend && npm run build
 ```
 
-## Sieben Dinge, die man wissen muss
+## Acht Dinge, die man wissen muss
 
 **Achsenreihenfolge.** EPSG:4326 ist offiziell lat/lon, praktisch erwartet jede Software
 lon/lat. `HgisBackendApplication` erzwingt deshalb in einem statischen Initialisierer
@@ -84,6 +85,15 @@ Full Table Scan.
 die Katalogzeilen und lässt die Tabellen in `gis_data` als Waisen zurück. Deshalb sammelt
 `ProjectDeletionService` erst alle Tabellennamen, droppt sie und löscht dann den Katalog,
 alles in einer Transaktion.
+
+**Einrasten läuft nie gegen Kacheln.** `ST_AsMVTGeom` quantisiert Koordinaten auf ein
+Raster von 4096 Einheiten je Kachel und vereinfacht die Geometrie. Ein daran
+eingerasteter Stützpunkt *sieht* aus wie ein Treffer und liegt Zentimeter bis Meter
+daneben — und solche Lücken zwischen benachbarten Flächen fallen erst Jahre später auf.
+Der Editor lädt seine Snap-Kandidaten deshalb über die Feature-API in voller Präzision,
+und die gefundene Koordinate wird unverändert durchgereicht, nie aus Bildschirmpixeln
+zurückgerechnet. Die Toleranz dagegen zählt in Pixeln: eine feste Meterangabe wäre
+herausgezoomt unbrauchbar und hineingezoomt wirkungslos.
 
 **Editieren arbeitet auf Einzelgeometrien, gespeichert wird multi.** Layerspalten sind
 immer multi-typisiert (`ST_Multi` beim Import), terra-draw kennt aber nur Point,

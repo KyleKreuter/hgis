@@ -16,6 +16,11 @@ export const OSM_BASEMAP_STYLE: StyleSpecification = {
       type: 'raster',
       tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
       tileSize: 256,
+      // OSM serves nothing past zoom 19. Without this MapLibre keeps requesting deeper
+      // tiles, every one of them fails, and the basemap disappears exactly where editing
+      // happens -- with a burst of console errors and no visible reason. Declared, it
+      // scales the level-19 tiles up instead.
+      maxzoom: 19,
       attribution: '© OpenStreetMap contributors',
     },
   },

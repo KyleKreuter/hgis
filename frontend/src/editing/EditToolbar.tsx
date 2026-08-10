@@ -1,5 +1,6 @@
 import {
   Check,
+  Magnet,
   MousePointer2,
   Minus,
   Pencil,
@@ -37,6 +38,10 @@ interface EditToolbarProps {
   onDiscard: () => void
   isSaving: boolean
   canEdit: boolean
+  snapEnabled: boolean
+  onToggleSnap: () => void
+  /** Set when the viewport holds more features than the editor loads; snapping is blind there. */
+  snapUnavailableReason?: string
 }
 
 export function EditToolbar({
@@ -49,6 +54,9 @@ export function EditToolbar({
   onDiscard,
   isSaving,
   canEdit,
+  snapEnabled,
+  onToggleSnap,
+  snapUnavailableReason,
 }: EditToolbarProps) {
   const buffer = useEditing((state) => state.buffer)
   const undo = useEditing((state) => state.undo)
@@ -109,6 +117,32 @@ export function EditToolbar({
           </Tooltip>
         )
       })}
+
+      <Separator orientation="vertical" className="mx-1 h-4 data-vertical:self-center" />
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant={snapEnabled && !snapUnavailableReason ? 'secondary' : 'ghost'}
+              size="icon-sm"
+              className={cn('size-7', snapEnabled && !snapUnavailableReason && 'ring-1 ring-border')}
+              disabled={Boolean(snapUnavailableReason)}
+              aria-label="Einrasten an vorhandenen Geometrien"
+              aria-pressed={snapEnabled && !snapUnavailableReason}
+              onClick={onToggleSnap}
+            >
+              <Magnet className="size-3.5" />
+            </Button>
+          }
+        />
+        <TooltipContent className="max-w-xs">
+          {/* Stated rather than silently switched off: snapping that stops working without
+              a word is how imprecise geometry gets drawn without anyone noticing. */}
+          {snapUnavailableReason ??
+            'Einrasten an Stützpunkten und Kanten vorhandener Objekte. Stützpunkte haben Vorrang.'}
+        </TooltipContent>
+      </Tooltip>
 
       <Separator orientation="vertical" className="mx-1 h-4 data-vertical:self-center" />
 

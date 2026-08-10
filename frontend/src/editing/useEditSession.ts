@@ -4,6 +4,7 @@ import { ApiError } from '@/api/client'
 import { useApplyEdits, type EditRequest } from '@/api/edits'
 import { countChanges, useEditing } from '@/state/editing'
 import type { DrawTool } from './DrawController'
+import type { SnapTarget } from './snapping'
 
 interface EditSessionOptions {
   layerId: string | null
@@ -30,6 +31,10 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
    * to start over from what is now on the server.
    */
   const [reloadNonce, setReloadNonce] = useState(0)
+  /** Snapping is on by default -- drawing without it is the exception, not the rule. */
+  const [snapEnabled, setSnapEnabled] = useState(true)
+  const [snapTarget, setSnapTarget] = useState<SnapTarget | null>(null)
+  const [snapUnavailableReason, setSnapUnavailableReason] = useState<string | null>(null)
 
   const buffer = useEditing((state) => state.buffer)
   const beginEditing = useEditing((state) => state.begin)
@@ -51,6 +56,8 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
     setActive(false)
     setSelectedFid(null)
     setInvalidGeometry(null)
+    setSnapTarget(null)
+    setSnapUnavailableReason(null)
   }, [endEditing])
 
   const save = useCallback(
@@ -142,6 +149,12 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
   return {
     active,
     reloadNonce,
+    snapEnabled,
+    toggleSnap: () => setSnapEnabled((previous) => !previous),
+    snapTarget,
+    setSnapTarget,
+    snapUnavailableReason,
+    setSnapUnavailableReason,
     tool,
     setTool,
     selectedFid,

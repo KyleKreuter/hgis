@@ -17,6 +17,7 @@ import {
   EditToolbar,
   EditingTileFilter,
   InvalidGeometryDialog,
+  SnapMarker,
   useEditSession,
 } from '@/editing'
 import { layerDetailQuery, layerListQuery } from '@/api/layers'
@@ -131,6 +132,9 @@ function Workspace() {
                 onDiscard={editing.discard}
                 isSaving={editing.isSaving}
                 canEdit={Boolean(activeLayer)}
+                snapEnabled={editing.snapEnabled}
+                onToggleSnap={editing.toggleSnap}
+                snapUnavailableReason={editing.snapUnavailableReason ?? undefined}
               />
               {!editing.active && (
                 <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
@@ -180,7 +184,11 @@ function Workspace() {
                   tool={editing.tool}
                   onSelectFeature={editing.setSelectedFid}
                   reloadNonce={editing.reloadNonce}
+                  snapEnabled={editing.snapEnabled}
+                  onSnapTarget={editing.setSnapTarget}
+                  onSnapUnavailable={editing.setSnapUnavailableReason}
                 />
+                <SnapMarker target={editing.snapTarget} />
                 <EditingTileFilter layerId={activeLayer.id} />
               </>
             )}

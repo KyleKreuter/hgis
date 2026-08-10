@@ -15,6 +15,7 @@ import type { FeaturePage } from '@/api/features'
 import { useMap } from '@/map/MapContext'
 import { useEditing, type DraftFeature } from '@/state/editing'
 import { toSinglePart } from './singlePart'
+import { boundsOf, findSnapTarget, type SnapCandidate, type SnapTarget } from './snapping'
 
 /**
  * How many existing features are loaded into the editor at once.
@@ -49,6 +50,11 @@ interface DrawControllerProps {
   onSelectFeature: (fid: number | null) => void
   /** Changing this rebuilds the editor from the server state -- see `useEditSession`. */
   reloadNonce: number
+  snapEnabled: boolean
+  /** Reports the coordinate the pointer would snap to, so `SnapMarker` can show it. */
+  onSnapTarget: (target: SnapTarget | null) => void
+  /** Why snapping cannot be trusted here, or null when it can. */
+  onSnapUnavailable: (reason: string | null) => void
 }
 
 /**
@@ -64,6 +70,9 @@ export function DrawController({
   tool,
   onSelectFeature,
   reloadNonce,
+  snapEnabled,
+  onSnapTarget,
+  onSnapUnavailable,
 }: DrawControllerProps) {
   const { mapRef, isLoaded } = useMap()
   const queryClient = useQueryClient()
@@ -72,10 +81,33 @@ export function DrawController({
   const originals = useRef(new Map<number, DraftFeature>())
   /** Last geometry seen per feature, so a selection is not mistaken for an edit. */
   const lastGeometry = useRef(new Map<number, string>())
+  /** What snapping may attach to, with bounds precomputed for cheap rejection. */
+  const snapCandidates = useRef<SnapCandidate[]>([])
+  /** Read inside terra-draw's snap callback, which is created once and outlives a toggle. */
+  const snapEnabledRef = useRef(snapEnabled)
+  snapEnabledRef.current = snapEnabled
 
   useEffect(() => {
     const map = mapRef.current
     if (!map || !isLoaded) return
+
+    /**
+     * terra-draw asks this on every pointer move while drawing or dragging a vertex.
+     * Returning undefined means "no snap", which is what leaves the pointer free.
+     */
+    function snapTo(event: { lng: number; lat: number }, context: { project: (lng: number, lat: number) => { x: number; y: number } }) {
+      if (!snapEnabledRef.current) {
+        onSnapTarget(null)
+        return undefined
+      }
+      const target = findSnapTarget(
+        [event.lng, event.lat],
+        snapCandidates.current,
+        ([lng, lat]) => context.project(lng, lat),
+      )
+      onSnapTarget(target)
+      return target ? (target.position as [number, number]) : undefined
+    }
 
     const draw = new TerraDraw({
       adapter: new TerraDrawMapLibreGLAdapter({ map }),
@@ -102,15 +134,19 @@ export function DrawController({
                     // two existing ones, which is how a shape gets refined.
                     midpoints: true,
                     deletable: true,
+                    snappable: { toCustom: snapTo },
                   },
                 },
               },
             ]),
           ),
         }),
+        // No snapping option on the point mode -- terra-draw offers it for lines and
+        // polygons only. Placing a single point is the one case where it would matter
+        // least, but it is a gap, not a decision.
         new TerraDrawPointMode(),
-        new TerraDrawLineStringMode(),
-        new TerraDrawPolygonMode(),
+        new TerraDrawLineStringMode({ snapping: { toCustom: snapTo } }),
+        new TerraDrawPolygonMode({ snapping: { toCustom: snapTo } }),
       ],
     })
 
@@ -170,6 +206,28 @@ export function DrawController({
       }
     })
 
+    // terra-draw only asks for a snap position once a drawing is under way -- before the
+    // first click of a polygon it never calls back. That is exactly when the preview is
+    // needed, so the marker is driven from plain pointer movement instead. This computes
+    // the display only; the snapping that actually places a vertex still goes through
+    // terra-draw's callback above.
+    function previewSnap(event: { lngLat: { lng: number; lat: number } }) {
+      const target = mapRef.current
+      if (!target || !snapEnabledRef.current || snapCandidates.current.length === 0) {
+        onSnapTarget(null)
+        return
+      }
+      onSnapTarget(
+        findSnapTarget(
+          [event.lngLat.lng, event.lngLat.lat],
+          snapCandidates.current,
+          ([lng, lat]) => target.project([lng, lat]),
+        ),
+      )
+    }
+
+    map.on('mousemove', previewSnap)
+
     // Existing features have to be inside terra-draw to be touchable at all. Loaded in
     // full precision from the feature API, never from the tiles: tile geometry is
     // quantised to the tile grid, and editing that would move every vertex slightly.
@@ -197,9 +255,14 @@ export function DrawController({
         })
 
         if ((page.totalCount ?? 0) > MAX_EDITABLE) {
-          toast.warning(
-            `Nur ${MAX_EDITABLE} von ${page.totalCount} Objekten im Ausschnitt sind bearbeitbar — bitte hineinzoomen.`,
-          )
+          // Snapping to a partial set is worse than not snapping: it would attach to
+          // whichever features happened to load and quietly miss the ones that did not
+          // (plan section D.1 asks for the reason to be stated, not for a silent retreat).
+          const reason = `Zu viele Objekte im Ausschnitt (${page.totalCount}) — zum Einrasten bitte hineinzoomen.`
+          onSnapUnavailable(reason)
+          toast.warning(reason)
+        } else {
+          onSnapUnavailable(null)
         }
 
         // Layer columns are always multi-typed, terra-draw only knows single geometries.
@@ -228,6 +291,13 @@ export function DrawController({
           })),
         )
 
+        // Full precision, straight from the feature API -- never the tile geometry, which
+        // is quantised to the tile grid (plan section D.1).
+        snapCandidates.current = editable.map(({ geometry }) => ({
+          geometry,
+          bounds: boundsOf(geometry),
+        }))
+
         for (const { feature, geometry } of editable) {
           lastGeometry.current.set(feature.fid, JSON.stringify(geometry))
           originals.current.set(feature.fid, {
@@ -248,16 +318,20 @@ export function DrawController({
     }
 
     return () => {
+      map.off('mousemove', previewSnap)
       // stop() removes terra-draw's own layers from the map. Without it a second
       // activation would add them again on top of the first set.
       draw.stop()
       drawRef.current = null
       originals.current.clear()
       lastGeometry.current.clear()
+      snapCandidates.current = []
+      onSnapTarget(null)
+      onSnapUnavailable(null)
       // Deliberately not ending the editing session here: leaving the mode is
       // `useEditSession`'s decision, and this cleanup also runs on a plain reload.
     }
-  }, [mapRef, isLoaded, layerId, queryClient, onSelectFeature, reloadNonce])
+  }, [mapRef, isLoaded, layerId, queryClient, onSelectFeature, onSnapTarget, onSnapUnavailable, reloadNonce])
 
   // Switching tools must not tear the instance down: terra-draw carries the working copy,
   // and recreating it would drop everything drawn so far.
