@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ApiError } from '@/api/client'
 import { ensureProjectLoaded, projectDetailQuery } from '@/api/projects'
-import { formatCount } from '@/lib/format'
+import { ProjectMap } from '@/map'
 
 export const Route = createFileRoute('/projects/$projectId')({
   // Loading here (with open=true) means the workspace never mounts against empty data,
@@ -53,16 +53,7 @@ function Workspace() {
           <PanelStub title="Layer" note="Layerbaum folgt in Phase 4" />
         </ScrollArea>
       }
-      map={
-        <PanelStub
-          title="Karte"
-          note={
-            project.layerCount === 0
-              ? 'Noch keine Layer — Import folgt in Phase 2'
-              : `${formatCount(project.layerCount)} Layer · MapLibre folgt in Phase 3`
-          }
-        />
-      }
+      map={<ProjectMap project={project} />}
       attributes={<PanelStub title="Attribute" note="Attributtabelle folgt in Phase 5" />}
     />
   )
