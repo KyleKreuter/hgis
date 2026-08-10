@@ -126,6 +126,128 @@ describe('findSnapTarget', () => {
   it('handles an empty candidate list', () => {
     expect(findSnapTarget([9.98, 53.54], [], project)).toBeNull()
   })
+
+  describe('intersections', () => {
+    // A cross: the two lines meet at 9.985/53.545, a point neither of them has as a vertex.
+    const horizontal = candidate({
+      type: 'LineString',
+      coordinates: [
+        [9.98, 53.545],
+        [9.99, 53.545],
+      ],
+    })
+    const vertical = candidate({
+      type: 'LineString',
+      coordinates: [
+        [9.985, 53.54],
+        [9.985, 53.55],
+      ],
+    })
+
+    it('snaps to where two lines cross', () => {
+      const target = findSnapTarget([9.9851, 53.5451], [horizontal, vertical], project)
+
+      expect(target?.kind).toBe('intersection')
+      expect(target?.position[0]).toBeCloseTo(9.985, 12)
+      expect(target?.position[1]).toBeCloseTo(53.545, 12)
+    })
+
+    it('prefers a crossing over a point on an edge', () => {
+      // Both lines are within tolerance here, so an edge target exists as well -- but a
+      // crossing is a place the data singles out, and an edge point is not.
+      const target = findSnapTarget([9.9852, 53.5450], [horizontal, vertical], project)
+
+      expect(target?.kind).toBe('intersection')
+    })
+
+    it('still prefers a vertex over a crossing', () => {
+      // A line ending exactly on the crossing: the endpoint and the intersection sit on
+      // the same coordinate, and the vertex is the more specific answer.
+      const ending = candidate({
+        type: 'LineString',
+        coordinates: [
+          [9.9855, 53.5455],
+          [9.985, 53.545],
+        ],
+      })
+
+      const target = findSnapTarget([9.98505, 53.54505], [horizontal, vertical, ending], project)
+
+      expect(target?.kind).toBe('vertex')
+    })
+
+    it('does not treat the corner between two consecutive segments as a crossing', () => {
+      // Neighbouring segments of one ring meet at a shared vertex. That is a vertex, and
+      // reporting it as an intersection would only mislabel it.
+      const corner = candidate({
+        type: 'LineString',
+        coordinates: [
+          [9.98, 53.54],
+          [9.985, 53.545],
+          [9.99, 53.54],
+        ],
+      })
+
+      const target = findSnapTarget([9.98501, 53.54501], [corner], project)
+
+      expect(target?.kind).toBe('vertex')
+    })
+
+    it('ignores parallel lines', () => {
+      const parallel = candidate({
+        type: 'LineString',
+        coordinates: [
+          [9.98, 53.5455],
+          [9.99, 53.5455],
+        ],
+      })
+
+      // Right between the two parallels, 5 pixels from each: an edge, never a crossing.
+      const target = findSnapTarget([9.985, 53.54525], [horizontal, parallel], project)
+
+      expect(target?.kind).toBe('edge')
+    })
+
+    it('ignores segments that would only cross beyond their ends', () => {
+      // Two short stubs whose infinite extensions meet, but the segments themselves do not.
+      const stubA = candidate({
+        type: 'LineString',
+        coordinates: [
+          [9.98, 53.545],
+          [9.9805, 53.545],
+        ],
+      })
+      const stubB = candidate({
+        type: 'LineString',
+        coordinates: [
+          [9.985, 53.5445],
+          [9.985, 53.5448],
+        ],
+      })
+
+      const target = findSnapTarget([9.985, 53.545], [stubA, stubB], project)
+
+      expect(target?.kind).not.toBe('intersection')
+    })
+
+    it('finds a crossing between two polygon edges', () => {
+      const first = candidate({
+        type: 'Polygon',
+        coordinates: [[[9.98, 53.54], [9.99, 53.54], [9.99, 53.55], [9.98, 53.55], [9.98, 53.54]]],
+      })
+      const second = candidate({
+        type: 'Polygon',
+        coordinates: [[[9.985, 53.535], [9.995, 53.535], [9.995, 53.545], [9.985, 53.545], [9.985, 53.535]]],
+      })
+
+      // The right edge of the first square crosses the top edge of the second at 9.99/53.545.
+      const target = findSnapTarget([9.9901, 53.5451], [first, second], project)
+
+      expect(target?.kind).toBe('intersection')
+      expect(target?.position[0]).toBeCloseTo(9.99, 12)
+      expect(target?.position[1]).toBeCloseTo(53.545, 12)
+    })
+  })
 })
 
 describe('boundsOf', () => {

@@ -26,12 +26,25 @@ export function SnapMarker({ target }: { target: SnapTarget | null }) {
         type: 'circle',
         source: SOURCE_ID,
         paint: {
-          // A vertex gets the heavier ring, a point on an edge the lighter one. Which of
-          // the two is about to be hit matters -- landing on a shared corner and landing
-          // somewhere along the line between two are different results -- and the
-          // difference is carried by weight, since the palette is monochrome by convention.
-          'circle-radius': ['case', ['==', ['get', 'kind'], 'vertex'], 7, 5],
-          'circle-stroke-width': ['case', ['==', ['get', 'kind'], 'vertex'], 2.5, 1.5],
+          // Weight follows how specific the target is: a vertex is a place the data
+          // states outright, a crossing one it implies, a point on an edge merely one it
+          // permits. Landing on any of the three is a different result, so they must not
+          // look alike -- and weight carries it, the palette being monochrome by
+          // convention.
+          'circle-radius': [
+            'match',
+            ['get', 'kind'],
+            'vertex', 7,
+            'intersection', 6,
+            5,
+          ],
+          'circle-stroke-width': [
+            'match',
+            ['get', 'kind'],
+            'vertex', 2.5,
+            'intersection', 2,
+            1.5,
+          ],
           'circle-color': 'transparent',
           'circle-stroke-color': '#0f172a',
         },

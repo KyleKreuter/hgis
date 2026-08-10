@@ -81,8 +81,12 @@ export function DrawController({
   const originals = useRef(new Map<number, DraftFeature>())
   /** Last geometry seen per feature, so a selection is not mistaken for an edit. */
   const lastGeometry = useRef(new Map<number, string>())
-  /** What snapping may attach to, with bounds precomputed for cheap rejection. */
-  const snapCandidates = useRef<SnapCandidate[]>([])
+  /**
+   * What snapping may attach to, keyed by fid so it can follow every change. Rebuilding
+   * this only on load would leave freshly drawn shapes invisible to snapping -- and
+   * drawing a second polygon flush against the first is precisely when it is wanted.
+   */
+  const snapCandidates = useRef(new Map<number, SnapCandidate>())
   /** Read inside terra-draw's snap callback, which is created once and outlives a toggle. */
   const snapEnabledRef = useRef(snapEnabled)
   snapEnabledRef.current = snapEnabled
@@ -102,7 +106,7 @@ export function DrawController({
       }
       const target = findSnapTarget(
         [event.lng, event.lat],
-        snapCandidates.current,
+        [...snapCandidates.current.values()],
         ([lng, lat]) => context.project(lng, lat),
       )
       onSnapTarget(target)
@@ -172,6 +176,8 @@ export function DrawController({
         .getState()
         .addFeature(feature.geometry as GeoJSON.Geometry, {}, Number(id))
       lastGeometry.current.set(fid, JSON.stringify(feature.geometry))
+      // Registering it as a snap target is the change handler's job -- terra-draw reports
+      // the creation there, whichever way the feature came into being.
       // A freshly drawn feature is what the user is working on, so its attribute form
       // opens without them having to select it again.
       onSelectFeature(fid)
@@ -182,6 +188,23 @@ export function DrawController({
     draw.on('deselect', () => onSelectFeature(null))
 
     draw.on('change', (ids, type) => {
+      // Snap candidates are maintained for every kind of change, not just edits: a
+      // feature added from anywhere -- drawn, loaded, inserted -- has to be attachable
+      // right away, and one that is gone must stop attracting the cursor.
+      if (type === 'delete') {
+        for (const id of ids) snapCandidates.current.delete(Number(id))
+        return
+      }
+      if (type === 'create') {
+        const created = draw.getSnapshot()
+        for (const id of ids) {
+          const feature = created.find((entry) => entry.id === id)
+          if (!feature || isHandle(feature)) continue
+          const geometry = feature.geometry as GeoJSON.Geometry
+          snapCandidates.current.set(Number(id), { geometry, bounds: boundsOf(geometry) })
+        }
+        return
+      }
       if (type !== 'update') return
       const snapshot = draw.getSnapshot()
 
@@ -203,6 +226,9 @@ export function DrawController({
           properties: {},
         }
         useEditing.getState().updateGeometry(base, feature.geometry as GeoJSON.Geometry)
+        // Kept in step, so snapping never attaches to where a shape used to be.
+        const moved = feature.geometry as GeoJSON.Geometry
+        snapCandidates.current.set(fid, { geometry: moved, bounds: boundsOf(moved) })
       }
     })
 
@@ -213,14 +239,14 @@ export function DrawController({
     // terra-draw's callback above.
     function previewSnap(event: { lngLat: { lng: number; lat: number } }) {
       const target = mapRef.current
-      if (!target || !snapEnabledRef.current || snapCandidates.current.length === 0) {
+      if (!target || !snapEnabledRef.current || snapCandidates.current.size === 0) {
         onSnapTarget(null)
         return
       }
       onSnapTarget(
         findSnapTarget(
           [event.lngLat.lng, event.lngLat.lat],
-          snapCandidates.current,
+          [...snapCandidates.current.values()],
           ([lng, lat]) => target.project([lng, lat]),
         ),
       )
@@ -293,10 +319,9 @@ export function DrawController({
 
         // Full precision, straight from the feature API -- never the tile geometry, which
         // is quantised to the tile grid (plan section D.1).
-        snapCandidates.current = editable.map(({ geometry }) => ({
-          geometry,
-          bounds: boundsOf(geometry),
-        }))
+        for (const { feature, geometry } of editable) {
+          snapCandidates.current.set(feature.fid, { geometry, bounds: boundsOf(geometry) })
+        }
 
         for (const { feature, geometry } of editable) {
           lastGeometry.current.set(feature.fid, JSON.stringify(geometry))
@@ -325,7 +350,7 @@ export function DrawController({
       drawRef.current = null
       originals.current.clear()
       lastGeometry.current.clear()
-      snapCandidates.current = []
+      snapCandidates.current.clear()
       onSnapTarget(null)
       onSnapUnavailable(null)
       // Deliberately not ending the editing session here: leaving the mode is

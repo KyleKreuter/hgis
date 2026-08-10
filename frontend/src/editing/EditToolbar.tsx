@@ -140,7 +140,7 @@ export function EditToolbar({
           {/* Stated rather than silently switched off: snapping that stops working without
               a word is how imprecise geometry gets drawn without anyone noticing. */}
           {snapUnavailableReason ??
-            'Einrasten an Stützpunkten und Kanten vorhandener Objekte. Stützpunkte haben Vorrang.'}
+            'Einrasten an vorhandenen Objekten: zuerst Stützpunkte, dann Schnittpunkte, dann Kanten.'}
         </TooltipContent>
       </Tooltip>
 

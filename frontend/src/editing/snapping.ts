@@ -11,7 +11,7 @@
  * the whole point is to land on the target coordinate exactly, not close to it.
  */
 
-export type SnapKind = 'vertex' | 'edge'
+export type SnapKind = 'vertex' | 'intersection' | 'edge'
 
 export interface SnapTarget {
   position: [number, number]
@@ -90,12 +90,23 @@ function projectOntoSegment(
   return { ratio, point: { x: a.x + ratio * dx, y: a.y + ratio * dy } }
 }
 
+/** One segment of a candidate, kept with its origin so neighbours can be told apart. */
+interface Segment {
+  a: [number, number]
+  b: [number, number]
+  candidate: number
+  line: number
+  index: number
+}
+
 /**
  * Finds what the pointer should snap to.
  *
- * Vertices win over edges even when an edge is closer: a shared corner is almost always
- * what someone aims for, and having the cursor slide onto the line right next to it is
- * the classic frustration of a snapping tool that only ranks by distance.
+ * <p>Ranked by meaning, not by distance: a vertex first, then an intersection, then a
+ * point somewhere along an edge. The first two are places the data actually singles out
+ * -- a shared corner, a crossing -- while a point on an edge is wherever the cursor
+ * happened to be. Ranking purely by pixels would let the cursor slide off a corner onto
+ * the line beside it, which is the classic frustration with snapping tools.
  *
  * @param pointer pointer position in map coordinates
  * @param candidates geometries to snap to, with precomputed bounds
@@ -116,8 +127,11 @@ export function findSnapTarget(
 
   let bestVertex: SnapTarget | null = null
   let bestEdge: SnapTarget | null = null
+  /** Segments close enough to matter; only these are tested against each other. */
+  const nearbySegments: Segment[] = []
 
-  for (const candidate of candidates) {
+  for (let c = 0; c < candidates.length; c++) {
+    const candidate = candidates[c]
     const [minLng, minLat, maxLng, maxLat] = candidate.bounds
     if (
       pointer[0] < minLng - toleranceInMapUnits ||
@@ -128,6 +142,7 @@ export function findSnapTarget(
       continue
     }
 
+    let lineIndex = 0
     for (const line of linesOf(candidate.geometry)) {
       for (let i = 0; i < line.length; i++) {
         const coordinate = line[i] as [number, number]
@@ -145,6 +160,12 @@ export function findSnapTarget(
         const { ratio, point } = projectOntoSegment(pointerPx, previousPx, vertexPx)
         const edgeDistance = distance(pointerPx, point)
 
+        // Collected with a generous margin: an intersection can sit within tolerance of
+        // the pointer while both crossing segments pass by further out.
+        if (edgeDistance <= tolerancePx * 3) {
+          nearbySegments.push({ a: previous, b: coordinate, candidate: c, line: lineIndex, index: i })
+        }
+
         if (edgeDistance <= tolerancePx && (!bestEdge || edgeDistance < bestEdge.distancePx)) {
           bestEdge = {
             // Interpolated in map coordinates, not unprojected from pixels.
@@ -157,10 +178,83 @@ export function findSnapTarget(
           }
         }
       }
+      lineIndex++
     }
   }
 
-  return bestVertex ?? bestEdge
+  const bestIntersection = findIntersection(nearbySegments, pointerPx, project, tolerancePx)
+  return bestVertex ?? bestIntersection ?? bestEdge
+}
+
+/**
+ * Closest crossing among the collected segments.
+ *
+ * <p>Quadratic in the number of segments, which is affordable only because the set is
+ * already filtered down to what lies near the pointer -- a handful, not the whole layer.
+ */
+function findIntersection(
+  segments: Segment[],
+  pointerPx: { x: number; y: number },
+  project: Project,
+  tolerancePx: number,
+): SnapTarget | null {
+  let best: SnapTarget | null = null
+
+  for (let i = 0; i < segments.length; i++) {
+    for (let j = i + 1; j < segments.length; j++) {
+      const first = segments[i]
+      const second = segments[j]
+
+      // Consecutive segments of the same ring meet at a shared vertex. That point is a
+      // vertex, not a crossing, and it is already covered by the first stage.
+      if (
+        first.candidate === second.candidate &&
+        first.line === second.line &&
+        Math.abs(first.index - second.index) <= 1
+      ) {
+        continue
+      }
+
+      const crossing = intersectSegments(first, second)
+      if (!crossing) continue
+
+      const distancePx = distance(pointerPx, project(crossing))
+      if (distancePx <= tolerancePx && (!best || distancePx < best.distancePx)) {
+        best = { position: crossing, kind: 'intersection', distancePx }
+      }
+    }
+  }
+  return best
+}
+
+/**
+ * Where two segments cross, or null if they do not.
+ *
+ * <p>Solved in map coordinates rather than in pixels. An intersection is computed, not
+ * copied from the data, so it is the one snap target without an exact original -- all the
+ * more reason not to round it through screen space on the way.
+ */
+function intersectSegments(first: Segment, second: Segment): [number, number] | null {
+  const r: [number, number] = [first.b[0] - first.a[0], first.b[1] - first.a[1]]
+  const s: [number, number] = [second.b[0] - second.a[0], second.b[1] - second.a[1]]
+
+  const denominator = r[0] * s[1] - r[1] * s[0]
+  if (denominator === 0) {
+    // Parallel or collinear. Collinear overlap has no single crossing point to snap to.
+    return null
+  }
+
+  const dx = second.a[0] - first.a[0]
+  const dy = second.a[1] - first.a[1]
+  const t = (dx * s[1] - dy * s[0]) / denominator
+  const u = (dx * r[1] - dy * r[0]) / denominator
+
+  // Both parameters have to stay inside their segment: without that, two short edges
+  // would "cross" wherever their infinite extensions happen to meet.
+  if (t < 0 || t > 1 || u < 0 || u > 1) {
+    return null
+  }
+  return [first.a[0] + t * r[0], first.a[1] + t * r[1]]
 }
 
 /**

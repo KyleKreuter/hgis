@@ -93,7 +93,10 @@ daneben — und solche Lücken zwischen benachbarten Flächen fallen erst Jahre 
 Der Editor lädt seine Snap-Kandidaten deshalb über die Feature-API in voller Präzision,
 und die gefundene Koordinate wird unverändert durchgereicht, nie aus Bildschirmpixeln
 zurückgerechnet. Die Toleranz dagegen zählt in Pixeln: eine feste Meterangabe wäre
-herausgezoomt unbrauchbar und hineingezoomt wirkungslos.
+herausgezoomt unbrauchbar und hineingezoomt wirkungslos. Gerastet wird auf Stützpunkte,
+Schnittpunkte und Kanten — in dieser Reihenfolge, nicht nach Abstand: die ersten beiden
+sind Orte, die die Daten auszeichnen, ein Kantenpunkt ist nur der, an dem der Zeiger
+zufällig stand.
 
 **Editieren arbeitet auf Einzelgeometrien, gespeichert wird multi.** Layerspalten sind
 immer multi-typisiert (`ST_Multi` beim Import), terra-draw kennt aber nur Point,
