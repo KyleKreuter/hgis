@@ -4,8 +4,8 @@ Web-GIS mit QGIS-ähnlichen Funktionen. PostGIS ist nicht nur Ablage, sondern di
 Rechen-Engine: Vector Tiles, Filter und später Geoprocessing laufen in der Datenbank,
 nicht in Java.
 
-**Stand: Phase 1 (Projektverwaltung) abgeschlossen.** Projekte lassen sich anlegen,
-öffnen, umbenennen und löschen. Layer und Karte folgen in Phase 2 und 3.
+**Stand: Phase 3 abgeschlossen.** Ein Shapefile, GeoPackage, GeoJSON oder CSV lässt
+sich hochladen und erscheint danach in der Karte. Layerbaum und Attributtabelle folgen.
 
 ## Architektur in drei Sätzen
 
@@ -86,8 +86,8 @@ alles in einer Transaktion.
 |---|---|---|
 | 0 | Fundament: Compose, Backend-Skelett, Katalog-Migration, Dock-Layout | fertig |
 | 1 | Projektverwaltung: Browser, Anlegen, Öffnen, Löschen | fertig |
-| 2 | Import: Shapefile, GeoPackage, GeoJSON, CSV über GeoTools | offen |
-| 3 | Karte: MVT-Endpunkt und MapLibre | offen |
+| 2 | Import: Shapefile, GeoPackage, GeoJSON, CSV über GeoTools | fertig |
+| 3 | Karte: MVT-Endpunkt und MapLibre | fertig |
 | 4 | Layerverwaltung: Baum, Reihenfolge, Sichtbarkeit | offen |
 | 5 | Attributtabelle und Identify | offen |
 | 6 | Digitalisieren und Editieren | offen |
