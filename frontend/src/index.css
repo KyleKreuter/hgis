@@ -2,6 +2,9 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+/* Must come after Tailwind: Tailwind's preflight and MapLibre's own control/popup
+   styles both target bare elements, and MapLibre needs to win. */
+@import "maplibre-gl/dist/maplibre-gl.css";
 
 @custom-variant dark (&:is(.dark *));
 
