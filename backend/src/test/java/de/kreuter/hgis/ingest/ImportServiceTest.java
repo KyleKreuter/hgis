@@ -13,6 +13,8 @@ import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.jobs.Job;
 import de.kreuter.hgis.jobs.JobService;
 import de.kreuter.hgis.jobs.dto.JobDtos;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -87,6 +89,22 @@ class ImportServiceTest {
 		assertThat(rowCount).isEqualTo(5000L);
 
 		assertThat(reader.isClosed()).as("the reader must be closed once the import is done").isTrue();
+	}
+
+	@Test
+	@DisplayName("each import stacks on top of the previous one instead of sharing z_index 0")
+	void assignsAnIncreasingZIndexPerImport() {
+		List<Layer> imported = new ArrayList<>();
+		for (String name : List.of("Erster", "Zweiter", "Dritter")) {
+			Job job = jobService.create(project.getId(), Job.Type.IMPORT, name + ".geojson");
+			importService.runImport(job.getId(), project.getId(),
+					FakeSourceReader.singlePolygon(project.getSrid()), name, null);
+			imported.add(layerRepository.findById(jobService.get(job.getId()).outputLayerId()).orElseThrow());
+		}
+
+		// Ties would leave the order undefined, and the two consumers break a tie in
+		// opposite directions: the layer tree sorts descending, the map moves ascending.
+		assertThat(imported).extracting(Layer::getZIndex).containsExactly(0, 1, 2);
 	}
 
 	@Test

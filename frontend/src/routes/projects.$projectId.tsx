@@ -1,15 +1,24 @@
-import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
+import { useState } from 'react'
+import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Upload } from 'lucide-react'
 import { WorkspaceLayout } from '@/layout/WorkspaceLayout'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ApiError } from '@/api/client'
 import { ensureProjectLoaded, projectDetailQuery } from '@/api/projects'
-import { ProjectMap } from '@/map'
+import { ImportDialog, LayerTree } from '@/layers'
+import { ProjectMap, type ZoomRequest } from '@/map'
+
+interface WorkspaceSearch {
+  /** Active layer. Lives in the URL so a working state survives a reload and can be shared. */
+  layer?: string
+}
 
 export const Route = createFileRoute('/projects/$projectId')({
+  validateSearch: (search: Record<string, unknown>): WorkspaceSearch => ({
+    layer: typeof search.layer === 'string' ? search.layer : undefined,
+  }),
   // Loading here (with open=true) means the workspace never mounts against empty data,
   // and last_opened_at is refreshed exactly once per visit.
   loader: ({ context, params }) => ensureProjectLoaded(context.queryClient, params.projectId),
@@ -25,37 +34,66 @@ export const Route = createFileRoute('/projects/$projectId')({
  */
 function Workspace() {
   const { projectId } = Route.useParams()
+  const { layer: activeLayerId } = Route.useSearch()
+  const navigate = useNavigate({ from: Route.fullPath })
   const { data: project } = useSuspenseQuery(projectDetailQuery(projectId, true))
+  const [importOpen, setImportOpen] = useState(false)
+  // A counter, not a timestamp: zooming to the same layer twice has to produce a new
+  // request object, and a counter does that without depending on the clock.
+  const [zoomTo, setZoomTo] = useState<ZoomRequest | null>(null)
+
+  function selectLayer(layerId: string | null) {
+    navigate({ search: { layer: layerId ?? undefined }, replace: true })
+  }
 
   return (
-    <WorkspaceLayout
-      toolbar={
-        <>
-          {/* Styled as a button but rendered as a real anchor: it navigates, so it
-              must keep link semantics (middle click, open in new tab, screen readers). */}
-          <Link
-            to="/"
-            className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
-            aria-label="Zur Projektliste"
-          >
-            <ArrowLeft className="size-3.5" />
-          </Link>
-          <span className="font-medium">{project.name}</span>
-          {/* The variant must match the primitive's data-vertical:self-stretch --
-              tailwind-merge treats prefixed and unprefixed utilities as separate
-              groups, so a bare self-center would not replace it. */}
-          <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
-          <span className="text-xs text-muted-foreground">EPSG:{project.srid}</span>
-        </>
-      }
-      leftDock={
-        <ScrollArea className="h-full">
-          <PanelStub title="Layer" note="Layerbaum folgt in Phase 4" />
-        </ScrollArea>
-      }
-      map={<ProjectMap project={project} />}
-      attributes={<PanelStub title="Attribute" note="Attributtabelle folgt in Phase 5" />}
-    />
+    <>
+      <ImportDialog projectId={projectId} open={importOpen} onOpenChange={setImportOpen} />
+      <WorkspaceLayout
+        toolbar={
+          <>
+            {/* Styled as a button but rendered as a real anchor: it navigates, so it
+                must keep link semantics (middle click, open in new tab, screen readers). */}
+            <Link
+              to="/"
+              className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+              aria-label="Zur Projektliste"
+            >
+              <ArrowLeft className="size-3.5" />
+            </Link>
+            <span className="font-medium">{project.name}</span>
+            {/* The variant must match the primitive's data-vertical:self-stretch --
+                tailwind-merge treats prefixed and unprefixed utilities as separate
+                groups, so a bare self-center would not replace it. */}
+            <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
+            <span className="text-xs text-muted-foreground">EPSG:{project.srid}</span>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={() => setImportOpen(true)}
+            >
+              <Upload className="size-3.5" />
+              Importieren
+            </Button>
+          </>
+        }
+        leftDock={
+          <LayerTree
+            projectId={projectId}
+            activeLayerId={activeLayerId ?? null}
+            onSelectLayer={selectLayer}
+            onZoomToLayer={(extent) =>
+              setZoomTo((previous) => ({ extent, nonce: (previous?.nonce ?? 0) + 1 }))
+            }
+            onImportClick={() => setImportOpen(true)}
+          />
+        }
+        map={<ProjectMap project={project} zoomTo={zoomTo} />}
+        attributes={<PanelStub title="Attribute" note="Attributtabelle folgt in Phase 5" />}
+      />
+    </>
   )
 }
 

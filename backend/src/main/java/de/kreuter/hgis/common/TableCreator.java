@@ -64,6 +64,12 @@ public class TableCreator {
 
 		Layer layer = new Layer(layerId, project, layerName, tableName,
 				schema.geometryType().name(), project.getSrid());
+		// Newly imported layers belong on top -- that is the one someone just asked to
+		// see. Leaving them all at the default 0 would make the order ambiguous, and the
+		// two consumers resolve a tie differently: the layer tree sorts descending and
+		// shows the newest last, the map moves them in ascending order and draws it
+		// first. Same data, opposite results.
+		layer.setZIndex(layerRepository.maxZIndex(project.getId()) + 1);
 		// Layer has no @GeneratedValue -- its id is always non-null by the time save() is
 		// called, so Spring Data JPA's isNew() check treats it as existing and merges
 		// rather than persists. merge() returns a different, managed instance; the

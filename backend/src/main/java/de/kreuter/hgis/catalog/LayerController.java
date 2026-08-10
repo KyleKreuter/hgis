@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -35,6 +36,16 @@ public class LayerController {
 	public LayerDtos.Detail update(@PathVariable UUID layerId,
 			@Valid @RequestBody LayerDtos.UpdateRequest request) {
 		return service.update(layerId, request);
+	}
+
+	/**
+	 * PUT rather than PATCH: the body is the complete new order, not a delta, and
+	 * sending it twice has to leave the same result.
+	 */
+	@PutMapping("/api/projects/{projectId}/layers/order")
+	public List<LayerDtos.Summary> reorder(@PathVariable UUID projectId,
+			@Valid @RequestBody LayerDtos.ReorderRequest request) {
+		return service.reorder(projectId, request.layerIdsBottomToTop());
 	}
 
 	@DeleteMapping("/api/layers/{layerId}")

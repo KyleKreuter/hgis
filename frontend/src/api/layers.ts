@@ -80,6 +80,21 @@ export function useUpdateLayer(layerId: string, projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: UpdateLayerInput) => api.patch<LayerDetail>(`/api/layers/${layerId}`, input),
+    // A visibility checkbox that only ticks once the server answered feels broken, and
+    // MapLayerSync reads this same cache -- so the map switches with the tick.
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: layerKeys.list(projectId) })
+      const previous = queryClient.getQueryData<LayerSummary[]>(layerKeys.list(projectId))
+      queryClient.setQueryData<LayerSummary[]>(layerKeys.list(projectId), (current) =>
+        current?.map((layer) => (layer.id === layerId ? { ...layer, ...input } : layer)),
+      )
+      return { previous }
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(layerKeys.list(projectId), context.previous)
+      }
+    },
     onSuccess: (updated) => {
       queryClient.setQueryData(layerKeys.detail(layerId), updated)
       queryClient.setQueryData<LayerSummary[]>(layerKeys.list(projectId), (current) =>
@@ -100,6 +115,44 @@ export function useDeleteLayer(projectId: string) {
         current?.filter((layer) => layer.id !== layerId),
       )
       queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
+    },
+  })
+}
+
+/**
+ * Writes the whole stacking order in one request.
+ *
+ * The parameter is ordered bottom first, matching the endpoint and `zIndex` itself --
+ * the layer tree displays the reverse, because a tree reads top-down. One request for
+ * the entire order is what keeps a failure from leaving half the layers moved.
+ */
+export function useReorderLayers(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (layerIdsBottomToTop: string[]) =>
+      api.put<LayerSummary[]>(`/api/projects/${projectId}/layers/order`, { layerIdsBottomToTop }),
+    // Without this the row would snap back to its old position for one frame and then
+    // jump to the new one -- the drop has to look final immediately.
+    onMutate: async (layerIdsBottomToTop) => {
+      await queryClient.cancelQueries({ queryKey: layerKeys.list(projectId) })
+      const previous = queryClient.getQueryData<LayerSummary[]>(layerKeys.list(projectId))
+      queryClient.setQueryData<LayerSummary[]>(layerKeys.list(projectId), (current) => {
+        if (!current) return current
+        const byId = new Map(current.map((layer) => [layer.id, layer]))
+        return layerIdsBottomToTop.flatMap((id, index) => {
+          const layer = byId.get(id)
+          return layer ? [{ ...layer, zIndex: index }] : []
+        })
+      })
+      return { previous }
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(layerKeys.list(projectId), context.previous)
+      }
+    },
+    onSuccess: (ordered) => {
+      queryClient.setQueryData(layerKeys.list(projectId), ordered)
     },
   })
 }

@@ -3,10 +3,13 @@ import { computeInitialView } from './initialView'
 import { MapCanvas } from './MapCanvas'
 import { MapLayerSync } from './MapLayerSync'
 import { ViewportPersistence } from './ViewportPersistence'
+import { ZoomToExtent, type ZoomRequest } from './ZoomToExtent'
 import { MapControls } from './controls/MapControls'
 
 interface ProjectMapProps {
   project: ProjectDetail
+  /** Set by the layer tree's "zoom to layer"; null while nothing was requested. */
+  zoomTo?: ZoomRequest | null
 }
 
 /**
@@ -16,11 +19,12 @@ interface ProjectMapProps {
  * without console errors even with zero layers -- track C's tile endpoint lands
  * separately, and `MapLayerSync` already no-ops on an empty list.
  */
-export function ProjectMap({ project }: ProjectMapProps) {
+export function ProjectMap({ project, zoomTo = null }: ProjectMapProps) {
   return (
     <MapCanvas initialView={computeInitialView(project)}>
       <MapLayerSync projectId={project.id} />
       <ViewportPersistence projectId={project.id} />
+      <ZoomToExtent request={zoomTo} />
       <MapControls />
     </MapCanvas>
   )

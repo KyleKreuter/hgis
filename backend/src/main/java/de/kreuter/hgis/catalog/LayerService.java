@@ -4,8 +4,12 @@ import de.kreuter.hgis.catalog.dto.LayerDtos;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Polygon;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -80,6 +84,49 @@ public class LayerService {
 		// is current in the response, not the value from before this update.
 		layerRepository.flush();
 		return toDetail(layer);
+	}
+
+	/**
+	 * Writes a whole project's stacking order in one transaction.
+	 *
+	 * <p>Dragging a layer in the tree changes the position of every layer it passes, so
+	 * the naive approach -- one PATCH per moved layer -- puts a partial reorder on the
+	 * screen the moment a single request fails: layers keep indices from two different
+	 * orderings and nothing says which. Sending the intended order as a whole makes that
+	 * impossible; either all indices move or none do.
+	 *
+	 * @param ordered every layer of the project, bottom first
+	 */
+	@Transactional
+	public List<LayerDtos.Summary> reorder(UUID projectId, List<UUID> ordered) {
+		if (!projectRepository.existsById(projectId)) {
+			throw new NotFoundException("Projekt " + projectId + " existiert nicht");
+		}
+
+		List<Layer> layers = layersByProjectOrdered(projectId);
+		Map<UUID, Layer> byId = layers.stream()
+				.collect(Collectors.toMap(Layer::getId, layer -> layer));
+
+		Set<UUID> given = new LinkedHashSet<>(ordered);
+		if (given.size() != ordered.size()) {
+			throw new BadRequestException("Die Reihenfolge enthält einen Layer mehrfach");
+		}
+		if (!given.equals(byId.keySet())) {
+			// Also the case when another session imported or deleted a layer in the
+			// meantime. Rejecting is right: the client reordered a list it no longer
+			// has, and guessing where the unnamed layers belong would be worse.
+			throw new BadRequestException(
+					"Die Reihenfolge muss genau die " + layers.size() + " Layer des Projekts enthalten");
+		}
+
+		for (int index = 0; index < ordered.size(); index++) {
+			byId.get(ordered.get(index)).setZIndex(index);
+		}
+		layerRepository.flush();
+
+		return layersByProjectOrdered(projectId).stream()
+				.map(LayerService::toSummary)
+				.toList();
 	}
 
 	@Transactional

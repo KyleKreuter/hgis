@@ -4,8 +4,9 @@ Web-GIS mit QGIS-ähnlichen Funktionen. PostGIS ist nicht nur Ablage, sondern di
 Rechen-Engine: Vector Tiles, Filter und später Geoprocessing laufen in der Datenbank,
 nicht in Java.
 
-**Stand: Phase 3 abgeschlossen.** Ein Shapefile, GeoPackage, GeoJSON oder CSV lässt
-sich hochladen und erscheint danach in der Karte. Layerbaum und Attributtabelle folgen.
+**Stand: Phase 4 abgeschlossen.** Ein Shapefile, GeoPackage, GeoJSON oder CSV lässt sich
+über den Import-Dialog hochladen und erscheint danach in der Karte. Layer lassen sich
+ein- und ausblenden, umsortieren, umbenennen und löschen. Die Attributtabelle folgt.
 
 ## Architektur in drei Sätzen
 
@@ -64,7 +65,7 @@ docker compose exec db psql -U hgis -d hgis -c "\dt gis_data.*"
 cd frontend && npm run build
 ```
 
-## Zwei Dinge, die man wissen muss
+## Vier Dinge, die man wissen muss
 
 **Achsenreihenfolge.** EPSG:4326 ist offiziell lat/lon, praktisch erwartet jede Software
 lon/lat. `HgisBackendApplication` erzwingt deshalb in einem statischen Initialisierer
@@ -80,6 +81,13 @@ die Katalogzeilen und lässt die Tabellen in `gis_data` als Waisen zurück. Desh
 `ProjectDeletionService` erst alle Tabellennamen, droppt sie und löscht dann den Katalog,
 alles in einer Transaktion.
 
+**Layerreihenfolge.** `z_index` zählt von unten: der höchste Wert wird zuletzt gezeichnet
+und liegt damit obenauf. Der Layerbaum zeigt genau die umgekehrte Reihenfolge, weil eine
+Liste von oben nach unten gelesen wird. Deshalb heißt das Feld im Reorder-Endpunkt
+`layerIdsBottomToTop` und der Import vergibt beim Anlegen `max(z_index) + 1` — bei
+gleichem Wert lösen Baum und Karte den Gleichstand gegenläufig auf, und derselbe
+Datenstand sähe an beiden Stellen anders aus.
+
 ## Fahrplan
 
 | Phase | Inhalt | Status |
@@ -88,7 +96,7 @@ alles in einer Transaktion.
 | 1 | Projektverwaltung: Browser, Anlegen, Öffnen, Löschen | fertig |
 | 2 | Import: Shapefile, GeoPackage, GeoJSON, CSV über GeoTools | fertig |
 | 3 | Karte: MVT-Endpunkt und MapLibre | fertig |
-| 4 | Layerverwaltung: Baum, Reihenfolge, Sichtbarkeit | offen |
+| 4 | Layerverwaltung: Baum, Reihenfolge, Sichtbarkeit, Import-Dialog | fertig |
 | 5 | Attributtabelle und Identify | offen |
 | 6 | Digitalisieren und Editieren | offen |
 | 7 | Härtung: Integrationstests, Limits, Fehlerbilder | offen |

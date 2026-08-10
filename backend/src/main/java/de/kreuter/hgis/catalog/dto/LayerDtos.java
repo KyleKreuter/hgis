@@ -2,6 +2,7 @@ package de.kreuter.hgis.catalog.dto;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
@@ -79,5 +80,22 @@ public final class LayerDtos {
 			@Min(value = 0, message = "maxZoom muss zwischen 0 und 24 liegen")
 			@Max(value = 24, message = "maxZoom muss zwischen 0 und 24 liegen")
 			Integer maxZoom) {
+	}
+
+	/**
+	 * New stacking order for a whole project.
+	 *
+	 * <p>The field name states the direction because getting it wrong is invisible until
+	 * someone looks at the map: the first entry ends up at {@code zIndex} 0 and is drawn
+	 * first, hence lowest. A layer tree shows the reverse of this list, since a tree
+	 * reads top-down.
+	 *
+	 * <p>The list has to name every layer of the project. A partial list would leave the
+	 * position of the others undefined, and demanding the full set is also what keeps a
+	 * layer from another project out.
+	 */
+	public record ReorderRequest(
+			@NotEmpty(message = "Es muss mindestens ein Layer angegeben werden")
+			List<UUID> layerIdsBottomToTop) {
 	}
 }

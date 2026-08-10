@@ -81,19 +81,36 @@ public class ImportController {
 		}
 		catch (BadRequestException ex) {
 			uploadStorage.cleanUp(uploaded);
-			jobService.markFailed(job.getId(), ex.getMessage());
-			throw ex;
+			String message = withUploadedName(ex.getMessage(), uploaded, filename);
+			jobService.markFailed(job.getId(), message);
+			throw new BadRequestException(message);
 		}
 		catch (RuntimeException ex) {
 			uploadStorage.cleanUp(uploaded);
-			jobService.markFailed(job.getId(), ex.getMessage());
+			String message = "Die Datei konnte nicht gelesen werden: "
+					+ withUploadedName(ex.getMessage(), uploaded, filename);
+			jobService.markFailed(job.getId(), message);
 			log.warn("Could not open uploaded file {} for job {}", filename, job.getId(), ex);
-			throw new BadRequestException("Die Datei konnte nicht gelesen werden: " + ex.getMessage());
+			throw new BadRequestException(message);
 		}
 
 		importService.runImportAsync(job.getId(), projectId, reader, layerName, srid);
 
 		return ResponseEntity.accepted().body(jobService.get(job.getId()));
+	}
+
+	/**
+	 * Readers quote the file they were handed, and that file is stored under a name of
+	 * our own making ({@link UploadStorage} deliberately keeps only the extension). The
+	 * user would therefore read about an "upload.csv" they never named. Swapping the
+	 * stored name back for theirs happens here, in the one place that knows both -- the
+	 * readers keep working with the path they were given.
+	 */
+	private static String withUploadedName(String message, Path stored, String originalName) {
+		if (message == null || originalName == null || originalName.isBlank()) {
+			return message;
+		}
+		return message.replace(stored.getFileName().toString(), originalName);
 	}
 
 	private static Charset parseCharset(String name) {
