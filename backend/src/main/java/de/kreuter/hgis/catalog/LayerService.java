@@ -4,7 +4,6 @@ import de.kreuter.hgis.catalog.dto.LayerDtos;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
-import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.UUID;
 import org.locationtech.jts.geom.Envelope;
@@ -20,15 +19,13 @@ public class LayerService {
 	private final LayerFieldRepository fieldRepository;
 	private final ProjectRepository projectRepository;
 	private final JdbcClient jdbc;
-	private final EntityManager entityManager;
 
 	LayerService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
-			ProjectRepository projectRepository, JdbcClient jdbc, EntityManager entityManager) {
+			ProjectRepository projectRepository, JdbcClient jdbc) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.projectRepository = projectRepository;
 		this.jdbc = jdbc;
-		this.entityManager = entityManager;
 	}
 
 	@Transactional(readOnly = true)
@@ -106,21 +103,8 @@ public class LayerService {
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
 	}
 
-	/**
-	 * Same result as {@code LayerRepository.findByProjectIdOrderByZIndexAscCreatedAtAsc},
-	 * written out by hand instead of relying on it: Spring Data's derived-query parser
-	 * does not decapitalize the "ZIndex" method segment back to the entity property
-	 * "zIndex", so it emits {@code ORDER BY l.ZIndex} and fails with
-	 * UnknownPathException at runtime. LayerRepository is off limits to this track
-	 * (see CONTRACT.md section 6), so the equivalent JPQL is issued directly here
-	 * instead of patching the method there.
-	 */
 	private List<Layer> layersByProjectOrdered(UUID projectId) {
-		return entityManager.createQuery(
-				"SELECT l FROM Layer l WHERE l.project.id = :projectId ORDER BY l.zIndex ASC, l.createdAt ASC",
-				Layer.class)
-				.setParameter("projectId", projectId)
-				.getResultList();
+		return layerRepository.findByProjectOrdered(projectId);
 	}
 
 	private static LayerDtos.Summary toSummary(Layer layer) {
