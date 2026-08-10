@@ -1,0 +1,38 @@
+services:
+  db:
+    # Multi-arch rebuild of the official postgis/postgis Dockerfiles. Same environment
+    # variables and init mechanics, but with a native linux/arm64 variant — the official
+    # image is amd64 only and would run under emulation on Apple Silicon.
+    image: ${HGIS_DB_IMAGE:-imresamu/postgis:17-3.5}
+    container_name: hgis-db
+    environment:
+      POSTGRES_DB: hgis
+      POSTGRES_USER: hgis
+      POSTGRES_PASSWORD: hgis
+      # Keeps index and sort behaviour reproducible across host locales.
+      POSTGRES_INITDB_ARGS: "--locale=C.UTF-8 --encoding=UTF8"
+    ports:
+      # 5432 and 5434 are taken by other local projects, so hgis defaults to 5435.
+      - "${HGIS_DB_PORT:-5435}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hgis -d hgis"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    # Import batches and MVT generation benefit noticeably from more working memory
+    # than the stock defaults give. Modest values, safe on a laptop.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=32MB
+      - -c
+      - maintenance_work_mem=256MB
+
+volumes:
+  pgdata:

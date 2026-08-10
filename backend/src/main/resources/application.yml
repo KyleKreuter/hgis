@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: hgis
+
+  datasource:
+    # Port 5435 by default: 5432 and 5434 are used by other local projects.
+    url: jdbc:postgresql://${HGIS_DB_HOST:localhost}:${HGIS_DB_PORT:5435}/${HGIS_DB_NAME:hgis}
+    username: ${HGIS_DB_USER:hgis}
+    password: ${HGIS_DB_PASSWORD:hgis}
+    hikari:
+      maximum-pool-size: 10
+      # Tile requests are short; imports run on their own executor and hold a
+      # connection per batch only.
+      connection-timeout: 10000
+
+  jpa:
+    # Flyway owns the catalog schema. Hibernate must never alter it.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: gis_meta
+        jdbc:
+          time_zone: UTC
+          # Batch inserts during import
+          batch_size: 1000
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    enabled: true
+    # Deliberately restricted to gis_meta. Layer tables in gis_data are payload,
+    # created at runtime, and must never be touched by a migration.
+    schemas: gis_meta
+    default-schema: gis_meta
+    locations: classpath:db/migration
+
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
+
+server:
+  port: ${HGIS_PORT:8080}
+  error:
+    include-message: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+logging:
+  level:
+    de.kreuter.hgis: DEBUG
