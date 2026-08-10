@@ -35,6 +35,17 @@ public class ProblemDetailAdvice {
 		return problem(HttpStatus.BAD_REQUEST, "Ungültige Anfrage", ex.getMessage());
 	}
 
+	/** Concurrent modification. The current server state travels along so the UI can show
+	 *  the difference rather than only reporting that there is one. */
+	@ExceptionHandler(ConflictException.class)
+	public ProblemDetail handleConflict(ConflictException ex) {
+		ProblemDetail problem = problem(HttpStatus.CONFLICT, "Konflikt", ex.getMessage());
+		if (ex.getCurrent() != null) {
+			problem.setProperty("current", ex.getCurrent());
+		}
+		return problem;
+	}
+
 	/** Bean validation failures, reported per field so the form can highlight them. */
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
@@ -71,8 +82,23 @@ public class ProblemDetailAdvice {
 	/** Malformed JSON or a body that cannot be bound is a client error, not a server fault. */
 	@ExceptionHandler(HttpMessageNotReadableException.class)
 	public ProblemDetail handleUnreadableBody(HttpMessageNotReadableException ex) {
+		// The bare message says only that something in the body did not fit, which leaves
+		// no way to find out what. The parser's own reason names the field and the reason,
+		// and it is logged as well: a request nobody can read must not also be a request
+		// nobody can diagnose.
+		String cause = ex.getMostSpecificCause().getMessage();
+		log.debug("Unreadable request body", ex);
+
 		return problem(HttpStatus.BAD_REQUEST, "Ungültige Anfrage",
-				"Der Anfragekörper konnte nicht gelesen werden");
+				cause == null || cause.isBlank()
+						? "Der Anfragekörper konnte nicht gelesen werden"
+						: "Der Anfragekörper konnte nicht gelesen werden: " + firstLine(cause));
+	}
+
+	/** Jackson appends the parse position over several lines; the first one carries the reason. */
+	private static String firstLine(String message) {
+		int newline = message.indexOf('\n');
+		return newline < 0 ? message : message.substring(0, newline);
 	}
 
 	@ExceptionHandler(Exception.class)

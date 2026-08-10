@@ -215,6 +215,18 @@ class FeatureQueryServiceTest {
 	}
 
 	@Test
+	@DisplayName("sorting by fid alone still honours the direction")
+	void pagesDescendingByFid() {
+		// "Newest first" is this query, and silently serving the opposite would be the
+		// kind of wrong nobody checks.
+		List<Object> descending = pageThrough("fid", true, 5, "hoehe");
+		List<Object> ascending = pageThrough("fid", false, 5, "hoehe");
+
+		assertThat(descending).hasSize(ROWS.size());
+		assertThat(descending).containsExactlyElementsOf(ascending.reversed());
+	}
+
+	@Test
 	@DisplayName("the total is reported once, on the first page")
 	void reportsTheTotalOnlyOnTheFirstPage() {
 		FeatureDtos.Page first = service.list(layer.getId(), query(null, false, null, 5));

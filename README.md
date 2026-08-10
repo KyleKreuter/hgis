@@ -4,11 +4,12 @@ Web-GIS mit QGIS-ähnlichen Funktionen. PostGIS ist nicht nur Ablage, sondern di
 Rechen-Engine: Vector Tiles, Filter und später Geoprocessing laufen in der Datenbank,
 nicht in Java.
 
-**Stand: Phase 5 abgeschlossen.** Ein Shapefile, GeoPackage, GeoJSON oder CSV lässt sich
+**Stand: Phase 6 abgeschlossen.** Ein Shapefile, GeoPackage, GeoJSON oder CSV lässt sich
 über den Import-Dialog hochladen und erscheint danach in der Karte. Layer lassen sich
 ein- und ausblenden, umsortieren, umbenennen und löschen. Die Attributtabelle zeigt die
 Daten mit Filter und Sortierung, Karte und Tabelle teilen sich eine Selektion, und ein
-Klick auf die Karte liefert die Attribute des getroffenen Objekts.
+Klick auf die Karte liefert die Attribute des getroffenen Objekts. Geometrien lassen sich
+zeichnen, verschieben und löschen; gespeichert wird als Batch in einer Transaktion.
 
 ## Architektur in drei Sätzen
 
@@ -67,7 +68,7 @@ docker compose exec db psql -U hgis -d hgis -c "\dt gis_data.*"
 cd frontend && npm run build
 ```
 
-## Sechs Dinge, die man wissen muss
+## Sieben Dinge, die man wissen muss
 
 **Achsenreihenfolge.** EPSG:4326 ist offiziell lat/lon, praktisch erwartet jede Software
 lon/lat. `HgisBackendApplication` erzwingt deshalb in einem statischen Initialisierer
@@ -82,6 +83,12 @@ Full Table Scan.
 die Katalogzeilen und lässt die Tabellen in `gis_data` als Waisen zurück. Deshalb sammelt
 `ProjectDeletionService` erst alle Tabellennamen, droppt sie und löscht dann den Katalog,
 alles in einer Transaktion.
+
+**Editieren arbeitet auf Einzelgeometrien, gespeichert wird multi.** Layerspalten sind
+immer multi-typisiert (`ST_Multi` beim Import), terra-draw kennt aber nur Point,
+LineString und Polygon. Beim Laden in den Editor wird deshalb ausgepackt — und was
+wirklich mehrteilig ist, bleibt unbearbeitbar, statt stillschweigend auf seinen ersten
+Teil reduziert zu werden. Beim Schreiben hebt `ST_Multi` wieder an, genau wie im Import.
 
 **Die `fid` ist die Feature-ID der Kachel, kein Attribut.** `ST_AsMVT(…, 'geom', 'fid')`
 benennt `fid` als ID-Spalte, deshalb taucht sie nicht unter den Properties auf.
@@ -110,7 +117,7 @@ Datenstand sähe an beiden Stellen anders aus.
 | 3 | Karte: MVT-Endpunkt und MapLibre | fertig |
 | 4 | Layerverwaltung: Baum, Reihenfolge, Sichtbarkeit, Import-Dialog | fertig |
 | 5 | Attributtabelle, Filter, Identify, Selektion | fertig |
-| 6 | Digitalisieren und Editieren | offen |
+| 6 | Digitalisieren und Editieren | fertig |
 | 7 | Härtung: Integrationstests, Limits, Fehlerbilder | offen |
 
 Der vollständige Plan mit allen Detailabschnitten liegt unter

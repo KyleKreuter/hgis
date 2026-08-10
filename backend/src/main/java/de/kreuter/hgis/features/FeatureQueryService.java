@@ -186,7 +186,9 @@ public class FeatureQueryService {
 			Map<String, Object> parameters) {
 		parameters.put("cursorFid", cursor.fid());
 		if (sortField == null) {
-			return "f.fid > :cursorFid";
+			// Sorting by fid alone still has a direction: "newest first" is a fid sorted
+			// descending, and ignoring desc here would silently serve the opposite.
+			return descending ? "f.fid < :cursorFid" : "f.fid > :cursorFid";
 		}
 
 		String column = "f." + SqlIdentifier.quoteColumn(sortField.getColumnName());
@@ -219,11 +221,12 @@ public class FeatureQueryService {
 	}
 
 	private String orderBy(LayerField sortField, boolean descending) {
-		// fid last and always ascending: it is the tie-breaker that makes the ordering
-		// total. Without it, rows sharing a sort value could come back in a different
-		// order per page and the keyset would skip or repeat them.
+		// As a tie-breaker fid is always ascending: it is what makes the ordering total,
+		// and rows sharing a sort value would otherwise come back in a different order per
+		// page, which is exactly what makes a keyset skip or repeat them. Sorted on its
+		// own, though, fid is the sort column and follows the requested direction.
 		if (sortField == null) {
-			return "f.fid ASC";
+			return descending ? "f.fid DESC" : "f.fid ASC";
 		}
 		return "f." + SqlIdentifier.quoteColumn(sortField.getColumnName())
 				+ (descending ? " DESC" : " ASC") + " NULLS LAST, f.fid ASC";

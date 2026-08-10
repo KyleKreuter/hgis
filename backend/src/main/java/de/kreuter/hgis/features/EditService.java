@@ -1,0 +1,341 @@
+package de.kreuter.hgis.features;
+
+import de.kreuter.hgis.catalog.Layer;
+import de.kreuter.hgis.catalog.LayerField;
+import de.kreuter.hgis.catalog.LayerFieldRepository;
+import de.kreuter.hgis.catalog.LayerRepository;
+import de.kreuter.hgis.common.BadRequestException;
+import de.kreuter.hgis.common.ConflictException;
+import de.kreuter.hgis.common.ExtentCalculator;
+import de.kreuter.hgis.common.NotFoundException;
+import de.kreuter.hgis.common.SqlIdentifier;
+import de.kreuter.hgis.features.dto.EditDtos;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
+
+/**
+ * Applies a batch of edits to one layer, all inside a single transaction.
+ *
+ * <p>Geometry travels as GeoJSON in EPSG:4326 and is converted, reprojected and promoted
+ * to its multi-type inside PostGIS -- the same {@code ST_Multi(ST_Transform(...))} the
+ * import uses, so a polygon drawn by hand and a polygon read from a shapefile end up
+ * stored identically.
+ */
+@Service
+public class EditService {
+
+	/** Guard against a single request trying to rewrite a whole layer. */
+	private static final int MAX_BATCH = 5000;
+
+	private final LayerRepository layerRepository;
+	private final LayerFieldRepository fieldRepository;
+	private final JdbcClient jdbc;
+	private final ExtentCalculator extentCalculator;
+
+	EditService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
+			JdbcClient jdbc, ExtentCalculator extentCalculator) {
+		this.layerRepository = layerRepository;
+		this.fieldRepository = fieldRepository;
+		this.jdbc = jdbc;
+		this.extentCalculator = extentCalculator;
+	}
+
+	@Transactional
+	public EditDtos.Response apply(UUID layerId, EditDtos.Request request) {
+		Layer layer = layerRepository.findById(layerId)
+				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
+
+		int total = request.creates().size() + request.updates().size() + request.deletes().size();
+		if (total == 0) {
+			throw new BadRequestException("Der Editier-Batch ist leer");
+		}
+		if (total > MAX_BATCH) {
+			throw new BadRequestException(
+					"Der Editier-Batch umfasst " + total + " Änderungen, erlaubt sind " + MAX_BATCH);
+		}
+
+		String table = SqlIdentifier.quoteLayerTable(layer.getTableName());
+		Map<String, LayerField> fields = fieldsByColumn(layerId);
+
+		Map<Long, Long> createdFids = new LinkedHashMap<>();
+		for (EditDtos.Create create : request.creates()) {
+			createdFids.put(create.clientId(), insert(table, layer, fields, create, request.repairsInvalid()));
+		}
+
+		int updated = 0;
+		for (EditDtos.Update update : request.updates()) {
+			updated += update(table, layer, fields, update, request.repairsInvalid());
+		}
+
+		int deleted = request.deletes().isEmpty() ? 0
+				: jdbc.sql("DELETE FROM " + table + " WHERE fid = ANY(:fids)")
+						.param("fids", request.deletes().toArray(Long[]::new))
+						.update();
+
+		return finish(layer, table, createdFids, updated, deleted);
+	}
+
+	// --- writes -----------------------------------------------------------------------
+
+	private long insert(String table, Layer layer, Map<String, LayerField> fields,
+			EditDtos.Create create, boolean repairInvalid) {
+		if (create.geometry() == null) {
+			throw new BadRequestException("Neues Objekt " + create.clientId() + " hat keine Geometrie");
+		}
+		String geometrySql = geometryExpression(layer, create.geometry(), repairInvalid, "g");
+
+		List<String> columns = new ArrayList<>();
+		List<Object> values = new ArrayList<>();
+		collectProperties(fields, create.properties(), columns, values);
+
+		StringBuilder sql = new StringBuilder("INSERT INTO ").append(table).append(" (geom");
+		columns.forEach(column -> sql.append(", ").append(column));
+		sql.append(") VALUES (").append(geometrySql);
+		for (int i = 0; i < columns.size(); i++) {
+			sql.append(", :v").append(i);
+		}
+		sql.append(") RETURNING fid");
+
+		var statement = jdbc.sql(sql.toString()).param("g", create.geometry().toString());
+		for (int i = 0; i < values.size(); i++) {
+			statement = statement.param("v" + i, values.get(i));
+		}
+		return statement.query(Long.class).single();
+	}
+
+	private int update(String table, Layer layer, Map<String, LayerField> fields,
+			EditDtos.Update update, boolean repairInvalid) {
+		List<String> assignments = new ArrayList<>();
+		List<Object> values = new ArrayList<>();
+
+		if (update.geometry() != null) {
+			assignments.add("geom = " + geometryExpression(layer, update.geometry(), repairInvalid, "g"));
+		}
+		if (update.properties() != null) {
+			List<String> columns = new ArrayList<>();
+			collectProperties(fields, update.properties(), columns, values);
+			for (int i = 0; i < columns.size(); i++) {
+				assignments.add(columns.get(i) + " = :v" + i);
+			}
+		}
+		if (assignments.isEmpty()) {
+			throw new BadRequestException(
+					"Änderung an Objekt " + update.fid() + " enthält weder Geometrie noch Attribute");
+		}
+
+		// xmin is the transaction that last wrote the row -- PostgreSQL's own row version,
+		// which is why optimistic locking here needs no extra column (plan section D.7).
+		StringBuilder sql = new StringBuilder("UPDATE ").append(table)
+				.append(" SET ").append(String.join(", ", assignments))
+				.append(" WHERE fid = :fid");
+		if (update.rowVersion() != null) {
+			sql.append(" AND xmin::text = :rowVersion");
+		}
+
+		var statement = jdbc.sql(sql.toString()).param("fid", update.fid());
+		if (update.geometry() != null) {
+			statement = statement.param("g", update.geometry().toString());
+		}
+		if (update.rowVersion() != null) {
+			statement = statement.param("rowVersion", update.rowVersion());
+		}
+		for (int i = 0; i < values.size(); i++) {
+			statement = statement.param("v" + i, values.get(i));
+		}
+
+		int affected = statement.update();
+		if (affected == 0) {
+			throw conflictOrMissing(table, update.fid());
+		}
+		return affected;
+	}
+
+	/**
+	 * Zero rows updated has two very different causes, and the client needs to tell them
+	 * apart: the row is gone, or someone else changed it. Re-reading is the only way to
+	 * know which.
+	 */
+	private RuntimeException conflictOrMissing(String table, long fid) {
+		List<Map<String, Object>> rows = jdbc
+				.sql("SELECT fid, xmin::text AS row_version FROM " + table + " WHERE fid = :fid")
+				.param("fid", fid)
+				.query()
+				.listOfRows();
+
+		if (rows.isEmpty()) {
+			return new NotFoundException("Objekt " + fid + " existiert nicht mehr");
+		}
+		return new ConflictException(
+				"Objekt " + fid + " wurde zwischenzeitlich von anderer Stelle geändert",
+				rows.get(0));
+	}
+
+	// --- geometry ---------------------------------------------------------------------
+
+	/**
+	 * SQL expression that turns the client's GeoJSON into a storable geometry, validating
+	 * it on the way.
+	 *
+	 * <p>Validation runs in Java rather than as part of the statement so a violation can
+	 * be reported with its reason and location. Letting the geometry column's constraint
+	 * catch it would produce a database error naming neither.
+	 */
+	private String geometryExpression(Layer layer, JsonNode geometry, boolean repairInvalid,
+			String parameter) {
+		String geoJson = geometry.toString();
+		validate(geoJson, layer, repairInvalid);
+
+		String source = repairInvalid
+				? "ST_CollectionExtract(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON(:%s), 4326)), %d)"
+						.formatted(parameter, dimensionOf(layer))
+				: "ST_SetSRID(ST_GeomFromGeoJSON(:%s), 4326)".formatted(parameter);
+
+		return "ST_Multi(ST_Transform(" + source + ", " + layer.getSrid() + "))";
+	}
+
+	private void validate(String geoJson, Layer layer, boolean repairInvalid) {
+		Map<String, Object> detail;
+		try {
+			detail = jdbc.sql("""
+					SELECT d.valid,
+					       d.reason,
+					       ST_X(d.location) AS x,
+					       ST_Y(d.location) AS y,
+					       GeometryType(g.geom) AS geometry_type
+					FROM (SELECT ST_SetSRID(ST_GeomFromGeoJSON(:g), 4326) AS geom) g,
+					     LATERAL ST_IsValidDetail(g.geom) AS d(valid, reason, location)
+					""")
+					.param("g", geoJson)
+					.query()
+					.singleRow();
+		}
+		catch (RuntimeException ex) {
+			// Malformed GeoJSON never reaches ST_IsValidDetail; PostGIS rejects it while
+			// parsing, and the raw message is more useful than anything generic.
+			throw new BadRequestException("Geometrie konnte nicht gelesen werden: " + rootMessage(ex));
+		}
+
+		requireCompatibleType(layer, (String) detail.get("geometry_type"));
+
+		if (Boolean.TRUE.equals(detail.get("valid")) || repairInvalid) {
+			return;
+		}
+
+		// Deliberately not repaired here. ST_MakeValid changes the shape -- and can turn a
+		// polygon into a GeometryCollection that no longer fits the column. Which is worth
+		// more, the drawn shape or a stored one, is the user's call, not ours.
+		String reason = (String) detail.get("reason");
+		Object x = detail.get("x");
+		Object y = detail.get("y");
+		String where = (x == null || y == null) ? ""
+				: " bei %.6f, %.6f".formatted(((Number) x).doubleValue(), ((Number) y).doubleValue());
+
+		throw new BadRequestException("Ungültige Geometrie: " + reason + where
+				+ ". Automatisch reparieren lassen oder die Geometrie korrigieren.");
+	}
+
+	/**
+	 * A layer column typed MultiPolygon cannot hold a line, and finding that out from a
+	 * constraint violation tells the user nothing they can act on.
+	 */
+	private void requireCompatibleType(Layer layer, String actualType) {
+		if (actualType == null || layer.getGeometryType().equals("GEOMETRY")) {
+			return;
+		}
+		String expected = layer.getGeometryType().toUpperCase(Locale.ROOT);
+		String actual = actualType.toUpperCase(Locale.ROOT);
+		// ST_Multi promotes on write, so the single-part form is just as acceptable.
+		if (expected.equals(actual) || expected.equals("MULTI" + actual)) {
+			return;
+		}
+		throw new BadRequestException("Der Layer nimmt " + humanType(expected)
+				+ " auf, die Geometrie ist " + humanType(actual));
+	}
+
+	private static String humanType(String geometryType) {
+		return switch (geometryType) {
+			case "POINT", "MULTIPOINT" -> "Punkte";
+			case "LINESTRING", "MULTILINESTRING" -> "Linien";
+			case "POLYGON", "MULTIPOLYGON" -> "Flächen";
+			default -> geometryType;
+		};
+	}
+
+	/** Dimension ST_CollectionExtract keeps: 1 point, 2 line, 3 area. */
+	private static int dimensionOf(Layer layer) {
+		return switch (layer.getGeometryType()) {
+			case "MULTIPOINT" -> 1;
+			case "MULTILINESTRING" -> 2;
+			default -> 3;
+		};
+	}
+
+	// --- attributes -------------------------------------------------------------------
+
+	private Map<String, LayerField> fieldsByColumn(UUID layerId) {
+		Map<String, LayerField> result = new LinkedHashMap<>();
+		for (LayerField field : fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId)) {
+			result.put(field.getColumnName(), field);
+		}
+		return result;
+	}
+
+	/**
+	 * Resolves the client's property keys to real columns.
+	 *
+	 * <p>Every key has to be a field of this layer -- the resolved column_name is what
+	 * gets quoted, never the key itself. Same rule as {@link FilterParser}: identifiers
+	 * come from the catalog, values are bound.
+	 */
+	private void collectProperties(Map<String, LayerField> fields, Map<String, Object> properties,
+			List<String> columns, List<Object> values) {
+		if (properties == null) {
+			return;
+		}
+		for (Map.Entry<String, Object> property : properties.entrySet()) {
+			LayerField field = fields.get(property.getKey());
+			if (field == null) {
+				throw new BadRequestException("Unbekanntes Feld: " + property.getKey()
+						+ ". Verfügbar: " + String.join(", ", fields.keySet()));
+			}
+			columns.add(SqlIdentifier.quoteColumn(field.getColumnName()));
+			values.add(property.getValue());
+		}
+	}
+
+	// --- bookkeeping ------------------------------------------------------------------
+
+	/**
+	 * Updates what the layer says about itself after a write: the tile cache buster, the
+	 * feature count and the extent. Without the version bump the map would keep serving
+	 * the cached tiles that still show the old geometry.
+	 */
+	private EditDtos.Response finish(Layer layer, String table, Map<Long, Long> createdFids,
+			int updated, int deleted) {
+		long featureCount = jdbc.sql("SELECT COUNT(*) FROM " + table).query(Long.class).single();
+
+		layer.setFeatureCount(featureCount);
+		layer.bumpDataVersion();
+		layer.setExtent(extentCalculator.forLayer(layer.getTableName(), layer.getSrid()));
+		layerRepository.flush();
+
+		return new EditDtos.Response(createdFids, updated, deleted,
+				layer.getDataVersion(), featureCount);
+	}
+
+	private static String rootMessage(Throwable throwable) {
+		Throwable root = throwable;
+		while (root.getCause() != null && root.getCause() != root) {
+			root = root.getCause();
+		}
+		return root.getMessage();
+	}
+}

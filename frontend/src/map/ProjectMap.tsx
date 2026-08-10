@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { ProjectDetail } from '@/api/projects'
 import { computeInitialView } from './initialView'
 import { MapCanvas } from './MapCanvas'
@@ -14,6 +15,10 @@ interface ProjectMapProps {
   zoomTo?: ZoomRequest | null
   /** Restricts Identify to one layer, so clicking through a stack stays predictable. */
   activeLayerId?: string | null
+  /** Mounted inside the canvas; used for the editing pieces, which all need `useMap()`. */
+  children?: ReactNode
+  /** Identify would fight the drawing tool for the click, so it stands down while editing. */
+  identifyEnabled?: boolean
 }
 
 /**
@@ -23,14 +28,21 @@ interface ProjectMapProps {
  * without console errors even with zero layers -- track C's tile endpoint lands
  * separately, and `MapLayerSync` already no-ops on an empty list.
  */
-export function ProjectMap({ project, zoomTo = null, activeLayerId = null }: ProjectMapProps) {
+export function ProjectMap({
+  project,
+  zoomTo = null,
+  activeLayerId = null,
+  identifyEnabled = true,
+  children,
+}: ProjectMapProps) {
   return (
     <MapCanvas initialView={computeInitialView(project)}>
       <MapLayerSync projectId={project.id} />
       <ViewportPersistence projectId={project.id} />
       <ZoomToExtent request={zoomTo} />
       <SelectionHighlight projectId={project.id} />
-      <IdentifyControl activeLayerId={activeLayerId} />
+      {identifyEnabled && <IdentifyControl activeLayerId={activeLayerId} />}
+      {children}
       <MapControls />
     </MapCanvas>
   )

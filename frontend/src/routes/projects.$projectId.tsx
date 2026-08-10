@@ -11,7 +11,15 @@ import { ensureProjectLoaded, projectDetailQuery } from '@/api/projects'
 import { ImportDialog, LayerTree } from '@/layers'
 import { ProjectMap, type ZoomRequest } from '@/map'
 import { AttributeTable } from '@/table'
-import { layerListQuery } from '@/api/layers'
+import {
+  AttributeForm,
+  DrawController,
+  EditToolbar,
+  EditingTileFilter,
+  InvalidGeometryDialog,
+  useEditSession,
+} from '@/editing'
+import { layerDetailQuery, layerListQuery } from '@/api/layers'
 import { featureDetailQuery } from '@/api/features'
 import { useSelection } from '@/state/selection'
 import { boundsOfGeometry } from '@/map/geometryBounds'
@@ -51,6 +59,12 @@ function Workspace() {
   // request object, and a counter does that without depending on the clock.
   const [zoomTo, setZoomTo] = useState<ZoomRequest | null>(null)
   const clearSelection = useSelection((state) => state.clear)
+  const editing = useEditSession({ layerId: activeLayerId ?? null, projectId })
+  // Only the detail carries the field list the attribute form is generated from.
+  const { data: activeLayerDetail } = useQuery({
+    ...layerDetailQuery(activeLayerId ?? ''),
+    enabled: Boolean(activeLayerId),
+  })
 
   const activeLayer = layers?.find((layer) => layer.id === activeLayerId) ?? null
 
@@ -82,6 +96,11 @@ function Workspace() {
   return (
     <>
       <ImportDialog projectId={projectId} open={importOpen} onOpenChange={setImportOpen} />
+      <InvalidGeometryDialog
+        message={editing.invalidGeometry}
+        onRepair={() => void editing.save(true)}
+        onCancel={editing.dismissInvalidGeometry}
+      />
       <WorkspaceLayout
         toolbar={
           <>
@@ -101,28 +120,71 @@ function Workspace() {
             <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
             <span className="text-xs text-muted-foreground">EPSG:{project.srid}</span>
 
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto"
-              onClick={() => setImportOpen(true)}
-            >
-              <Upload className="size-3.5" />
-              Importieren
-            </Button>
+            <div className="ml-auto flex items-center gap-2">
+              <EditToolbar
+                active={editing.active}
+                geometryType={activeLayer?.geometryType}
+                tool={editing.tool}
+                onToolChange={editing.setTool}
+                onStart={editing.start}
+                onSave={() => void editing.save()}
+                onDiscard={editing.discard}
+                isSaving={editing.isSaving}
+                canEdit={Boolean(activeLayer)}
+              />
+              {!editing.active && (
+                <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+                  <Upload className="size-3.5" />
+                  Importieren
+                </Button>
+              )}
+            </div>
           </>
         }
         leftDock={
-          <LayerTree
-            projectId={projectId}
-            activeLayerId={activeLayerId ?? null}
-            onSelectLayer={selectLayer}
-            onZoomToLayer={requestZoom}
-            onImportClick={() => setImportOpen(true)}
-          />
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1">
+              <LayerTree
+                projectId={projectId}
+                activeLayerId={activeLayerId ?? null}
+                onSelectLayer={selectLayer}
+                onZoomToLayer={requestZoom}
+                onImportClick={() => setImportOpen(true)}
+              />
+            </div>
+            {editing.active && (
+              <div className="max-h-[55%] shrink-0 overflow-auto border-t">
+                <div className="flex h-7 items-center border-b bg-muted/40 px-2 text-xs font-medium tracking-wide uppercase text-muted-foreground">
+                  Attribute
+                </div>
+                <AttributeForm
+                  fields={activeLayerDetail?.fields ?? []}
+                  feature={editing.selectedFeature}
+                />
+              </div>
+            )}
+          </div>
         }
         map={
-          <ProjectMap project={project} zoomTo={zoomTo} activeLayerId={activeLayerId ?? null} />
+          <ProjectMap
+            project={project}
+            zoomTo={zoomTo}
+            activeLayerId={activeLayerId ?? null}
+            identifyEnabled={!editing.active}
+          >
+            {editing.active && activeLayer && (
+              <>
+                <DrawController
+                  layerId={activeLayer.id}
+                  geometryType={activeLayer.geometryType}
+                  tool={editing.tool}
+                  onSelectFeature={editing.setSelectedFid}
+                  reloadNonce={editing.reloadNonce}
+                />
+                <EditingTileFilter layerId={activeLayer.id} />
+              </>
+            )}
+          </ProjectMap>
         }
         attributes={
           <AttributeTable

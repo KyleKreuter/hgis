@@ -3,6 +3,7 @@ package de.kreuter.hgis.ingest;
 import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.Project;
+import de.kreuter.hgis.common.ExtentCalculator;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.common.TableCreator;
 import de.kreuter.hgis.common.TableCreator.CreatedLayer;
@@ -12,10 +13,6 @@ import de.kreuter.hgis.jobs.Job;
 import de.kreuter.hgis.jobs.JobService;
 import java.util.List;
 import java.util.UUID;
-import org.locationtech.jts.geom.GeometryFactory;
-import org.locationtech.jts.geom.Polygon;
-import org.locationtech.jts.io.ParseException;
-import org.locationtech.jts.io.WKBReader;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,16 +44,16 @@ class ImportTransactions {
 	private final JobService jobService;
 	private final LayerRepository layerRepository;
 	private final JdbcClient jdbc;
-	private final GeometryFactory wgs84GeometryFactory;
+	private final ExtentCalculator extentCalculator;
 
 	ImportTransactions(TableCreator tableCreator, FeatureWriter featureWriter, JobService jobService,
-			LayerRepository layerRepository, JdbcClient jdbc, GeometryFactory wgs84GeometryFactory) {
+			LayerRepository layerRepository, JdbcClient jdbc, ExtentCalculator extentCalculator) {
 		this.tableCreator = tableCreator;
 		this.featureWriter = featureWriter;
 		this.jobService = jobService;
 		this.layerRepository = layerRepository;
 		this.jdbc = jdbc;
-		this.wgs84GeometryFactory = wgs84GeometryFactory;
+		this.extentCalculator = extentCalculator;
 	}
 
 	@Transactional
@@ -89,7 +86,7 @@ class ImportTransactions {
 				.orElseThrow(() -> new IllegalStateException("Layer " + layerId + " verschwand während des Imports"));
 
 		layer.setFeatureCount(featureCount);
-		layer.setExtent(computeExtent(layer.getTableName(), srid));
+		layer.setExtent(extentCalculator.forLayer(layer.getTableName(), srid));
 
 		// The rollup below reads the layer extent straight from the database, and the
 		// assignment above is still sitting in the persistence context. Without this
@@ -149,23 +146,4 @@ class ImportTransactions {
 	 * JTS rather than relying on driver-level geometry support, which raw JDBC queries
 	 * (unlike Hibernate's spatial dialect) don't have.
 	 */
-	private Polygon computeExtent(String tableName, int srid) {
-		byte[] wkb = jdbc.sql("""
-				SELECT ST_AsBinary(ST_Transform(ST_SetSRID(ST_Extent(geom)::geometry, :srid), 4326))
-				FROM %s
-				""".formatted(SqlIdentifier.quoteLayerTable(tableName)))
-				.param("srid", srid)
-				.query(byte[].class)
-				.optional()
-				.orElse(null);
-
-		if (wkb == null) {
-			return null; // empty table
-		}
-		try {
-			return (Polygon) new WKBReader(wgs84GeometryFactory).read(wkb);
-		} catch (ParseException e) {
-			throw new IllegalStateException("Von PostGIS gelieferte Extent-Geometrie ist nicht lesbar", e);
-		}
-	}
 }
