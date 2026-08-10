@@ -3,6 +3,7 @@ package de.kreuter.hgis.ingest;
 import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.Project;
+import de.kreuter.hgis.catalog.ProjectRepository;
 import de.kreuter.hgis.common.ExtentCalculator;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.common.TableCreator;
@@ -43,15 +44,18 @@ class ImportTransactions {
 	private final FeatureWriter featureWriter;
 	private final JobService jobService;
 	private final LayerRepository layerRepository;
+	private final ProjectRepository projectRepository;
 	private final JdbcClient jdbc;
 	private final ExtentCalculator extentCalculator;
 
 	ImportTransactions(TableCreator tableCreator, FeatureWriter featureWriter, JobService jobService,
-			LayerRepository layerRepository, JdbcClient jdbc, ExtentCalculator extentCalculator) {
+			LayerRepository layerRepository, ProjectRepository projectRepository, JdbcClient jdbc,
+			ExtentCalculator extentCalculator) {
 		this.tableCreator = tableCreator;
 		this.featureWriter = featureWriter;
 		this.jobService = jobService;
 		this.layerRepository = layerRepository;
+		this.projectRepository = projectRepository;
 		this.jdbc = jdbc;
 		this.extentCalculator = extentCalculator;
 	}
@@ -120,30 +124,16 @@ class ImportTransactions {
 	/**
 	 * Recomputes a project's extent as the union of its layer extents.
 	 *
-	 * Both are already EPSG:4326, so no transform is needed. Runs as plain SQL because
-	 * the alternative -- loading every layer entity just to union boxes -- would read far
-	 * more than it needs to.
+	 * Both are already EPSG:4326, so nothing has to be transformed. Combined in Java by
+	 * {@link ExtentCalculator}: the SQL version could not express a project whose only
+	 * layer holds a single point, because the union of one point is a point and the column
+	 * takes a polygon.
 	 */
 	private void updateProjectExtent(UUID projectId) {
-		jdbc.sql("""
-				UPDATE gis_meta.project p
-				SET extent = sub.box
-				FROM (
-				  SELECT ST_Envelope(ST_Extent(extent)::geometry) AS box
-				  FROM gis_meta.layer
-				  WHERE project_id = :projectId AND extent IS NOT NULL
-				) sub
-				WHERE p.id = :projectId AND sub.box IS NOT NULL
-				""")
-				.param("projectId", projectId)
-				.update();
+		projectRepository.findById(projectId).ifPresent(project -> {
+			project.setExtent(extentCalculator.forProject(projectId));
+			projectRepository.flush();
+		});
 	}
 
-	/**
-	 * Bounding box of every feature in the table, transformed to EPSG:4326 for storage as
-	 * layer metadata. {@code ST_Extent} yields a box2d with no CRS of its own, hence the
-	 * explicit {@code ST_SetSRID} before the transform. Read back as WKB and parsed with
-	 * JTS rather than relying on driver-level geometry support, which raw JDBC queries
-	 * (unlike Hibernate's spatial dialect) don't have.
-	 */
 }

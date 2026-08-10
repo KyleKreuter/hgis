@@ -14,15 +14,15 @@ import java.util.List;
  *
  * Schema reference: https://github.com/mapbox/vector-tile-spec/blob/master/2.1/vector_tile.proto
  */
-final class MvtTileDecoder {
+public final class MvtTileDecoder {
 
-	record Layer(String name, List<Long> featureIds) {
+	public record Layer(String name, List<Long> featureIds) {
 	}
 
 	private MvtTileDecoder() {
 	}
 
-	static List<Layer> decode(byte[] mvt) {
+	public static List<Layer> decode(byte[] mvt) {
 		List<Layer> layers = new ArrayList<>();
 		Cursor tile = new Cursor(mvt);
 		while (tile.hasRemaining()) {

@@ -4,12 +4,13 @@ Web-GIS mit QGIS-ähnlichen Funktionen. PostGIS ist nicht nur Ablage, sondern di
 Rechen-Engine: Vector Tiles, Filter und später Geoprocessing laufen in der Datenbank,
 nicht in Java.
 
-**Stand: Phase 6 abgeschlossen.** Ein Shapefile, GeoPackage, GeoJSON oder CSV lässt sich
+**Stand: Phase 7 abgeschlossen, MVP steht.** Ein Shapefile, GeoPackage, GeoJSON oder CSV lässt sich
 über den Import-Dialog hochladen und erscheint danach in der Karte. Layer lassen sich
 ein- und ausblenden, umsortieren, umbenennen und löschen. Die Attributtabelle zeigt die
 Daten mit Filter und Sortierung, Karte und Tabelle teilen sich eine Selektion, und ein
 Klick auf die Karte liefert die Attribute des getroffenen Objekts. Geometrien lassen sich
 zeichnen, verschieben und löschen; gespeichert wird als Batch in einer Transaktion.
+252 Backend- und 56 Frontend-Tests decken die Kette vom Upload bis zur Kachel ab.
 
 ## Architektur in drei Sätzen
 
@@ -118,7 +119,7 @@ Datenstand sähe an beiden Stellen anders aus.
 | 4 | Layerverwaltung: Baum, Reihenfolge, Sichtbarkeit, Import-Dialog | fertig |
 | 5 | Attributtabelle, Filter, Identify, Selektion | fertig |
 | 6 | Digitalisieren und Editieren | fertig |
-| 7 | Härtung: Integrationstests, Limits, Fehlerbilder | offen |
+| 7 | Härtung: Integrationstests, Limits, Fehlerbilder | fertig |
 
 Der vollständige Plan mit allen Detailabschnitten liegt unter
 `~/.claude/plans/melodic-greeting-lollipop.md`.
