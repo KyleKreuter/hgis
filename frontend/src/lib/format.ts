@@ -13,6 +13,20 @@ export function formatCount(value: number): string {
 }
 
 /**
+ * Grouping separators are wrong here: 12.847 objects reads well, but the year 1900 as
+ * "1.900" reads as a quantity and is simply not what the data says. An attribute value
+ * is data, so only the decimal separator is localised.
+ */
+const attributeNumberFormat = new Intl.NumberFormat('de-DE', {
+  useGrouping: false,
+  maximumFractionDigits: 12,
+})
+
+export function formatAttributeNumber(value: number): string {
+  return attributeNumberFormat.format(value)
+}
+
+/**
  * "vor 2 Stunden" for anything recent, a plain date beyond a week -- past that point
  * relative wording stops helping ("vor 34 Tagen" is harder to place than a date).
  */

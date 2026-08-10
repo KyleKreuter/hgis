@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { ArrowLeft, Upload } from 'lucide-react'
 import { WorkspaceLayout } from '@/layout/WorkspaceLayout'
 import { Separator } from '@/components/ui/separator'
@@ -9,6 +10,11 @@ import { ApiError } from '@/api/client'
 import { ensureProjectLoaded, projectDetailQuery } from '@/api/projects'
 import { ImportDialog, LayerTree } from '@/layers'
 import { ProjectMap, type ZoomRequest } from '@/map'
+import { AttributeTable } from '@/table'
+import { layerListQuery } from '@/api/layers'
+import { featureDetailQuery } from '@/api/features'
+import { useSelection } from '@/state/selection'
+import { boundsOfGeometry } from '@/map/geometryBounds'
 
 interface WorkspaceSearch {
   /** Active layer. Lives in the URL so a working state survives a reload and can be shared. */
@@ -27,23 +33,50 @@ export const Route = createFileRoute('/projects/$projectId')({
 })
 
 /**
- * The workspace shell. Later phases fill the panels:
- *   left dock   layer tree and layer properties (phase 4)
- *   map         MapLibre canvas with vector tile sources (phase 3)
- *   attributes  virtualised attribute table (phase 5)
+ * The workspace shell: layer tree on the left, map in the middle, attribute table below.
+ *
+ * The three panels are coupled through two things and nothing else -- the active layer,
+ * which lives in the URL, and the selection store, which both the map and the table
+ * write to. Everything else each panel loads for itself.
  */
 function Workspace() {
   const { projectId } = Route.useParams()
   const { layer: activeLayerId } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
+  const queryClient = useQueryClient()
   const { data: project } = useSuspenseQuery(projectDetailQuery(projectId, true))
+  const { data: layers } = useQuery(layerListQuery(projectId))
   const [importOpen, setImportOpen] = useState(false)
   // A counter, not a timestamp: zooming to the same layer twice has to produce a new
   // request object, and a counter does that without depending on the clock.
   const [zoomTo, setZoomTo] = useState<ZoomRequest | null>(null)
+  const clearSelection = useSelection((state) => state.clear)
+
+  const activeLayer = layers?.find((layer) => layer.id === activeLayerId) ?? null
+
+  function requestZoom(extent: [number, number, number, number]) {
+    setZoomTo((previous) => ({ extent, nonce: (previous?.nonce ?? 0) + 1 }))
+  }
 
   function selectLayer(layerId: string | null) {
+    // A fid means nothing outside its layer, so a selection cannot survive the switch.
+    clearSelection()
     navigate({ search: { layer: layerId ?? undefined }, replace: true })
+  }
+
+  /**
+   * Fetches the one feature's geometry and flies there. Goes through the query cache, so
+   * zooming to a row that Identify already opened costs no request at all.
+   */
+  async function zoomToFeature(fid: number) {
+    if (!activeLayerId) return
+    try {
+      const feature = await queryClient.fetchQuery(featureDetailQuery(activeLayerId, fid))
+      const bounds = boundsOfGeometry(feature.geometry)
+      if (bounds) requestZoom(bounds)
+    } catch {
+      toast.error('Objekt konnte nicht geladen werden')
+    }
   }
 
   return (
@@ -84,14 +117,20 @@ function Workspace() {
             projectId={projectId}
             activeLayerId={activeLayerId ?? null}
             onSelectLayer={selectLayer}
-            onZoomToLayer={(extent) =>
-              setZoomTo((previous) => ({ extent, nonce: (previous?.nonce ?? 0) + 1 }))
-            }
+            onZoomToLayer={requestZoom}
             onImportClick={() => setImportOpen(true)}
           />
         }
-        map={<ProjectMap project={project} zoomTo={zoomTo} />}
-        attributes={<PanelStub title="Attribute" note="Attributtabelle folgt in Phase 5" />}
+        map={
+          <ProjectMap project={project} zoomTo={zoomTo} activeLayerId={activeLayerId ?? null} />
+        }
+        attributes={
+          <AttributeTable
+            layerId={activeLayerId ?? null}
+            layerName={activeLayer?.name}
+            onZoomToFeature={zoomToFeature}
+          />
+        }
       />
     </>
   )
@@ -122,19 +161,6 @@ function ProjectLoadError({ error }: { error: Error }) {
         <Link to="/" className={buttonVariants()}>
           Zur Projektliste
         </Link>
-      </div>
-    </div>
-  )
-}
-
-function PanelStub({ title, note }: { title: string; note: string }) {
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-7 shrink-0 items-center border-b bg-muted/40 px-2 text-xs font-medium tracking-wide uppercase text-muted-foreground">
-        {title}
-      </div>
-      <div className="flex flex-1 items-center justify-center p-4">
-        <p className="text-sm text-muted-foreground">{note}</p>
       </div>
     </div>
   )

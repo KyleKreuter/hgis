@@ -4,9 +4,11 @@ Web-GIS mit QGIS-ähnlichen Funktionen. PostGIS ist nicht nur Ablage, sondern di
 Rechen-Engine: Vector Tiles, Filter und später Geoprocessing laufen in der Datenbank,
 nicht in Java.
 
-**Stand: Phase 4 abgeschlossen.** Ein Shapefile, GeoPackage, GeoJSON oder CSV lässt sich
+**Stand: Phase 5 abgeschlossen.** Ein Shapefile, GeoPackage, GeoJSON oder CSV lässt sich
 über den Import-Dialog hochladen und erscheint danach in der Karte. Layer lassen sich
-ein- und ausblenden, umsortieren, umbenennen und löschen. Die Attributtabelle folgt.
+ein- und ausblenden, umsortieren, umbenennen und löschen. Die Attributtabelle zeigt die
+Daten mit Filter und Sortierung, Karte und Tabelle teilen sich eine Selektion, und ein
+Klick auf die Karte liefert die Attribute des getroffenen Objekts.
 
 ## Architektur in drei Sätzen
 
@@ -65,7 +67,7 @@ docker compose exec db psql -U hgis -d hgis -c "\dt gis_data.*"
 cd frontend && npm run build
 ```
 
-## Vier Dinge, die man wissen muss
+## Sechs Dinge, die man wissen muss
 
 **Achsenreihenfolge.** EPSG:4326 ist offiziell lat/lon, praktisch erwartet jede Software
 lon/lat. `HgisBackendApplication` erzwingt deshalb in einem statischen Initialisierer
@@ -80,6 +82,16 @@ Full Table Scan.
 die Katalogzeilen und lässt die Tabellen in `gis_data` als Waisen zurück. Deshalb sammelt
 `ProjectDeletionService` erst alle Tabellennamen, droppt sie und löscht dann den Katalog,
 alles in einer Transaktion.
+
+**Die `fid` ist die Feature-ID der Kachel, kein Attribut.** `ST_AsMVT(…, 'geom', 'fid')`
+benennt `fid` als ID-Spalte, deshalb taucht sie nicht unter den Properties auf.
+MapLibre-Ausdrücke müssen `['id']` lesen — `['get','fid']` liefert für jedes Objekt
+`null`, der Filter passt auf nichts, und es gibt keinerlei Fehlermeldung.
+
+**Filterausdrücke sind kein SQL.** Der Client schickt einen Ausdruck über Feldnamen, die
+er kennt; `FilterParser` löst jeden Bezeichner über `layer_field` auf und bindet jeden
+Wert als Parameter. Nur diese beiden Regeln machen die Filterleiste ungefährlich — ein
+durchgereichtes SQL-Fragment wäre eine offene Datenbank.
 
 **Layerreihenfolge.** `z_index` zählt von unten: der höchste Wert wird zuletzt gezeichnet
 und liegt damit obenauf. Der Layerbaum zeigt genau die umgekehrte Reihenfolge, weil eine
@@ -97,7 +109,7 @@ Datenstand sähe an beiden Stellen anders aus.
 | 2 | Import: Shapefile, GeoPackage, GeoJSON, CSV über GeoTools | fertig |
 | 3 | Karte: MVT-Endpunkt und MapLibre | fertig |
 | 4 | Layerverwaltung: Baum, Reihenfolge, Sichtbarkeit, Import-Dialog | fertig |
-| 5 | Attributtabelle und Identify | offen |
+| 5 | Attributtabelle, Filter, Identify, Selektion | fertig |
 | 6 | Digitalisieren und Editieren | offen |
 | 7 | Härtung: Integrationstests, Limits, Fehlerbilder | offen |
 

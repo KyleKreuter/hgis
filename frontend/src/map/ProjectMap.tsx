@@ -4,12 +4,16 @@ import { MapCanvas } from './MapCanvas'
 import { MapLayerSync } from './MapLayerSync'
 import { ViewportPersistence } from './ViewportPersistence'
 import { ZoomToExtent, type ZoomRequest } from './ZoomToExtent'
+import { IdentifyControl } from './IdentifyControl'
+import { SelectionHighlight } from './SelectionHighlight'
 import { MapControls } from './controls/MapControls'
 
 interface ProjectMapProps {
   project: ProjectDetail
   /** Set by the layer tree's "zoom to layer"; null while nothing was requested. */
   zoomTo?: ZoomRequest | null
+  /** Restricts Identify to one layer, so clicking through a stack stays predictable. */
+  activeLayerId?: string | null
 }
 
 /**
@@ -19,12 +23,14 @@ interface ProjectMapProps {
  * without console errors even with zero layers -- track C's tile endpoint lands
  * separately, and `MapLayerSync` already no-ops on an empty list.
  */
-export function ProjectMap({ project, zoomTo = null }: ProjectMapProps) {
+export function ProjectMap({ project, zoomTo = null, activeLayerId = null }: ProjectMapProps) {
   return (
     <MapCanvas initialView={computeInitialView(project)}>
       <MapLayerSync projectId={project.id} />
       <ViewportPersistence projectId={project.id} />
       <ZoomToExtent request={zoomTo} />
+      <SelectionHighlight projectId={project.id} />
+      <IdentifyControl activeLayerId={activeLayerId} />
       <MapControls />
     </MapCanvas>
   )

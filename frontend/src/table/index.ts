@@ -1,0 +1,1 @@
+export { AttributeTable } from './AttributeTable'
