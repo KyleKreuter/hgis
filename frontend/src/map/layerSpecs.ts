@@ -20,7 +20,11 @@ export function sourceIdFor(layerId: string): string {
  * cache-immutable response (contract section 1) safe.
  */
 export function buildTileUrl(layer: Pick<LayerSummary, 'id' | 'dataVersion' | 'styleVersion'>): string {
-  return `/api/layers/${layer.id}/tiles/{z}/{x}/{y}.mvt?v=${layer.dataVersion}.${layer.styleVersion}`
+  // Absolute on purpose. MapLibre resolves tile templates in a worker, where there is
+  // no document base URL to resolve a leading-slash path against -- a relative template
+  // is dropped without any error event, and the layer simply stays empty.
+  const origin = typeof window === 'undefined' ? '' : window.location.origin
+  return `${origin}/api/layers/${layer.id}/tiles/{z}/{x}/{y}.mvt?v=${layer.dataVersion}.${layer.styleVersion}`
 }
 
 /**

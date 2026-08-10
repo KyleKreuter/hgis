@@ -15,6 +15,13 @@ export default defineConfig({
       '@': new URL('./src', import.meta.url).pathname,
     },
   },
+  optimizeDeps: {
+    // MapLibre spawns its tile-parsing worker via `new Worker(new URL(...))`. Vite's
+    // dependency pre-bundling rewrites that URL and the worker then never starts --
+    // silently: raster tiles keep loading (main thread), vector tiles never arrive,
+    // and no error is raised anywhere.
+    exclude: ['maplibre-gl'],
+  },
   server: {
     port: 5173,
     proxy: {

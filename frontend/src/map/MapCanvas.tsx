@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 // maplibre-gl v6 ships pure named exports, no default -- `Map` is renamed on
 // import since it would otherwise shadow the global/DOM `Map` class.
-import { Map as MapLibreMap } from 'maplibre-gl'
+import { Map as MapLibreMap, prewarm } from 'maplibre-gl'
 import { MapContext } from './MapContext'
 import { OSM_ATTRIBUTION, OSM_BASEMAP_STYLE } from './basemap'
 
@@ -38,6 +38,16 @@ export function MapCanvas({ initialView, children }: MapCanvasProps) {
     const container = containerRef.current
     if (!container || mapRef.current) return
 
+    // MapLibre keeps ONE global worker pool for all map instances and tears it down
+    // when the last map is removed. React 19 StrictMode's mount/cleanup/mount cycle
+    // hits exactly that: the first instance's removal disposes the pool the second
+    // instance is already relying on. Vector tiles are parsed in those workers, so
+    // they stop loading entirely -- silently, with no error event, while raster tiles
+    // (which bypass the workers) keep working and make the map look healthy.
+    //
+    // prewarm() keeps the pool alive independently of any single map's lifetime.
+    prewarm()
+
     const view = initialViewRef.current
     const map = new MapLibreMap({
       container,
@@ -51,10 +61,37 @@ export function MapCanvas({ initialView, children }: MapCanvasProps) {
     })
 
     mapRef.current = map
+    if (import.meta.env.DEV) {
+      // Debug handle. The map is otherwise unreachable from the console (it lives in a
+      // ref by design), which makes questions like "did this source actually load?"
+      // impossible to answer from outside -- `__hgisMap.isSourceLoaded(id)` and
+      // `querySourceFeatures` are what pinned down the worker problem above.
+      ;(window as unknown as Record<string, unknown>).__hgisMap = map
+    }
     map.on('load', () => setIsLoaded(true))
 
+    // MapLibre reports tile and style failures through this event and nowhere else --
+    // without a listener a broken source fails completely silently, and the map simply
+    // renders nothing where the data should be.
+    map.on('error', (event) => {
+      console.error('[hgis] MapLibre error:', event.error?.message ?? event)
+    })
+
     return () => {
-      map.remove()
+      // remove() throws ("can't access property destroy, this.painter is undefined")
+      // when the map is torn down before WebGL finished initialising -- exactly what
+      // React 19 StrictMode provokes with its mount/cleanup/mount cycle in dev.
+      //
+      // The throw is harmless in itself, but it aborts the rest of this cleanup: the
+      // ref would stay populated, the second mount would hit the guard above and skip
+      // creating a map, and what remained was a half-disposed instance that still drew
+      // the basemap but could no longer load any tiles. Hence catch and always reset.
+      try {
+        map.remove()
+      }
+      catch (error) {
+        console.debug('[hgis] map.remove() during teardown:', error)
+      }
       mapRef.current = null
       setIsLoaded(false)
     }

@@ -91,6 +91,16 @@ class ImportTransactions {
 		layer.setFeatureCount(featureCount);
 		layer.setExtent(computeExtent(layer.getTableName(), srid));
 
+		// The rollup below reads the layer extent straight from the database, and the
+		// assignment above is still sitting in the persistence context. Without this
+		// flush it would read NULL and the project extent would stay empty.
+		layerRepository.flush();
+
+		// Roll the layer extents up to the project. The map uses it to pick its opening
+		// view for a project that has never been opened, so without this a freshly
+		// imported project would start zoomed out over the whole country.
+		updateProjectExtent(layer.getProject().getId());
+
 		String message = skippedCount > 0
 				? skippedCount + " von " + (featureCount + skippedCount)
 						+ " Datensätzen übersprungen (fehlende oder unlesbare Geometrie)"
@@ -108,6 +118,28 @@ class ImportTransactions {
 	@Transactional
 	void failBeforeTableExists(UUID jobId, String reason) {
 		jobService.markFailed(jobId, reason);
+	}
+
+	/**
+	 * Recomputes a project's extent as the union of its layer extents.
+	 *
+	 * Both are already EPSG:4326, so no transform is needed. Runs as plain SQL because
+	 * the alternative -- loading every layer entity just to union boxes -- would read far
+	 * more than it needs to.
+	 */
+	private void updateProjectExtent(UUID projectId) {
+		jdbc.sql("""
+				UPDATE gis_meta.project p
+				SET extent = sub.box
+				FROM (
+				  SELECT ST_Envelope(ST_Extent(extent)::geometry) AS box
+				  FROM gis_meta.layer
+				  WHERE project_id = :projectId AND extent IS NOT NULL
+				) sub
+				WHERE p.id = :projectId AND sub.box IS NOT NULL
+				""")
+				.param("projectId", projectId)
+				.update();
 	}
 
 	/**
