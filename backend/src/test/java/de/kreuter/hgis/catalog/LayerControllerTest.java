@@ -9,7 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import de.kreuter.hgis.common.SqlIdentifier;
-import de.kreuter.hgis.tiles.TileTestcontainersConfiguration;
+import de.kreuter.hgis.TestcontainersConfiguration;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * DELETE actually drops it, which is the whole point of {@link LayerService#delete}
  * existing instead of a plain {@code repository.delete}.
  */
-@Import(TileTestcontainersConfiguration.class)
+@Import(TestcontainersConfiguration.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 class LayerControllerTest {

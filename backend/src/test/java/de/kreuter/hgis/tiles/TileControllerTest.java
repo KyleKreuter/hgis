@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import de.kreuter.hgis.TestcontainersConfiguration;
 import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.Project;
@@ -30,7 +31,7 @@ import org.springframework.test.web.servlet.MvcResult;
  * the right geometries) is covered at the {@link MvtService} level by
  * {@link MvtServiceTest}; this class only needs one small tile of data.
  */
-@Import(TileTestcontainersConfiguration.class)
+@Import(TestcontainersConfiguration.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 class TileControllerTest {

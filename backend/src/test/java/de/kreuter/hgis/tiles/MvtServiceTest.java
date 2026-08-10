@@ -2,6 +2,7 @@ package de.kreuter.hgis.tiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import de.kreuter.hgis.TestcontainersConfiguration;
 import de.kreuter.hgis.tiles.LayerTableFixture.TestLayer;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +25,7 @@ import tools.jackson.databind.ObjectMapper;
  * because the noise data (5000 rows) that makes the EXPLAIN proof meaningful is not
  * cheap to regenerate per test method.
  */
-@Import(TileTestcontainersConfiguration.class)
+@Import(TestcontainersConfiguration.class)
 @SpringBootTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MvtServiceTest {

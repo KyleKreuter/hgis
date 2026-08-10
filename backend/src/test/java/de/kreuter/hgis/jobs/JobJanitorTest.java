@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
 import de.kreuter.hgis.common.TableCreator;
-import de.kreuter.hgis.ingest.PostgisTestcontainersConfiguration;
+import de.kreuter.hgis.TestcontainersConfiguration;
 import de.kreuter.hgis.ingest.spi.SourceField;
 import de.kreuter.hgis.ingest.spi.SourceSchema;
 import java.util.List;
@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  * the assertions all see the same connection state, and test data is rolled back
  * automatically afterwards.
  */
-@Import(PostgisTestcontainersConfiguration.class)
+@Import(TestcontainersConfiguration.class)
 @SpringBootTest
 @Transactional
 class JobJanitorTest {

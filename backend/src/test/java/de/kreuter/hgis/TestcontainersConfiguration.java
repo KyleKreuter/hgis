@@ -7,15 +7,18 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * Database for integration tests.
+ * The one database for all integration tests.
  *
  * A plain {@code postgres} image has no PostGIS, so every geometry column in
  * V1__catalog.sql fails to create and the context never starts. The image therefore has
  * to match the one used for local development, declared as a Postgres-compatible
  * substitute so {@code PostgreSQLContainer} keeps wiring up the JDBC connection.
  *
- * Public so tests in every package can import it; the generated version was
- * package-private and therefore unusable outside de.kreuter.hgis.
+ * <p>Deliberately the only such configuration in the code base. Spring caches test
+ * contexts by their configuration, so a second class -- even one that is byte for byte
+ * equivalent -- yields a second context and therefore a second container. Tests that
+ * need extra schema objects create them in their own setup instead of bringing their own
+ * init script; the price of a divergent script is a whole extra Postgres per test run.
  */
 @TestConfiguration(proxyBeanMethods = false)
 public class TestcontainersConfiguration {

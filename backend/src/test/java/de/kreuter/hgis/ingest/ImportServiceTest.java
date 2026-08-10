@@ -2,6 +2,7 @@ package de.kreuter.hgis.ingest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import de.kreuter.hgis.TestcontainersConfiguration;
 import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerField;
 import de.kreuter.hgis.catalog.LayerFieldRepository;
@@ -26,7 +27,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * {@link de.kreuter.hgis.common.TableCreator} and {@link FeatureWriter} together, driven
  * by {@link FakeSourceReader} since track A's real readers do not exist yet.
  */
-@Import(PostgisTestcontainersConfiguration.class)
+@Import(TestcontainersConfiguration.class)
 @SpringBootTest
 class ImportServiceTest {
 
