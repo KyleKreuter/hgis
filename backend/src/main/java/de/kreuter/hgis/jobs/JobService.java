@@ -1,0 +1,71 @@
+package de.kreuter.hgis.jobs;
+
+import de.kreuter.hgis.common.NotFoundException;
+import de.kreuter.hgis.jobs.dto.JobDtos;
+import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Owns the {@code job} row and its status transitions PENDING -> RUNNING ->
+ * SUCCEEDED/FAILED. Every public method here is its own short transaction; callers that
+ * need a job update to commit together with other work (the layer catalog row, a batch
+ * of features) call these methods from within their own {@code @Transactional} method so
+ * the calls join that transaction instead of opening a new one.
+ */
+@Service
+public class JobService {
+
+	private final JobRepository repository;
+
+	JobService(JobRepository repository) {
+		this.repository = repository;
+	}
+
+	/** Creates a job in PENDING. Flushed immediately so createdAt is populated for the
+	 *  202 response the controller returns right after this call. */
+	@Transactional
+	public Job create(UUID projectId, Job.Type type, String filename) {
+		return repository.saveAndFlush(new Job(projectId, type, filename));
+	}
+
+	@Transactional
+	public void markRunning(UUID jobId, UUID outputLayerId, Long totalCount) {
+		Job job = require(jobId);
+		job.markRunning();
+		job.setOutputLayerId(outputLayerId);
+		job.updateProgress(0, totalCount, 0);
+	}
+
+	@Transactional
+	public void updateProgress(UUID jobId, long processedCount, Long totalCount, long skippedCount) {
+		require(jobId).updateProgress(processedCount, totalCount, skippedCount);
+	}
+
+	@Transactional
+	public void markSucceeded(UUID jobId, String message) {
+		require(jobId).markSucceeded(message);
+	}
+
+	@Transactional
+	public void markFailed(UUID jobId, String message) {
+		require(jobId).markFailed(message);
+	}
+
+	@Transactional(readOnly = true)
+	public JobDtos.Response get(UUID jobId) {
+		return toResponse(require(jobId));
+	}
+
+	private Job require(UUID jobId) {
+		return repository.findById(jobId)
+				.orElseThrow(() -> new NotFoundException("Job " + jobId + " existiert nicht"));
+	}
+
+	private static JobDtos.Response toResponse(Job job) {
+		return new JobDtos.Response(
+				job.getId(), job.getType().name(), job.getStatus().name(), job.getFilename(),
+				job.getProcessedCount(), job.getTotalCount(), job.getSkippedCount(), job.getOutputLayerId(),
+				job.getMessage(), job.getStartedAt(), job.getFinishedAt(), job.getCreatedAt());
+	}
+}
