@@ -35,6 +35,14 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
   const [snapEnabled, setSnapEnabled] = useState(true)
   const [snapTarget, setSnapTarget] = useState<SnapTarget | null>(null)
   const [snapUnavailableReason, setSnapUnavailableReason] = useState<string | null>(null)
+  /**
+   * Other layers to snap against.
+   *
+   * Session state, not project state: which layers one snaps to while drawing is a
+   * working preference and changes from task to task, unlike visibility and order, which
+   * describe the project itself and therefore live on the server.
+   */
+  const [snapSourceLayerIds, setSnapSourceLayerIds] = useState<string[]>([])
 
   const buffer = useEditing((state) => state.buffer)
   const beginEditing = useEditing((state) => state.begin)
@@ -58,6 +66,7 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
     setInvalidGeometry(null)
     setSnapTarget(null)
     setSnapUnavailableReason(null)
+    setSnapSourceLayerIds([])
   }, [endEditing])
 
   const save = useCallback(
@@ -155,6 +164,11 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
     setSnapTarget,
     snapUnavailableReason,
     setSnapUnavailableReason,
+    snapSourceLayerIds,
+    toggleSnapSource: (id: string) =>
+      setSnapSourceLayerIds((previous) =>
+        previous.includes(id) ? previous.filter((entry) => entry !== id) : [...previous, id],
+      ),
     tool,
     setTool,
     selectedFid,

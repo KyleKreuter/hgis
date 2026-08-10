@@ -96,7 +96,8 @@ zurückgerechnet. Die Toleranz dagegen zählt in Pixeln: eine feste Meterangabe 
 herausgezoomt unbrauchbar und hineingezoomt wirkungslos. Gerastet wird auf Stützpunkte,
 Schnittpunkte und Kanten — in dieser Reihenfolge, nicht nach Abstand: die ersten beiden
 sind Orte, die die Daten auszeichnen, ein Kantenpunkt ist nur der, an dem der Zeiger
-zufällig stand.
+zufällig stand. Andere Layer lassen sich im Editiermodus als Fangquelle dazuschalten;
+ihre Objekte sind dann Ziel, bleiben aber unveränderbar.
 
 **Editieren arbeitet auf Einzelgeometrien, gespeichert wird multi.** Layerspalten sind
 immer multi-typisiert (`ST_Multi` beim Import), terra-draw kennt aber nur Point,

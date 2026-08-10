@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -55,6 +55,8 @@ interface DrawControllerProps {
   onSnapTarget: (target: SnapTarget | null) => void
   /** Why snapping cannot be trusted here, or null when it can. */
   onSnapUnavailable: (reason: string | null) => void
+  /** Other layers to snap against. Their features are targets only, never editable. */
+  snapSourceLayerIds: string[]
 }
 
 /**
@@ -73,6 +75,7 @@ export function DrawController({
   snapEnabled,
   onSnapTarget,
   onSnapUnavailable,
+  snapSourceLayerIds,
 }: DrawControllerProps) {
   const { mapRef, isLoaded } = useMap()
   const queryClient = useQueryClient()
@@ -87,9 +90,21 @@ export function DrawController({
    * drawing a second polygon flush against the first is precisely when it is wanted.
    */
   const snapCandidates = useRef(new Map<number, SnapCandidate>())
+  /**
+   * Snap targets from other layers, kept apart from the editable ones on purpose: a fid
+   * only identifies a row within its own layer, so merging them into one fid-keyed map
+   * would have features of one layer overwrite those of another.
+   */
+  const externalCandidates = useRef<SnapCandidate[]>([])
   /** Read inside terra-draw's snap callback, which is created once and outlives a toggle. */
   const snapEnabledRef = useRef(snapEnabled)
   snapEnabledRef.current = snapEnabled
+
+  /** Everything snapping may attach to: this layer's features plus the marked sources. */
+  const allSnapCandidates = useCallback(
+    () => [...snapCandidates.current.values(), ...externalCandidates.current],
+    [],
+  )
 
   useEffect(() => {
     const map = mapRef.current
@@ -106,7 +121,7 @@ export function DrawController({
       }
       const target = findSnapTarget(
         [event.lng, event.lat],
-        [...snapCandidates.current.values()],
+        allSnapCandidates(),
         ([lng, lat]) => context.project(lng, lat),
       )
       onSnapTarget(target)
@@ -161,6 +176,12 @@ export function DrawController({
       // Same reasoning as `__hgisMap`: the instance lives in a ref, so questions like
       // "did this feature actually get added" cannot be answered from outside without it.
       ;(window as unknown as Record<string, unknown>).__hgisDraw = draw
+      // Snap candidates live in refs too, and "is this layer actually being snapped to"
+      // has no other answer from outside.
+      ;(window as unknown as Record<string, unknown>).__hgisSnap = () => ({
+        eigene: snapCandidates.current.size,
+        fremde: externalCandidates.current.length,
+      })
     }
 
     // A finished shape is a new feature. terra-draw keeps drawing it until then, so this
@@ -239,14 +260,15 @@ export function DrawController({
     // terra-draw's callback above.
     function previewSnap(event: { lngLat: { lng: number; lat: number } }) {
       const target = mapRef.current
-      if (!target || !snapEnabledRef.current || snapCandidates.current.size === 0) {
+      const candidates = allSnapCandidates()
+      if (!target || !snapEnabledRef.current || candidates.length === 0) {
         onSnapTarget(null)
         return
       }
       onSnapTarget(
         findSnapTarget(
           [event.lngLat.lng, event.lngLat.lat],
-          [...snapCandidates.current.values()],
+          candidates,
           ([lng, lat]) => target.project([lng, lat]),
         ),
       )
@@ -351,12 +373,75 @@ export function DrawController({
       originals.current.clear()
       lastGeometry.current.clear()
       snapCandidates.current.clear()
+      externalCandidates.current = []
       onSnapTarget(null)
       onSnapUnavailable(null)
       // Deliberately not ending the editing session here: leaving the mode is
       // `useEditSession`'s decision, and this cleanup also runs on a plain reload.
     }
-  }, [mapRef, isLoaded, layerId, queryClient, onSelectFeature, onSnapTarget, onSnapUnavailable, reloadNonce])
+  }, [mapRef, isLoaded, layerId, queryClient, onSelectFeature, onSnapTarget, onSnapUnavailable, allSnapCandidates, reloadNonce])
+
+  /**
+   * Loads the marked snap sources.
+   *
+   * Deliberately its own effect: toggling a source must not rebuild terra-draw, which
+   * holds every unsaved change. These features are targets only -- they are never handed
+   * to the drawing tool, so nothing about them can be moved by accident.
+   */
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isLoaded || snapSourceLayerIds.length === 0) {
+      externalCandidates.current = []
+      return
+    }
+
+    // The layer being edited is always a snap target through its editable features. If it
+    // is also marked as a source -- easily done by switching the active layer to one --
+    // loading it again would put every one of its features into the candidate set twice.
+    const sources = snapSourceLayerIds.filter((id) => id !== layerId)
+    if (sources.length === 0) {
+      externalCandidates.current = []
+      return
+    }
+
+    let cancelled = false
+    const bounds = map.getBounds()
+    const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(',')
+
+    async function loadSources() {
+      const loaded: SnapCandidate[] = []
+
+      for (const sourceLayerId of sources) {
+        try {
+          const page = await queryClient.fetchQuery({
+            queryKey: ['layers', sourceLayerId, 'snap-source', bbox],
+            queryFn: () =>
+              api.get<FeaturePage>(
+                `/api/layers/${sourceLayerId}/features?geometry=true&bbox=${bbox}&size=${MAX_EDITABLE}`,
+              ),
+            staleTime: 30_000,
+          })
+
+          for (const feature of page.features) {
+            if (!feature.geometry) continue
+            // Multi-part geometry is fine here, unlike for editing: snapping walks
+            // coordinates and never has to represent the feature as one editable shape.
+            const geometry = feature.geometry as GeoJSON.Geometry
+            loaded.push({ geometry, bounds: boundsOf(geometry) })
+          }
+        } catch {
+          toast.error('Ein Layer konnte nicht als Fangquelle geladen werden')
+        }
+      }
+
+      if (!cancelled) externalCandidates.current = loaded
+    }
+
+    void loadSources()
+    return () => {
+      cancelled = true
+    }
+  }, [mapRef, isLoaded, layerId, queryClient, snapSourceLayerIds])
 
   // Switching tools must not tear the instance down: terra-draw carries the working copy,
   // and recreating it would drop everything drawn so far.

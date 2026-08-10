@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Circle,
   Crosshair,
+  Magnet,
   MoreHorizontal,
   Pencil,
   Shapes,
@@ -58,6 +59,9 @@ interface LayerTreeProps {
   onSelectLayer: (layerId: string | null) => void
   onZoomToLayer: (extent: [number, number, number, number]) => void
   onImportClick: () => void
+  /** Layers marked as snap sources, or null when not editing -- the toggle only exists then. */
+  snapSources?: string[] | null
+  onToggleSnapSource?: (layerId: string) => void
 }
 
 export function LayerTree({
@@ -66,6 +70,8 @@ export function LayerTree({
   onSelectLayer,
   onZoomToLayer,
   onImportClick,
+  snapSources = null,
+  onToggleSnapSource,
 }: LayerTreeProps) {
   const { data: layers, isPending } = useQuery(layerListQuery(projectId))
   const reorder = useReorderLayers(projectId)
@@ -151,6 +157,9 @@ export function LayerTree({
               }
               canMoveUp={index > 0}
               canMoveDown={index < displayed.length - 1}
+              isSnapSource={snapSources?.includes(layer.id) ?? false}
+              showSnapToggle={snapSources !== null && layer.id !== activeLayerId}
+              onToggleSnapSource={() => onToggleSnapSource?.(layer.id)}
               onSelect={() => onSelectLayer(layer.id)}
               onZoom={() => {
                 if (!layer.extent) {
@@ -203,6 +212,9 @@ interface LayerRowProps {
   layer: LayerSummary
   projectId: string
   isActive: boolean
+  isSnapSource: boolean
+  showSnapToggle: boolean
+  onToggleSnapSource: () => void
   isDragged: boolean
   dropIndicator: 'above' | 'below' | null
   canMoveUp: boolean
@@ -222,6 +234,9 @@ function LayerRow({
   layer,
   projectId,
   isActive,
+  isSnapSource,
+  showSnapToggle,
+  onToggleSnapSource,
   isDragged,
   dropIndicator,
   canMoveUp,
@@ -291,6 +306,27 @@ function LayerRow({
           {formatCount(layer.featureCount)}
         </span>
       </button>
+
+      {/* Only while editing, and never on the layer being edited -- that one is always a
+          snap source, and offering to switch it off would suggest otherwise. */}
+      {showSnapToggle && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className={cn(
+            'size-5 shrink-0',
+            isSnapSource ? 'text-foreground' : 'text-muted-foreground/40 hover:text-muted-foreground',
+          )}
+          aria-label={`${layer.name} ${isSnapSource ? 'nicht mehr' : ''} als Fangquelle verwenden`}
+          aria-pressed={isSnapSource}
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggleSnapSource()
+          }}
+        >
+          <Magnet className="size-3" />
+        </Button>
+      )}
 
       <DropdownMenu>
         <DropdownMenuTrigger

@@ -154,6 +154,8 @@ function Workspace() {
                 onSelectLayer={selectLayer}
                 onZoomToLayer={requestZoom}
                 onImportClick={() => setImportOpen(true)}
+                snapSources={editing.active ? editing.snapSourceLayerIds : null}
+                onToggleSnapSource={editing.toggleSnapSource}
               />
             </div>
             {editing.active && (
@@ -187,6 +189,7 @@ function Workspace() {
                   snapEnabled={editing.snapEnabled}
                   onSnapTarget={editing.setSnapTarget}
                   onSnapUnavailable={editing.setSnapUnavailableReason}
+                  snapSourceLayerIds={editing.snapSourceLayerIds}
                 />
                 <SnapMarker target={editing.snapTarget} />
                 <EditingTileFilter layerId={activeLayer.id} />
