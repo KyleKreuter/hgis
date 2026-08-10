@@ -15,7 +15,13 @@ import type { FeaturePage } from '@/api/features'
 import { useMap } from '@/map/MapContext'
 import { useEditing, type DraftFeature } from '@/state/editing'
 import { toSinglePart } from './singlePart'
-import { boundsOf, findSnapTarget, type SnapCandidate, type SnapTarget } from './snapping'
+import {
+  boundsOf,
+  findSnapTarget,
+  isTargetInReach,
+  type SnapCandidate,
+  type SnapTarget,
+} from './snapping'
 
 /**
  * How many existing features are loaded into the editor at once.
@@ -99,6 +105,13 @@ export function DrawController({
   /** Read inside terra-draw's snap callback, which is created once and outlives a toggle. */
   const snapEnabledRef = useRef(snapEnabled)
   snapEnabledRef.current = snapEnabled
+  /**
+   * The target the marker is currently showing.
+   *
+   * Kept because placing a point has to snap on its own (see `snapPlacedPoint`), and the
+   * position the marker promised is the only honest answer at that moment.
+   */
+  const previewTarget = useRef<SnapTarget | null>(null)
 
   /** Everything snapping may attach to: this layer's features plus the marked sources. */
   const allSnapCandidates = useCallback(
@@ -160,9 +173,8 @@ export function DrawController({
             ]),
           ),
         }),
-        // No snapping option on the point mode -- terra-draw offers it for lines and
-        // polygons only. Placing a single point is the one case where it would matter
-        // least, but it is a gap, not a decision.
+        // Takes no snapping option -- terra-draw offers one for lines and polygons only.
+        // A placed point is corrected afterwards instead, in `snapPlacedPoint`.
         new TerraDrawPointMode(),
         new TerraDrawLineStringMode({ snapping: { toCustom: snapTo } }),
         new TerraDrawPolygonMode({ snapping: { toCustom: snapTo } }),
@@ -184,6 +196,38 @@ export function DrawController({
       })
     }
 
+    /**
+     * Moves a just-placed point onto the snap target, and reports where it ended up.
+     *
+     * terra-draw has no snapping option on its point mode -- lines and polygons get one,
+     * points do not -- so the point lands wherever the click was and is corrected here.
+     *
+     * The target is the one the marker was showing, never one recomputed from the click.
+     * Recomputing would be wrong twice over: the point is already in terra-draw's store by
+     * now, so the search would find the point itself at a distance of zero; and even
+     * without that it could settle on a different target than the one under the marker,
+     * which would make the marker a lie.
+     */
+    function snapPlacedPoint(id: string | number, geometry: GeoJSON.Geometry): GeoJSON.Geometry {
+      const map = mapRef.current
+      const target = previewTarget.current
+      if (geometry.type !== 'Point' || !snapEnabledRef.current || !target || !map) return geometry
+
+      const click = geometry.coordinates as [number, number]
+      if (!isTargetInReach(target, click, ([lng, lat]) => map.project([lng, lat]))) {
+        return geometry
+      }
+
+      const snapped: GeoJSON.Point = { type: 'Point', coordinates: target.position }
+      // Recorded before the update so the change handler recognises its own correction:
+      // it compares against this and would otherwise log a second, separate undo step for
+      // a move the user never made.
+      lastGeometry.current.set(Number(id), JSON.stringify(snapped))
+      draw.updateFeatureGeometry(id, snapped)
+      snapCandidates.current.set(Number(id), { geometry: snapped, bounds: boundsOf(snapped) })
+      return snapped
+    }
+
     // A finished shape is a new feature. terra-draw keeps drawing it until then, so this
     // is the first moment there is a geometry worth recording.
     draw.on('finish', (id, context) => {
@@ -191,12 +235,12 @@ export function DrawController({
       const feature = draw.getSnapshot().find((entry) => entry.id === id)
       if (!feature || isHandle(feature)) return
 
+      const geometry = snapPlacedPoint(id, feature.geometry as GeoJSON.Geometry)
+
       // The id terra-draw assigned came from the buffer's own counter, so it is already
       // the temporary fid -- passing it on keeps the two sides holding one id, not two.
-      const fid = useEditing
-        .getState()
-        .addFeature(feature.geometry as GeoJSON.Geometry, {}, Number(id))
-      lastGeometry.current.set(fid, JSON.stringify(feature.geometry))
+      const fid = useEditing.getState().addFeature(geometry, {}, Number(id))
+      lastGeometry.current.set(fid, JSON.stringify(geometry))
       // Registering it as a snap target is the change handler's job -- terra-draw reports
       // the creation there, whichever way the feature came into being.
       // A freshly drawn feature is what the user is working on, so its attribute form
@@ -262,16 +306,18 @@ export function DrawController({
       const target = mapRef.current
       const candidates = allSnapCandidates()
       if (!target || !snapEnabledRef.current || candidates.length === 0) {
+        previewTarget.current = null
         onSnapTarget(null)
         return
       }
-      onSnapTarget(
-        findSnapTarget(
-          [event.lngLat.lng, event.lngLat.lat],
-          candidates,
-          ([lng, lat]) => target.project([lng, lat]),
-        ),
+      const found = findSnapTarget(
+        [event.lngLat.lng, event.lngLat.lat],
+        candidates,
+        ([lng, lat]) => target.project([lng, lat]),
       )
+      // Held for the point tool, which snaps from here rather than through terra-draw.
+      previewTarget.current = found
+      onSnapTarget(found)
     }
 
     map.on('mousemove', previewSnap)
@@ -374,6 +420,7 @@ export function DrawController({
       lastGeometry.current.clear()
       snapCandidates.current.clear()
       externalCandidates.current = []
+      previewTarget.current = null
       onSnapTarget(null)
       onSnapUnavailable(null)
       // Deliberately not ending the editing session here: leaving the mode is

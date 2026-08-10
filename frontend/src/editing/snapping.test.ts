@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { boundsOf, findSnapTarget, type Project, type SnapCandidate } from './snapping'
+import {
+  boundsOf,
+  findSnapTarget,
+  isTargetInReach,
+  type Project,
+  type SnapCandidate,
+  type SnapTarget,
+} from './snapping'
 
 /**
  * A simple equirectangular projection: 10000 pixels per degree, y downwards. Good enough
@@ -247,6 +254,34 @@ describe('findSnapTarget', () => {
       expect(target?.position[0]).toBeCloseTo(9.99, 12)
       expect(target?.position[1]).toBeCloseTo(53.545, 12)
     })
+  })
+})
+
+describe('isTargetInReach', () => {
+  const target: SnapTarget = {
+    position: [9.98, 53.54],
+    kind: 'vertex',
+    // Deliberately nonsense: the distance recorded when the target was found says nothing
+    // about where the pointer is now, and this guards against the check reading it.
+    distancePx: 0,
+  }
+
+  it('accepts a target the pointer is still near', () => {
+    // 3 pixels away.
+    expect(isTargetInReach(target, [9.9803, 53.54], project)).toBe(true)
+  })
+
+  it('rejects a target the pointer has moved away from', () => {
+    // 50 pixels away -- a preview left over from before a pan.
+    expect(isTargetInReach(target, [9.985, 53.54], project)).toBe(false)
+  })
+
+  it('measures against the given tolerance', () => {
+    // 15 pixels away: beyond the default of 12, inside a widened 20.
+    const pointer: [number, number] = [9.9815, 53.54]
+
+    expect(isTargetInReach(target, pointer, project)).toBe(false)
+    expect(isTargetInReach(target, pointer, project, 20)).toBe(true)
   })
 })
 

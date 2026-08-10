@@ -275,6 +275,24 @@ function mapUnitsPerPixel(pointer: [number, number], project: Project): number {
   return pixels === 0 ? Infinity : step / pixels
 }
 
+/**
+ * Whether a target the marker was showing still covers where the pointer ended up.
+ *
+ * The point tool snaps by correcting an already-placed point (see `DrawController`), using
+ * the target the marker last displayed rather than a fresh search. That target can be
+ * stale -- from before a pan, or from an input that never sent a pointer move at all --
+ * and applying it blindly would move the point somewhere no marker ever was. This is the
+ * check that keeps the marker binding and nothing else.
+ */
+export function isTargetInReach(
+  target: SnapTarget,
+  position: [number, number],
+  project: Project,
+  tolerancePx: number = SNAP_TOLERANCE_PX,
+): boolean {
+  return distance(project(position), project(target.position)) <= tolerancePx
+}
+
 /** Bounding box of a geometry, for the cheap rejection above. */
 export function boundsOf(geometry: GeoJSON.Geometry): [number, number, number, number] {
   let minLng = Infinity
