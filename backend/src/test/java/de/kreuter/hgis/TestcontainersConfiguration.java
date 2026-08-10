@@ -13,9 +13,10 @@ import org.testcontainers.utility.DockerImageName;
  * V1__catalog.sql fails to create and the context never starts. The image therefore has
  * to match the one used for local development, declared as a Postgres-compatible
  * substitute so {@code PostgreSQLContainer} keeps wiring up the JDBC connection.
+ *
+ * Public so tests in every package can import it; the generated version was
+ * package-private and therefore unusable outside de.kreuter.hgis.
  */
-// Public so tests in every package can import it; the generated version was
-// package-private and therefore unusable outside de.kreuter.hgis.
 @TestConfiguration(proxyBeanMethods = false)
 public class TestcontainersConfiguration {
 
