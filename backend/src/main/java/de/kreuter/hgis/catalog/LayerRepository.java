@@ -10,7 +10,17 @@ import org.springframework.data.repository.query.Param;
 
 public interface LayerRepository extends JpaRepository<Layer, UUID> {
 
-	List<Layer> findByProjectIdOrderByZIndexAscCreatedAtAsc(UUID projectId);
+	/**
+	 * Layers of a project in drawing order.
+	 *
+	 * Written out as JPQL on purpose. A derived query name would have to carry the
+	 * segment "ZIndex", and Spring Data does not decapitalize that back to the entity
+	 * property {@code zIndex} -- the Java Beans rule leaves a name unchanged when its
+	 * first two characters are uppercase, so {@code getZIndex()} exposes "ZIndex". The
+	 * result is {@code ORDER BY l.ZIndex} and a runtime failure.
+	 */
+	@Query("SELECT l FROM Layer l WHERE l.project.id = :projectId ORDER BY l.zIndex ASC, l.createdAt ASC")
+	List<Layer> findByProjectOrdered(@Param("projectId") UUID projectId);
 
 	Optional<Layer> findByTableName(String tableName);
 

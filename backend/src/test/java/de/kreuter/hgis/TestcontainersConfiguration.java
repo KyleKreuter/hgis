@@ -6,13 +6,29 @@ import org.springframework.context.annotation.Bean;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+/**
+ * Database for integration tests.
+ *
+ * A plain {@code postgres} image has no PostGIS, so every geometry column in
+ * V1__catalog.sql fails to create and the context never starts. The image therefore has
+ * to match the one used for local development, declared as a Postgres-compatible
+ * substitute so {@code PostgreSQLContainer} keeps wiring up the JDBC connection.
+ */
+// Public so tests in every package can import it; the generated version was
+// package-private and therefore unusable outside de.kreuter.hgis.
 @TestConfiguration(proxyBeanMethods = false)
-class TestcontainersConfiguration {
+public class TestcontainersConfiguration {
+
+	/** Same multi-arch PostGIS build as docker-compose.yml -- native on Apple Silicon. */
+	private static final DockerImageName POSTGIS = DockerImageName
+			.parse("imresamu/postgis:17-3.5")
+			.asCompatibleSubstituteFor("postgres");
 
 	@Bean
 	@ServiceConnection
 	PostgreSQLContainer postgresContainer() {
-		return new PostgreSQLContainer(DockerImageName.parse("postgres:latest"));
+		return new PostgreSQLContainer(POSTGIS)
+				.withInitScript("db/testcontainers-init.sql");
 	}
 
 }
