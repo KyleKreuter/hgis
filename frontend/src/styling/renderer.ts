@@ -22,7 +22,9 @@ export function convertRenderer(
   if (type === 'single') return { type: 'single', symbol: base }
 
   const fallbackSymbol = withPrimaryColor(defaultSymbolFor(geometryType), FALLBACK_COLOR)
-  const field = 'field' in style.renderer ? style.renderer.field : ''
+  // Read off the discriminator, not off the member being present: the server omits
+  // null members, so absence says nothing about which renderer this is.
+  const field = style.renderer.type === 'single' ? '' : style.renderer.field
 
   if (type === 'categorized') {
     return { type: 'categorized', field, categories: [], fallbackSymbol }

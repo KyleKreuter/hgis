@@ -297,6 +297,39 @@ describe('syncMapLayers mit Symbologie', () => {
     expect(sources.size).toBe(0)
   })
 
+  /**
+   * A PATCH answers with the server's own serialisation, a later GET reads the same
+   * document back out of a jsonb column, and PostgreSQL reorders the keys in there.
+   * Semantically the same style, textually a different one -- and a refetch must not
+   * turn that into paint updates on every layer of the project.
+   */
+  it('erkennt einen Style mit vertauschter Schlüsselreihenfolge als unverändert', () => {
+    const { map } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    const style = styleWithColor('#0072b2')
+    syncMapLayers(map, [makeLayer({ style })], applied)
+
+    const reordered = {
+      opacity: style.opacity,
+      renderer: {
+        symbol: {
+          outlineWidth: 1,
+          fillColor: '#0072b2',
+          outlineColor: '#262626',
+          kind: 'fill',
+          fillOpacity: 0.25,
+        },
+        type: 'single',
+      },
+      version: 1,
+    } as unknown as LayerStyle
+    syncMapLayers(map, [makeLayer({ style: reordered })], applied)
+
+    expect(map.setPaintProperty).not.toHaveBeenCalled()
+    expect(map.setLayoutProperty).not.toHaveBeenCalled()
+    expect(map.addLayer).toHaveBeenCalledTimes(1)
+  })
+
   it('geht beim Wechsel auf kategorisiert in einen Ausdruck über, ohne Kacheln neu zu holen', () => {
     const { map } = createFakeMap()
     const applied = new Map<string, AppliedLayer>()

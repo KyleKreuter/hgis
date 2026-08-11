@@ -31,6 +31,10 @@ export function CategorizedEditor({
   onChange,
 }: CategorizedEditorProps) {
   const [palette, setPalette] = useState(DEFAULT_CATEGORY_PALETTE)
+  // Defensive: the server omits every null member (@JsonInclude(NON_NULL)), so an
+  // empty list may not arrive as `[]` at all. `undefined.length` here would take the
+  // whole workspace down over an edge case that costs one line to survive.
+  const categories = renderer.categories ?? []
   const { data, isFetching, isError } = useQuery({
     ...layerValuesQuery(layerId, renderer.field),
     enabled: renderer.field !== '',
@@ -45,9 +49,11 @@ export function CategorizedEditor({
     const key = `${layerId}:${data.field}`
     if (generatedFor.current === key) return
     generatedFor.current = key
-    if (renderer.categories.length > 0) return
+    if (categories.length > 0) return
     onChange({ ...renderer, categories: buildCategories(data.values, geometryType, palette) })
-  }, [data, geometryType, layerId, onChange, palette, renderer])
+    // `categories.length`, not `categories` itself: the fallback to `[]` makes a fresh
+    // array on every render, which would re-run this effect forever.
+  }, [categories.length, data, geometryType, layerId, onChange, palette, renderer])
 
   function selectField(fieldId: string) {
     generatedFor.current = null
@@ -56,10 +62,10 @@ export function CategorizedEditor({
 
   function recolor(paletteId: string) {
     setPalette(paletteId)
-    const colors = paletteColors(paletteId, renderer.categories.length)
+    const colors = paletteColors(paletteId, categories.length)
     onChange({
       ...renderer,
-      categories: renderer.categories.map((category, index) => ({
+      categories: categories.map((category, index) => ({
         ...category,
         symbol: withPrimaryColor(category.symbol, colors[index]),
       })),
@@ -70,7 +76,7 @@ export function CategorizedEditor({
     onChange(
       {
         ...renderer,
-        categories: renderer.categories.map((category, position) =>
+        categories: categories.map((category, position) =>
           position === index ? { ...category, symbol: withPrimaryColor(category.symbol, color) } : category,
         ),
       },
@@ -103,7 +109,7 @@ export function CategorizedEditor({
           variant="outline"
           size="sm"
           className="h-7 px-2 text-xs"
-          disabled={renderer.categories.length === 0}
+          disabled={categories.length === 0}
           onClick={() => recolor(palette)}
         >
           Neu verteilen
@@ -129,10 +135,10 @@ export function CategorizedEditor({
         </p>
       )}
 
-      {renderer.categories.length > 0 && (
+      {categories.length > 0 && (
         <ScrollArea className="max-h-56">
           <ul className="grid gap-0.5 py-1">
-            {renderer.categories.map((category, index) => (
+            {categories.map((category, index) => (
               <li key={`${index}-${String(category.value)}`} className="flex items-center gap-1.5">
                 <ColorInput
                   value={primaryColorOf(category.symbol)}

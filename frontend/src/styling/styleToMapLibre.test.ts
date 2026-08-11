@@ -239,6 +239,35 @@ describe('styleToMapLibre Reihenfolge und Ids', () => {
   })
 })
 
+describe('styleToMapLibre Strichart', () => {
+  // Cast on purpose: the whole point is a payload the type says cannot occur -- a
+  // symbol whose optional member the server left out of the JSON entirely.
+  function lineStyle(symbol: Record<string, unknown>): LayerStyle {
+    return { version: 1, renderer: { type: 'single', symbol }, opacity: 1 } as unknown as LayerStyle
+  }
+
+  function dashOf(style: LayerStyle): unknown {
+    const [spec] = styleToMapLibre(style, makeLayer({ geometryType: 'MULTILINESTRING' }), SOURCE_ID)
+    return (spec as LineLayerSpecification).paint?.['line-dasharray']
+  }
+
+  /**
+   * The server omits every null member, so a solid line comes back with no `dashArray`
+   * key at all rather than with `null`. Both have to mean the same thing here.
+   */
+  it('zeichnet durchgezogen, ob dashArray fehlt, null oder leer ist', () => {
+    const solid = { kind: 'line', color: '#404040', width: 1.25 }
+
+    expect(dashOf(lineStyle(solid))).toBeUndefined()
+    expect(dashOf(lineStyle({ ...solid, dashArray: null }))).toBeUndefined()
+    expect(dashOf(lineStyle({ ...solid, dashArray: [] }))).toBeUndefined()
+  })
+
+  it('übernimmt ein Strichmuster unverändert', () => {
+    expect(dashOf(lineStyle({ kind: 'line', color: '#404040', width: 1.25, dashArray: [3, 2] }))).toEqual([3, 2])
+  })
+})
+
 describe('styleToMapLibre Ausdrücke', () => {
   function fillColorOf(style: LayerStyle): unknown {
     const [spec] = styleToMapLibre(style, makeLayer(), SOURCE_ID)

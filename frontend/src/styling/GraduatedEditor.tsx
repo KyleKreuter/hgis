@@ -31,8 +31,12 @@ interface GraduatedEditorProps {
 }
 
 export function GraduatedEditor({ layerId, geometryType, renderer, fields, onChange }: GraduatedEditorProps) {
+  // Defensive: the server omits every null member (@JsonInclude(NON_NULL)), so an
+  // empty list may not arrive as `[]` at all. `undefined.length` here would take the
+  // whole workspace down over an edge case that costs one line to survive.
+  const classes = renderer.classes ?? []
   const [method, setMethod] = useState<ClassifyMethod>('quantile')
-  const [classCount, setClassCount] = useState(Math.max(2, renderer.classes.length || 5))
+  const [classCount, setClassCount] = useState(Math.max(2, classes.length || 5))
   const [ramp, setRamp] = useState(DEFAULT_RAMP)
 
   const numericFields = fields.filter(isNumericField)
@@ -62,7 +66,7 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
     onChange(
       {
         ...renderer,
-        classes: renderer.classes.map((styleClass, position) =>
+        classes: classes.map((styleClass, position) =>
           position === index
             ? { ...styleClass, symbol: withPrimaryColor(styleClass.symbol, color) }
             : styleClass,
@@ -133,17 +137,17 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
         </p>
       )}
 
-      {renderer.classes.length > 0 && renderer.classes.length < classCount && (
+      {classes.length > 0 && classes.length < classCount && (
         <p className="py-1 text-xs text-muted-foreground">
           Das Feld hat zu wenige verschiedene Werte für {formatCount(classCount)} Klassen — es sind{' '}
-          {formatCount(renderer.classes.length)} geworden.
+          {formatCount(classes.length)} geworden.
         </p>
       )}
 
-      {renderer.classes.length > 0 && (
+      {classes.length > 0 && (
         <ScrollArea className="max-h-56">
           <ul className="grid gap-0.5 py-1">
-            {renderer.classes.map((styleClass, index) => (
+            {classes.map((styleClass, index) => (
               <li key={index} className="flex items-center gap-1.5">
                 <ColorInput
                   value={primaryColorOf(styleClass.symbol)}
