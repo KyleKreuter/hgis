@@ -52,8 +52,15 @@ interface DrawControllerProps {
   layerId: string
   geometryType: GeometryType
   tool: DrawTool
-  /** Reports which feature the attribute form should show; null when nothing is selected. */
-  onSelectFeature: (fid: number | null) => void
+  /**
+   * Reports which feature the attribute form should show. `feature` is this controller's
+   * own loaded copy of an existing feature (see `originals`), which carries its
+   * `rowVersion` -- the form has to show something for a feature that has not been
+   * edited yet, and the buffer has nothing for it until it is. Both arguments are null
+   * when nothing is selected; `feature` is also null for a freshly drawn one, already
+   * reachable through the buffer's own `creates` entry.
+   */
+  onSelectFeature: (fid: number | null, feature: DraftFeature | null) => void
   /** Changing this rebuilds the editor from the server state -- see `useEditSession`. */
   reloadNonce: number
   snapEnabled: boolean
@@ -269,13 +276,22 @@ export function DrawController({
       // Registering it as a snap target is the change handler's job -- terra-draw reports
       // the creation there, whichever way the feature came into being.
       // A freshly drawn feature is what the user is working on, so its attribute form
-      // opens without them having to select it again.
-      onSelectFeature(fid)
+      // opens without them having to select it again. No loaded copy to pass -- it was
+      // never on the server -- but `addFeature` just put it in `buffer.creates`, which
+      // `resolveSelectedFeature` reaches for first anyway.
+      onSelectFeature(fid, null)
     })
 
-    draw.on('select', (id) => onSelectFeature(Number(id)))
+    draw.on('select', (id) => {
+      const fid = Number(id)
+      // The loaded, unedited copy of an existing feature, so a plain click can populate
+      // the attribute form without the click itself writing into the buffer. Undefined
+      // for a feature this controller drew rather than loaded -- it is already in
+      // `buffer.creates`, which does not need this fallback.
+      onSelectFeature(fid, originals.current.get(fid) ?? null)
+    })
 
-    draw.on('deselect', () => onSelectFeature(null))
+    draw.on('deselect', () => onSelectFeature(null, null))
 
     draw.on('change', (ids, type) => {
       // The sync below writes into terra-draw itself and keeps every ref in step as it
@@ -303,7 +319,7 @@ export function DrawController({
           // row came back on the next reload, having never been deleted at all.
           useEditing.getState().removeFeature(fid, original)
           lastGeometry.current.delete(fid)
-          onSelectFeature(null)
+          onSelectFeature(null, null)
         }
         return
       }

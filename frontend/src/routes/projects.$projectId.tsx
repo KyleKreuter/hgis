@@ -260,7 +260,7 @@ function Workspace() {
                   layerId={activeLayer.id}
                   geometryType={activeLayer.geometryType}
                   tool={editing.tool}
-                  onSelectFeature={editing.setSelectedFid}
+                  onSelectFeature={editing.selectFeature}
                   reloadNonce={editing.reloadNonce}
                   snapEnabled={editing.snapEnabled}
                   onSnapTarget={editing.setSnapTarget}

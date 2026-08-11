@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { useApplyEdits, type EditRequest } from '@/api/edits'
-import { countChanges, useEditing } from '@/state/editing'
+import { countChanges, useEditing, type DraftFeature } from '@/state/editing'
 import { endMeasurement } from '@/measurement/store'
 import type { DrawTool } from './DrawController'
 import type { SnapTarget } from './snapping'
@@ -24,6 +24,14 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
   const [active, setActive] = useState(false)
   const [tool, setTool] = useState<DrawTool>('select')
   const [selectedFid, setSelectedFid] = useState<number | null>(null)
+  /**
+   * The loaded, unedited state of the selected feature -- kept apart from the buffer on
+   * purpose. Selecting an existing feature writes nothing into `buffer.updates` (a plain
+   * click must not count as a change, see `dirtyFids` in state/editing.ts), so it has no
+   * buffer entry to show until it is actually edited. This is what `selectedFeature`
+   * falls back to in the meantime; see `resolveSelectedFeature`.
+   */
+  const [selectedOriginal, setSelectedOriginal] = useState<DraftFeature | null>(null)
   /** Set when the server refused a geometry; drives the explicit repair prompt. */
   const [invalidGeometry, setInvalidGeometry] = useState<string | null>(null)
   /**
@@ -53,6 +61,18 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
 
   const pending = countChanges(buffer)
 
+  /**
+   * Records the current selection, passed down as `DrawController`'s `onSelectFeature`.
+   * `original` is DrawController's own loaded copy of an existing feature, or null for a
+   * freshly drawn one (already in `buffer.creates`, see `resolveSelectedFeature`) and for
+   * "nothing selected". Deliberately the only place either piece of state is set, so the
+   * two never drift apart.
+   */
+  const selectFeature = useCallback((fid: number | null, original: DraftFeature | null) => {
+    setSelectedFid(fid)
+    setSelectedOriginal(original)
+  }, [])
+
   const start = useCallback(() => {
     if (!layerId) return
     // Before anything else, and synchronously: measuring and drawing fight over the
@@ -67,12 +87,12 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
   const stop = useCallback(() => {
     endEditing()
     setActive(false)
-    setSelectedFid(null)
+    selectFeature(null, null)
     setInvalidGeometry(null)
     setSnapTarget(null)
     setSnapUnavailableReason(null)
     setSnapSourceLayerIds([])
-  }, [endEditing])
+  }, [endEditing, selectFeature])
 
   const save = useCallback(
     async (repairInvalid = false) => {
@@ -102,7 +122,7 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
         // filter, and only then let the refreshed dataVersion pull new tiles. The other
         // way round the old geometry flashes back for a frame.
         resetBuffer()
-        setSelectedFid(null)
+        selectFeature(null, null)
         setInvalidGeometry(null)
         setReloadNonce((previous) => previous + 1)
 
@@ -132,14 +152,14 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
         toast.error(error instanceof ApiError ? error.message : 'Speichern fehlgeschlagen')
       }
     },
-    [applyEdits, resetBuffer],
+    [applyEdits, resetBuffer, selectFeature],
   )
 
   const discard = useCallback(() => {
     resetBuffer()
-    setSelectedFid(null)
+    selectFeature(null, null)
     setInvalidGeometry(null)
-  }, [resetBuffer])
+  }, [resetBuffer, selectFeature])
 
   /**
    * Deletes the selected feature through the buffer. The drawing surface follows via
@@ -149,8 +169,8 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
   const deleteSelected = useCallback(() => {
     if (selectedFid === null) return
     useEditing.getState().removeFeature(selectedFid)
-    setSelectedFid(null)
-  }, [selectedFid])
+    selectFeature(null, null)
+  }, [selectedFid, selectFeature])
 
   // Closing the tab with unsaved edits. The browser shows its own wording; all we can do
   // is ask for the prompt at all (plan section D.8).
@@ -166,10 +186,7 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
     return () => window.removeEventListener('beforeunload', warn)
   }, [pending])
 
-  const selectedFeature =
-    selectedFid === null
-      ? null
-      : (buffer.creates[selectedFid] ?? buffer.updates[selectedFid] ?? null)
+  const selectedFeature = resolveSelectedFeature(buffer, selectedFid, selectedOriginal)
 
   return {
     active,
@@ -188,7 +205,7 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
     tool,
     setTool,
     selectedFid,
-    setSelectedFid,
+    selectFeature,
     selectedFeature,
     deleteSelected,
     pending,
@@ -200,4 +217,29 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
     discard,
     isSaving: applyEdits.isPending,
   }
+}
+
+/** The buffer shape, read off the store itself so this file need not export its own copy. */
+type EditBuffer = ReturnType<typeof useEditing.getState>['buffer']
+
+/**
+ * What the attribute form should show for the current selection.
+ *
+ * The buffer takes precedence: once a feature has actually been edited -- geometry or
+ * properties -- its buffer entry is the current truth and `selectedOriginal` is stale by
+ * comparison. A feature that has only been clicked has no buffer entry at all, by design
+ * (a selection must never register as a change, see `dirtyFids` in state/editing.ts), so
+ * `selectedOriginal` -- the copy `DrawController` loaded it from -- is what lets it show
+ * up in the form regardless.
+ *
+ * Exported as a plain function, apart from the hook, so this -- the part that actually
+ * decides what gets shown -- can be tested without rendering a component.
+ */
+export function resolveSelectedFeature(
+  buffer: EditBuffer,
+  selectedFid: number | null,
+  selectedOriginal: DraftFeature | null,
+): DraftFeature | null {
+  if (selectedFid === null) return null
+  return buffer.creates[selectedFid] ?? buffer.updates[selectedFid] ?? selectedOriginal
 }
