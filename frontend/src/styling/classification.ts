@@ -27,7 +27,8 @@ export function fieldIdOfColumn(fields: LayerField[], columnName: string): strin
  *
  * Objects without a value get no category of their own: MapLibre's `match` cannot carry
  * null as a branch label, so they land on the fallback symbol either way. `undefined` is
- * excluded alongside `null` -- the API drops null members, so both spellings arrive.
+ * excluded next to it because the two say the same thing, not because the API is
+ * expected to send it.
  */
 export function buildCategories(
   values: FieldValue[],

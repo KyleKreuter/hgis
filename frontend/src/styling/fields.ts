@@ -39,9 +39,10 @@ export function isNumericField(field: LayerField): boolean {
 /**
  * How a value from `/values` reads in the category list.
  *
- * Takes `unknown`, not `CategoryValue`: a stored category may have lost its value on
- * the way through the API, and "ohne Wert" is the honest label for that too -- it is
- * the category MapLibre will never match and whose objects fall to the fallback.
+ * Accepts `undefined` beside `null` and reads both as "ohne Wert". The server writes
+ * `value` on every category, null included, so `undefined` does not arrive today -- but
+ * the two mean the same thing here either way: the category MapLibre will never match,
+ * whose objects fall to the fallback symbol.
  */
 export function formatCategoryValue(value: CategoryValue | undefined): string {
   if (value === null || value === undefined) return 'ohne Wert'
