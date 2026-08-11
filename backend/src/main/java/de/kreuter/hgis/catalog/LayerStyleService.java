@@ -2,6 +2,7 @@ package de.kreuter.hgis.catalog;
 
 import de.kreuter.hgis.catalog.dto.StyleDtos;
 import de.kreuter.hgis.common.BadRequestException;
+import de.kreuter.hgis.common.GeometryType;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -57,6 +58,22 @@ public class LayerStyleService {
 	private static final int MAX_LABEL_LENGTH = 200;
 
 	private static final int MAX_ZOOM = 24;
+
+	/**
+	 * The three "no style set" symbols a renderer reset by {@link #cleanupAfterFieldRemoval}
+	 * falls back to as a last resort. Kept byte for byte identical to the frontend's
+	 * {@code defaults.ts} -- the monochrome look of a layer nobody has styled yet -- so a
+	 * field's removal never dresses the layer up in a colour nobody chose.
+	 */
+	private static final StyleDtos.Symbol DEFAULT_MARKER = new StyleDtos.Symbol(
+			StyleDtos.SYMBOL_MARKER, "circle", 3.0, "#404040", "#fafafa", 1.0,
+			null, null, null, null, null, null);
+	private static final StyleDtos.Symbol DEFAULT_LINE = new StyleDtos.Symbol(
+			StyleDtos.SYMBOL_LINE, null, null, null, null, null,
+			"#404040", 1.25, null, null, null, null);
+	private static final StyleDtos.Symbol DEFAULT_FILL = new StyleDtos.Symbol(
+			StyleDtos.SYMBOL_FILL, null, null, "#404040", null, null,
+			null, null, null, 0.25, "#262626", 1.0);
 
 	private final ObjectMapper objectMapper;
 	private final LayerFieldRepository fieldRepository;
@@ -135,6 +152,109 @@ public class LayerStyleService {
 					.ifPresent(field -> columns.add(field.getColumnName()));
 		}
 		return columns;
+	}
+
+	/**
+	 * Whether the layer's style currently classifies or labels by one particular column
+	 * -- the two flags {@code GET .../fields/{fieldId}/usage} answers (CONTRACT.md phase
+	 * 12), so the confirmation dialog can say what deleting the field would actually
+	 * touch instead of asking a question nobody can weigh.
+	 */
+	public FieldUsage fieldUsage(String styleJson, String columnName) {
+		StyleDtos.Style style = readStored(styleJson);
+		if (style == null) {
+			return new FieldUsage(false, false);
+		}
+
+		StyleDtos.Renderer renderer = style.renderer();
+		boolean usedByRenderer = renderer != null && classifies(renderer.type())
+				&& columnName.equals(renderer.field());
+
+		StyleDtos.Labels labels = style.labels();
+		boolean usedByLabels = labels != null && labels.isEnabled() && columnName.equals(labels.field());
+
+		return new FieldUsage(usedByRenderer, usedByLabels);
+	}
+
+	/**
+	 * @param usedByRenderer the renderer classifies (categorized or graduated) by this field
+	 * @param usedByLabels   the labels are switched on and read this field
+	 */
+	public record FieldUsage(boolean usedByRenderer, boolean usedByLabels) {
+	}
+
+	/**
+	 * Rewrites a stored style so it no longer refers to a field that is about to be
+	 * dropped from the layer (CONTRACT.md phase 12) -- the dead end the contract calls
+	 * out by name: without this, a style pointing at a column that no longer exists
+	 * would fail {@link #validateAndSerialize} forever after, freezing the layer's
+	 * symbology on every future save, even one that touches nothing about the style.
+	 *
+	 * <p>A renderer classifying by the removed field falls back to a plain single
+	 * symbol, the same conversion the symbology panel itself offers on the way from a
+	 * classification back to "Einzelsymbol" ({@code renderer.ts#convertRenderer}):
+	 * whichever symbol the renderer already carried -- its own for a single renderer,
+	 * the fallback symbol for a categorized or graduated one -- survives; only the
+	 * classification is lost, because the field it depended on is gone. If neither
+	 * symbol was ever set, one of the three monochrome defaults above stands in, so the
+	 * result is always a renderer this class can store. An enabled labels block reading
+	 * the removed field is switched off outright rather than pointed at some other
+	 * field -- guessing a replacement would label some features with an attribute the
+	 * user never chose to show.
+	 *
+	 * <p>Whatever comes out of that is run back through {@link #validate} against the
+	 * layer's remaining fields, exactly like a client-supplied style would be. That is
+	 * the actual guarantee this method gives: what {@link LayerFieldService#deleteField}
+	 * ends up storing is, by construction, something this class's own validation
+	 * accepts.
+	 *
+	 * @param styleJson       the layer's currently stored style, or null
+	 * @param removedColumn   column name of the field the caller is about to drop
+	 * @param remainingFields every field of the layer except the one being removed
+	 * @param geometryType    the layer's geometry type, for the rare case a renderer has
+	 *                        to fall back to a symbol it never had one of its own
+	 * @return canonical JSON to store; the original {@code styleJson}, unchanged, if the
+	 *         removed field was not referenced by the style at all
+	 */
+	public String cleanupAfterFieldRemoval(String styleJson, String removedColumn,
+			List<LayerField> remainingFields, GeometryType geometryType) {
+		StyleDtos.Style style = readStored(styleJson);
+		if (style == null) {
+			return styleJson;
+		}
+
+		StyleDtos.Renderer renderer = style.renderer();
+		boolean rendererHit = renderer != null && removedColumn.equals(renderer.field());
+
+		StyleDtos.Labels labels = style.labels();
+		boolean labelsHit = labels != null && removedColumn.equals(labels.field());
+
+		if (!rendererHit && !labelsHit) {
+			return styleJson;
+		}
+
+		if (rendererHit) {
+			StyleDtos.Symbol symbol = renderer.symbol() != null ? renderer.symbol()
+					: renderer.fallbackSymbol() != null ? renderer.fallbackSymbol()
+					: defaultSymbolFor(geometryType);
+			renderer = new StyleDtos.Renderer(StyleDtos.RENDERER_SINGLE, symbol, null, null, null, null);
+		}
+		if (labelsHit) {
+			labels = new StyleDtos.Labels(false, null, labels.size(), labels.color(), labels.haloColor(),
+					labels.haloWidth(), labels.minZoom(), labels.allowOverlap());
+		}
+
+		StyleDtos.Style cleaned = new StyleDtos.Style(
+				style.version(), renderer, labels, style.opacity(), style.minZoom(), style.maxZoom());
+		return objectMapper.writeValueAsString(validate(cleaned, remainingFields));
+	}
+
+	private static StyleDtos.Symbol defaultSymbolFor(GeometryType geometryType) {
+		return switch (geometryType) {
+			case MULTIPOINT -> DEFAULT_MARKER;
+			case MULTILINESTRING -> DEFAULT_LINE;
+			case MULTIPOLYGON, GEOMETRY -> DEFAULT_FILL;
+		};
 	}
 
 	// --- validation -------------------------------------------------------------------

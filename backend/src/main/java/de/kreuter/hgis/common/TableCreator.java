@@ -127,6 +127,22 @@ public class TableCreator {
 	}
 
 	/**
+	 * Narrows an existing layer's payload table by one column -- the counterpart to
+	 * {@link #addColumn}, for a field a user wants to remove instead of add (CONTRACT.md
+	 * phase 12). Whatever values the column held are gone with it; the caller decides
+	 * whether that is acceptable and cleans up any catalog row and style reference that
+	 * pointed at it, this only ever executes the DDL.
+	 *
+	 * @param columnName already through {@link SqlIdentifier#toColumnName} when the
+	 *                    column was created, so it is safe to quote here unchanged
+	 */
+	public void dropColumn(String tableName, String columnName) {
+		jdbc.sql("ALTER TABLE " + SqlIdentifier.quoteLayerTable(tableName)
+				+ " DROP COLUMN " + SqlIdentifier.quoteColumn(columnName))
+				.update();
+	}
+
+	/**
 	 * Compensation for a failed or aborted import: drops the physical table and removes
 	 * the catalog row. {@code layer_field} rows disappear with it via {@code ON DELETE
 	 * CASCADE}. Used both by the import compensation path and by {@code JobJanitor} when

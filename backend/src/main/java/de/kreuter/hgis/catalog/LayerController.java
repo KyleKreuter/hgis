@@ -115,4 +115,24 @@ public class LayerController {
 			@Valid @RequestBody LayerDtos.RenameFieldRequest request) {
 		return fieldService.renameField(layerId, fieldId, request);
 	}
+
+	/**
+	 * What deleting this field would touch -- data for the confirmation dialog, not a
+	 * check of its own (CONTRACT.md phase 12).
+	 */
+	@GetMapping("/api/layers/{layerId}/fields/{fieldId}/usage")
+	public LayerDtos.FieldUsage usage(@PathVariable UUID layerId, @PathVariable UUID fieldId) {
+		return fieldService.usage(layerId, fieldId);
+	}
+
+	/**
+	 * Deletes an attribute field: drops its column and, if the style classified or
+	 * labelled by it, resets that part of the style so it stays valid (CONTRACT.md
+	 * phase 12).
+	 */
+	@DeleteMapping("/api/layers/{layerId}/fields/{fieldId}")
+	public ResponseEntity<Void> deleteField(@PathVariable UUID layerId, @PathVariable UUID fieldId) {
+		fieldService.deleteField(layerId, fieldId);
+		return ResponseEntity.noContent().build();
+	}
 }
