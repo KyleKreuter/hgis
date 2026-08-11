@@ -124,8 +124,81 @@ class FeatureQueryServiceTest {
 		projectRepository.deleteById(project.getId());
 	}
 
+	private Project modeProject;
+	private Layer modeLayer;
+	private String modeTableName;
+
+	/** The rectangle every selection-mode test queries against, in EPSG:4326. */
+	private static final double[] SELECTION_RECT = { 10.00, 50.00, 10.10, 50.10 };
+
+	/**
+	 * A second, small fixture dedicated to the {@code intersects}/{@code contains}
+	 * selection modes. The paging fixture above is deliberately made of equal,
+	 * non-overlapping envelopes along a line -- useful for cursor tests, useless for
+	 * proving that {@code &&} alone is not enough to select by geometry.
+	 *
+	 * <p>This layer's storage CRS is EPSG:4326, so {@link #SELECTION_RECT} can be written
+	 * directly in the same coordinates as the fixture rows, without a mental detour
+	 * through UTM to check which one lies where.
+	 */
+	@BeforeAll
+	void createModeLayer() {
+		modeProject = projectRepository.saveAndFlush(
+				new Project("Auswahl-Test " + UUID.randomUUID(), null, 4326, "osm"));
+
+		UUID layerId = UUID.randomUUID();
+		modeTableName = SqlIdentifier.tableName(layerId);
+		String table = SqlIdentifier.quoteLayerTable(modeTableName);
+
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid   bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom  geometry(MultiPolygon, 4326) NOT NULL,
+				    label text
+				)
+				""".formatted(table)).update();
+
+		jdbc.sql("""
+				INSERT INTO %s (geom, label) VALUES
+				-- Fully inside SELECTION_RECT: found by both intersects and contains.
+				(ST_Multi(ST_MakeEnvelope(10.02, 50.02, 10.04, 50.04, 4326)), 'innen'),
+				-- Straddles the rectangle's right edge (10.10): intersects it, is not
+				-- fully contained by it.
+				(ST_Multi(ST_MakeEnvelope(10.08, 50.03, 10.15, 50.05, 4326)), 'kante'),
+				-- An L made of two arms that individually never reach the rectangle. Their
+				-- combined envelope overlaps it -- the && prefilter alone would wrongly
+				-- include this row -- but neither arm actually touches it, so both exact
+				-- modes must exclude it.
+				(ST_Multi(ST_Collect(ARRAY[
+				    ST_MakeEnvelope(10.15, 50.05, 10.20, 50.20, 4326),
+				    ST_MakeEnvelope(10.05, 50.15, 10.20, 50.20, 4326)
+				])), 'nur-bbox')
+				""".formatted(table)).update();
+
+		Layer newLayer = new Layer(layerId, modeProject, "Auswahl", modeTableName, "MULTIPOLYGON", 4326);
+		newLayer.setFeatureCount(3);
+		modeLayer = layerRepository.saveAndFlush(newLayer);
+
+		fieldRepository.saveAndFlush(new LayerField(modeLayer, "Label", "label", "text", 0));
+	}
+
+	@AfterAll
+	void dropModeLayer() {
+		jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(modeTableName)).update();
+		layerRepository.deleteById(modeLayer.getId());
+		projectRepository.deleteById(modeProject.getId());
+	}
+
+	private FeatureQueryService.Query modeQuery(String mode) {
+		return new FeatureQueryService.Query(null, false, null, SELECTION_RECT, mode, false, null, 100);
+	}
+
+	private List<Object> labelsOf(FeatureDtos.Page page) {
+		return page.features().stream().map(feature -> feature.properties().get("label")).toList();
+	}
+
 	private FeatureQueryService.Query query(String sort, boolean desc, String cursor, int size) {
-		return new FeatureQueryService.Query(sort, desc, null, null, false, cursor, size);
+		return new FeatureQueryService.Query(sort, desc, null, null, null, false, cursor, size);
 	}
 
 	/** Walks every page and returns the values of one column, in the order delivered. */
@@ -241,7 +314,7 @@ class FeatureQueryServiceTest {
 	@DisplayName("the total counts the filtered set, not the page")
 	void countsTheFilteredSet() {
 		FeatureDtos.Page page = service.list(layer.getId(), new FeatureQueryService.Query(
-				null, false, "Straße = 'Alsterufer'", null, false, null, 2));
+				null, false, "Straße = 'Alsterufer'", null, null, false, null, 2));
 
 		assertThat(page.features()).hasSize(2);
 		assertThat(page.totalCount()).isEqualTo(4);
@@ -250,7 +323,7 @@ class FeatureQueryServiceTest {
 	@Test
 	void filtersByExpression() {
 		FeatureDtos.Page page = service.list(layer.getId(), new FeatureQueryService.Query(
-				null, false, "\"Höhe\" > 40 AND Straße IS NOT NULL", null, false, null, 100));
+				null, false, "\"Höhe\" > 40 AND Straße IS NOT NULL", null, null, false, null, 100));
 
 		assertThat(page.features()).hasSize(2);
 		assertThat(page.features()).allSatisfy(feature ->
@@ -264,7 +337,7 @@ class FeatureQueryServiceTest {
 		// 4326, that is roughly 9.98 E / 53.54 N.
 		FeatureDtos.Page all = service.list(layer.getId(), query(null, false, null, 100));
 		FeatureDtos.Page inBox = service.list(layer.getId(), new FeatureQueryService.Query(
-				null, false, null, new double[] { 9.0, 53.0, 11.0, 54.0 }, false, null, 100));
+				null, false, null, new double[] { 9.0, 53.0, 11.0, 54.0 }, null, false, null, 100));
 
 		assertThat(all.features()).hasSize(ROWS.size());
 		assertThat(inBox.features())
@@ -272,7 +345,7 @@ class FeatureQueryServiceTest {
 				.hasSize(ROWS.size());
 
 		FeatureDtos.Page elsewhere = service.list(layer.getId(), new FeatureQueryService.Query(
-				null, false, null, new double[] { 2.0, 48.0, 3.0, 49.0 }, false, null, 100));
+				null, false, null, new double[] { 2.0, 48.0, 3.0, 49.0 }, null, false, null, 100));
 		assertThat(elsewhere.features()).as("Paris holds none of it").isEmpty();
 	}
 
@@ -281,7 +354,7 @@ class FeatureQueryServiceTest {
 		FeatureDtos.Feature without = service.list(layer.getId(), query(null, false, null, 1))
 				.features().get(0);
 		FeatureDtos.Feature with = service.list(layer.getId(), new FeatureQueryService.Query(
-				null, false, null, null, true, null, 1)).features().get(0);
+				null, false, null, null, null, true, null, 1)).features().get(0);
 
 		assertThat(without.geometry()).isNull();
 		assertThat(with.geometry())
@@ -322,6 +395,48 @@ class FeatureQueryServiceTest {
 		assertThatThrownBy(() -> service.list(layer.getId(), query(null, false, "nicht-base64!!", 10)))
 				.isInstanceOf(BadRequestException.class)
 				.hasMessageContaining("Cursor");
+	}
+
+	@Test
+	@DisplayName("without mode, only the && prefilter applies -- today's behaviour is unchanged")
+	void selectsByBoundingBoxAloneWithoutAMode() {
+		FeatureDtos.Page page = service.list(modeLayer.getId(), modeQuery(null));
+
+		assertThat(labelsOf(page))
+				.as("all three rows pass the bbox-only prefilter, including the one whose "
+						+ "geometry never actually touches the rectangle")
+				.containsExactlyInAnyOrder("innen", "kante", "nur-bbox");
+	}
+
+	@Test
+	@DisplayName("intersects adds the exact test, dropping the row that only overlaps by envelope")
+	void selectsByIntersection() {
+		FeatureDtos.Page page = service.list(modeLayer.getId(), modeQuery("intersects"));
+
+		assertThat(labelsOf(page)).containsExactlyInAnyOrder("innen", "kante");
+	}
+
+	@Test
+	@DisplayName("contains only keeps the row that lies fully inside the rectangle")
+	void selectsByContainment() {
+		FeatureDtos.Page page = service.list(modeLayer.getId(), modeQuery("contains"));
+
+		assertThat(labelsOf(page)).containsExactly("innen");
+	}
+
+	@Test
+	@DisplayName("totalCount reflects the exact test too, not just the && prefilter")
+	void reportsTheTotalForASelectionMode() {
+		FeatureDtos.Page page = service.list(modeLayer.getId(), modeQuery("intersects"));
+
+		assertThat(page.totalCount()).isEqualTo(2);
+	}
+
+	@Test
+	void rejectsAnUnknownSelectionMode() {
+		assertThatThrownBy(() -> service.list(modeLayer.getId(), modeQuery("touches")))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("Auswahlmodus");
 	}
 
 	@Test

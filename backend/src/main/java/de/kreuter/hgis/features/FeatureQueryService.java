@@ -52,10 +52,20 @@ public class FeatureQueryService {
 			boolean descending,
 			String filter,
 			double[] bbox,
+			String mode,
 			boolean includeGeometry,
 			String cursor,
 			int size) {
 	}
+
+	/**
+	 * The exact geometry test layered on top of the index-backed {@code &&} prefilter.
+	 *
+	 * <p>{@code &&} only compares bounding boxes, so a diagonal or L-shaped geometry whose
+	 * envelope overlaps the query rectangle can still miss it entirely -- both modes need
+	 * the exact test, {@code INTERSECTS} included.
+	 */
+	private enum SelectionMode { INTERSECTS, CONTAINS }
 
 	@Transactional(readOnly = true)
 	public FeatureDtos.Page list(UUID layerId, Query query) {
@@ -143,6 +153,10 @@ public class FeatureQueryService {
 			Map<String, Object> parameters) {
 		List<String> conditions = new ArrayList<>();
 
+		// Resolved unconditionally so an unknown mode is rejected even without a bbox,
+		// rather than being silently ignored.
+		SelectionMode mode = resolveSelectionMode(query.mode());
+
 		if (query.bbox() != null) {
 			double[] bbox = query.bbox();
 			if (bbox.length != 4) {
@@ -151,13 +165,23 @@ public class FeatureQueryService {
 			// The envelope is transformed into the layer's CRS, never geom into 4326 --
 			// same reasoning as the tile query: only an untransformed geom column can use
 			// its GiST index.
-			conditions.add("f.geom && ST_Transform("
-					+ "ST_MakeEnvelope(:bboxMinX, :bboxMinY, :bboxMaxX, :bboxMaxY, 4326), :layerSrid)");
+			String envelope = "ST_Transform("
+					+ "ST_MakeEnvelope(:bboxMinX, :bboxMinY, :bboxMaxX, :bboxMaxY, 4326), :layerSrid)";
+			conditions.add("f.geom && " + envelope);
 			parameters.put("bboxMinX", bbox[0]);
 			parameters.put("bboxMinY", bbox[1]);
 			parameters.put("bboxMaxX", bbox[2]);
 			parameters.put("bboxMaxY", bbox[3]);
 			parameters.put("layerSrid", layer.getSrid());
+
+			// && alone only narrows by bounding box; these add the precise test the
+			// client asked for, on top of it -- not instead of it (see SelectionMode).
+			if (mode == SelectionMode.INTERSECTS) {
+				conditions.add("ST_Intersects(f.geom, " + envelope + ")");
+			}
+			else if (mode == SelectionMode.CONTAINS) {
+				conditions.add("ST_Contains(" + envelope + ", f.geom)");
+			}
 		}
 
 		FilterParser.ParsedFilter filter = FilterParser.parse(query.filter(), fields);
@@ -268,6 +292,22 @@ public class FeatureQueryService {
 						|| field.getColumnName().equalsIgnoreCase(sort))
 				.findFirst()
 				.orElseThrow(() -> new BadRequestException("Unbekanntes Sortierfeld: " + sort));
+	}
+
+	/**
+	 * No Spring enum binding on the {@code @RequestParam}: that would throw a generic 400
+	 * on a bad value, without the German message every other validation error in this
+	 * class gives.
+	 */
+	private SelectionMode resolveSelectionMode(String mode) {
+		if (mode == null) {
+			return null;
+		}
+		return switch (mode) {
+			case "intersects" -> SelectionMode.INTERSECTS;
+			case "contains" -> SelectionMode.CONTAINS;
+			default -> throw new BadRequestException("Unbekannter Auswahlmodus: " + mode);
+		};
 	}
 
 	private Layer require(UUID layerId) {

@@ -121,7 +121,7 @@ class AxisOrderTest {
 			// And back out again: the feature API returns GeoJSON in 4326, which has to be
 			// the coordinate that went in.
 			String geoJson = queryService
-					.list(layerId, new FeatureQueryService.Query(null, false, null, null, true, null, 1))
+					.list(layerId, new FeatureQueryService.Query(null, false, null, null, null, true, null, 1))
 					.features()
 					.get(0)
 					.geometry();
