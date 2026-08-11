@@ -5,6 +5,7 @@ import {
   type QueryClient,
 } from '@tanstack/react-query'
 import { api } from './client'
+import type { Job } from './imports'
 
 export interface ProjectSummary {
   id: string
@@ -45,6 +46,10 @@ export interface UpdateProjectInput {
   basemap?: string
   center?: [number, number]
   zoom?: number
+}
+
+export interface DuplicateProjectInput {
+  name?: string
 }
 
 export const projectKeys = {
@@ -108,6 +113,13 @@ export function useDeleteProject() {
       queryClient.removeQueries({ queryKey: projectKeys.detail(id) })
       queryClient.invalidateQueries({ queryKey: projectKeys.all })
     },
+  })
+}
+
+export function useDuplicateProject(projectId: string) {
+  return useMutation({
+    mutationFn: (input: DuplicateProjectInput) =>
+      api.post<Job>(`/api/projects/${projectId}/duplicate`, input),
   })
 }
 

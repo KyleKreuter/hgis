@@ -16,6 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.persistence.EntityManager;
 
 /**
  * Simulates the state a crash would leave behind -- a job stuck in RUNNING with its
@@ -49,6 +50,9 @@ class JobJanitorTest {
 
 	@Autowired
 	private JdbcClient jdbc;
+
+	@Autowired
+	private EntityManager entityManager;
 
 	@Test
 	void dropsTheHalfWrittenTableAndFailsAnOrphanedRunningJob() {
@@ -91,6 +95,22 @@ class JobJanitorTest {
 		janitor.cleanUpOrphanedJobs();
 
 		assertThat(jobRepository.findById(pending.getId()).orElseThrow().getStatus()).isEqualTo(Job.Status.PENDING);
+	}
+
+	@Test
+	void removesTheWholeTargetProjectForAnOrphanedDuplicateJob() {
+		Project source = projectRepository.saveAndFlush(
+				new Project("Duplizierung Quelle " + UUID.randomUUID(), null, 25832, "osm"));
+		Project target = projectRepository.saveAndFlush(
+				new Project("Duplizierung Ziel " + UUID.randomUUID(), null, 25832, "osm"));
+		Job job = jobService.create(source.getId(), Job.Type.DUPLICATE, null);
+		jobService.markDuplicateRunning(job.getId(), target.getId(), 0L);
+
+		janitor.cleanUpOne(job.getId());
+
+		entityManager.flush();
+		entityManager.clear();
+		assertThat(projectRepository.findById(target.getId())).isEmpty();
 	}
 
 	private static SourceSchema minimalSchema() {

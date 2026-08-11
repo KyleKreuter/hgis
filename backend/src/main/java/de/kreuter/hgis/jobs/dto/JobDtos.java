@@ -20,6 +20,7 @@ public final class JobDtos {
 			Long totalCount,
 			long skippedCount,
 			UUID outputLayerId,
+			UUID outputProjectId,
 			String message,
 			Instant startedAt,
 			Instant finishedAt,

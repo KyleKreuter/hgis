@@ -207,6 +207,17 @@ public class Layer {
 		this.extent = extent;
 	}
 
+	public void setCopyMetadata(long featureCount, boolean visible, int zIndex, int minZoom,
+			int maxZoom, String style, Polygon extent) {
+		this.featureCount = featureCount;
+		this.visible = visible;
+		this.zIndex = zIndex;
+		this.minZoom = minZoom;
+		this.maxZoom = maxZoom;
+		this.style = style;
+		this.extent = extent;
+	}
+
 	public Instant getCreatedAt() {
 		return createdAt;
 	}

@@ -4,6 +4,9 @@ import de.kreuter.hgis.catalog.dto.ProjectDtos;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.GeometryConfig;
 import de.kreuter.hgis.common.NotFoundException;
+import de.kreuter.hgis.jobs.Job;
+import de.kreuter.hgis.jobs.JobService;
+import de.kreuter.hgis.jobs.dto.JobDtos;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -26,13 +29,18 @@ public class ProjectService {
 	private final ProjectDeletionService deletionService;
 	private final GeometryFactory geometryFactory;
 	private final JdbcClient jdbc;
+	private final JobService jobService;
+	private final ProjectDuplicateService duplicateService;
 
 	ProjectService(ProjectRepository repository, ProjectDeletionService deletionService,
-			GeometryFactory geometryFactory, JdbcClient jdbc) {
+			GeometryFactory geometryFactory, JdbcClient jdbc, JobService jobService,
+			ProjectDuplicateService duplicateService) {
 		this.repository = repository;
 		this.deletionService = deletionService;
 		this.geometryFactory = geometryFactory;
 		this.jdbc = jdbc;
+		this.jobService = jobService;
+		this.duplicateService = duplicateService;
 	}
 
 	@Transactional(readOnly = true)
@@ -116,6 +124,16 @@ public class ProjectService {
 	public void delete(UUID id) {
 		require(id);
 		deletionService.deleteProject(id);
+	}
+
+	public JobDtos.Response duplicate(UUID id, ProjectDtos.DuplicateRequest request) {
+		require(id);
+		if (request.name() != null && request.name().trim().isEmpty()) {
+			throw new BadRequestException("Name darf nicht leer sein");
+		}
+		Job job = jobService.create(id, Job.Type.DUPLICATE, null);
+		duplicateService.runDuplicateAsync(job.getId(), id, request.name());
+		return jobService.get(job.getId());
 	}
 
 	// --- helpers ---------------------------------------------------------------

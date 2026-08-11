@@ -17,9 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class JobService {
 
 	private final JobRepository repository;
+	private final JobParameters parameters;
 
-	JobService(JobRepository repository) {
+	JobService(JobRepository repository, JobParameters parameters) {
 		this.repository = repository;
+		this.parameters = parameters;
 	}
 
 	/** Creates a job in PENDING. Flushed immediately so createdAt is populated for the
@@ -34,6 +36,15 @@ public class JobService {
 		Job job = require(jobId);
 		job.markRunning();
 		job.setOutputLayerId(outputLayerId);
+		job.updateProgress(0, totalCount, 0);
+	}
+
+	/** Starts a duplicate job and records its target in the existing JSONB payload. */
+	@Transactional
+	public void markDuplicateRunning(UUID jobId, UUID outputProjectId, Long totalCount) {
+		Job job = require(jobId);
+		job.markRunning();
+		job.setParameters(parameters.duplicate(outputProjectId));
 		job.updateProgress(0, totalCount, 0);
 	}
 
@@ -62,10 +73,14 @@ public class JobService {
 				.orElseThrow(() -> new NotFoundException("Job " + jobId + " existiert nicht"));
 	}
 
-	private static JobDtos.Response toResponse(Job job) {
+	private JobDtos.Response toResponse(Job job) {
 		return new JobDtos.Response(
 				job.getId(), job.getType().name(), job.getStatus().name(), job.getFilename(),
 				job.getProcessedCount(), job.getTotalCount(), job.getSkippedCount(), job.getOutputLayerId(),
-				job.getMessage(), job.getStartedAt(), job.getFinishedAt(), job.getCreatedAt());
+				outputProjectId(job), job.getMessage(), job.getStartedAt(), job.getFinishedAt(), job.getCreatedAt());
+	}
+
+	private UUID outputProjectId(Job job) {
+		return parameters.outputProjectId(job.getParameters());
 	}
 }

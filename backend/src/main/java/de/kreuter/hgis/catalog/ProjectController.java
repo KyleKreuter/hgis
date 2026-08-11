@@ -1,6 +1,7 @@
 package de.kreuter.hgis.catalog;
 
 import de.kreuter.hgis.catalog.dto.ProjectDtos;
+import de.kreuter.hgis.jobs.dto.JobDtos;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -53,6 +54,14 @@ public class ProjectController {
 	public ProjectDtos.Detail update(@PathVariable UUID id,
 			@Valid @RequestBody ProjectDtos.UpdateRequest request) {
 		return service.update(id, request);
+	}
+
+	@PostMapping("/{id}/duplicate")
+	public ResponseEntity<JobDtos.Response> duplicate(@PathVariable UUID id,
+			@Valid @RequestBody(required = false) ProjectDtos.DuplicateRequest request) {
+		JobDtos.Response job = service.duplicate(id,
+				request == null ? new ProjectDtos.DuplicateRequest(null) : request);
+		return ResponseEntity.accepted().body(job);
 	}
 
 	/** Preflight for the delete dialog: how much would actually be destroyed. */

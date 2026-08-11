@@ -20,6 +20,7 @@ export interface Job {
   totalCount: number | null
   skippedCount: number
   outputLayerId: string | null
+  outputProjectId: string | null
   message: string | null
   startedAt: string | null
   finishedAt: string | null
@@ -95,12 +96,15 @@ const jobQuery = (jobId: string) =>
  * Polls one job until it reaches a terminal state. Pass null to stop polling entirely --
  * the dialog uses that before an upload has been started and after it has been dismissed.
  */
-export function useImportJob(jobId: string | null) {
+export function useJob(jobId: string | null) {
   return useQuery({
     ...jobQuery(jobId ?? 'none'),
     enabled: jobId !== null,
   })
 }
+
+/** Kept for import call sites; jobs are shared by imports and project duplication. */
+export const useImportJob = useJob
 
 /**
  * Starts an import. Note what is and is not asynchronous here: the endpoint opens the

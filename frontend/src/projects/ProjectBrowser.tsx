@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { Layers, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { Copy, Layers, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -25,6 +25,7 @@ import { formatCount, formatRelative } from '@/lib/format'
 import { CreateProjectDialog } from './CreateProjectDialog'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
 import { RenameProjectDialog } from './RenameProjectDialog'
+import { DuplicateProjectDialog } from './DuplicateProjectDialog'
 
 export function ProjectBrowser() {
   const { data: projects, isLoading, isError, error } = useQuery(projectListQuery())
@@ -33,6 +34,7 @@ export function ProjectBrowser() {
   const [createOpen, setCreateOpen] = useState(false)
   const [toDelete, setToDelete] = useState<ProjectSummary | null>(null)
   const [toRename, setToRename] = useState<ProjectSummary | null>(null)
+  const [toDuplicate, setToDuplicate] = useState<ProjectSummary | null>(null)
 
   const filtered = useMemo(() => {
     if (!projects) return []
@@ -105,6 +107,7 @@ export function ProjectBrowser() {
                         key={project.id}
                         project={project}
                         onRename={() => setToRename(project)}
+                        onDuplicate={() => setToDuplicate(project)}
                         onDelete={() => setToDelete(project)}
                       />
                     ))}
@@ -119,6 +122,7 @@ export function ProjectBrowser() {
       <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
       <DeleteProjectDialog project={toDelete} onOpenChange={() => setToDelete(null)} />
       <RenameProjectDialog project={toRename} onOpenChange={() => setToRename(null)} />
+      <DuplicateProjectDialog project={toDuplicate} onOpenChange={() => setToDuplicate(null)} />
     </div>
   )
 }
@@ -126,10 +130,12 @@ export function ProjectBrowser() {
 function ProjectRow({
   project,
   onRename,
+  onDuplicate,
   onDelete,
 }: {
   project: ProjectSummary
   onRename: () => void
+  onDuplicate: () => void
   onDelete: () => void
 }) {
   const navigate = useNavigate()
@@ -204,6 +210,10 @@ function ProjectRow({
             <DropdownMenuItem onClick={onRename}>
               <Pencil className="size-3.5" />
               Umbenennen
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onDuplicate}>
+              <Copy className="size-3.5" />
+              Duplizieren
             </DropdownMenuItem>
             {/* No destructive variant: the UI stays monochrome. The warning is
                 carried by the confirmation dialog, which names what is lost and

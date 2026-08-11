@@ -2,6 +2,7 @@ package de.kreuter.hgis.jobs;
 
 import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerRepository;
+import de.kreuter.hgis.catalog.ProjectDeletionService;
 import de.kreuter.hgis.common.TableCreator;
 import java.util.List;
 import java.util.UUID;
@@ -35,14 +36,19 @@ public class JobJanitor {
 	private final LayerRepository layerRepository;
 	private final TableCreator tableCreator;
 	private final JdbcClient jdbc;
+	private final ProjectDeletionService projectDeletionService;
+	private final JobParameters parameters;
 
 	JobJanitor(JobRepository jobRepository, JobService jobService, LayerRepository layerRepository,
-			TableCreator tableCreator, JdbcClient jdbc) {
+			TableCreator tableCreator, JdbcClient jdbc, ProjectDeletionService projectDeletionService,
+			JobParameters parameters) {
 		this.jobRepository = jobRepository;
 		this.jobService = jobService;
 		this.layerRepository = layerRepository;
 		this.tableCreator = tableCreator;
 		this.jdbc = jdbc;
+		this.projectDeletionService = projectDeletionService;
+		this.parameters = parameters;
 	}
 
 	@EventListener(ApplicationReadyEvent.class)
@@ -66,7 +72,17 @@ public class JobJanitor {
 			return; // already handled, e.g. by a concurrent call; nothing left to do
 		}
 
-		String reason = "Anwendung wurde während des Imports neu gestartet, Job wurde abgebrochen";
+		String reason = job.getType() == Job.Type.DUPLICATE
+				? "Anwendung wurde während der Projektduplizierung neu gestartet, Job wurde abgebrochen"
+				: "Anwendung wurde während des Imports neu gestartet, Job wurde abgebrochen";
+		if (job.getType() == Job.Type.DUPLICATE) {
+			UUID outputProjectId = parameters.outputProjectId(job.getParameters());
+			if (outputProjectId != null) {
+				projectDeletionService.deleteProject(outputProjectId);
+			}
+			jobService.markFailed(jobId, reason);
+			return;
+		}
 		if (job.getOutputLayerId() != null) {
 			Layer layer = layerRepository.findById(job.getOutputLayerId()).orElse(null);
 			if (layer != null) {

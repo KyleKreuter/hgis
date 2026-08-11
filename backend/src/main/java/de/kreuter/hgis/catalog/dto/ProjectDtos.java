@@ -62,6 +62,12 @@ public final class ProjectDtos {
 			String basemap) {
 	}
 
+	/** Optional target name for an asynchronous project duplication. */
+	public record DuplicateRequest(
+			@Size(max = 200, message = "Name darf höchstens 200 Zeichen lang sein")
+			String name) {
+	}
+
 	/**
 	 * Partial update. Every field is optional; null means "leave unchanged".
 	 * srid is deliberately absent -- it is immutable after creation.

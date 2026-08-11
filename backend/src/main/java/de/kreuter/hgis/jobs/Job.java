@@ -131,6 +131,10 @@ public class Job {
 		this.outputLayerId = outputLayerId;
 	}
 
+	public void setParameters(String parameters) {
+		this.parameters = parameters;
+	}
+
 	/**
 	 * Terminal transition to SUCCEEDED. Deliberately not guarded by a state check: this
 	 * is also how a crash-recovered job would be resolved, and a compensating path must
