@@ -30,6 +30,8 @@ public class FeatureController {
 	 * @param sort field to sort by, by source name; fid when omitted
 	 * @param filter expression over the layer's fields, see {@link FilterParser}
 	 * @param bbox minLng,minLat,maxLng,maxLat in EPSG:4326
+	 * @param mode exact geometry test against {@code bbox}: {@code intersects} or
+	 *     {@code contains}; omitted keeps today's bounding-box-only comparison
 	 * @param geometry include full-precision GeoJSON per feature
 	 * @param cursor opaque position from the previous page's {@code nextCursor}
 	 */
@@ -40,12 +42,13 @@ public class FeatureController {
 			@RequestParam(required = false, defaultValue = "false") boolean desc,
 			@RequestParam(required = false) String filter,
 			@RequestParam(required = false) double[] bbox,
+			@RequestParam(required = false) String mode,
 			@RequestParam(required = false, defaultValue = "false") boolean geometry,
 			@RequestParam(required = false) String cursor,
 			@RequestParam(required = false, defaultValue = "" + DEFAULT_PAGE_SIZE) int size) {
 
 		return service.list(layerId,
-				new FeatureQueryService.Query(sort, desc, filter, bbox, geometry, cursor, size));
+				new FeatureQueryService.Query(sort, desc, filter, bbox, mode, geometry, cursor, size));
 	}
 
 	/** One feature with all its attributes -- what Identify shows for a clicked geometry. */
