@@ -111,6 +111,22 @@ public class TableCreator {
 	}
 
 	/**
+	 * Widens an existing layer's payload table by one column -- the counterpart to
+	 * {@link #createLayerTable} for a layer someone wants to extend instead of build
+	 * fresh. Existing rows read back {@code NULL} for it, which needs no special
+	 * handling: it is simply what {@code ALTER TABLE ... ADD COLUMN} leaves behind.
+	 *
+	 * @param columnName already through {@link SqlIdentifier#toColumnName}, unique
+	 *                    against this layer's other columns
+	 * @param pgType      always {@link FieldType#pgType()}, never a raw request value
+	 */
+	public void addColumn(String tableName, String columnName, String pgType) {
+		jdbc.sql("ALTER TABLE " + SqlIdentifier.quoteLayerTable(tableName)
+				+ " ADD COLUMN " + SqlIdentifier.quoteColumn(columnName) + " " + pgType)
+				.update();
+	}
+
+	/**
 	 * Compensation for a failed or aborted import: drops the physical table and removes
 	 * the catalog row. {@code layer_field} rows disappear with it via {@code ON DELETE
 	 * CASCADE}. Used both by the import compensation path and by {@code JobJanitor} when
