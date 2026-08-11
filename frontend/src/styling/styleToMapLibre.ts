@@ -200,8 +200,9 @@ function labelPaint(labels: LabelStyle): SymbolLayerSpecification['paint'] {
 
 /**
  * The font stack the label layer asks for. It has to exist in the glyph source
- * declared on the basemap style (`map/basemap.ts`) -- without glyphs MapLibre renders
- * no text at all and only says so on the error event.
+ * declared on the basemap style (`map/basemap.ts`) and as a folder under
+ * `backend/.../resources/glyphs/` -- without matching PBFs MapLibre renders no
+ * text at all and only says so on the error event.
  */
 export const LABEL_FONT = ['Noto Sans Regular']
 
