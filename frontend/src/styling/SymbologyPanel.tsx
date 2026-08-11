@@ -10,16 +10,11 @@ import { Row, Section } from './controls'
 import { defaultStyleFor } from './defaults'
 import { GraduatedEditor } from './GraduatedEditor'
 import { LabelEditor } from './LabelEditor'
+import { RENDERER_LABELS, labelOf } from './labels'
 import { convertRenderer } from './renderer'
 import { SymbolEditor } from './SymbolEditor'
 import type { LabelStyle, Renderer, RendererType } from './types'
 import { useStyleEditor } from './useStyleEditor'
-
-const RENDERER_LABELS: [RendererType, string][] = [
-  ['single', 'Einzelsymbol'],
-  ['categorized', 'Kategorisiert'],
-  ['graduated', 'Abgestuft'],
-]
 
 interface SymbologyPanelProps {
   layer: LayerSummary
@@ -76,7 +71,7 @@ export function SymbologyPanel({ layer, projectId }: SymbologyPanelProps) {
         <Row label="Typ">
           <Select value={style.renderer.type} onValueChange={(value) => switchRenderer(value as RendererType)}>
             <SelectTrigger size="sm" className="w-full">
-              <SelectValue />
+              <SelectValue>{(value: string) => labelOf(RENDERER_LABELS, value)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {RENDERER_LABELS.map(([value, label]) => (

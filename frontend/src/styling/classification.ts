@@ -23,6 +23,14 @@ export function fieldIdOfColumn(fields: LayerField[], columnName: string): strin
 }
 
 /**
+ * What the picker shows for a chosen field. Base UI renders the raw `value` in the
+ * trigger, and since that value is a uuid, the field would read as one without this.
+ */
+export function sourceNameOfField(fields: LayerField[], fieldId: string): string {
+  return fields.find((field) => field.id === fieldId)?.sourceName ?? ''
+}
+
+/**
  * Categories from the distinct values of a column.
  *
  * Objects without a value get no category of their own: MapLibre's `match` cannot carry

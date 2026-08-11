@@ -6,21 +6,14 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCount } from '@/lib/format'
-import { buildClasses, columnNameOfField, fieldIdOfColumn } from './classification'
+import { buildClasses, columnNameOfField, fieldIdOfColumn, sourceNameOfField } from './classification'
 import { ColorInput, NumberInput, Row } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
 import { isNumericField } from './fields'
 import { PaletteSelect } from './PaletteSelect'
+import { METHOD_LABELS, labelOf } from './labels'
 import { DEFAULT_RAMP } from './palettes'
 import type { Renderer } from './types'
-
-const METHOD_LABELS: [ClassifyMethod, string][] = [
-  ['quantile', 'Quantile'],
-  ['equalInterval', 'Gleiche Intervalle'],
-  // Named as what it is: the server approximates Jenks with ntile, because exact Jenks
-  // is quadratic and unusable on a large layer.
-  ['naturalBreaks', 'Natürliche Unterbrechungen (genähert)'],
-]
 
 interface GraduatedEditorProps {
   layerId: string
@@ -81,7 +74,9 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
       <Row label="Feld">
         <Select value={fieldIdOfColumn(fields, renderer.field)} onValueChange={(value) => value && selectField(value)}>
           <SelectTrigger size="sm" className="w-full">
-            <SelectValue placeholder="Zahlenfeld wählen" />
+            <SelectValue placeholder="Zahlenfeld wählen">
+              {(value: string) => sourceNameOfField(fields, value) || 'Zahlenfeld wählen'}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {numericFields.map((field) => (
@@ -107,7 +102,7 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
           }}
         >
           <SelectTrigger size="sm" className="w-full">
-            <SelectValue />
+            <SelectValue>{(value: string) => labelOf(METHOD_LABELS, value)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {METHOD_LABELS.map(([value, label]) => (

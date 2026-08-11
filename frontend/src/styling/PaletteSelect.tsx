@@ -1,5 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { CATEGORY_PALETTE, COLOR_RAMPS, sampleRamp } from './defaults'
+import { paletteLabel } from './labels'
 import { DEFAULT_CATEGORY_PALETTE } from './palettes'
 
 interface PaletteSelectProps {
@@ -13,7 +14,7 @@ export function PaletteSelect({ value, onValueChange, includeCategorical = true 
   return (
     <Select value={value} onValueChange={(next) => next && onValueChange(next)}>
       <SelectTrigger size="sm" className="min-w-0 flex-1">
-        <SelectValue />
+        <SelectValue>{(value: string) => paletteLabel(value)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {includeCategorical && (
