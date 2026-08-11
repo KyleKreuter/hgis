@@ -21,6 +21,7 @@ import {
   SnapMarker,
   useEditSession,
 } from '@/editing'
+import { MeasurementOverlay, MeasurementToolbar, useIsMeasuring } from '@/measurement'
 import { layerDetailQuery, layerListQuery } from '@/api/layers'
 import { featureDetailQuery } from '@/api/features'
 import { useSelection } from '@/state/selection'
@@ -62,6 +63,9 @@ function Workspace() {
   const [zoomTo, setZoomTo] = useState<ZoomRequest | null>(null)
   const clearSelection = useSelection((state) => state.clear)
   const editing = useEditSession({ layerId: activeLayerId ?? null, projectId })
+  // Only the on/off fact, not the running measurement -- the sketch changes with every
+  // mouse move, and re-rendering the whole workspace for that would be absurd.
+  const measuring = useIsMeasuring()
   // Only the detail carries the field list the attribute form is generated from.
   const { data: activeLayerDetail } = useQuery({
     ...layerDetailQuery(activeLayerId ?? ''),
@@ -123,6 +127,10 @@ function Workspace() {
             <span className="text-xs text-muted-foreground">EPSG:{project.srid}</span>
 
             <div className="ml-auto flex items-center gap-2">
+              {/* Measuring answers a question about the map and writes nothing, so it
+                  stands before the editing tools rather than inside them. */}
+              <MeasurementToolbar disabled={editing.active} />
+              <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
               <EditToolbar
                 active={editing.active}
                 geometryType={activeLayer?.geometryType}
@@ -187,7 +195,8 @@ function Workspace() {
             project={project}
             zoomTo={zoomTo}
             activeLayerId={activeLayerId ?? null}
-            identifyEnabled={!editing.active}
+            // Identify would consume the same click the measuring tool needs.
+            identifyEnabled={!editing.active && !measuring}
           >
             {editing.active && activeLayer && (
               <>
@@ -206,6 +215,7 @@ function Workspace() {
                 <EditingTileFilter layerId={activeLayer.id} />
               </>
             )}
+            {measuring && <MeasurementOverlay />}
           </ProjectMap>
         }
         attributes={

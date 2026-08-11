@@ -10,6 +10,7 @@ import { layerListQuery, type LayerSummary } from '@/api/layers'
 import { useSelection } from '@/state/selection'
 import { useMap } from './MapContext'
 import { sourceIdFor } from './layerSpecs'
+import { SELECTION_LAYER_SUFFIX, raiseOverlays } from './overlays'
 
 /**
  * The three layer kinds a highlight can be. Narrower than MapLibre's LayerSpecification
@@ -18,7 +19,11 @@ import { sourceIdFor } from './layerSpecs'
  */
 type HighlightSpec = FillLayerSpecification | LineLayerSpecification | CircleLayerSpecification
 
-const HIGHLIGHT_SUFFIX = '-selected'
+/**
+ * Shared with `overlays`, which recognises the highlight by exactly this suffix and
+ * keeps it above the data layers whenever the catalog is reconciled.
+ */
+const HIGHLIGHT_SUFFIX = SELECTION_LAYER_SUFFIX
 
 /**
  * `fid` is the MVT feature id, not an attribute.
@@ -110,6 +115,10 @@ export function SelectionHighlight({ projectId }: { projectId: string }) {
         map.addLayer(spec)
       }
     }
+
+    // A fresh `addLayer` lands on top of everything, including a running measurement.
+    // One shared rule decides who is above whom -- see `overlays`.
+    if (specs.length > 0) raiseOverlays(map)
   }, [mapRef, isLoaded, layers, selectedLayerId, selected])
 
   return null

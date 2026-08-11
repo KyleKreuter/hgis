@@ -8,6 +8,7 @@ import type {
 import type { LayerSummary } from '@/api/layers'
 import { styleToMapLibre } from '@/styling/styleToMapLibre'
 import { buildTileUrl, sourceIdFor } from './layerSpecs'
+import { raiseOverlays } from './overlays'
 
 /**
  * The subset of maplibregl.Map this module touches. Kept narrow and structural on
@@ -23,6 +24,7 @@ export type MapLike = Pick<
   | 'removeLayer'
   | 'getLayer'
   | 'moveLayer'
+  | 'getStyle'
   | 'setLayoutProperty'
   | 'setPaintProperty'
 >
@@ -183,7 +185,9 @@ function isSameValue(a: unknown, b: unknown): boolean {
  *
  * Finally reorders every managed layer bottom-to-top by ascending `zIndex` via
  * `moveLayer` (no beforeId moves a layer to the very top), which also keeps a
- * GEOMETRY layer's sublayers stacked polygon -> line -> point -> label.
+ * GEOMETRY layer's sublayers stacked polygon -> line -> point -> label -- and then
+ * lifts the overlays (selection, measurement) back above all of it, since that same
+ * reorder would otherwise bury them under the data on every visibility toggle.
  */
 export function syncMapLayers(map: MapLike, layers: LayerSummary[], applied: Map<string, AppliedLayer>): void {
   const desired = new Map(layers.map((layer) => [layer.id, layer]))
@@ -241,4 +245,6 @@ export function syncMapLayers(map: MapLike, layers: LayerSummary[], applied: Map
       if (map.getLayer(spec.id)) map.moveLayer(spec.id)
     }
   }
+
+  raiseOverlays(map)
 }

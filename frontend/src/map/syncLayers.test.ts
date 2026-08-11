@@ -43,6 +43,10 @@ function createFakeMap(options: { sourceSupportsSetTiles?: boolean } = {}) {
       if (index >= 0) layerOrder.splice(index, 1)
     }) as unknown as MapLike['removeLayer'],
     getLayer: vi.fn((id: string) => layers.get(id) as unknown as ReturnType<MapLike['getLayer']>) as unknown as MapLike['getLayer'],
+    // Only the layer order is modelled -- that is what `raiseOverlays` reads.
+    getStyle: vi.fn(() => ({
+      layers: layerOrder.map((id) => ({ id })),
+    })) as unknown as MapLike['getStyle'],
     moveLayer: vi.fn((id: string) => {
       const index = layerOrder.indexOf(id)
       if (index >= 0) layerOrder.splice(index, 1)
@@ -200,6 +204,49 @@ describe('syncMapLayers', () => {
       'hgis-layer-b-point',
       'hgis-layer-c-render',
       'hgis-layer-a-render',
+    ])
+  })
+
+  /**
+   * Die Regression, um die es geht: `syncMapLayers` schiebt am Ende jeden Datenlayer
+   * nach ganz oben. Vor der gemeinsamen Overlay-Regel (`overlays`) lag danach die
+   * laufende Messung unter den Daten -- ausgelöst von etwas so Beiläufigem wie einem
+   * Sichtbarkeits-Haken im Layerbaum.
+   */
+  it('lässt Messung und Auswahl auch nach einem Reorder oben', () => {
+    const { map, layerOrder } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    const first = makeLayer({ id: 'a', zIndex: 0 })
+    syncMapLayers(map, [first], applied)
+
+    // So legen SelectionHighlight und MeasurementLayer ihre Layer an: obenauf.
+    map.addLayer({ id: 'hgis-layer-a-selected', type: 'fill', source: 's' } as AddLayerObject)
+    map.addLayer({ id: 'hgis-measurement-line', type: 'line', source: 'm' } as AddLayerObject)
+
+    syncMapLayers(map, [first, makeLayer({ id: 'b', zIndex: 1 })], applied)
+
+    expect(layerOrder).toEqual([
+      'hgis-layer-a-render',
+      'hgis-layer-b-render',
+      'hgis-layer-a-selected',
+      'hgis-measurement-line',
+    ])
+  })
+
+  it('sortiert eine später hinzugekommene Auswahl unter die Messung', () => {
+    const { map, layerOrder } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    syncMapLayers(map, [makeLayer({ id: 'a' })], applied)
+
+    map.addLayer({ id: 'hgis-measurement-line', type: 'line', source: 'm' } as AddLayerObject)
+    map.addLayer({ id: 'hgis-layer-a-selected', type: 'fill', source: 's' } as AddLayerObject)
+
+    syncMapLayers(map, [makeLayer({ id: 'a' })], applied)
+
+    expect(layerOrder).toEqual([
+      'hgis-layer-a-render',
+      'hgis-layer-a-selected',
+      'hgis-measurement-line',
     ])
   })
 

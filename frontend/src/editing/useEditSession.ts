@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { useApplyEdits, type EditRequest } from '@/api/edits'
 import { countChanges, useEditing } from '@/state/editing'
+import { endMeasurement } from '@/measurement/store'
 import type { DrawTool } from './DrawController'
 import type { SnapTarget } from './snapping'
 
@@ -54,6 +55,10 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
 
   const start = useCallback(() => {
     if (!layerId) return
+    // Before anything else, and synchronously: measuring and drawing fight over the
+    // same click and over the same map handlers, so the measurement has to be gone
+    // before the drawing tool is mounted -- not one effect pass later.
+    endMeasurement()
     beginEditing(layerId)
     setActive(true)
     setTool('select')
