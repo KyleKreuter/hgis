@@ -6,11 +6,13 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCount } from '@/lib/format'
+import { buildClasses, columnNameOfField, fieldIdOfColumn } from './classification'
 import { ColorInput, NumberInput, Row } from './controls'
-import { defaultSymbolFor, primaryColorOf, withPrimaryColor } from './defaults'
-import { formatClassLabel, isNumericField } from './fields'
-import { DEFAULT_RAMP, PaletteSelect, paletteColors } from './palettes'
-import type { Renderer, StyleClass } from './types'
+import { primaryColorOf, withPrimaryColor } from './defaults'
+import { isNumericField } from './fields'
+import { PaletteSelect } from './PaletteSelect'
+import { DEFAULT_RAMP } from './palettes'
+import type { Renderer } from './types'
 
 const METHOD_LABELS: [ClassifyMethod, string][] = [
   ['quantile', 'Quantile'],
@@ -51,9 +53,9 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
     onChange({ ...renderer, classes: buildClasses(data.breaks, geometryType, ramp) })
   }, [classCount, data, geometryType, layerId, method, onChange, ramp, renderer])
 
-  function selectField(field: string) {
+  function selectField(fieldId: string) {
     generatedFor.current = null
-    onChange({ ...renderer, field, classes: [] })
+    onChange({ ...renderer, field: columnNameOfField(fields, fieldId), classes: [] })
   }
 
   function setClassColor(index: number, color: string) {
@@ -73,13 +75,13 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
   return (
     <>
       <Row label="Feld">
-        <Select value={renderer.field} onValueChange={(value) => value && selectField(value)}>
+        <Select value={fieldIdOfColumn(fields, renderer.field)} onValueChange={(value) => value && selectField(value)}>
           <SelectTrigger size="sm" className="w-full">
             <SelectValue placeholder="Zahlenfeld wählen" />
           </SelectTrigger>
           <SelectContent>
             {numericFields.map((field) => (
-              <SelectItem key={field.id} value={field.columnName}>
+              <SelectItem key={field.id} value={field.id}>
                 {field.sourceName}
               </SelectItem>
             ))}
@@ -172,21 +174,4 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
       </Row>
     </>
   )
-}
-
-/**
- * `breaks` holds the lower bound of every class plus the maximum -- usually n+1 values,
- * but fewer when the column has fewer distinct values than classes were asked for. The
- * server drops the repeated bounds because `step` rejects stops that do not ascend, so
- * the class count comes from the answer and never from what was requested.
- */
-function buildClasses(breaks: number[], geometryType: GeometryType, ramp: string): StyleClass[] {
-  const count = Math.max(0, breaks.length - 1)
-  const colors = paletteColors(ramp, count)
-  return Array.from({ length: count }, (_, index) => ({
-    min: breaks[index],
-    max: breaks[index + 1],
-    label: formatClassLabel(breaks[index], breaks[index + 1]),
-    symbol: withPrimaryColor(defaultSymbolFor(geometryType), colors[index]),
-  }))
 }

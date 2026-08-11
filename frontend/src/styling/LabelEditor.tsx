@@ -2,6 +2,7 @@ import type { LayerField } from '@/api/layers'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { columnNameOfField, fieldIdOfColumn } from './classification'
 import { ColorInput, NumberInput, Row } from './controls'
 import { defaultLabels } from './defaults'
 import type { LabelStyle } from './types'
@@ -40,13 +41,16 @@ export function LabelEditor({ labels, fields, onChange }: LabelEditorProps) {
       {enabled && (
         <>
           <Row label="Feld">
-            <Select value={current.field} onValueChange={(value) => value && onChange({ ...current, field: value })}>
+            <Select
+              value={fieldIdOfColumn(fields, current.field)}
+              onValueChange={(value) => value && onChange({ ...current, field: columnNameOfField(fields, value) })}
+            >
               <SelectTrigger size="sm" className="w-full">
                 <SelectValue placeholder="Feld wählen" />
               </SelectTrigger>
               <SelectContent>
                 {fields.map((field) => (
-                  <SelectItem key={field.id} value={field.columnName}>
+                  <SelectItem key={field.id} value={field.id}>
                     {field.sourceName}
                   </SelectItem>
                 ))}

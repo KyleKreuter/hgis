@@ -8,10 +8,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCount } from '@/lib/format'
+import { buildCategories, columnNameOfField, fieldIdOfColumn } from './classification'
 import { ColorInput, Row } from './controls'
-import { defaultSymbolFor, primaryColorOf, withPrimaryColor } from './defaults'
-import { formatCategoryValue } from './fields'
-import { PaletteSelect, paletteColors, DEFAULT_CATEGORY_PALETTE } from './palettes'
+import { primaryColorOf, withPrimaryColor } from './defaults'
+import { PaletteSelect } from './PaletteSelect'
+import { DEFAULT_CATEGORY_PALETTE, paletteColors } from './palettes'
 import type { Renderer, StyleCategory } from './types'
 
 interface CategorizedEditorProps {
@@ -48,9 +49,9 @@ export function CategorizedEditor({
     onChange({ ...renderer, categories: buildCategories(data.values, geometryType, palette) })
   }, [data, geometryType, layerId, onChange, palette, renderer])
 
-  function selectField(field: string) {
+  function selectField(fieldId: string) {
     generatedFor.current = null
-    onChange({ ...renderer, field, categories: [] })
+    onChange({ ...renderer, field: columnNameOfField(fields, fieldId), categories: [] })
   }
 
   function recolor(paletteId: string) {
@@ -82,13 +83,13 @@ export function CategorizedEditor({
   return (
     <>
       <Row label="Feld">
-        <Select value={renderer.field} onValueChange={(value) => value && selectField(value)}>
+        <Select value={fieldIdOfColumn(fields, renderer.field)} onValueChange={(value) => value && selectField(value)}>
           <SelectTrigger size="sm" className="w-full">
             <SelectValue placeholder="Feld wählen" />
           </SelectTrigger>
           <SelectContent>
             {fields.map((field) => (
-              <SelectItem key={field.id} value={field.columnName}>
+              <SelectItem key={field.id} value={field.id}>
                 {field.sourceName}
               </SelectItem>
             ))}
@@ -169,20 +170,6 @@ export function CategorizedEditor({
       </Row>
     </>
   )
-}
-
-/**
- * Values without a value get no category of their own: MapLibre's `match` cannot carry
- * null as a branch label, so those objects land on the fallback symbol either way.
- */
-function buildCategories(values: FieldValue[], geometryType: GeometryType, palette: string): StyleCategory[] {
-  const usable = values.filter((entry) => entry.value !== null)
-  const colors = paletteColors(palette, usable.length)
-  return usable.map((entry, index) => ({
-    value: entry.value,
-    label: formatCategoryValue(entry.value),
-    symbol: withPrimaryColor(defaultSymbolFor(geometryType), colors[index]),
-  }))
 }
 
 function countOf(values: FieldValue[] | undefined, value: StyleCategory['value']): string {
