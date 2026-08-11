@@ -66,12 +66,19 @@ public class ImportService {
 	 * The three-phase import described on the class. Never throws: every failure path
 	 * ends in the job being marked FAILED with a readable message, because nothing is
 	 * left to report a failure to once this method is running on a background thread.
+	 *
+	 * <p>Also always closes {@code reader} exactly once, on every path -- including the
+	 * three below that stop before phase B's own try-with-resources ever gets to it. For a
+	 * Shapefile, {@code reader} is the only thing holding the path to the directory its ZIP
+	 * was already extracted into; losing that path here would leak it for good, since
+	 * nothing else in the application ever revisits it.
 	 */
 	public void runImport(UUID jobId, UUID projectId, SourceReader reader, String layerName,
 			Integer sourceSridOverride) {
 		Project project = projectRepository.findById(projectId).orElse(null);
 		if (project == null) {
 			transactions.failBeforeTableExists(jobId, "Projekt " + projectId + " existiert nicht");
+			closeQuietly(reader, jobId);
 			return;
 		}
 
@@ -81,6 +88,7 @@ public class ImportService {
 		} catch (Exception e) {
 			log.error("Import {} failed while inspecting the source schema", jobId, e);
 			transactions.failBeforeTableExists(jobId, "Quelldatei konnte nicht gelesen werden: " + describe(e));
+			closeQuietly(reader, jobId);
 			return;
 		}
 
@@ -93,6 +101,7 @@ public class ImportService {
 		} catch (Exception e) {
 			log.error("Import {} failed before its table existed", jobId, e);
 			transactions.failBeforeTableExists(jobId, "Layer konnte nicht angelegt werden: " + describe(e));
+			closeQuietly(reader, jobId);
 			return;
 		}
 
@@ -156,5 +165,19 @@ public class ImportService {
 	private static String describe(Exception e) {
 		String message = e.getMessage();
 		return message != null && !message.isBlank() ? message : e.getClass().getSimpleName();
+	}
+
+	/**
+	 * Closes {@code reader} on a path that stops before phase B's try-with-resources would
+	 * have done it. A failure here is logged and swallowed, never rethrown: the job has
+	 * already been given its failure reason by the caller, and a problem releasing a
+	 * resource that failure never got to use must not overwrite that reason.
+	 */
+	private static void closeQuietly(SourceReader reader, UUID jobId) {
+		try {
+			reader.close();
+		} catch (Exception e) {
+			log.warn("Import {} could not close its source reader after an early failure", jobId, e);
+		}
 	}
 }

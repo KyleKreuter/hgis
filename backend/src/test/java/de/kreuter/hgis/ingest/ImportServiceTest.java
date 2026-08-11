@@ -1,6 +1,14 @@
 package de.kreuter.hgis.ingest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import de.kreuter.hgis.TestcontainersConfiguration;
 import de.kreuter.hgis.catalog.Layer;
@@ -15,6 +23,7 @@ import de.kreuter.hgis.jobs.JobService;
 import de.kreuter.hgis.jobs.dto.JobDtos;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -187,6 +196,59 @@ class ImportServiceTest {
 				.query(String.class).single();
 
 		assertThat(geometryType).isEqualTo("ST_MultiPolygon");
+	}
+
+	/**
+	 * The two failure paths that never reach phase B's own try-with-resources: the project
+	 * is gone by the time the import runs on its background thread, or table creation
+	 * itself fails. Forcing either one against the real database reliably would mean
+	 * depending on internals (a concrete DDL error, a precisely timed project deletion)
+	 * this test has no business knowing about, so {@link ImportTransactions} is mocked here
+	 * instead -- unlike every other test in this class, what is being verified is an
+	 * interaction (the reader gets closed) rather than a database state.
+	 */
+	@Test
+	@DisplayName("the project is gone by the time the import runs: the reader is still closed")
+	void closesTheReaderWhenTheProjectIsGone() {
+		ProjectRepository noSuchProject = mock(ProjectRepository.class);
+		when(noSuchProject.findById(any())).thenReturn(Optional.empty());
+		ImportTransactions transactions = mock(ImportTransactions.class);
+		ImportService serviceUnderTest = new ImportService(transactions, noSuchProject);
+
+		FakeSourceReader reader = FakeSourceReader.singlePolygon(project.getSrid());
+		UUID jobId = UUID.randomUUID();
+
+		serviceUnderTest.runImport(jobId, UUID.randomUUID(), reader, "Layer", null);
+
+		assertThat(reader.isClosed())
+				.as("the reader must be closed even when the project no longer exists")
+				.isTrue();
+		verify(transactions).failBeforeTableExists(eq(jobId), any());
+		verify(transactions, never()).begin(any(), any(), any(), any());
+	}
+
+	@Test
+	@DisplayName("table creation fails: the reader is still closed")
+	void closesTheReaderWhenTableCreationFails() {
+		ProjectRepository stubbedProjectRepository = mock(ProjectRepository.class);
+		UUID projectId = UUID.randomUUID();
+		when(stubbedProjectRepository.findById(projectId)).thenReturn(Optional.of(project));
+
+		ImportTransactions transactions = mock(ImportTransactions.class);
+		when(transactions.begin(any(), any(), any(), any()))
+				.thenThrow(new RuntimeException("Tabelle konnte nicht angelegt werden"));
+		ImportService serviceUnderTest = new ImportService(transactions, stubbedProjectRepository);
+
+		FakeSourceReader reader = FakeSourceReader.singlePolygon(project.getSrid());
+		UUID jobId = UUID.randomUUID();
+
+		serviceUnderTest.runImport(jobId, projectId, reader, "Layer", null);
+
+		assertThat(reader.isClosed())
+				.as("the reader must be closed even when the table could not be created")
+				.isTrue();
+		verify(transactions).failBeforeTableExists(eq(jobId), any());
+		verify(transactions, never()).complete(any(), any(), anyInt(), anyLong(), anyLong());
 	}
 
 	private long countGisDataTables() {

@@ -17,6 +17,14 @@ import java.util.zip.ZipFile;
  * <p>Unpacking is bounded in three ways (plan section A.9), because the size of an archive
  * says nothing about the size of its contents: a few hundred kilobytes of zeros expand to
  * gigabytes, and an unbounded extractor turns that into a full disk.
+ *
+ * <p>A directory returned by {@link #extract} belongs to whoever called it -- normally a
+ * {@code ShapefileSourceReader}, which deletes it in {@code close()}. If that reader is
+ * itself never closed (a crash mid-import; ordinary in-process failures are the caller's
+ * responsibility, see {@code ImportService#runImport}), the directory outlives the process
+ * that made it, with no path left anywhere to find it again. {@code
+ * de.kreuter.hgis.ingest.ZipExtractionJanitor} is the backstop for exactly that: a sweep
+ * over every {@code hgis-shp-} directory in the system temp root, by age.
  */
 final class ZipExtractor {
 
