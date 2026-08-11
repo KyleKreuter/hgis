@@ -10,7 +10,7 @@ export const CREATABLE_GEOMETRY_TYPES: CreatableGeometryType[] = [
   'MULTIPOLYGON',
 ]
 
-/** Fachlich verständliche Labels for the fixed `FieldType` enum -- CONTRACT.md table. */
+/** Plain-language labels for the fixed `FieldType` enum -- CONTRACT.md table. */
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   TEXT: 'Text',
   INTEGER: 'Ganzzahl',
