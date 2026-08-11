@@ -1,0 +1,49 @@
+/**
+ * Maps a PostgreSQL `data_type` to the input it deserves, and back to the string an
+ * HTML input wants for its `value`.
+ *
+ * Extracted out of `editing/AttributeForm.tsx` so the table's cell editor and the
+ * attribute form share one mapping instead of two that could drift apart. Belongs to
+ * the table module because that is where the second consumer lives; the form imports
+ * it from here.
+ *
+ * The wire format is settled by `FeaturePropertyWireFormatTest` on the backend -- see
+ * CONTRACT.md. All eleven types round-trip through GET/POST unchanged.
+ */
+
+export type FieldKind =
+  | 'text'
+  | 'integer'
+  | 'decimal'
+  | 'boolean'
+  | 'date'
+  | 'time'
+  | 'timestamp'
+  | 'readonly'
+
+export function kindOf(dataType: string): FieldKind {
+  const type = dataType.toLowerCase()
+  if (type.startsWith('timestamp')) return 'timestamp'
+  if (type === 'date') return 'date'
+  if (type === 'time') return 'time'
+  if (type === 'boolean') return 'boolean'
+  // A base64 blob typed by hand is a fixture for mistakes, not a way to edit data --
+  // uuid and bytea are shown but never opened for editing (user decision, CONTRACT.md).
+  if (type === 'uuid' || type === 'bytea') return 'readonly'
+  if (/^(smallint|integer|bigint)$/.test(type)) return 'integer'
+  if (/^(double precision|numeric|real|decimal)/.test(type)) return 'decimal'
+  return 'text'
+}
+
+/**
+ * `datetime-local` wants "YYYY-MM-DDTHH:mm"; the API delivers a full ISO timestamp.
+ *
+ * `date` and `time` already arrive in exactly the shape their input wants -- the old
+ * ten-character trim here was worked around a timestamp bug in `date` that no longer
+ * exists (CONTRACT.md), so only `timestamp` still needs trimming.
+ */
+export function toInputValue(value: unknown, kind: FieldKind): string {
+  const text = String(value)
+  if (kind === 'timestamp') return text.slice(0, 16)
+  return text
+}
