@@ -136,6 +136,17 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
     setInvalidGeometry(null)
   }, [resetBuffer])
 
+  /**
+   * Deletes the selected feature through the buffer. The drawing surface follows via
+   * `historyNonce` -- same channel undo uses -- so the toolbar does not need a handle on
+   * terra-draw. Disabled in the UI when nothing is selected.
+   */
+  const deleteSelected = useCallback(() => {
+    if (selectedFid === null) return
+    useEditing.getState().removeFeature(selectedFid)
+    setSelectedFid(null)
+  }, [selectedFid])
+
   // Closing the tab with unsaved edits. The browser shows its own wording; all we can do
   // is ask for the prompt at all (plan section D.8).
   useEffect(() => {
@@ -174,6 +185,7 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
     selectedFid,
     setSelectedFid,
     selectedFeature,
+    deleteSelected,
     pending,
     invalidGeometry,
     dismissInvalidGeometry: () => setInvalidGeometry(null),

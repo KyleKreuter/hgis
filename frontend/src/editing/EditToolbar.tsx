@@ -7,6 +7,7 @@ import {
   Redo2,
   Spline,
   Square,
+  Trash2,
   Undo2,
   X,
 } from 'lucide-react'
@@ -36,6 +37,10 @@ interface EditToolbarProps {
   onStart: () => void
   onSave: () => void
   onDiscard: () => void
+  /** Deletes the currently selected feature; no-op when nothing is selected. */
+  onDelete: () => void
+  /** Whether a feature is selected and can be deleted. */
+  canDelete: boolean
   isSaving: boolean
   canEdit: boolean
   snapEnabled: boolean
@@ -52,6 +57,8 @@ export function EditToolbar({
   onStart,
   onSave,
   onDiscard,
+  onDelete,
+  canDelete,
   isSaving,
   canEdit,
   snapEnabled,
@@ -145,6 +152,28 @@ export function EditToolbar({
       </Tooltip>
 
       <Separator orientation="vertical" className="mx-1 h-4 data-vertical:self-center" />
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
+              disabled={!canDelete || isSaving}
+              aria-label="Ausgewähltes Objekt löschen"
+              onClick={onDelete}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          }
+        />
+        <TooltipContent>
+          {canDelete
+            ? 'Ausgewähltes Objekt löschen (auch Entf)'
+            : 'Objekt in der Karte auswählen, um es zu löschen'}
+        </TooltipContent>
+      </Tooltip>
 
       <Button
         variant="ghost"

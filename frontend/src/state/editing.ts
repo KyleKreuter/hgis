@@ -39,7 +39,8 @@ interface EditingState {
    */
   nextTempId: number
   /**
-   * Counts undo and redo steps, and nothing else.
+   * Counts buffer changes that did not start in the drawing tool: undo, redo, and
+   * deletes triggered from the toolbar.
    *
    * The drawing tool holds its own copy of every geometry and cannot see a patch being
    * applied here. Every other change to the buffer starts in the tool itself, so this is
@@ -179,7 +180,8 @@ export const useEditing = create<EditingState>((set, get) => {
         `properties:${feature.fid}`,
       ),
 
-    removeFeature: (fid, base) =>
+    removeFeature: (fid, base) => {
+      const previous = get().buffer
       mutate((draft) => {
         if (fid < 0) {
           // Never existed on the server, so deleting it is simply forgetting it.
@@ -189,7 +191,14 @@ export const useEditing = create<EditingState>((set, get) => {
         delete draft.updates[fid]
         if (!draft.deletes.includes(fid)) draft.deletes.push(fid)
         void base
-      }, 'Objekt gelöscht'),
+      }, 'Objekt gelöscht')
+      // No-op deletes must not bump the nonce -- otherwise the sync would run for nothing.
+      if (get().buffer === previous) return
+      // Delete-key removals already emptied the surface; a toolbar delete has not.
+      // Bumping the nonce lets DrawController drop the shape in either case -- when the
+      // feature is already gone the sync is a no-op.
+      set({ historyNonce: get().historyNonce + 1 })
+    },
 
     undo: () => {
       const { buffer, undoStack, redoStack, historyNonce } = get()

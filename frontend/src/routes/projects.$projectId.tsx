@@ -131,6 +131,8 @@ function Workspace() {
                 onStart={editing.start}
                 onSave={() => void editing.save()}
                 onDiscard={editing.discard}
+                onDelete={editing.deleteSelected}
+                canDelete={editing.selectedFid !== null}
                 isSaving={editing.isSaving}
                 canEdit={Boolean(activeLayer)}
                 snapEnabled={editing.snapEnabled}

@@ -546,12 +546,12 @@ export function DrawController({
   }, [mapRef, isLoaded, layerId, queryClient, snapSourceLayerIds])
 
   /**
-   * Brings the drawing surface back in line after undo or redo.
+   * Brings the drawing surface back in line after undo, redo, or a toolbar delete.
    *
-   * Undo applies patches to the buffer, and nothing else notices: terra-draw keeps its own
-   * copy of every geometry. Without this the counter dropped to "keine Änderungen" while
-   * the taken-back shape stayed on screen -- and saving then wrote something different
-   * from what was visible.
+   * Those changes land in the buffer without terra-draw noticing: undo applies patches,
+   * and the delete button calls `removeFeature` directly. Without this the counter would
+   * claim "keine Änderungen" while the taken-back or deleted shape still sat on screen --
+   * and saving would then write something different from what was visible.
    *
    * Rebuilt from the buffer rather than played back step by step: a patch says how the
    * buffer changed, not what the map should now show, and the two would drift apart over

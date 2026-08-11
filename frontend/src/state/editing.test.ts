@@ -60,6 +60,13 @@ describe('edit buffer', () => {
     expect(store().buffer.deletes).toEqual([])
   })
 
+  it('signals the drawing surface when a feature is deleted', () => {
+    const before = store().historyNonce
+    store().removeFeature(2)
+    // Same channel undo uses: without it a toolbar delete would leave the shape on the map.
+    expect(store().historyNonce).toBe(before + 1)
+  })
+
   describe('undo and redo', () => {
     it('takes back one change and puts it back', () => {
       store().addFeature(POINT)
