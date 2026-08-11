@@ -30,6 +30,26 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Objekte per Rechteck auswählen, wahlweise berührte oder vollständig eingeschlossene,
   und die Auswahl mit Umschalt ergänzen oder mit Alt abziehen
 - Einen Layer oder die aktuelle Auswahl als GeoJSON herunterladen
+- Sachdaten direkt in der Attributtabelle bearbeiten, mit der Tastatur und je Feldtyp
+  passender Eingabe
+
+### Sachdaten bearbeiten
+
+Die Attributtabelle hat einen eigenen Bearbeitungsmodus, getrennt vom Digitalisieren an
+der Karte. Beide schließen sich aus: Wer den einen einschaltet, wird gefragt, bevor
+ungespeicherte Änderungen des anderen verworfen werden.
+
+Jede Spalte bekommt die Eingabe, die zu ihrem Typ passt — ein Datumsfeld für ein Datum,
+eine Auswahl für Ja/Nein, ein Zahlenfeld für Zahlen. Ein geleertes Feld bedeutet
+ausdrücklich NULL und nicht den leeren Text; bei Ja/Nein gibt es NULL als dritte
+Möglichkeit. Gearbeitet wird mit der Tastatur: Pfeiltasten bewegen den Fokus, Enter oder
+Lostippen öffnet eine Zelle, Enter springt eine Zeile tiefer, Tab eine Spalte weiter,
+Escape verwirft.
+
+Geändert wird zunächst nur im Arbeitsspeicher; ein Zähler zeigt die offenen Änderungen,
+Speichern und Verwerfen sind getrennte Aktionen. Beim Speichern prüft der Server, ob die
+Zeile inzwischen von jemand anderem geändert wurde, und lehnt in diesem Fall den ganzen
+Vorgang ab, statt fremde Arbeit zu überschreiben.
 
 ### Auswählen und exportieren
 
