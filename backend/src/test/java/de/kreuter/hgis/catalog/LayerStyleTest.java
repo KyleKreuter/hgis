@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import de.kreuter.hgis.TestcontainersConfiguration;
 import de.kreuter.hgis.common.SqlIdentifier;
 import java.util.UUID;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -299,6 +300,44 @@ class LayerStyleTest {
 				.andExpect(jsonPath("$.style.renderer.field").value("gebaeudehoehe"));
 
 		assertThat(styleService.tileColumns(reload())).containsExactly("gebaeudehoehe");
+	}
+
+	@Test
+	@DisplayName("a dash pattern survives storage; no pattern means the member is gone, not null")
+	void dashArrayRoundTrips() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "single",
+				  "symbol": { "kind": "line", "color": "#2980b9", "width": 2,
+				              "dashArray": [2, 2] } } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.symbol.dashArray", Matchers.hasSize(2)))
+				.andExpect(jsonPath("$.style.renderer.symbol.dashArray[0]").value(2.0));
+
+		// Absent, not null: a solid line is the absence of a pattern. A client reading
+		// symbol.dashArray gets undefined either way, one testing 'dashArray' in symbol
+		// does not -- so this is worth pinning down rather than leaving to Jackson.
+		patchStyle("""
+				{ "style": { "renderer": { "type": "single",
+				  "symbol": { "kind": "line", "color": "#2980b9", "width": 2,
+				              "dashArray": null } } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.symbol.color").value("#2980b9"))
+				.andExpect(jsonPath("$.style.renderer.symbol.dashArray").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("a numeric category value stays a number, it does not become a string")
+	void numericCategoryValuesKeepTheirType() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "categorized", "field": "einwohner",
+				  "categories": [ { "value": 100, "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.categories[0].value").value(100))
+				.andExpect(jsonPath("$.style.renderer.categories[0].value")
+						.value(Matchers.instanceOf(Number.class)));
 	}
 
 	@Test
