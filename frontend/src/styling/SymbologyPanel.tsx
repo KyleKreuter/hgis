@@ -1,18 +1,18 @@
 import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RotateCcw } from 'lucide-react'
-import { layerDetailQuery, type LayerField, type LayerSummary } from '@/api/layers'
+import { layerDetailQuery, type LayerSummary } from '@/api/layers'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { CategorizedEditor } from './CategorizedEditor'
 import { Row, Section } from './controls'
-import { defaultStyleFor, defaultSymbolFor, withPrimaryColor } from './defaults'
-import { isNumericField } from './fields'
+import { defaultStyleFor } from './defaults'
 import { GraduatedEditor } from './GraduatedEditor'
 import { LabelEditor } from './LabelEditor'
+import { convertRenderer } from './renderer'
 import { SymbolEditor } from './SymbolEditor'
-import type { LabelStyle, LayerStyle, Renderer, RendererType } from './types'
+import type { LabelStyle, Renderer, RendererType } from './types'
 import { useStyleEditor } from './useStyleEditor'
 
 const RENDERER_LABELS: [RendererType, string][] = [
@@ -20,9 +20,6 @@ const RENDERER_LABELS: [RendererType, string][] = [
   ['categorized', 'Kategorisiert'],
   ['graduated', 'Abgestuft'],
 ]
-
-/** Neutral grey for "everything the classification does not cover". */
-const FALLBACK_COLOR = '#a3a3a3'
 
 interface SymbologyPanelProps {
   layer: LayerSummary
@@ -141,30 +138,4 @@ export function SymbologyPanel({ layer, projectId }: SymbologyPanelProps) {
       </Section>
     </div>
   )
-}
-
-/**
- * Switching the renderer keeps the symbol the user has already set up and only adds
- * what the new type needs. The classification itself is not carried over -- a field
- * chosen for categories rarely makes sense as a numeric class, and `field: ''` is the
- * signal the editors use to ask for one.
- */
-function convertRenderer(
-  style: LayerStyle,
-  type: RendererType,
-  geometryType: LayerSummary['geometryType'],
-  fields: LayerField[],
-): Renderer {
-  const base = style.renderer.type === 'single' ? style.renderer.symbol : style.renderer.fallbackSymbol
-  if (type === 'single') return { type: 'single', symbol: base }
-
-  const fallbackSymbol = withPrimaryColor(defaultSymbolFor(geometryType), FALLBACK_COLOR)
-  const field = 'field' in style.renderer ? style.renderer.field : ''
-
-  if (type === 'categorized') {
-    return { type: 'categorized', field, categories: [], fallbackSymbol }
-  }
-  // A graduated renderer on a text column is a guaranteed 400 from `/classify`.
-  const numeric = fields.some((candidate) => candidate.sourceName === field && isNumericField(candidate))
-  return { type: 'graduated', field: numeric ? field : '', classes: [], fallbackSymbol }
 }

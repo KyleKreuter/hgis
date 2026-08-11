@@ -1,3 +1,16 @@
+/**
+ * Field handling for the symbology panel.
+ *
+ * **Every `field` in a style is the column name, never the source name.** The tile
+ * carries its properties under the column name -- a source name may hold umlauts or
+ * blanks and never becomes an SQL identifier -- so the server canonicalises
+ * `renderer.field` and `labels.field` on save and answers `/values` and `/classify`
+ * with the column name too. The field pickers therefore carry `columnName` as their
+ * value and only *display* `sourceName`; writing anything else would make the style in
+ * the cache disagree with the stored one, and `['get', field]` would read a property
+ * that is not in the tile.
+ */
+
 import type { LayerField } from '@/api/layers'
 import { formatAttributeNumber } from '@/lib/format'
 import type { CategoryValue } from './types'

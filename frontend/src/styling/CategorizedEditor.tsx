@@ -88,7 +88,7 @@ export function CategorizedEditor({
           </SelectTrigger>
           <SelectContent>
             {fields.map((field) => (
-              <SelectItem key={field.id} value={field.sourceName}>
+              <SelectItem key={field.id} value={field.columnName}>
                 {field.sourceName}
               </SelectItem>
             ))}

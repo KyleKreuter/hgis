@@ -15,8 +15,9 @@ interface LabelEditorProps {
 export function LabelEditor({ labels, fields, onChange }: LabelEditorProps) {
   const enabled = Boolean(labels?.enabled)
   // Kept around while switched off so turning labels back on restores the field and
-  // colours instead of starting over.
-  const current = labels ?? defaultLabels(fields[0]?.sourceName ?? '')
+  // colours instead of starting over. The column name, not the source name -- see
+  // `fields.ts` for why every `field` in a style is the column name.
+  const current = labels ?? defaultLabels(fields[0]?.columnName ?? '')
 
   return (
     <>
@@ -45,7 +46,7 @@ export function LabelEditor({ labels, fields, onChange }: LabelEditorProps) {
               </SelectTrigger>
               <SelectContent>
                 {fields.map((field) => (
-                  <SelectItem key={field.id} value={field.sourceName}>
+                  <SelectItem key={field.id} value={field.columnName}>
                     {field.sourceName}
                   </SelectItem>
                 ))}

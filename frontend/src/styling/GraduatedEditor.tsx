@@ -79,7 +79,7 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
           </SelectTrigger>
           <SelectContent>
             {numericFields.map((field) => (
-              <SelectItem key={field.id} value={field.sourceName}>
+              <SelectItem key={field.id} value={field.columnName}>
                 {field.sourceName}
               </SelectItem>
             ))}
@@ -131,6 +131,13 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
         </p>
       )}
 
+      {renderer.classes.length > 0 && renderer.classes.length < classCount && (
+        <p className="py-1 text-xs text-muted-foreground">
+          Das Feld hat zu wenige verschiedene Werte für {formatCount(classCount)} Klassen — es sind{' '}
+          {formatCount(renderer.classes.length)} geworden.
+        </p>
+      )}
+
       {renderer.classes.length > 0 && (
         <ScrollArea className="max-h-56">
           <ul className="grid gap-0.5 py-1">
@@ -167,7 +174,12 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
   )
 }
 
-/** `breaks` holds n+1 values: the lower bound of every class, plus the maximum. */
+/**
+ * `breaks` holds the lower bound of every class plus the maximum -- usually n+1 values,
+ * but fewer when the column has fewer distinct values than classes were asked for. The
+ * server drops the repeated bounds because `step` rejects stops that do not ascend, so
+ * the class count comes from the answer and never from what was requested.
+ */
 function buildClasses(breaks: number[], geometryType: GeometryType, ramp: string): StyleClass[] {
   const count = Math.max(0, breaks.length - 1)
   const colors = paletteColors(ramp, count)
