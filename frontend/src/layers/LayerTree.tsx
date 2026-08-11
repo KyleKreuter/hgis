@@ -35,7 +35,7 @@ import {
   type GeometryType,
   type LayerSummary,
 } from '@/api/layers'
-import { previewColorOf } from '@/styling/defaults'
+import { previewColorOf } from '@/styling'
 import { DeleteLayerDialog } from './DeleteLayerDialog'
 import { GEOMETRY_LABELS } from './geometry'
 import { RenameLayerDialog } from './RenameLayerDialog'
