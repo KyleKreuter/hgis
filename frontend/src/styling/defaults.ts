@@ -82,9 +82,33 @@ export function defaultLabels(field: string): LabelStyle {
   }
 }
 
-/** The colour a symbol is identified by -- what a legend swatch and a colour picker show. */
+/** The label style every missing member falls back to. */
+export const DEFAULT_LABELS = defaultLabels('')
+
+/**
+ * The colour a symbol is identified by -- what a legend swatch and a colour picker show.
+ *
+ * Falls back rather than returning what it was given: the member is optional in the
+ * stored JSON, and an `undefined` here would reach both a paint property (which costs
+ * the entire layer, see `styleToMapLibre`) and the `value` of a colour input (which
+ * turns it into an uncontrolled one).
+ */
 export function primaryColorOf(symbol: LayerSymbol): string {
-  return symbol.kind === 'line' ? symbol.color : symbol.fillColor
+  const color = symbol.kind === 'line' ? symbol.color : symbol.fillColor
+  return colorOr(color, symbol.kind === 'marker' ? DEFAULT_MARKER.fillColor : DEFAULT_FILL.fillColor)
+}
+
+/**
+ * A usable colour, or the fallback. The style schema types every colour as `string`,
+ * but the value comes out of an API and may be missing or empty.
+ */
+export function colorOr(value: string | undefined | null, fallback: string): string {
+  return typeof value === 'string' && value !== '' ? value : fallback
+}
+
+/** A usable number, or the fallback -- catches missing values and NaN alike. */
+export function numberOr(value: number | undefined | null, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
 /**

@@ -36,9 +36,16 @@ export function isNumericField(field: LayerField): boolean {
   return NUMERIC_TYPES.has(base)
 }
 
-/** How a value from `/values` reads in the category list. */
-export function formatCategoryValue(value: CategoryValue): string {
-  if (value === null) return 'ohne Wert'
+/**
+ * How a value from `/values` reads in the category list.
+ *
+ * Accepts `undefined` beside `null` and reads both as "ohne Wert". The server writes
+ * `value` on every category, null included, so `undefined` does not arrive today -- but
+ * the two mean the same thing here either way: the category MapLibre will never match,
+ * whose objects fall to the fallback symbol.
+ */
+export function formatCategoryValue(value: CategoryValue | undefined): string {
+  if (value === null || value === undefined) return 'ohne Wert'
   if (typeof value === 'number') return formatAttributeNumber(value)
   return value === '' ? 'leer' : value
 }

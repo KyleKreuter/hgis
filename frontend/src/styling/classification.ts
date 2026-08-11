@@ -26,14 +26,16 @@ export function fieldIdOfColumn(fields: LayerField[], columnName: string): strin
  * Categories from the distinct values of a column.
  *
  * Objects without a value get no category of their own: MapLibre's `match` cannot carry
- * null as a branch label, so they land on the fallback symbol either way.
+ * null as a branch label, so they land on the fallback symbol either way. `undefined` is
+ * excluded next to it because the two say the same thing, not because the API is
+ * expected to send it.
  */
 export function buildCategories(
   values: FieldValue[],
   geometryType: GeometryType,
   palette: string,
 ): StyleCategory[] {
-  const usable = values.filter((entry) => entry.value !== null)
+  const usable = values.filter((entry) => entry.value !== null && entry.value !== undefined)
   const colors = paletteColors(palette, usable.length)
   return usable.map((entry, index) => ({
     value: entry.value,
