@@ -1,0 +1,310 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`styleToMapLibre je Renderer > GEOMETRY-Layer, kategorisiert 1`] = `
+[
+  {
+    "filter": [
+      "==",
+      [
+        "geometry-type",
+      ],
+      "Polygon",
+    ],
+    "id": "hgis-layer-layer-1-polygon",
+    "layout": {
+      "visibility": "visible",
+    },
+    "maxzoom": 22,
+    "minzoom": 0,
+    "paint": {
+      "fill-color": [
+        "match",
+        [
+          "get",
+          "art",
+        ],
+        "A",
+        "#0072b2",
+        "#a3a3a3",
+      ],
+      "fill-opacity": 0.36,
+      "fill-outline-color": [
+        "match",
+        [
+          "get",
+          "art",
+        ],
+        "A",
+        "#004c77",
+        "#737373",
+      ],
+    },
+    "source": "hgis-layer-layer-1",
+    "source-layer": "layer",
+    "type": "fill",
+  },
+  {
+    "filter": [
+      "==",
+      [
+        "geometry-type",
+      ],
+      "LineString",
+    ],
+    "id": "hgis-layer-layer-1-line",
+    "layout": {
+      "visibility": "visible",
+    },
+    "maxzoom": 22,
+    "minzoom": 0,
+    "paint": {
+      "line-color": [
+        "match",
+        [
+          "get",
+          "art",
+        ],
+        "A",
+        "#0072b2",
+        "#a3a3a3",
+      ],
+      "line-opacity": 0.9,
+      "line-width": 1.25,
+    },
+    "source": "hgis-layer-layer-1",
+    "source-layer": "layer",
+    "type": "line",
+  },
+  {
+    "filter": [
+      "==",
+      [
+        "geometry-type",
+      ],
+      "Point",
+    ],
+    "id": "hgis-layer-layer-1-point",
+    "layout": {
+      "visibility": "visible",
+    },
+    "maxzoom": 22,
+    "minzoom": 0,
+    "paint": {
+      "circle-color": [
+        "match",
+        [
+          "get",
+          "art",
+        ],
+        "A",
+        "#0072b2",
+        "#a3a3a3",
+      ],
+      "circle-opacity": 0.9,
+      "circle-radius": 3,
+      "circle-stroke-color": "#fafafa",
+      "circle-stroke-opacity": 0.9,
+      "circle-stroke-width": 1,
+    },
+    "source": "hgis-layer-layer-1",
+    "source-layer": "layer",
+    "type": "circle",
+  },
+  {
+    "id": "hgis-layer-layer-1-label",
+    "layout": {
+      "symbol-placement": "point",
+      "text-allow-overlap": false,
+      "text-field": [
+        "get",
+        "name",
+      ],
+      "text-font": [
+        "Noto Sans Regular",
+      ],
+      "text-size": 11,
+      "visibility": "visible",
+    },
+    "maxzoom": 22,
+    "minzoom": 12,
+    "paint": {
+      "text-color": "#262626",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 1.5,
+    },
+    "source": "hgis-layer-layer-1",
+    "source-layer": "layer",
+    "type": "symbol",
+  },
+]
+`;
+
+exports[`styleToMapLibre je Renderer > categorized 1`] = `
+[
+  {
+    "id": "hgis-layer-layer-1-render",
+    "layout": {
+      "visibility": "visible",
+    },
+    "maxzoom": 22,
+    "minzoom": 0,
+    "paint": {
+      "fill-color": [
+        "match",
+        [
+          "get",
+          "nutzungsart",
+        ],
+        "Wohnen",
+        "#0072b2",
+        "Gewerbe",
+        "#d55e00",
+        "#a3a3a3",
+      ],
+      "fill-opacity": 0.5,
+      "fill-outline-color": [
+        "match",
+        [
+          "get",
+          "nutzungsart",
+        ],
+        "Wohnen",
+        "#004c77",
+        "Gewerbe",
+        "#8e3f00",
+        "#737373",
+      ],
+    },
+    "source": "hgis-layer-layer-1",
+    "source-layer": "layer",
+    "type": "fill",
+  },
+]
+`;
+
+exports[`styleToMapLibre je Renderer > graduated 1`] = `
+[
+  {
+    "id": "hgis-layer-layer-1-render",
+    "layout": {
+      "visibility": "visible",
+    },
+    "maxzoom": 22,
+    "minzoom": 0,
+    "paint": {
+      "line-color": [
+        "case",
+        [
+          "has",
+          "einwohner",
+        ],
+        [
+          "step",
+          [
+            "get",
+            "einwohner",
+          ],
+          "#eff5fb",
+          120,
+          "#6baed6",
+          340,
+          "#08306b",
+        ],
+        "#d4d4d4",
+      ],
+      "line-width": [
+        "case",
+        [
+          "has",
+          "einwohner",
+        ],
+        [
+          "step",
+          [
+            "get",
+            "einwohner",
+          ],
+          1,
+          120,
+          2,
+          340,
+          3,
+        ],
+        1,
+      ],
+    },
+    "source": "hgis-layer-layer-1",
+    "source-layer": "layer",
+    "type": "line",
+  },
+]
+`;
+
+exports[`styleToMapLibre je Renderer > mit Beschriftung 1`] = `
+[
+  {
+    "id": "hgis-layer-layer-1-render",
+    "layout": {
+      "visibility": "visible",
+    },
+    "maxzoom": 22,
+    "minzoom": 0,
+    "paint": {
+      "circle-color": "#e74c3c",
+      "circle-radius": 5,
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 1,
+    },
+    "source": "hgis-layer-layer-1",
+    "source-layer": "layer",
+    "type": "circle",
+  },
+  {
+    "id": "hgis-layer-layer-1-label",
+    "layout": {
+      "symbol-placement": "point",
+      "text-allow-overlap": false,
+      "text-field": [
+        "get",
+        "name",
+      ],
+      "text-font": [
+        "Noto Sans Regular",
+      ],
+      "text-size": 12,
+      "visibility": "visible",
+    },
+    "maxzoom": 22,
+    "minzoom": 14,
+    "paint": {
+      "text-color": "#333333",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 1.5,
+    },
+    "source": "hgis-layer-layer-1",
+    "source-layer": "layer",
+    "type": "symbol",
+  },
+]
+`;
+
+exports[`styleToMapLibre je Renderer > single 1`] = `
+[
+  {
+    "id": "hgis-layer-layer-1-render",
+    "layout": {
+      "visibility": "visible",
+    },
+    "maxzoom": 22,
+    "minzoom": 0,
+    "paint": {
+      "fill-color": "#27ae60",
+      "fill-opacity": 0.4,
+      "fill-outline-color": "#1e8449",
+    },
+    "source": "hgis-layer-layer-1",
+    "source-layer": "layer",
+    "type": "fill",
+  },
+]
+`;
