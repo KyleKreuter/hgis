@@ -166,6 +166,36 @@ public final class LayerDtos {
 	}
 
 	/**
+	 * Request to add one attribute field to an existing layer (CONTRACT.md phase 11).
+	 * Unlike {@link CreateRequest.Field}, this is not part of a batch: the layer already
+	 * has a physical table, and this widens it by exactly one column.
+	 */
+	public record AddFieldRequest(
+			@NotBlank(message = "Name darf nicht leer sein")
+			@Size(max = 200, message = "Name darf höchstens 200 Zeichen lang sein")
+			String name,
+
+			/**
+			 * One of {@link de.kreuter.hgis.common.FieldType}'s nine tokens. Kept as a
+			 * plain string for the same reason as {@link CreateRequest#geometryType()}: an
+			 * unknown token is rejected with a field-level message instead of failing while
+			 * Jackson reads the body.
+			 */
+			@NotBlank(message = "Typ darf nicht leer sein")
+			String type) {
+	}
+
+	/**
+	 * Request to rename an existing field's display name. {@code columnName} and
+	 * {@code dataType} never change -- see CONTRACT.md phase 11, trap 3.
+	 */
+	public record RenameFieldRequest(
+			@NotBlank(message = "Name darf nicht leer sein")
+			@Size(max = 200, message = "Name darf höchstens 200 Zeichen lang sein")
+			String name) {
+	}
+
+	/**
 	 * New stacking order for a whole project.
 	 *
 	 * <p>The field name states the direction because getting it wrong is invisible until

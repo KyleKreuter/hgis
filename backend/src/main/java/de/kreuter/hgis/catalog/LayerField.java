@@ -29,8 +29,14 @@ public class LayerField {
 	@JoinColumn(name = "layer_id", nullable = false, updatable = false)
 	private Layer layer;
 
-	/** Original name from the file, shown in the UI. May contain umlauts and spaces. */
-	@Column(name = "source_name", nullable = false, updatable = false)
+	/**
+	 * Original name from the file, shown in the UI. May contain umlauts and spaces.
+	 *
+	 * <p>The one column of this entity a client may change after creation -- see
+	 * {@link #rename}. {@code columnName}, {@code dataType} and {@code ordinal} stay
+	 * {@code updatable = false}: the physical column they describe never does.
+	 */
+	@Column(name = "source_name", nullable = false)
 	private String sourceName;
 
 	/** Normalised, unique, safe to quote into SQL. */
@@ -79,5 +85,15 @@ public class LayerField {
 
 	public int getOrdinal() {
 		return ordinal;
+	}
+
+	/**
+	 * Changes the display name only. {@code columnName} and {@code dataType} are the
+	 * physical column and never move -- a rename is purely a label change (CONTRACT.md
+	 * phase 11, trap 3). Callers are responsible for checking the new name against the
+	 * rest of the layer's fields first; this method does not repeat that check.
+	 */
+	public void rename(String newSourceName) {
+		this.sourceName = newSourceName;
 	}
 }

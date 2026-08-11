@@ -6,6 +6,7 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,10 +22,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class LayerController {
 
 	private final LayerService service;
+	private final LayerFieldService fieldService;
 	private final ClassificationService classificationService;
 
-	LayerController(LayerService service, ClassificationService classificationService) {
+	LayerController(LayerService service, LayerFieldService fieldService,
+			ClassificationService classificationService) {
 		this.service = service;
+		this.fieldService = fieldService;
 		this.classificationService = classificationService;
 	}
 
@@ -95,5 +99,20 @@ public class LayerController {
 	public ResponseEntity<Void> delete(@PathVariable UUID layerId) {
 		service.delete(layerId);
 		return ResponseEntity.noContent().build();
+	}
+
+	/** Adds one attribute field to an existing layer (CONTRACT.md phase 11). */
+	@PostMapping("/api/layers/{layerId}/fields")
+	public ResponseEntity<LayerDtos.Field> addField(@PathVariable UUID layerId,
+			@Valid @RequestBody LayerDtos.AddFieldRequest request) {
+		LayerDtos.Field field = fieldService.addField(layerId, request);
+		return ResponseEntity.status(HttpStatus.CREATED).body(field);
+	}
+
+	/** Renames an existing field's display name; column and type are immutable. */
+	@PatchMapping("/api/layers/{layerId}/fields/{fieldId}")
+	public LayerDtos.Field renameField(@PathVariable UUID layerId, @PathVariable UUID fieldId,
+			@Valid @RequestBody LayerDtos.RenameFieldRequest request) {
+		return fieldService.renameField(layerId, fieldId, request);
 	}
 }
