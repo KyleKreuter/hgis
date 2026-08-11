@@ -48,3 +48,7 @@ backend/uploads/
 
 # Worktrees paralleler Spuren
 .teams/
+
+# Arbeitsdokumente, lokal gepflegt
+PLAN.md
+CONTRACT.md
