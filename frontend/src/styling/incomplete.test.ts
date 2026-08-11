@@ -139,6 +139,82 @@ describe('unvollständige Symbole', () => {
     expect(paintOf(specs[0])['fill-opacity']).toBe(0.25)
   })
 
+  /**
+   * The counterpart to the fill symbol: a category whose `value` did not survive the
+   * API arrives as `undefined`, not `null`. As a branch label that is a parse error,
+   * and MapLibre answers a rejected expression by discarding the layer -- so it has to
+   * be skipped exactly like the explicit null it used to be.
+   */
+  it('überspringt Kategorien, deren Wert verloren ging, wie eine Kategorie ohne Wert', () => {
+    const withoutValue = asStyle({
+      version: 1,
+      renderer: {
+        type: 'categorized',
+        field: 'art',
+        categories: [
+          { label: 'Ohne Angabe', symbol: { kind: 'fill', fillColor: '#111111' } },
+          { value: 'A', label: 'A', symbol: { kind: 'fill', fillColor: '#222222' } },
+        ],
+        fallbackSymbol: { kind: 'fill', fillColor: '#a3a3a3' },
+      },
+      opacity: 1,
+    })
+
+    const specs = styleToMapLibre(withoutValue, makeLayer('MULTIPOLYGON'), 'src')
+
+    expect(paintOf(specs[0])['fill-color']).toEqual(['match', ['get', 'art'], 'A', '#222222', '#a3a3a3'])
+    expect(undefinedProperties(specs)).toEqual([])
+  })
+
+  it('lässt Werte aus, die gar kein gültiges Label sein können', () => {
+    const odd = asStyle({
+      version: 1,
+      renderer: {
+        type: 'categorized',
+        field: 'art',
+        categories: [
+          { value: true, label: 'wahr', symbol: { kind: 'fill', fillColor: '#111111' } },
+          { value: 12.5, label: '12,5', symbol: { kind: 'fill', fillColor: '#222222' } },
+          { value: 7, label: '7', symbol: { kind: 'fill', fillColor: '#333333' } },
+        ],
+        fallbackSymbol: { kind: 'fill', fillColor: '#a3a3a3' },
+      },
+      opacity: 1,
+    })
+
+    expect(paintOf(styleToMapLibre(odd, makeLayer('MULTIPOLYGON'), 'src')[0])['fill-color']).toEqual([
+      'match',
+      ['get', 'art'],
+      7,
+      '#333333',
+      '#a3a3a3',
+    ])
+  })
+
+  it('verwirft Klassen ohne brauchbare Untergrenze, statt step kippen zu lassen', () => {
+    const broken = asStyle({
+      version: 1,
+      renderer: {
+        type: 'graduated',
+        field: 'hoehe',
+        classes: [
+          { max: 10, label: 'ohne min', symbol: { kind: 'fill', fillColor: '#111111' } },
+          { min: 10, max: 20, label: '10 – 20', symbol: { kind: 'fill', fillColor: '#222222' } },
+          { min: 20, max: 30, label: '20 – 30', symbol: { kind: 'fill', fillColor: '#333333' } },
+        ],
+        fallbackSymbol: { kind: 'fill', fillColor: '#d4d4d4' },
+      },
+      opacity: 1,
+    })
+
+    expect(paintOf(styleToMapLibre(broken, makeLayer('MULTIPOLYGON'), 'src')[0])['fill-color']).toEqual([
+      'case',
+      ['has', 'hoehe'],
+      ['step', ['get', 'hoehe'], '#222222', 20, '#333333'],
+      '#d4d4d4',
+    ])
+  })
+
   it('beschriftet mit vollständigem Paint, auch wenn nur Feld und Schalter gesetzt sind', () => {
     const specs = styleToMapLibre(
       asStyle({

@@ -295,9 +295,24 @@ function dataDriven<R, T extends string | number>(
     : stepExpression(renderer.field, renderer.classes ?? [], valueOf, fallback)
 }
 
+/**
+ * What MapLibre accepts as a `match` branch label, stated positively.
+ *
+ * Everything else -- a missing value, an explicit null, a fraction, a boolean -- makes
+ * the parser reject the *entire* expression, which costs the layer rather than the one
+ * category. Stating the rule as "what is allowed" is what makes that safe: a value the
+ * schema does not foresee is skipped instead of slipping through a list of exclusions.
+ *
+ * Skipping loses nothing. MapLibre answers a non-matching input with the default, so
+ * those objects land on the fallback symbol, which is exactly where they belong.
+ */
+function isBranchLabel(value: unknown): value is string | number {
+  return typeof value === 'string' || (typeof value === 'number' && Number.isSafeInteger(value))
+}
+
 function matchExpression<T extends string | number>(
   field: string,
-  categories: { value: string | number | null; symbol: LayerSymbol }[],
+  categories: { value: unknown; symbol: LayerSymbol }[],
   valueOf: (symbol: LayerSymbol) => T,
   fallback: T,
 ): PaintValue<T> {
@@ -306,18 +321,14 @@ function matchExpression<T extends string | number>(
   const seen = new Set<string | number>()
 
   for (const category of categories) {
-    // Objects without a value cannot be a branch label -- and do not need to be:
-    // MapLibre returns the default for a null input, so they land on the fallback.
-    if (category.value === null) continue
-    // MapLibre rejects the whole expression over a single non-integer numeric label;
-    // skipping it costs one category instead of the entire layer's colouring.
-    if (typeof category.value === 'number' && !Number.isSafeInteger(category.value)) continue
-    // Duplicate labels are a parse error too, so the first definition wins.
-    if (seen.has(category.value)) continue
+    const label = category.value
+    if (!isBranchLabel(label)) continue
+    // Duplicate labels are a parse error just the same, so the first definition wins.
+    if (seen.has(label)) continue
 
-    seen.add(category.value)
+    seen.add(label)
     const output = valueOf(category.symbol)
-    branches.push(category.value, output)
+    branches.push(label, output)
     outputs.push(output)
   }
 
@@ -331,14 +342,17 @@ function stepExpression<T extends string | number>(
   valueOf: (symbol: LayerSymbol) => T,
   fallback: T,
 ): PaintValue<T> {
-  if (classes.length === 0) return fallback
+  // A bound that is not a finite number cannot be a stop, and `step` rejects the whole
+  // expression over one of them -- same cost as a bad `match` label.
+  const usable = classes.filter((styleClass) => Number.isFinite(styleClass.min))
+  if (usable.length === 0) return fallback
 
-  const first = valueOf(classes[0].symbol)
+  const first = valueOf(usable[0].symbol)
   const outputs: T[] = [first]
   const stops: (number | T)[] = []
-  let previous = classes[0].min
+  let previous = usable[0].min
 
-  for (const styleClass of classes.slice(1)) {
+  for (const styleClass of usable.slice(1)) {
     // Quantile breaks repeat when a value dominates the column, and `step` rejects a
     // stop list that is not strictly ascending -- such a class is simply empty.
     if (!(styleClass.min > previous)) continue

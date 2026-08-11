@@ -11,6 +11,7 @@ import { formatCount } from '@/lib/format'
 import { buildCategories, columnNameOfField, fieldIdOfColumn } from './classification'
 import { ColorInput, Row } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
+import { formatCategoryValue } from './fields'
 import { PaletteSelect } from './PaletteSelect'
 import { DEFAULT_CATEGORY_PALETTE, paletteColors } from './palettes'
 import type { Renderer, StyleCategory } from './types'
@@ -138,21 +139,26 @@ export function CategorizedEditor({
       {categories.length > 0 && (
         <ScrollArea className="max-h-56">
           <ul className="grid gap-0.5 py-1">
-            {categories.map((category, index) => (
+            {categories.map((category, index) => {
+              // The label is an optional member and may not have survived the API, so it
+              // falls back to how the value itself reads.
+              const label = category.label || formatCategoryValue(category.value)
+              return (
               <li key={`${index}-${String(category.value)}`} className="flex items-center gap-1.5">
                 <ColorInput
                   value={primaryColorOf(category.symbol)}
                   onChange={(color) => setCategoryColor(index, color)}
-                  ariaLabel={`Farbe für ${category.label}`}
+                  ariaLabel={`Farbe für ${label}`}
                 />
-                <span className="truncate text-xs" title={category.label}>
-                  {category.label}
+                <span className="truncate text-xs" title={label}>
+                  {label}
                 </span>
                 <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
                   {countOf(data?.values, category.value)}
                 </span>
               </li>
-            ))}
+              )
+            })}
           </ul>
         </ScrollArea>
       )}

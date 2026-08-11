@@ -36,9 +36,15 @@ export function isNumericField(field: LayerField): boolean {
   return NUMERIC_TYPES.has(base)
 }
 
-/** How a value from `/values` reads in the category list. */
-export function formatCategoryValue(value: CategoryValue): string {
-  if (value === null) return 'ohne Wert'
+/**
+ * How a value from `/values` reads in the category list.
+ *
+ * Takes `unknown`, not `CategoryValue`: a stored category may have lost its value on
+ * the way through the API, and "ohne Wert" is the honest label for that too -- it is
+ * the category MapLibre will never match and whose objects fall to the fallback.
+ */
+export function formatCategoryValue(value: CategoryValue | undefined): string {
+  if (value === null || value === undefined) return 'ohne Wert'
   if (typeof value === 'number') return formatAttributeNumber(value)
   return value === '' ? 'leer' : value
 }
