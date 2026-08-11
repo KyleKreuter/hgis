@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import de.kreuter.hgis.TestcontainersConfiguration;
 import de.kreuter.hgis.common.SqlIdentifier;
 import java.util.UUID;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -299,6 +300,82 @@ class LayerStyleTest {
 				.andExpect(jsonPath("$.style.renderer.field").value("gebaeudehoehe"));
 
 		assertThat(styleService.tileColumns(reload())).containsExactly("gebaeudehoehe");
+	}
+
+	@Test
+	@DisplayName("a dash pattern survives storage; no pattern means the member is gone, not null")
+	void dashArrayRoundTrips() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "single",
+				  "symbol": { "kind": "line", "color": "#2980b9", "width": 2,
+				              "dashArray": [2, 2] } } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.symbol.dashArray", Matchers.hasSize(2)))
+				.andExpect(jsonPath("$.style.renderer.symbol.dashArray[0]").value(2.0));
+
+		// Absent, not null: a solid line is the absence of a pattern. A client reading
+		// symbol.dashArray gets undefined either way, one testing 'dashArray' in symbol
+		// does not -- so this is worth pinning down rather than leaving to Jackson.
+		patchStyle("""
+				{ "style": { "renderer": { "type": "single",
+				  "symbol": { "kind": "line", "color": "#2980b9", "width": 2,
+				              "dashArray": null } } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.symbol.color").value("#2980b9"))
+				.andExpect(jsonPath("$.style.renderer.symbol.dashArray").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("a category for the features without a value keeps its explicit null")
+	void aNullCategoryValueSurvives() throws Exception {
+		// The one member that is written even when null. Colouring "objects without a use
+		// type" is a category like any other -- dropped from the document it would read as
+		// an entry whose value was never picked, and nothing could tell the two apart.
+		patchStyle("""
+				{ "style": { "renderer": { "type": "categorized", "field": "nutzungsart",
+				  "categories": [
+				    { "value": "Wohnen", "symbol": { "kind": "fill", "fillColor": "#e74c3c" } },
+				    { "value": null, "label": "Ohne Angabe",
+				      "symbol": { "kind": "fill", "fillColor": "#999999" } },
+				    { "label": "Wert nie gewählt" } ] } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.categories", Matchers.hasSize(3)))
+				.andExpect(jsonPath("$.style.renderer.categories[1].label").value("Ohne Angabe"))
+				.andExpect(jsonPath("$.style.renderer.categories[1]", Matchers.hasKey("value")))
+				.andExpect(jsonPath("$.style.renderer.categories[1].value").doesNotExist())
+				// A category that arrives without the member at all comes back carrying an
+				// explicit null. So value is present on every category this API ever
+				// returns, and a reader never has to tell "absent" from "null" -- only the
+				// two spellings the client may send collapse into one.
+				.andExpect(jsonPath("$.style.renderer.categories[2]", Matchers.hasKey("value")))
+				.andExpect(jsonPath("$.style.renderer.categories[2].value").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("an empty category list stays an empty list, it does not vanish")
+	void anEmptyCategoryListIsKept() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "categorized", "field": "nutzungsart",
+				  "categories": [] } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.categories", Matchers.hasSize(0)));
+	}
+
+	@Test
+	@DisplayName("a numeric category value stays a number, it does not become a string")
+	void numericCategoryValuesKeepTheirType() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "categorized", "field": "einwohner",
+				  "categories": [ { "value": 100, "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.categories[0].value").value(100))
+				.andExpect(jsonPath("$.style.renderer.categories[0].value")
+						.value(Matchers.instanceOf(Number.class)));
 	}
 
 	@Test

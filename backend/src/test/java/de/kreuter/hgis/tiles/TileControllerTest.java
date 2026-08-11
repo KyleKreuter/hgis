@@ -15,6 +15,8 @@ import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.tiles.LayerTableFixture.TestLayer;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +31,8 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * HTTP-level tests for {@link TileController}: status codes, headers, and the
@@ -56,6 +60,9 @@ class TileControllerTest {
 	@Autowired
 	private LayerFieldRepository layerFieldRepository;
 
+	@Autowired
+	private MvtService mvtService;
+
 	private TestLayer testLayer;
 	private Layer layer;
 
@@ -72,6 +79,8 @@ class TileControllerTest {
 
 		layerFieldRepository.saveAndFlush(new LayerField(layer, "Nutzungsart",
 				LayerTableFixture.CATEGORY_COLUMN, "text", 0));
+		layerFieldRepository.saveAndFlush(new LayerField(layer, "Einwohner",
+				LayerTableFixture.NUMERIC_COLUMN, "integer", 1));
 	}
 
 	@AfterEach
@@ -121,6 +130,50 @@ class TileControllerTest {
 				.allSatisfy(feature -> assertThat(feature.properties())
 						.containsEntry(LayerTableFixture.CATEGORY_COLUMN,
 								testLayer.categories().get(feature.id())));
+	}
+
+	/**
+	 * The values offered for a categorized renderer have to be comparable to what the tile
+	 * carries, because that comparison is the whole mechanism: MapLibre's {@code match}
+	 * checks the type as well as the value, so a category picked as text against a numeric
+	 * tile property matches nothing and every feature falls to the fallback colour. Nothing
+	 * about that looks broken -- the map just turns uniformly grey.
+	 *
+	 * <p>The two sides are produced by entirely separate code (JDBC via {@code /values},
+	 * ST_AsMVT in the tile), so their agreement is an assumption worth holding on to.
+	 */
+	@Test
+	@DisplayName("a value from /values has the type the same attribute has in the tile")
+	void offeredValuesMatchTheTypeInTheTile() throws Exception {
+		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832,
+				List.of(LayerTableFixture.CATEGORY_COLUMN, LayerTableFixture.NUMERIC_COLUMN),
+				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
+		Map<String, Object> inTile = MvtTileDecoder.decode(mvt).get(0).features().get(0).properties();
+
+		assertThat(firstValue(LayerTableFixture.CATEGORY_COLUMN).isString())
+				.as("Textspalte: /values liefert einen String, die Kachel auch")
+				.isTrue();
+		assertThat(inTile.get(LayerTableFixture.CATEGORY_COLUMN)).isInstanceOf(String.class);
+
+		assertThat(firstValue(LayerTableFixture.NUMERIC_COLUMN).isIntegralNumber())
+				.as("Ganzzahlspalte: /values liefert eine ganze Zahl, die Kachel auch")
+				.isTrue();
+		assertThat(inTile.get(LayerTableFixture.NUMERIC_COLUMN)).isInstanceOf(Long.class);
+	}
+
+	/** The most frequent non-null value {@code /values} offers for a column. */
+	private JsonNode firstValue(String field) throws Exception {
+		String json = mockMvc.perform(get("/api/layers/{layerId}/values", layer.getId())
+						.param("field", field))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+
+		for (JsonNode entry : new ObjectMapper().readTree(json).get("values")) {
+			if (!entry.get("value").isNull()) {
+				return entry.get("value");
+			}
+		}
+		throw new AssertionError("keine nicht-leeren Werte fuer " + field);
 	}
 
 	@Test

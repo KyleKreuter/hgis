@@ -78,9 +78,26 @@ public final class StyleDtos {
 			Symbol fallbackSymbol) {
 	}
 
-	/** @param value the attribute value this entry matches; a scalar or null */
+	/**
+	 * @param value the attribute value this entry matches; a scalar, or null for the
+	 *              features that have no value at all
+	 */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
-	public record Category(Object value, String label, Symbol symbol) {
+	public record Category(
+
+			/**
+			 * Written out even when null, against the rule the rest of this file follows.
+			 * Null is a value here, not the absence of one: "objects without a use type"
+			 * is a category a user can legitimately colour, and {@code /values} offers it
+			 * as one. Dropped from the document it would be indistinguishable from a
+			 * half-filled entry whose value was never chosen, and a renderer reading the
+			 * style back could only guess which of the two it has.
+			 */
+			@JsonInclude(JsonInclude.Include.ALWAYS)
+			Object value,
+
+			String label,
+			Symbol symbol) {
 	}
 
 	/** Half-open in intent: {@code min} inclusive, {@code max} exclusive except for the last class. */
