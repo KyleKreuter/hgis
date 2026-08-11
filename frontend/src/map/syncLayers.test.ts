@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AddLayerObject, VectorSourceSpecification } from 'maplibre-gl'
 import type { LayerSummary } from '@/api/layers'
+import type { LayerStyle } from '@/styling/types'
 import { type AppliedLayer, type MapLike, syncMapLayers } from './syncLayers'
 
 interface FakeSource {
@@ -51,6 +52,10 @@ function createFakeMap(options: { sourceSupportsSetTiles?: boolean } = {}) {
       const layer = layers.get(id) as (AddLayerObject & { layout?: Record<string, unknown> }) | undefined
       if (layer) layer.layout = { ...layer.layout, [name]: value }
     }) as unknown as MapLike['setLayoutProperty'],
+    setPaintProperty: vi.fn((id: string, name: string, value: unknown) => {
+      const layer = layers.get(id) as (AddLayerObject & { paint?: Record<string, unknown> }) | undefined
+      if (layer) layer.paint = { ...layer.paint, [name]: value }
+    }) as unknown as MapLike['setPaintProperty'],
   }
 
   return { map, sources, layers, layerOrder }
@@ -207,5 +212,121 @@ describe('syncMapLayers', () => {
     expect(map.addSource).not.toHaveBeenCalled()
     expect(map.addLayer).not.toHaveBeenCalled()
     expect(applied.size).toBe(0)
+  })
+})
+
+function styleWithColor(color: string): LayerStyle {
+  return {
+    version: 1,
+    renderer: {
+      type: 'single',
+      symbol: { kind: 'fill', fillColor: color, fillOpacity: 0.25, outlineColor: '#262626', outlineWidth: 1 },
+    },
+    opacity: 1,
+  }
+}
+
+const LABELS = {
+  enabled: true,
+  field: 'name',
+  size: 12,
+  color: '#262626',
+  haloColor: '#ffffff',
+  haloWidth: 1.5,
+  minZoom: 12,
+  allowOverlap: false,
+}
+
+describe('syncMapLayers mit Symbologie', () => {
+  /**
+   * The whole point of the server keeping `styleVersion` unchanged for a colour change:
+   * the tiles stay valid, so the map must not touch the source. A layer that is torn
+   * down and rebuilt would be just as tile-free but re-runs layout over every loaded
+   * tile -- enough to make a colour slider stutter.
+   */
+  it('wendet eine Farbänderung über setPaintProperty an, ohne Source oder Layer anzufassen', () => {
+    const { map } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    syncMapLayers(map, [makeLayer({ style: styleWithColor('#404040') })], applied)
+    const addLayerCalls = (map.addLayer as ReturnType<typeof vi.fn>).mock.calls.length
+
+    syncMapLayers(map, [makeLayer({ style: styleWithColor('#0072b2') })], applied)
+
+    expect(map.setPaintProperty).toHaveBeenCalledWith('hgis-layer-layer-1-render', 'fill-color', '#0072b2')
+    expect((map.addLayer as ReturnType<typeof vi.fn>).mock.calls.length).toBe(addLayerCalls)
+    expect(map.removeLayer).not.toHaveBeenCalled()
+    expect(map.removeSource).not.toHaveBeenCalled()
+  })
+
+  it('baut die Layer neu auf, wenn Beschriftung hinzukommt -- die Source bleibt stehen', () => {
+    const { map, layers } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    const style = styleWithColor('#404040')
+    syncMapLayers(map, [makeLayer({ style })], applied)
+
+    syncMapLayers(map, [makeLayer({ style: { ...style, labels: LABELS } })], applied)
+
+    expect([...layers.keys()]).toEqual(['hgis-layer-layer-1-render', 'hgis-layer-layer-1-label'])
+    expect(map.removeSource).not.toHaveBeenCalled()
+    expect(map.addSource).toHaveBeenCalledTimes(1)
+  })
+
+  it('legt den Label-Layer über die Geometrie und hält die Reihenfolge zwischen Layern', () => {
+    const { map, layerOrder } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    const labelled = makeLayer({ id: 'a', zIndex: 0, style: { ...styleWithColor('#404040'), labels: LABELS } })
+    const above = makeLayer({ id: 'b', zIndex: 1 })
+
+    syncMapLayers(map, [labelled, above], applied)
+
+    expect(layerOrder).toEqual([
+      'hgis-layer-a-render',
+      'hgis-layer-a-label',
+      'hgis-layer-b-render',
+    ])
+  })
+
+  it('entfernt auch den Label-Layer, wenn der Layer aus dem Projekt fällt', () => {
+    const { map, layers, sources } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    syncMapLayers(map, [makeLayer({ style: { ...styleWithColor('#404040'), labels: LABELS } })], applied)
+
+    syncMapLayers(map, [], applied)
+
+    expect(layers.size).toBe(0)
+    expect(sources.size).toBe(0)
+  })
+
+  it('geht beim Wechsel auf kategorisiert in einen Ausdruck über, ohne Kacheln neu zu holen', () => {
+    const { map } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    syncMapLayers(map, [makeLayer({ style: styleWithColor('#404040') })], applied)
+
+    const categorized: LayerStyle = {
+      version: 1,
+      renderer: {
+        type: 'categorized',
+        field: 'art',
+        categories: [
+          {
+            value: 'A',
+            label: 'A',
+            symbol: { kind: 'fill', fillColor: '#0072b2', fillOpacity: 0.25, outlineColor: '#262626', outlineWidth: 1 },
+          },
+        ],
+        fallbackSymbol: { kind: 'fill', fillColor: '#a3a3a3', fillOpacity: 0.25, outlineColor: '#262626', outlineWidth: 1 },
+      },
+      opacity: 1,
+    }
+    syncMapLayers(map, [makeLayer({ style: categorized })], applied)
+
+    expect(map.setPaintProperty).toHaveBeenCalledWith('hgis-layer-layer-1-render', 'fill-color', [
+      'match',
+      ['get', 'art'],
+      'A',
+      '#0072b2',
+      '#a3a3a3',
+    ])
+    expect(map.removeSource).not.toHaveBeenCalled()
   })
 })

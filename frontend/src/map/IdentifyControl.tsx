@@ -66,10 +66,12 @@ export function IdentifyControl({ activeLayerId }: IdentifyControlProps) {
       }
 
       // The MapLibre layer id is "hgis-layer-<uuid>-render" and friends, so the catalog
-      // id is what sits between the prefix and the role suffix.
+      // id is what sits between the prefix and the role suffix. `-label` belongs in the
+      // list: a styled layer's text sits on top and is what a click lands on first --
+      // it reports the same feature of the same source, so it identifies just as well.
       const layerId = String(feature.layer.id)
         .slice(MANAGED_PREFIX.length)
-        .replace(/-(render|polygon|line|point|selected)(-outline)?$/, '')
+        .replace(/-(render|polygon|line|point|label|selected)(-outline)?$/, '')
 
       const fid = Number(feature.id)
       setHit({ layerId, fid, lngLat: event.lngLat })

@@ -10,6 +10,7 @@ import { ApiError } from '@/api/client'
 import { ensureProjectLoaded, projectDetailQuery } from '@/api/projects'
 import { ImportDialog, LayerTree } from '@/layers'
 import { ProjectMap, type ZoomRequest } from '@/map'
+import { SymbologyPanel } from '@/styling'
 import { AttributeTable } from '@/table'
 import {
   AttributeForm,
@@ -167,6 +168,13 @@ function Workspace() {
                   fields={activeLayerDetail?.fields ?? []}
                   feature={editing.selectedFeature}
                 />
+              </div>
+            )}
+            {/* Shares the dock's lower half with the attribute form, and yields to it:
+                while editing, the attributes of the selected object are what matters. */}
+            {!editing.active && activeLayer && (
+              <div className="max-h-[55%] shrink-0 overflow-auto border-t">
+                <SymbologyPanel layer={activeLayer} projectId={projectId} />
               </div>
             )}
           </div>

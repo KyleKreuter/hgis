@@ -11,6 +11,13 @@ import type { StyleSpecification } from 'maplibre-gl'
  */
 export const OSM_BASEMAP_STYLE: StyleSpecification = {
   version: 8,
+  // Label rendering needs glyphs, and MapLibre can only take them from the style. A
+  // symbol layer with a `text-field` and no `glyphs` entry draws nothing at all and
+  // reports it on the error event only -- so layer labels would silently not work.
+  //
+  // Public glyph service, no key. It is the second external dependency after the OSM
+  // tiles; serving the PBFs from our own backend is the way to drop it again.
+  glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
   sources: {
     osm: {
       type: 'raster',

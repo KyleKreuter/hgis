@@ -8,7 +8,7 @@ import type { GeometryType, LayerSummary } from '@/api/layers'
 export const MANAGED_PREFIX = 'hgis-layer-'
 
 /** The MVT layer name inside every tile (contract section 1) -- constant, not the display name. */
-const TILE_SOURCE_LAYER = 'layer'
+export const TILE_SOURCE_LAYER = 'layer'
 
 export function sourceIdFor(layerId: string): string {
   return `${MANAGED_PREFIX}${layerId}`
@@ -32,45 +32,61 @@ export function buildTileUrl(layer: Pick<LayerSummary, 'id' | 'dataVersion' | 's
  * GEOMETRY layer (mixed geometries) needs three sublayers on the same source,
  * filtered by geometry-type; every other geometry type needs exactly one.
  *
+ * A styled layer with labels switched on adds one more id at the end: text belongs
+ * above the geometry it names, and appending it keeps the array bottom-to-top.
+ *
  * Both `addLayerToMap` (creation order) and `applyOrder` (moveLayer order) rely on
  * this array being bottom-to-top so polygons never obscure lines or points.
  */
-export function layerIdsFor(layerId: string, geometryType: GeometryType): string[] {
+export function layerIdsFor(
+  layerId: string,
+  geometryType: GeometryType,
+  options: { labeled?: boolean } = {},
+): string[] {
   const base = sourceIdFor(layerId)
-  if (geometryType === 'GEOMETRY') {
-    return [`${base}-polygon`, `${base}-line`, `${base}-point`]
-  }
-  return [`${base}-render`]
+  const geometryIds =
+    geometryType === 'GEOMETRY'
+      ? [`${base}-polygon`, `${base}-line`, `${base}-point`]
+      : [`${base}-render`]
+  return options.labeled ? [...geometryIds, `${base}-label`] : geometryIds
 }
 
-const CIRCLE_PAINT = {
+/**
+ * The unstyled look. Exported so `styling/defaults.ts` can be pinned against it: the
+ * default symbols exist to reproduce exactly this, and a test would otherwise not
+ * notice the two drifting apart.
+ */
+export const CIRCLE_PAINT = {
   'circle-radius': 3,
   'circle-color': '#404040',
   'circle-stroke-width': 1,
   'circle-stroke-color': '#fafafa',
 } as const
 
-const LINE_PAINT = {
+export const LINE_PAINT = {
   'line-color': '#404040',
   'line-width': 1.25,
 } as const
 
-const FILL_PAINT = {
+export const FILL_PAINT = {
   'fill-color': '#404040',
   'fill-opacity': 0.25,
   'fill-outline-color': '#262626',
 } as const
 
-const GEOMETRY_FILTERS: Record<'point' | 'line' | 'polygon', FilterSpecification> = {
+export const GEOMETRY_FILTERS: Record<'point' | 'line' | 'polygon', FilterSpecification> = {
   point: ['==', ['geometry-type'], 'Point'],
   line: ['==', ['geometry-type'], 'LineString'],
   polygon: ['==', ['geometry-type'], 'Polygon'],
 }
 
 /**
- * Builds the MapLibre layer objects for one catalog layer, in the same bottom-to-top
- * order as `layerIdsFor`. Design is deliberately monochrome (project convention, no
- * signal colors) -- per-layer styling is reserved for phase 7 (`LayerDetail.style`).
+ * Builds the MapLibre layer objects for a catalog layer *without* a style, in the same
+ * bottom-to-top order as `layerIdsFor`. Monochrome by project convention.
+ *
+ * This is the default rendering the whole styling feature falls back to, which is why
+ * it stays a separate literal path: `styleToMapLibre(null, …)` returns exactly this,
+ * and no layer that has never been styled may look any different than it did before.
  */
 export function layerSpecsFor(layer: LayerSummary, sourceId: string): LayerSpecification[] {
   const visibility = layer.visible ? 'visible' : 'none'

@@ -35,6 +35,7 @@ import {
   type GeometryType,
   type LayerSummary,
 } from '@/api/layers'
+import { previewColorOf } from '@/styling/defaults'
 import { DeleteLayerDialog } from './DeleteLayerDialog'
 import { GEOMETRY_LABELS } from './geometry'
 import { RenameLayerDialog } from './RenameLayerDialog'
@@ -247,6 +248,7 @@ function LayerRow({
 }: LayerRowProps) {
   const updateLayer = useUpdateLayer(layer.id, projectId)
   const Icon = GEOMETRY_ICONS[layer.geometryType]
+  const previewColor = previewColorOf(layer.style)
 
   return (
     <li
@@ -289,9 +291,11 @@ function LayerRow({
             is -- a symbol preview, the same slot QGIS uses for the layer's styling. */}
         <Icon
           className={cn(
-            'size-3 shrink-0 text-muted-foreground',
+            'size-3 shrink-0',
             layer.geometryType !== 'MULTILINESTRING' && 'fill-current',
+            previewColor === null && 'text-muted-foreground',
           )}
+          style={previewColor === null ? undefined : { color: previewColor }}
         />
         <span className={cn('truncate', !layer.visible && 'text-muted-foreground')}>
           {layer.name}
