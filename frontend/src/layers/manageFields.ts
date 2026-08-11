@@ -1,4 +1,5 @@
-import type { AddLayerFieldInput, FieldType, RenameLayerFieldInput } from '@/api/layers'
+import type { AddLayerFieldInput, FieldType, LayerFieldUsage, RenameLayerFieldInput } from '@/api/layers'
+import { formatCount } from '@/lib/format'
 
 /**
  * The subset of {@link import('@/api/layers').LayerField} the duplicate check needs --
@@ -50,4 +51,25 @@ export function buildAddFieldInput(name: string, type: FieldType): AddLayerField
 /** Builds the PATCH body for a rename: trims the name, keeps the field id it targets. */
 export function buildRenameFieldInput(fieldId: string, name: string): RenameLayerFieldInput {
   return { fieldId, name: name.trim() }
+}
+
+/**
+ * The confirmation text for deleting a field (CONTRACT.md "Attributfelder löschen"):
+ * how many objects lose a value, and -- only when it actually applies -- that the style
+ * resets as a side effect. That consequence is easy to miss and nobody expects it, so it
+ * belongs in the question asked up front rather than a surprise discovered afterwards.
+ */
+export function buildDeleteFieldWarning(usage: LayerFieldUsage): string {
+  const sentences = [
+    usage.valueCount === 0
+      ? 'Kein Objekt hat einen Wert in diesem Feld.'
+      : `${formatCount(usage.valueCount)} ${usage.valueCount === 1 ? 'Objekt hat' : 'Objekte haben'} einen Wert in diesem Feld.`,
+  ]
+  if (usage.usedByRenderer) {
+    sentences.push('Die Einfärbung nach diesem Feld wird dabei zurückgesetzt.')
+  }
+  if (usage.usedByLabels) {
+    sentences.push('Die Beschriftung nach diesem Feld wird dabei deaktiviert.')
+  }
+  return sentences.join(' ')
 }

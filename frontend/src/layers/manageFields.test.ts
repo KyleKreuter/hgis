@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import type { LayerFieldUsage } from '@/api/layers'
 import {
   buildAddFieldInput,
+  buildDeleteFieldWarning,
   buildRenameFieldInput,
   existingFieldNameError,
   type ExistingField,
@@ -61,5 +63,50 @@ describe('buildRenameFieldInput', () => {
       fieldId: 'f1',
       name: 'Baumart',
     })
+  })
+})
+
+describe('buildDeleteFieldWarning', () => {
+  const usage = (overrides: Partial<LayerFieldUsage> = {}): LayerFieldUsage => ({
+    valueCount: 0,
+    usedByRenderer: false,
+    usedByLabels: false,
+    ...overrides,
+  })
+
+  it('names zero affected objects explicitly rather than saying "0 Objekte"', () => {
+    expect(buildDeleteFieldWarning(usage())).toBe('Kein Objekt hat einen Wert in diesem Feld.')
+  })
+
+  it('uses the singular for exactly one affected object', () => {
+    expect(buildDeleteFieldWarning(usage({ valueCount: 1 }))).toBe(
+      '1 Objekt hat einen Wert in diesem Feld.',
+    )
+  })
+
+  it('uses the plural and German grouping for several affected objects', () => {
+    expect(buildDeleteFieldWarning(usage({ valueCount: 1234 }))).toBe(
+      '1.234 Objekte haben einen Wert in diesem Feld.',
+    )
+  })
+
+  it('warns that the renderer is reset when the field drives it', () => {
+    expect(buildDeleteFieldWarning(usage({ valueCount: 5, usedByRenderer: true }))).toBe(
+      '5 Objekte haben einen Wert in diesem Feld. Die Einfärbung nach diesem Feld wird dabei zurückgesetzt.',
+    )
+  })
+
+  it('warns that labels are disabled when the field drives them', () => {
+    expect(buildDeleteFieldWarning(usage({ valueCount: 5, usedByLabels: true }))).toBe(
+      '5 Objekte haben einen Wert in diesem Feld. Die Beschriftung nach diesem Feld wird dabei deaktiviert.',
+    )
+  })
+
+  it('combines both warnings when the field drives renderer and labels at once', () => {
+    expect(
+      buildDeleteFieldWarning(usage({ valueCount: 5, usedByRenderer: true, usedByLabels: true })),
+    ).toBe(
+      '5 Objekte haben einen Wert in diesem Feld. Die Einfärbung nach diesem Feld wird dabei zurückgesetzt. Die Beschriftung nach diesem Feld wird dabei deaktiviert.',
+    )
   })
 })

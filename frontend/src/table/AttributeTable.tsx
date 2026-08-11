@@ -19,6 +19,7 @@ import {
   moveFocus,
   type CellPosition,
 } from './cellNavigation'
+import { isUnknownSortFieldError } from './sortValidity'
 import { cellValue, hasEdit } from './tableEditSession'
 import { useTableEditing } from './useTableEditing'
 
@@ -106,6 +107,17 @@ export function AttributeTable({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort, filter])
+
+  // A field deleted while it was the active sort (ManageFieldsDialog, CONTRACT.md
+  // "Attributfelder löschen") leaves this pointed at a column the server no longer
+  // knows -- the next fetch answers with exactly that 400. Falling back to unsorted here
+  // is simpler and more honest than trying to purge the deleted field out of this state
+  // the moment the dialog deletes it, from a wholly different part of the page. The
+  // filter goes through the same kind of error but is deliberately left alone -- see
+  // `isUnknownSortFieldError`.
+  useEffect(() => {
+    if (sort && isUnknownSortFieldError(query.error)) setSort(null)
+  }, [sort, query.error])
 
   const virtualizer = useVirtualizer({
     count: rows.length,
