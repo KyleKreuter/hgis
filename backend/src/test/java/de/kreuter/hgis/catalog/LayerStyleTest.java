@@ -338,14 +338,20 @@ class LayerStyleTest {
 				  "categories": [
 				    { "value": "Wohnen", "symbol": { "kind": "fill", "fillColor": "#e74c3c" } },
 				    { "value": null, "label": "Ohne Angabe",
-				      "symbol": { "kind": "fill", "fillColor": "#999999" } } ] } } }
+				      "symbol": { "kind": "fill", "fillColor": "#999999" } },
+				    { "label": "Wert nie gewählt" } ] } } }
 				""")
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.style.renderer.categories", Matchers.hasSize(2)))
+				.andExpect(jsonPath("$.style.renderer.categories", Matchers.hasSize(3)))
 				.andExpect(jsonPath("$.style.renderer.categories[1].label").value("Ohne Angabe"))
-				.andExpect(jsonPath("$.style.renderer.categories[1]",
-						Matchers.hasKey("value")))
-				.andExpect(jsonPath("$.style.renderer.categories[1].value").doesNotExist());
+				.andExpect(jsonPath("$.style.renderer.categories[1]", Matchers.hasKey("value")))
+				.andExpect(jsonPath("$.style.renderer.categories[1].value").doesNotExist())
+				// A category that arrives without the member at all comes back carrying an
+				// explicit null. So value is present on every category this API ever
+				// returns, and a reader never has to tell "absent" from "null" -- only the
+				// two spellings the client may send collapse into one.
+				.andExpect(jsonPath("$.style.renderer.categories[2]", Matchers.hasKey("value")))
+				.andExpect(jsonPath("$.style.renderer.categories[2].value").doesNotExist());
 	}
 
 	@Test
