@@ -52,6 +52,62 @@ describe('edit buffer', () => {
     expect(dirtyFids(store().buffer).sort()).toEqual([7, 9])
   })
 
+  describe('dirtyFids and what actually changed', () => {
+    it('leaves a feature visible when only its properties changed', () => {
+      store().updateProperties(existing(3), { strasse: 'Neu' })
+
+      // Its tile geometry is still correct -- nothing was drawn to replace it.
+      expect(dirtyFids(store().buffer)).toEqual([])
+    })
+
+    it('hides a feature once its geometry changed', () => {
+      store().updateGeometry(existing(4), OTHER_POINT)
+
+      expect(dirtyFids(store().buffer)).toEqual([4])
+    })
+
+    it('hides a feature whose geometry and properties both changed', () => {
+      store().updateGeometry(existing(5), OTHER_POINT)
+      store().updateProperties(existing(5), { strasse: 'Neu' })
+
+      expect(dirtyFids(store().buffer)).toEqual([5])
+    })
+
+    it('keeps a feature hidden once its geometry changed, even after a later attribute edit', () => {
+      // Order reversed compared to the test above: geometry first, then properties.
+      store().updateGeometry(existing(6), OTHER_POINT)
+      store().updateProperties(existing(6), { strasse: 'Neu' })
+
+      expect(dirtyFids(store().buffer)).toEqual([6])
+    })
+
+    it('does not hide a new feature no matter what changed on it', () => {
+      const fid = store().addFeature(POINT)
+      store().updateGeometry({ fid, geometry: POINT, properties: {} }, OTHER_POINT)
+
+      expect(dirtyFids(store().buffer)).toEqual([])
+    })
+
+    it('hides a deleted feature regardless of what was edited on it before', () => {
+      store().updateProperties(existing(8), { strasse: 'Neu' })
+      store().removeFeature(8)
+
+      expect(dirtyFids(store().buffer)).toEqual([8])
+    })
+
+    it('unhides a feature again once its geometry edit is undone', () => {
+      store().updateGeometry(existing(7), OTHER_POINT)
+      expect(dirtyFids(store().buffer)).toEqual([7])
+
+      store().undo()
+
+      // The update entry is gone entirely, not merely stripped of the flag -- it was
+      // the only change recorded for this feature.
+      expect(store().buffer.updates).toEqual({})
+      expect(dirtyFids(store().buffer)).toEqual([])
+    })
+  })
+
   it('forgets a new feature entirely when it is deleted', () => {
     const fid = store().addFeature(POINT)
     store().removeFeature(fid)
