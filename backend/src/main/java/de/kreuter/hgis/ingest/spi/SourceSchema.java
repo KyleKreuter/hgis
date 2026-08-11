@@ -1,5 +1,6 @@
 package de.kreuter.hgis.ingest.spi;
 
+import de.kreuter.hgis.common.GeometryType;
 import java.util.List;
 
 /**
@@ -26,10 +27,6 @@ public record SourceSchema(
 		String charset,
 		CrsConfidence crsConfidence,
 		Long featureCount) {
-
-	public enum GeometryType {
-		MULTIPOINT, MULTILINESTRING, MULTIPOLYGON, GEOMETRY
-	}
 
 	/**
 	 * Where the source CRS came from. DECLARED is trustworthy; GUESSED means a

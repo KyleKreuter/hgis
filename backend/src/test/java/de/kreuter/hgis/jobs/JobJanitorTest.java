@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
+import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.common.TableCreator;
 import de.kreuter.hgis.TestcontainersConfiguration;
 import de.kreuter.hgis.ingest.spi.SourceField;
@@ -114,7 +115,7 @@ class JobJanitorTest {
 	}
 
 	private static SourceSchema minimalSchema() {
-		return new SourceSchema(SourceSchema.GeometryType.MULTIPOLYGON, 25832,
+		return new SourceSchema(GeometryType.MULTIPOLYGON, 25832,
 				List.of(new SourceField("name", String.class)),
 				"UTF-8", SourceSchema.CrsConfidence.DECLARED, 0L);
 	}

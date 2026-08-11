@@ -2,6 +2,7 @@ package de.kreuter.hgis.ingest.reader;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.ingest.spi.SourceFeature;
 import de.kreuter.hgis.ingest.spi.SourceReader;
 import de.kreuter.hgis.ingest.spi.SourceSchema;
@@ -34,7 +35,7 @@ class GeoPackageSourceReaderTest {
 
 		try (SourceReader reader = SourceReaderFactory.open(file, null, null)) {
 			SourceSchema schema = reader.schema();
-			assertThat(schema.geometryType()).isEqualTo(SourceSchema.GeometryType.MULTIPOINT);
+			assertThat(schema.geometryType()).isEqualTo(GeometryType.MULTIPOINT);
 			assertThat(schema.sourceSrid()).isEqualTo(4326);
 			assertThat(schema.crsConfidence()).isEqualTo(SourceSchema.CrsConfidence.DECLARED);
 			assertThat(schema.featureCount()).isEqualTo(1L);

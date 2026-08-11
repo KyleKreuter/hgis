@@ -49,21 +49,45 @@ public class TableCreator {
 	}
 
 	/**
+	 * One field to create alongside a brand-new, empty layer: its display name and the
+	 * closed set of types a client may pick from. Unlike {@link SourceField}, which
+	 * carries a Java class an import reader produced, this comes straight from a request
+	 * and is never anything but one of {@link FieldType}'s nine values.
+	 */
+	public record NewField(String sourceName, FieldType type) {
+	}
+
+	/**
 	 * Creates the {@code gis_data} table, its GiST index on {@code geom}, and the
 	 * {@code layer} plus {@code layer_field} catalog rows. The table always uses the
 	 * project's storage SRID -- payload geometry never lives in any other CRS.
 	 */
 	public CreatedLayer createLayerTable(Project project, SourceSchema schema, String layerName) {
+		return buildLayer(project, schema.geometryType(), mapColumns(schema.fields()), layerName);
+	}
+
+	/**
+	 * Same table creation, for a layer a user creates empty and draws into by hand
+	 * instead of importing. {@code GEOMETRY} is not accepted here -- the caller is
+	 * expected to have already rejected it, since only the import path may produce a
+	 * genuinely mixed layer.
+	 */
+	public CreatedLayer createLayerTable(Project project, GeometryType geometryType, List<NewField> fields,
+			String layerName) {
+		return buildLayer(project, geometryType, mapNewColumns(fields), layerName);
+	}
+
+	/** The part both public overloads share once their fields are reduced to plain columns. */
+	private CreatedLayer buildLayer(Project project, GeometryType geometryType, List<ColumnMapping> columns,
+			String layerName) {
 		UUID layerId = Uuid7.generate();
 		String tableName = SqlIdentifier.tableName(layerId);
 
-		List<ColumnMapping> columns = mapColumns(schema.fields());
-
-		createTable(tableName, schema.geometryType(), project.getSrid(), columns);
+		createTable(tableName, geometryType, project.getSrid(), columns);
 		createGeometryIndex(tableName);
 
 		Layer layer = new Layer(layerId, project, layerName, tableName,
-				schema.geometryType().name(), project.getSrid());
+				geometryType.name(), project.getSrid());
 		// Newly imported layers belong on top -- that is the one someone just asked to
 		// see. Leaving them all at the default 0 would make the order ambiguous, and the
 		// two consumers resolve a tie differently: the layer tree sorts descending and
@@ -110,7 +134,18 @@ public class TableCreator {
 		return columns;
 	}
 
-	private void createTable(String tableName, SourceSchema.GeometryType geometryType, int srid,
+	private List<ColumnMapping> mapNewColumns(List<NewField> fields) {
+		LinkedHashSet<String> taken = new LinkedHashSet<>();
+		List<ColumnMapping> columns = new ArrayList<>(fields.size());
+		for (NewField field : fields) {
+			String columnName = SqlIdentifier.toColumnName(field.sourceName(), taken);
+			taken.add(columnName);
+			columns.add(new ColumnMapping(field.sourceName(), columnName, field.type().pgType()));
+		}
+		return columns;
+	}
+
+	private void createTable(String tableName, GeometryType geometryType, int srid,
 			List<ColumnMapping> columns) {
 		StringBuilder ddl = new StringBuilder()
 				.append("CREATE TABLE ").append(SqlIdentifier.quoteLayerTable(tableName)).append(" (\n")
@@ -134,7 +169,7 @@ public class TableCreator {
 				+ SqlIdentifier.quoteLayerTable(tableName) + " USING GIST (geom)").update();
 	}
 
-	private static String postgisGeometryType(SourceSchema.GeometryType type) {
+	private static String postgisGeometryType(GeometryType type) {
 		return switch (type) {
 			case MULTIPOINT -> "MultiPoint";
 			case MULTILINESTRING -> "MultiLineString";

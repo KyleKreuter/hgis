@@ -1,6 +1,6 @@
 package de.kreuter.hgis.ingest.reader;
 
-import de.kreuter.hgis.ingest.spi.SourceSchema.GeometryType;
+import de.kreuter.hgis.common.GeometryType;
 import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.MultiLineString;
 import org.locationtech.jts.geom.MultiPoint;

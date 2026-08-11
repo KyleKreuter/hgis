@@ -2,6 +2,7 @@ package de.kreuter.hgis.ingest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.ingest.spi.SourceFeature;
 import de.kreuter.hgis.ingest.spi.SourceField;
 import de.kreuter.hgis.ingest.spi.SourceReader;
@@ -121,7 +122,7 @@ class FeatureSampleTest {
 
 		@Override
 		public SourceSchema schema() {
-			return new SourceSchema(SourceSchema.GeometryType.MULTIPOINT, 4326, fields(),
+			return new SourceSchema(GeometryType.MULTIPOINT, 4326, fields(),
 					"UTF-8", SourceSchema.CrsConfidence.GUESSED, null);
 		}
 

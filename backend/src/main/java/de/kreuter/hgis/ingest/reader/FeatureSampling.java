@@ -1,6 +1,6 @@
 package de.kreuter.hgis.ingest.reader;
 
-import de.kreuter.hgis.ingest.spi.SourceSchema.GeometryType;
+import de.kreuter.hgis.common.GeometryType;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.Set;

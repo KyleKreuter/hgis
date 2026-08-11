@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonRawValue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -88,6 +89,49 @@ public final class LayerDtos {
 			List<Field> fields,
 			Instant createdAt,
 			Instant updatedAt) {
+	}
+
+	/**
+	 * Request to create a brand-new, empty layer -- ready to draw into immediately,
+	 * rather than the by-product of a file import.
+	 */
+	public record CreateRequest(
+			@NotBlank(message = "Name darf nicht leer sein")
+			@Size(max = 200, message = "Name darf höchstens 200 Zeichen lang sein")
+			String name,
+
+			/**
+			 * One of MULTIPOINT, MULTILINESTRING or MULTIPOLYGON. GEOMETRY is deliberately
+			 * not accepted here: a genuinely mixed layer needs three separate MapLibre
+			 * layers (plan section B.6) and is not a sensible starting point for a layer
+			 * nobody has drawn into yet. Kept as a plain string rather than the enum itself
+			 * -- an unknown token would otherwise fail while Jackson reads the body, before
+			 * validation gets a chance to name the field for the client.
+			 */
+			@NotBlank(message = "Geometrietyp darf nicht leer sein")
+			String geometryType,
+
+			/**
+			 * Attribute fields to create alongside the layer, in the given order. May be
+			 * absent or empty -- a layer without any is valid and shows only {@code fid} in
+			 * the attribute table.
+			 */
+			List<Field> fields) {
+
+		/** Null-safe reading of {@link #fields()}: absent means none. */
+		public List<Field> fields() {
+			return fields == null ? List.of() : fields;
+		}
+
+		/**
+		 * One attribute field to create.
+		 *
+		 * @param name the display name, i.e. {@code layer_field.source_name}; the SQL
+		 *             column name is derived from it the same way an import derives one
+		 * @param type one of {@link de.kreuter.hgis.common.FieldType}'s nine tokens
+		 */
+		public record Field(String name, String type) {
+		}
 	}
 
 	/**
