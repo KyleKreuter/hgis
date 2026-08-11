@@ -3,12 +3,13 @@ import type { Map as MapLibreMap } from 'maplibre-gl'
 /**
  * Which layers are overlays, and in which order they belong above the data.
  *
- * Three components add layers to the same style without knowing about each other:
+ * Four components add layers to the same style without knowing about each other:
  * `syncMapLayers` reconciles the catalog and finishes by moving every data layer to
- * the top, `SelectionHighlight` adds a highlight per selected feature, and
- * `MeasurementLayer` draws the sketch. Whoever ran last used to win -- so toggling a
- * layer's visibility, changing a colour or reordering the tree pushed the data over a
- * running measurement, and the sketch disappeared under it.
+ * the top, `SelectionHighlight` adds a highlight per selected feature, `MeasurementLayer`
+ * draws its sketch, and `RectangleSelectTool` draws the rectangle being dragged.
+ * Whoever ran last used to win -- so toggling a layer's visibility, changing a colour
+ * or reordering the tree pushed the data over a running measurement, and the sketch
+ * disappeared under it.
  *
  * The fix is one shared rule instead of three private ones: an overlay is recognised
  * by its id, every writer calls `raiseOverlays` when it is done, and the tier list
@@ -23,14 +24,20 @@ export const SELECTION_LAYER_SUFFIX = '-selected'
 /** Id namespace of the measurement sketch layers -- see `MeasurementLayer`. */
 export const MEASUREMENT_LAYER_PREFIX = 'hgis-measurement'
 
+/** Id namespace of the rectangle select sketch layers -- see `RectangleSelectTool`. */
+export const RECTANGLE_SELECT_LAYER_PREFIX = 'hgis-rectangle-select'
+
 /**
  * Bottom to top. The selection belongs above the data it points at; the measurement
- * sketch belongs above everything, because it is the one thing being drawn right now
- * and a vertex hidden under a highlight cannot be placed with any confidence.
+ * sketch and the rectangle being dragged belong above everything, because each is the
+ * one thing being drawn right now and a vertex or a corner hidden under a highlight
+ * cannot be placed with any confidence. Measurement and the rectangle tool are mutually
+ * exclusive (starting one ends the other), so their relative order never actually shows.
  */
 const TIERS: readonly ((layerId: string) => boolean)[] = [
   (layerId) => layerId.includes(SELECTION_LAYER_SUFFIX),
   (layerId) => layerId.startsWith(MEASUREMENT_LAYER_PREFIX),
+  (layerId) => layerId.startsWith(RECTANGLE_SELECT_LAYER_PREFIX),
 ]
 
 /** The tier a layer belongs to, or -1 when it is not an overlay at all. */

@@ -1,13 +1,42 @@
 import { create } from 'zustand'
 
+/**
+ * How an incoming set of fids is folded into the current selection -- see `select`.
+ * `'replace'` is the whole of the original contract; `'add'`/`'subtract'` are what the
+ * rectangle select tool needs for Shift/Alt-modified drags.
+ */
+export type SelectionMode = 'replace' | 'add' | 'subtract'
+
 interface SelectionState {
   /** The layer the selection belongs to. Selecting in another layer replaces it. */
   layerId: string | null
   selected: Set<number>
 
   toggle: (layerId: string, fid: number) => void
-  select: (layerId: string, fids: number[]) => void
+  /** `mode` defaults to `'replace'`, which is the previous, still-supported behaviour. */
+  select: (layerId: string, fids: number[], mode?: SelectionMode) => void
   clear: () => void
+}
+
+/**
+ * Folds `fids` into `base` according to `mode`. `'replace'` ignores `base` entirely --
+ * same as the original `select` -- so a mode-less call is byte-for-byte what it always
+ * was.
+ */
+function applySelectionMode(
+  base: ReadonlySet<number>,
+  fids: readonly number[],
+  mode: SelectionMode,
+): Set<number> {
+  if (mode === 'replace') return new Set(fids)
+
+  const next = new Set(base)
+  if (mode === 'add') {
+    for (const fid of fids) next.add(fid)
+  } else {
+    for (const fid of fids) next.delete(fid)
+  }
+  return next
 }
 
 /**
@@ -39,7 +68,13 @@ export const useSelection = create<SelectionState>((set) => ({
       return { layerId, selected: next }
     }),
 
-  select: (layerId, fids) => set({ layerId, selected: new Set(fids) }),
+  select: (layerId, fids, mode = 'replace') =>
+    set((state) => ({
+      layerId,
+      // 'add'/'subtract' only make sense against this layer's own selection -- a
+      // selection left over from another layer is dropped first, same as `toggle`.
+      selected: applySelectionMode(state.layerId === layerId ? state.selected : new Set(), fids, mode),
+    })),
 
   clear: () => set({ layerId: null, selected: new Set() }),
 }))

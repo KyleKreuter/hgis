@@ -54,3 +54,49 @@ describe('selection store', () => {
     expect([...first]).toEqual([1])
   })
 })
+
+describe('select with a mode', () => {
+  beforeEach(() => {
+    state().clear()
+  })
+
+  it('without a mode still replaces, as before', () => {
+    state().select(LAYER, [1, 2])
+    state().select(LAYER, [3])
+    expect([...state().selected]).toEqual([3])
+  })
+
+  it('replace mode discards the previous selection', () => {
+    state().select(LAYER, [1, 2])
+    state().select(LAYER, [3], 'replace')
+    expect([...state().selected]).toEqual([3])
+  })
+
+  it('add mode extends the existing selection within the same layer', () => {
+    state().select(LAYER, [1, 2])
+    state().select(LAYER, [2, 3], 'add')
+    expect([...state().selected].sort()).toEqual([1, 2, 3])
+  })
+
+  it('subtract mode removes only the given fids', () => {
+    state().select(LAYER, [1, 2, 3])
+    state().select(LAYER, [2], 'subtract')
+    expect([...state().selected].sort()).toEqual([1, 3])
+  })
+
+  it('add mode against another layer starts fresh, like replace', () => {
+    // A rectangle drawn with Shift held, right after switching layers, must not carry
+    // fids from the previous layer's selection -- fid 1 there is a different object.
+    state().select(LAYER, [1, 2])
+    state().select(OTHER, [5], 'add')
+    expect(state().layerId).toBe(OTHER)
+    expect([...state().selected]).toEqual([5])
+  })
+
+  it('subtract mode against another layer removes nothing, since there is nothing shared', () => {
+    state().select(LAYER, [1, 2])
+    state().select(OTHER, [1], 'subtract')
+    expect(state().layerId).toBe(OTHER)
+    expect([...state().selected]).toEqual([])
+  })
+})
