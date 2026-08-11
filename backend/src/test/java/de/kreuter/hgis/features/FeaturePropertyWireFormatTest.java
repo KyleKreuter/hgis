@@ -17,7 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -41,18 +40,21 @@ import tools.jackson.databind.ObjectMapper;
  * Pins down the wire format of {@code properties} on the feature API -- both directions --
  * against a real PostGIS table, one column per PostgreSQL type a layer can have.
  *
- * <p>{@link FeatureQueryService#toFeature} puts whatever the JDBC driver hands back
- * straight into the properties map and lets Jackson serialise it; {@link EditService}
- * binds an incoming JSON value straight into an UPDATE statement without ever looking at
- * {@code layer_field.data_type}. Neither step is deliberately type-aware, so what actually
- * crosses the wire is a fact about the JDBC driver and Jackson's defaults, not a documented
- * contract -- this test is that documentation. It records the current behaviour exactly as
- * found, including the parts that look like bugs; nothing here has been fixed to make an
- * assertion prettier.
+ * <p>{@code FeatureQueryService.toFeature} converts a {@code date} column's raw
+ * {@link java.sql.Date} into a {@link java.time.LocalDate} before handing the row to
+ * Jackson; every other type already reads back correctly as whatever the JDBC driver
+ * hands over. {@code EditService.collectProperties} looks up each property's
+ * {@code layer_field.data_type} and parses the incoming JSON value into the matching
+ * Java type before binding it -- {@code date}, {@code timestamptz}, {@code uuid} and
+ * {@code bytea} need that parsing because JDBC would otherwise bind Jackson's generic
+ * {@code String} as varchar, which PostgreSQL has no implicit cast for. A value that does
+ * not fit its column -- an unparsable date, a string where a number belongs -- is
+ * rejected as a 400 naming the field, rather than reaching PostgreSQL and surfacing as a
+ * bare 500.
  *
- * <p>The headline finding: {@code date}, {@code timestamptz}, {@code uuid} and
- * {@code bytea} all read back as JSON strings, and none of the four can be written back in
- * that exact shape -- see {@link #failsToRoundTripStringEncodedTypes()}.
+ * <p>This test is the contract for both directions: what {@code GET} produces for each
+ * of the ten types, and that writing exactly that value back through the edit endpoint
+ * round-trips to the same value again.
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
@@ -182,26 +184,17 @@ class FeaturePropertyWireFormatTest {
 	}
 
 	@Test
-	@DisplayName("date reads back as a full UTC timestamp, not the plain ISO date a naive reader expects")
-	void readsDateAsATimezoneDependentTimestamp() throws Exception {
+	@DisplayName("date reads back as a plain ISO date, independent of the server's time zone")
+	void readsDateAsAPlainIsoDate() throws Exception {
 		JsonNode node = getFeature(filledFid).json().get("properties").get("datecol");
 
+		// FeatureQueryService.toFeature() converts the java.sql.Date the JDBC driver hands
+		// back into a java.time.LocalDate before it reaches Jackson, so the wire value is
+		// only ever the calendar date -- never a timestamp, and never dependent on the
+		// JVM's default time zone the way a raw java.util.Date would be. Same shape
+		// GeoJsonExportService already gets for free from PostgreSQL's own to_jsonb().
 		assertThat(node.isString()).isTrue();
-		assertThat(node.asString())
-				.as("shape: an ISO instant with millisecond precision, not \"2024-03-01\"")
-				.matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z");
-
-		// FeatureQueryService.toFeature() puts the java.sql.Date straight from the JDBC
-		// driver into the properties map and leaves serialisation to Jackson's default
-		// java.util.Date handling. That serialiser treats it as "midnight in the JVM's
-		// default time zone" and converts *that* instant to UTC -- so the wire value
-		// depends on where the server runs, and on a positive UTC offset the calendar day
-		// printed can be the day *before* what is actually stored (observed here: a row
-		// with 2024-03-01 in the database reads back as 2024-02-29T23:00:00.000Z on a
-		// UTC+1 server). Contrast with GeoJsonExportService, which asks PostgreSQL's own
-		// to_jsonb() to do the conversion and gets a clean "2024-03-01" every time.
-		Instant expected = STORED_DATE.atStartOfDay(ZoneId.systemDefault()).toInstant();
-		assertThat(Instant.parse(node.asString())).isEqualTo(expected);
+		assertThat(node.asString()).isEqualTo(STORED_DATE.toString());
 	}
 
 	@Test
@@ -264,33 +257,26 @@ class FeaturePropertyWireFormatTest {
 		assertThat(after.get("boolcol").asBoolean()).isTrue();
 	}
 
-	// --- writing: the types that do not work --------------------------------------------
+	// --- writing: the types that need conversion ------------------------------------------
 
 	@Test
-	@DisplayName("date, timestamptz, uuid and bytea cannot be written back in the exact shape GET returns")
-	void failsToRoundTripStringEncodedTypes() throws Exception {
+	@DisplayName("date, timestamptz, uuid and bytea round-trip in the exact shape GET returns")
+	void roundTripsStringEncodedTypes() throws Exception {
 		JsonNode before = getFeature(filledFid).json().get("properties");
 
 		for (String column : List.of("datecol", "tscol", "uuidcol", "byteacol")) {
 			MockHttpServletResponse response = putProperties(filledFid, rawProperties(before, column));
 
-			// EditService.collectProperties binds every value with whatever Java type
-			// Jackson produced from the request body -- java.lang.String for all four of
-			// these, since that is exactly how FeatureQueryService read them back out.
-			// JDBC then sends the parameter as varchar, and PostgreSQL has no implicit or
-			// assignment cast from varchar to date, timestamptz, uuid or bytea (unlike
-			// text columns, or JSON numbers into the numeric types above). The UPDATE is
-			// rejected before it runs, and ProblemDetailAdvice's catch-all turns that into
-			// a bare 500 -- there is no column-aware validation anywhere in this path.
+			// EditService.toColumnValue looks up layer_field.data_type for the column and
+			// parses Jackson's generic String into the matching java.time / java.util type
+			// before binding it, so JDBC sends a properly typed parameter instead of
+			// varchar -- unlike the numeric types and boolean above, these four cannot be
+			// bound as whatever plain Java type Jackson produced from the JSON literal.
 			assertThat(response.getStatus())
 					.as("column %s: writing back exactly what GET produced", column)
-					.isEqualTo(500);
-			assertThat(response.getContentAsString(StandardCharsets.UTF_8))
-					.contains("\"title\":\"Interner Fehler\"");
+					.isEqualTo(200);
 		}
 
-		// Each update is a single UPDATE statement covering the one changed column, so a
-		// type error rejects that statement whole -- nothing above actually changed.
 		JsonNode after = getFeature(filledFid).json().get("properties");
 		assertThat(after.get("datecol")).isEqualTo(before.get("datecol"));
 		assertThat(after.get("tscol")).isEqualTo(before.get("tscol"));
@@ -301,32 +287,30 @@ class FeaturePropertyWireFormatTest {
 	// --- writing: invalid values --------------------------------------------------------
 
 	@Test
-	@DisplayName("a string that fails an integer column is a bare 500, not a 400")
-	void rejectsATypeMismatchedIntegerWithAGeneric500() throws Exception {
+	@DisplayName("a string that fails an integer column is a 400 naming the field")
+	void rejectsATypeMismatchedIntegerWith400() throws Exception {
 		MockHttpServletResponse response = putProperties(filledFid, "{\"intcol\":\"abc\"}");
 
-		// No check anywhere in EditService compares the property against
-		// layer_field.data_type before it reaches JDBC; the request only fails once
-		// PostgreSQL itself refuses the statement (column intcol is of type integer but
-		// expression is of type character varying), and that failure surfaces as the
-		// same generic 500 as any other unexpected exception -- not the 400 with a field
-		// name that every other validation error in this API gives.
-		assertThat(response.getStatus()).isEqualTo(500);
+		// EditService.toColumnValue checks the value against layer_field.data_type before
+		// it ever reaches JDBC, so a mismatch is a BadRequestException -- mapped to 400 by
+		// ProblemDetailAdvice -- rather than a bare 500 once PostgreSQL refuses the
+		// statement. The message names the field by its source_name, the identifier the
+		// UI actually shows the user, not the internal column name.
+		assertThat(response.getStatus()).isEqualTo(400);
 		String body = response.getContentAsString(StandardCharsets.UTF_8);
-		assertThat(body).contains("\"title\":\"Interner Fehler\"");
-		assertThat(body)
-				.as("the SQL error naming the column and its type never reaches the client")
-				.doesNotContain("intcol");
+		assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+		assertThat(body).as("names the field by its source name").contains("Ganzzahl");
 	}
 
 	@Test
-	@DisplayName("an unparsable date fails the same way as any other type mismatch: 500, not 400")
-	void rejectsATypeMismatchedDateWithAGeneric500() throws Exception {
+	@DisplayName("an unparsable date is a 400 naming the field, not a generic 500")
+	void rejectsATypeMismatchedDateWith400() throws Exception {
 		MockHttpServletResponse response = putProperties(filledFid, "{\"datecol\":\"kein-datum\"}");
 
-		assertThat(response.getStatus()).isEqualTo(500);
-		assertThat(response.getContentAsString(StandardCharsets.UTF_8))
-				.contains("\"title\":\"Interner Fehler\"");
+		assertThat(response.getStatus()).isEqualTo(400);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+		assertThat(body).as("names the field by its source name").contains("Datum");
 	}
 
 	// --- writing: null vs. absent --------------------------------------------------------

@@ -10,7 +10,13 @@ import de.kreuter.hgis.common.ExtentCalculator;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.features.dto.EditDtos;
+import de.kreuter.hgis.features.dto.FeatureDtos;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -307,8 +313,129 @@ public class EditService {
 						+ ". Verfügbar: " + String.join(", ", fields.keySet()));
 			}
 			columns.add(SqlIdentifier.quoteColumn(field.getColumnName()));
-			values.add(property.getValue());
+			values.add(toColumnValue(field, property.getValue()));
 		}
+	}
+
+	/**
+	 * Converts one incoming property value to the Java type its column needs before it is
+	 * bound as a JDBC parameter.
+	 *
+	 * <p>Jackson decodes the request body generically -- every JSON value becomes
+	 * whatever plain Java type the token implies (String, Boolean, Integer/Long/Double),
+	 * with no awareness of the column it is destined for. That already matches what JDBC
+	 * needs for the numeric types and boolean. It does not for {@code date},
+	 * {@code timestamptz}, {@code uuid} and {@code bytea}: {@link FeatureQueryService}
+	 * reads all four back as JSON strings (dates and timestamps as ISO-8601 text, bytea
+	 * as base64), and PostgreSQL has no implicit cast from varchar to any of them --
+	 * binding the raw string sends the parameter as varchar and the statement is
+	 * rejected outright.
+	 *
+	 * <p>Parsing every column here, not only those four, is also what turns a value that
+	 * plain does not fit the column -- a string where {@code layer_field.data_type} says
+	 * a number, an unparsable date -- into a {@link BadRequestException} naming the
+	 * field, instead of a bare 500 once PostgreSQL rejects the statement.
+	 */
+	private static Object toColumnValue(LayerField field, Object value) {
+		if (value == null) {
+			return null;
+		}
+		String type = field.getDataType().toLowerCase(Locale.ROOT);
+		return switch (type) {
+			case "integer", "smallint" -> asNumber(field, value).intValue();
+			case "bigint" -> asNumber(field, value).longValue();
+			case "double precision", "real" -> asNumber(field, value).doubleValue();
+			case "numeric", "decimal" -> asBigDecimal(field, value);
+			case "boolean" -> asBoolean(field, value);
+			case "date" -> asLocalDate(field, value);
+			case "uuid" -> asUuid(field, value);
+			case "bytea" -> asBytes(field, value);
+			// timestamptz is the only timestamp-like type this application ever creates
+			// (TypeMapper never emits a bare "timestamp"), but the prefix check covers
+			// that variant too rather than silently mis-binding it as text.
+			default -> type.startsWith("timestamp") ? asOffsetDateTime(field, value) : asText(field, value);
+		};
+	}
+
+	private static Number asNumber(LayerField field, Object value) {
+		if (value instanceof Number number) {
+			return number;
+		}
+		throw typeMismatch(field, value);
+	}
+
+	private static BigDecimal asBigDecimal(LayerField field, Object value) {
+		Number number = asNumber(field, value);
+		return number instanceof BigDecimal decimal ? decimal : BigDecimal.valueOf(number.doubleValue());
+	}
+
+	private static Boolean asBoolean(LayerField field, Object value) {
+		if (value instanceof Boolean bool) {
+			return bool;
+		}
+		throw typeMismatch(field, value);
+	}
+
+	private static String asText(LayerField field, Object value) {
+		if (value instanceof String text) {
+			return text;
+		}
+		throw typeMismatch(field, value);
+	}
+
+	private static LocalDate asLocalDate(LayerField field, Object value) {
+		try {
+			return LocalDate.parse(asText(field, value));
+		}
+		catch (DateTimeParseException ex) {
+			throw typeMismatch(field, value);
+		}
+	}
+
+	/**
+	 * {@code timestamptz} reads back as a UTC instant (see {@link FeatureQueryService}),
+	 * which {@link OffsetDateTime#parse} accepts just as well as an explicit offset --
+	 * ISO_OFFSET_DATE_TIME treats {@code Z} as zero offset. {@link java.time.Instant}
+	 * looks like the more natural fit but pgjdbc's {@code setObject} cannot derive a SQL
+	 * type for it (JDBC 4.2 maps {@code TIMESTAMP WITH TIME ZONE} to
+	 * {@code OffsetDateTime}, not {@code Instant}), so binding it throws a
+	 * {@code PSQLException} before the statement ever runs.
+	 */
+	private static OffsetDateTime asOffsetDateTime(LayerField field, Object value) {
+		try {
+			return OffsetDateTime.parse(asText(field, value));
+		}
+		catch (DateTimeParseException ex) {
+			throw typeMismatch(field, value);
+		}
+	}
+
+	private static UUID asUuid(LayerField field, Object value) {
+		try {
+			return UUID.fromString(asText(field, value));
+		}
+		catch (IllegalArgumentException ex) {
+			throw typeMismatch(field, value);
+		}
+	}
+
+	private static byte[] asBytes(LayerField field, Object value) {
+		try {
+			return Base64.getDecoder().decode(asText(field, value));
+		}
+		catch (IllegalArgumentException ex) {
+			throw typeMismatch(field, value);
+		}
+	}
+
+	/**
+	 * Named by {@code sourceName}, not {@code columnName}: this is the identifier the
+	 * client showed the user in the first place (see {@link FeatureDtos.Feature}), so it
+	 * is the one that lets them find the offending field again in the UI.
+	 */
+	private static BadRequestException typeMismatch(LayerField field, Object value) {
+		return new BadRequestException("Feld " + field.getSourceName() + " erwartet den Typ "
+				+ field.getDataType() + ", erhalten: " + value);
 	}
 
 	// --- bookkeeping ------------------------------------------------------------------

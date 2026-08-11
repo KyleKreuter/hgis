@@ -16,6 +16,11 @@ import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.features.dto.EditDtos;
 import de.kreuter.hgis.features.dto.FeatureDtos;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -326,5 +331,103 @@ class EditServiceTest {
 		assertThat(response.featureCount()).isEqualTo(2);
 		assertThat(queryService.get(layer.getId(), toUpdate).properties())
 				.containsEntry("strasse", "Geändert");
+	}
+
+	@Test
+	@DisplayName("a batch updates several features at once, each across several typed columns, nulls included")
+	void updatesSeveralFeaturesAcrossSeveralTypesInOneBatch() {
+		// This is the shape a spreadsheet-style cell edit produces in bulk: many rows,
+		// several columns of different types each, and clearing a cell means sending
+		// null for it -- unlike the rest of this file, which edits one feature and one
+		// or two columns at a time. A dedicated table with more column types than the
+		// shared fixture is what makes that worth testing here.
+		UUID richLayerId = UUID.randomUUID();
+		String richTable = SqlIdentifier.tableName(richLayerId);
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom   geometry(MultiPolygon, 25832) NOT NULL,
+				    txt    text,
+				    cnt    integer,
+				    amt    numeric(10,2),
+				    active boolean,
+				    whn    date,
+				    seen   timestamptz,
+				    ident  uuid,
+				    blob   bytea
+				)
+				""".formatted(SqlIdentifier.quoteLayerTable(richTable))).update();
+
+		Layer richLayer = layerRepository.saveAndFlush(
+				new Layer(richLayerId, project, "Vieltypig", richTable, "MULTIPOLYGON", 25832));
+		fieldRepository.saveAndFlush(new LayerField(richLayer, "Text", "txt", "text", 0));
+		fieldRepository.saveAndFlush(new LayerField(richLayer, "Anzahl", "cnt", "integer", 1));
+		fieldRepository.saveAndFlush(new LayerField(richLayer, "Betrag", "amt", "numeric", 2));
+		fieldRepository.saveAndFlush(new LayerField(richLayer, "Aktiv", "active", "boolean", 3));
+		fieldRepository.saveAndFlush(new LayerField(richLayer, "Datum", "whn", "date", 4));
+		fieldRepository.saveAndFlush(new LayerField(richLayer, "Gesehen", "seen", "timestamptz", 5));
+		fieldRepository.saveAndFlush(new LayerField(richLayer, "Kennung", "ident", "uuid", 6));
+		fieldRepository.saveAndFlush(new LayerField(richLayer, "Anhang", "blob", "bytea", 7));
+
+		try {
+			long first = insertRichRow(richTable);
+			long second = insertRichRow(richTable);
+
+			UUID newIdent = UUID.randomUUID();
+			String newBlob = Base64.getEncoder().encodeToString(new byte[] { 1, 2, 3 });
+
+			Map<String, Object> firstUpdate = Map.of(
+					"txt", "Neu 1",
+					"cnt", 7,
+					"amt", 42.5,
+					"active", true,
+					"whn", "2024-06-15",
+					"seen", "2024-06-15T10:30:00.000Z",
+					"ident", newIdent.toString(),
+					"blob", newBlob);
+
+			// Clearing every column of a row: each key present with an explicit null,
+			// exactly what the UI sends for an emptied cell.
+			Map<String, Object> secondUpdate = new LinkedHashMap<>();
+			for (String column : List.of("txt", "cnt", "amt", "active", "whn", "seen", "ident", "blob")) {
+				secondUpdate.put(column, null);
+			}
+
+			EditDtos.Response response = editService.apply(richLayer.getId(), new EditDtos.Request(null,
+					List.of(new EditDtos.Update(first, null, null, firstUpdate),
+							new EditDtos.Update(second, null, null, secondUpdate)),
+					null, false));
+
+			assertThat(response.updated()).isEqualTo(2);
+
+			Map<String, Object> firstProps = queryService.get(richLayer.getId(), first).properties();
+			assertThat(firstProps.get("txt")).isEqualTo("Neu 1");
+			assertThat(firstProps.get("cnt")).isEqualTo(7);
+			assertThat((BigDecimal) firstProps.get("amt")).isEqualByComparingTo("42.50");
+			assertThat(firstProps.get("active")).isEqualTo(true);
+			assertThat(firstProps.get("whn")).isEqualTo(LocalDate.of(2024, 6, 15));
+			assertThat(((java.util.Date) firstProps.get("seen")).toInstant())
+					.isEqualTo(Instant.parse("2024-06-15T10:30:00.000Z"));
+			assertThat(firstProps.get("ident")).isEqualTo(newIdent);
+			assertThat((byte[]) firstProps.get("blob")).isEqualTo(new byte[] { 1, 2, 3 });
+
+			Map<String, Object> secondProps = queryService.get(richLayer.getId(), second).properties();
+			for (String column : List.of("txt", "cnt", "amt", "active", "whn", "seen", "ident", "blob")) {
+				assertThat(secondProps.get(column)).as("column %s", column).isNull();
+			}
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(richTable)).update();
+			layerRepository.deleteById(richLayer.getId());
+		}
+	}
+
+	private long insertRichRow(String table) {
+		return jdbc.sql("INSERT INTO " + SqlIdentifier.quoteLayerTable(table)
+						+ " (geom, txt, cnt, amt, active, whn, seen, ident, blob) VALUES ("
+						+ "ST_Multi(ST_GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 25832)), "
+						+ "'Alt', 1, 1.00, false, '2024-01-01', '2024-01-01T00:00:00Z', "
+						+ "gen_random_uuid(), '\\x010203') RETURNING fid")
+				.query(Long.class).single();
 	}
 }

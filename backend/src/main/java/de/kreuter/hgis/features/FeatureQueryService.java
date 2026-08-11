@@ -8,6 +8,7 @@ import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.features.dto.FeatureDtos;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -274,13 +275,34 @@ public class FeatureQueryService {
 	private FeatureDtos.Feature toFeature(Map<String, Object> row, List<LayerField> fields) {
 		Map<String, Object> properties = new LinkedHashMap<>();
 		for (LayerField field : fields) {
-			properties.put(field.getColumnName(), row.get(field.getColumnName()));
+			properties.put(field.getColumnName(), toWireValue(row.get(field.getColumnName()), field));
 		}
 		return new FeatureDtos.Feature(
 				((Number) row.get("fid")).longValue(),
 				(String) row.get("row_version"),
 				properties,
 				(String) row.get("geometry"));
+	}
+
+	/**
+	 * The driver hands a {@code date} column back as {@link java.sql.Date}, a
+	 * {@link java.util.Date} subtype Jackson serialises with its default instant
+	 * handling: midnight in the JVM's default zone, converted to UTC. On a positive UTC
+	 * offset that prints the calendar day *before* the one actually stored. Converting to
+	 * {@link LocalDate} keeps only the calendar date on the wire -- "2024-03-01", the same
+	 * shape {@code GeoJsonExportService} already gets for free from {@code to_jsonb()}.
+	 *
+	 * <p>Every other column type already reads back correctly as-is: {@code timestamptz}
+	 * carries an absolute instant, so {@link java.sql.Timestamp}'s default serialisation
+	 * does not depend on the server's zone the way {@code java.sql.Date} does, and
+	 * {@code uuid} / {@code bytea} already arrive as {@link java.util.UUID} / {@code byte[]},
+	 * which Jackson serialises as a plain string on its own.
+	 */
+	private static Object toWireValue(Object value, LayerField field) {
+		if (value instanceof java.sql.Date sqlDate && "date".equalsIgnoreCase(field.getDataType())) {
+			return sqlDate.toLocalDate();
+		}
+		return value;
 	}
 
 	private LayerField resolveSortField(String sort, List<LayerField> fields) {
