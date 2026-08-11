@@ -41,9 +41,12 @@ Geometrieart (Punkte, Linien oder Flächen) und beliebig viele Attributfelder mi
 jeweils passenden Typ. Danach lässt sich sofort hineinzeichnen; alles Weitere,
 Einrasten und Rückgängig eingeschlossen, funktioniert wie bei importierten Daten.
 
-Ein Punkt verdient Beachtung: Attributfelder lassen sich später nicht mehr ergänzen. Wer
-einen Layer ohne Felder anlegt, kann zwar zeichnen, hat aber dauerhaft nur die laufende
-Objektnummer. Der Dialog weist beim Anlegen darauf hin.
+Attributfelder lassen sich auch nachträglich ergänzen — „Felder verwalten“ im Aktionsmenü
+des Layers legt neue an und benennt vorhandene um, bei importierten Layern ebenso wie bei
+selbst angelegten. Bestehende Objekte bekommen bei einem neuen Feld zunächst keinen Wert.
+Nicht möglich sind das Löschen eines Feldes und das Ändern seines Typs: Beides würde
+bestehende Daten oder eine darauf aufgebaute Darstellung beschädigen. Der Typ wird deshalb
+angezeigt, aber nicht zur Bearbeitung angeboten.
 
 ### Sachdaten bearbeiten
 
