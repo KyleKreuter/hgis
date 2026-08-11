@@ -12,6 +12,7 @@ import {
   Magnet,
   MoreHorizontal,
   Pencil,
+  Plus,
   Shapes,
   Spline,
   Square,
@@ -59,6 +60,7 @@ interface LayerTreeProps {
   onSelectLayer: (layerId: string | null) => void
   onZoomToLayer: (extent: [number, number, number, number]) => void
   onImportClick: () => void
+  onCreateLayerClick: () => void
   /** Layers marked as snap sources, or null when not editing -- the toggle only exists then. */
   snapSources?: string[] | null
   onToggleSnapSource?: (layerId: string) => void
@@ -70,6 +72,7 @@ export function LayerTree({
   onSelectLayer,
   onZoomToLayer,
   onImportClick,
+  onCreateLayerClick,
   snapSources = null,
   onToggleSnapSource,
 }: LayerTreeProps) {
@@ -126,10 +129,16 @@ export function LayerTree({
           <p className="text-sm text-muted-foreground">
             Noch keine Layer in diesem Projekt.
           </p>
-          <Button variant="outline" size="sm" onClick={onImportClick}>
-            <Upload className="size-3.5" />
-            Daten importieren
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onImportClick}>
+              <Upload className="size-3.5" />
+              Daten importieren
+            </Button>
+            <Button variant="outline" size="sm" onClick={onCreateLayerClick}>
+              <Plus className="size-3.5" />
+              Neuer Layer
+            </Button>
+          </div>
         </div>
       </Panel>
     )

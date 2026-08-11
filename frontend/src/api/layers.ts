@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query'
 import type { LayerStyle } from '@/styling/types'
 import { api } from './client'
+import { projectKeys } from './projects'
 
 /**
  * MULTIPOINT | MULTILINESTRING | MULTIPOLYGON for a single geometry kind, GEOMETRY
@@ -51,6 +52,41 @@ export interface LayerDetail extends LayerSummary {
   fields: LayerField[]
   createdAt: string
   updatedAt: string
+}
+
+/**
+ * Field types accepted when creating a layer from scratch (contract "Layer selbst
+ * anlegen"). `uuid` and `bytea` are deliberately absent from this list -- both are
+ * read-only in the attribute editor (phase 9), so offering them here would create a
+ * field that can never be filled in.
+ */
+export type FieldType =
+  | 'TEXT'
+  | 'INTEGER'
+  | 'BIGINT'
+  | 'DOUBLE'
+  | 'NUMERIC'
+  | 'BOOLEAN'
+  | 'DATE'
+  | 'TIME'
+  | 'TIMESTAMP'
+
+/**
+ * Geometry kinds the create-layer endpoint accepts. `GEOMETRY` (mixed) is excluded on
+ * purpose: it needs three separate MapLibre layers on one source and is not a
+ * meaningful choice for a layer that starts out empty (CONTRACT.md).
+ */
+export type CreatableGeometryType = Exclude<GeometryType, 'GEOMETRY'>
+
+export interface CreateLayerField {
+  name: string
+  type: FieldType
+}
+
+export interface CreateLayerInput {
+  name: string
+  geometryType: CreatableGeometryType
+  fields: CreateLayerField[]
 }
 
 export interface UpdateLayerInput {
@@ -207,6 +243,29 @@ export function useUpdateLayerStyle(layerId: string, projectId: string) {
     onError: () => {
       queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
       queryClient.invalidateQueries({ queryKey: layerKeys.detail(layerId) })
+    },
+  })
+}
+
+/**
+ * Creates an empty layer that can be drawn into right away (contract "Layer selbst
+ * anlegen"). The response is the same `LayerSummary` shape the list endpoint returns
+ * per entry, so it is appended to the cached list directly instead of waiting on a
+ * refetch -- the same trick `useUpdateLayer` uses for a patch.
+ */
+export function useCreateLayer(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CreateLayerInput) =>
+      api.post<LayerSummary>(`/api/projects/${projectId}/layers`, input),
+    onSuccess: (created) => {
+      queryClient.setQueryData<LayerSummary[]>(layerKeys.list(projectId), (current) =>
+        current ? [...current, created] : [created],
+      )
+      queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
+      // The project browser shows feature and layer totals per project (like after an
+      // import, see useRefreshAfterImport in api/imports.ts).
+      queryClient.invalidateQueries({ queryKey: projectKeys.all })
     },
   })
 }
