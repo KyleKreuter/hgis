@@ -167,5 +167,48 @@ Datenstand sähe an beiden Stellen anders aus.
 | 6 | Digitalisieren und Editieren | fertig |
 | 7 | Härtung: Integrationstests, Limits, Fehlerbilder | fertig |
 
-Der vollständige Plan mit allen Detailabschnitten liegt unter
-`~/.claude/plans/melodic-greeting-lollipop.md`.
+Danach, nicht mehr im ursprünglichen Phasenschnitt:
+
+| Thema | Stand |
+|---|---|
+| Einrasten: Stützpunkte, Schnittpunkte, Kanten, über Layergrenzen, beim Punktsetzen | fertig |
+| Import-Vorschau: erkannte Kodierung mit Werteprobe, geratenes CRS mit Verortung | fertig |
+| Symbologie: Einzelsymbol, kategorisiert, abgestuft, Beschriftung, Klassifizierung | fertig |
+| Wortmarke, Favicon, Seitentitel | fertig |
+
+## Offen
+
+**In Arbeit**
+
+- Symbologie-Panel: Die Feldauswahl zeigt die Feld-UUID statt des Feldnamens, und
+  „categorized"/„categorical" stehen noch englisch im UI.
+
+**Braucht eine Entscheidung**
+
+- **Glyphen für die Beschriftung.** Der Kartenstil verweist auf
+  `fonts.openmaptiles.org`. Der Dienst antwortet nicht verwertbar, MapLibre rendert
+  daraufhin lokal — die Beschriftung erscheint korrekt samt Umlauten, aber über einen
+  Notbehelf und mit einer Konsolenwarnung je Zeichen. Zugleich ist es eine externe
+  Abhängigkeit, die Phase 3 ausdrücklich vermeiden wollte. Wahl zwischen eigenem
+  Glyphen-Dienst im Backend, anderem Anbieter und bewusstem Verzicht.
+
+**Lücken im geplanten Umfang** (waren im MVP vorgesehen, fehlen noch)
+
+- `POST /api/projects/{id}/duplicate` — Projekt kopieren als Job (Plan E.5). Weder
+  Backend noch UI.
+- Maßstabsabhängige Sichtbarkeit je Layer (Phase 4). `min_zoom`/`max_zoom` lassen sich
+  über die API setzen, es gibt nur keine Bedienung dafür.
+- Objekte löschen geht ausschließlich über die Entf-Taste. Funktioniert, ist aber ohne
+  Schaltfläche praktisch unauffindbar.
+
+**Roadmap nach dem MVP**
+
+Geoprocessing als serverseitige PostGIS-Jobs (die Job-Infrastruktur trägt es bereits) ·
+Export nach GeoPackage · Projekt umprojizieren als bewusste Operation · Druck-Layout ·
+WMS/WMTS/WFS über einen Backend-Proxy · Multi-User mit Spring Security.
+
+---
+
+Der ursprüngliche Plan mit allen Detailabschnitten liegt unter
+`~/.claude/plans/melodic-greeting-lollipop.md`. Er ist der Stand **vor** der Umsetzung und
+wird bewusst nicht fortgeschrieben — was gilt, steht hier.
