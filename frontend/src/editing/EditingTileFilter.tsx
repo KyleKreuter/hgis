@@ -13,6 +13,11 @@ import { dirtyFids, useEditing } from '@/state/editing'
  *
  * A filter is the right tool because the tiles themselves are still valid -- nothing has
  * been saved. Refetching them would show exactly the same geometry again.
+ *
+ * `dirtyFids` already narrows the hidden set to features whose geometry actually changed
+ * -- a property-only edit leaves the tile correct, so nothing here needs to know about
+ * that distinction. It stays in the store because the store is what knows how a change
+ * entered the buffer; this component only needs the resulting set of fids to hide.
  */
 export function EditingTileFilter({ layerId }: { layerId: string }) {
   const { mapRef, isLoaded } = useMap()

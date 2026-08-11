@@ -10,6 +10,13 @@ export interface DraftFeature {
   properties: Record<string, unknown>
   /** xmin of the row this draft is based on; absent for new features. */
   rowVersion?: string
+  /**
+   * Set once `updateGeometry` has touched this feature. `geometry` itself is always
+   * present -- a property-only edit carries the untouched geometry forward unchanged --
+   * so its mere presence cannot say whether the shape actually moved. This flag is the
+   * one place that tells the two apart, and `dirtyFids` relies on it.
+   */
+  geometryChanged?: boolean
 }
 
 interface Buffer {
@@ -163,7 +170,14 @@ export const useEditing = create<EditingState>((set, get) => {
       mutate(
         (draft) => {
           const target = feature.fid < 0 ? draft.creates : draft.updates
-          target[feature.fid] = { ...feature, ...target[feature.fid], geometry }
+          // Set last and unconditionally: this is the only place a shape is recorded as
+          // moved, and no earlier spread in this assignment gets to overrule it.
+          target[feature.fid] = {
+            ...feature,
+            ...target[feature.fid],
+            geometry,
+            geometryChanged: true,
+          }
         },
         'Geometrie geändert',
         `geometry:${feature.fid}`,
@@ -174,6 +188,9 @@ export const useEditing = create<EditingState>((set, get) => {
         (draft) => {
           const target = feature.fid < 0 ? draft.creates : draft.updates
           const existing = target[feature.fid] ?? feature
+          // Deliberately not touching `geometryChanged`: it carries forward from
+          // `existing`, so a property-only edit leaves it unset and a later one on a
+          // feature whose geometry already moved keeps it set.
           target[feature.fid] = { ...existing, properties }
         },
         'Attribute geändert',
@@ -238,11 +255,18 @@ export function countChanges(buffer: Buffer): number {
 }
 
 /**
- * fids of existing features the buffer has touched.
+ * fids of existing features whose tile no longer matches the buffer.
  *
- * The tile layers hide exactly these: their tiles still show the old geometry, and
- * without hiding them the edited version would be drawn on top of its own outdated self.
+ * The tile layers hide exactly these: a feature whose geometry changed still has its old
+ * outline baked into the tile, and without hiding it the edited version would be drawn on
+ * top of its own outdated self. A feature edited through `updateProperties` alone has no
+ * such conflict -- its tile geometry is still correct, only an attribute differs, and that
+ * attribute does not render on the map at all. Hiding it anyway would just punch a
+ * groundless hole where nobody is drawing a replacement.
  */
 export function dirtyFids(buffer: Buffer): number[] {
-  return [...Object.keys(buffer.updates).map(Number), ...buffer.deletes]
+  const geometryChanges = Object.values(buffer.updates)
+    .filter((feature) => feature.geometryChanged)
+    .map((feature) => feature.fid)
+  return [...geometryChanges, ...buffer.deletes]
 }
