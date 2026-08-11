@@ -53,6 +53,10 @@ export function AttributeTable({
   onZoomToFeature,
   onRequestEdit,
 }: AttributeTableProps) {
+  // Keyed by columnName, not the display name shown in the header -- columnName never
+  // changes when a field is renamed (ManageFieldsDialog, CONTRACT.md), so a rename of
+  // the currently sorted field can never leave this pointed at a name the server no
+  // longer resolves.
   const [sort, setSort] = useState<{ field: string; desc: boolean } | null>(null)
   const [filter, setFilter] = useState('')
 
@@ -323,11 +327,11 @@ function HeaderRow({
   sort: { field: string; desc: boolean } | null
   onSort: (sort: { field: string; desc: boolean } | null) => void
 }) {
-  function toggle(field: string) {
+  function toggle(columnName: string) {
     // Three states in sequence: ascending, descending, unsorted. Without the third,
     // there is no way back to the layer's natural order once a column was clicked.
-    if (sort?.field !== field) return onSort({ field, desc: false })
-    if (!sort.desc) return onSort({ field, desc: true })
+    if (sort?.field !== columnName) return onSort({ field: columnName, desc: false })
+    if (!sort.desc) return onSort({ field: columnName, desc: true })
     return onSort(null)
   }
 
@@ -342,9 +346,9 @@ function HeaderRow({
           key={field.id}
           label={field.sourceName}
           align={isNumeric(field) ? 'right' : 'left'}
-          active={sort?.field === field.sourceName}
+          active={sort?.field === field.columnName}
           descending={sort?.desc}
-          onClick={() => toggle(field.sourceName)}
+          onClick={() => toggle(field.columnName)}
         />
       ))}
       <span />

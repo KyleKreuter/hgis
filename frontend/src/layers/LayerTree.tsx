@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronUp,
   Circle,
+  Columns3,
   Crosshair,
   Download,
   FileDown,
@@ -44,6 +45,7 @@ import { useSelection } from '@/state/selection'
 import { previewColorOf } from '@/styling'
 import { DeleteLayerDialog } from './DeleteLayerDialog'
 import { GEOMETRY_LABELS } from './geometry'
+import { ManageFieldsDialog } from './ManageFieldsDialog'
 import { RenameLayerDialog } from './RenameLayerDialog'
 import { isNoOpMove, reorderedIdsBottomToTop } from './reorder'
 
@@ -80,6 +82,7 @@ export function LayerTree({
   const reorder = useReorderLayers(projectId)
 
   const [renaming, setRenaming] = useState<LayerSummary | null>(null)
+  const [managingFields, setManagingFields] = useState<LayerSummary | null>(null)
   const [deleting, setDeleting] = useState<LayerSummary | null>(null)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dropBefore, setDropBefore] = useState<number | null>(null)
@@ -178,6 +181,7 @@ export function LayerTree({
                 onZoomToLayer(layer.extent)
               }}
               onRename={() => setRenaming(layer)}
+              onManageFields={() => setManagingFields(layer)}
               onDelete={() => setDeleting(layer)}
               onMoveUp={() => move(layer, -1)}
               onMoveDown={() => move(layer, 1)}
@@ -193,6 +197,11 @@ export function LayerTree({
       </ScrollArea>
 
       <RenameLayerDialog layer={renaming} projectId={projectId} onOpenChange={() => setRenaming(null)} />
+      <ManageFieldsDialog
+        layer={managingFields}
+        projectId={projectId}
+        onOpenChange={() => setManagingFields(null)}
+      />
       <DeleteLayerDialog
         layer={deleting}
         projectId={projectId}
@@ -231,6 +240,7 @@ interface LayerRowProps {
   onSelect: () => void
   onZoom: () => void
   onRename: () => void
+  onManageFields: () => void
   onDelete: () => void
   onMoveUp: () => void
   onMoveDown: () => void
@@ -253,6 +263,7 @@ function LayerRow({
   onSelect,
   onZoom,
   onRename,
+  onManageFields,
   onDelete,
   onMoveUp,
   onMoveDown,
@@ -393,6 +404,10 @@ function LayerRow({
           <DropdownMenuItem onClick={onRename}>
             <Pencil className="size-3.5" />
             Umbenennen
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onManageFields}>
+            <Columns3 className="size-3.5" />
+            Felder verwalten
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleExportLayer} disabled={isExporting}>
