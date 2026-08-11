@@ -13,6 +13,7 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 ## Funktionen
 
 - Projekte anlegen, duplizieren, öffnen und verwalten
+- Leere Layer anlegen und direkt hineinzeichnen, ohne den Umweg über eine Datei
 - Shapefiles, GeoPackages, GeoJSON- und CSV-Dateien importieren
 - Koordinatenbezug und Zeichenkodierung vor dem Import prüfen
 - Layer ordnen, umbenennen, ein- und ausblenden sowie löschen
@@ -32,6 +33,17 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Einen Layer oder die aktuelle Auswahl als GeoJSON herunterladen
 - Sachdaten direkt in der Attributtabelle bearbeiten, mit der Tastatur und je Feldtyp
   passender Eingabe
+
+### Eigene Layer anlegen
+
+Ein Layer muss nicht aus einer Datei stammen. „Neuer Layer“ legt einen leeren an — Name,
+Geometrieart (Punkte, Linien oder Flächen) und beliebig viele Attributfelder mit dem
+jeweils passenden Typ. Danach lässt sich sofort hineinzeichnen; alles Weitere,
+Einrasten und Rückgängig eingeschlossen, funktioniert wie bei importierten Daten.
+
+Ein Punkt verdient Beachtung: Attributfelder lassen sich später nicht mehr ergänzen. Wer
+einen Layer ohne Felder anlegt, kann zwar zeichnen, hat aber dauerhaft nur die laufende
+Objektnummer. Der Dialog weist beim Anlegen darauf hin.
 
 ### Sachdaten bearbeiten
 
