@@ -2,6 +2,7 @@ package de.kreuter.hgis.ingest.reader;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.ingest.spi.SourceFeature;
 import de.kreuter.hgis.ingest.spi.SourceReader;
 import de.kreuter.hgis.ingest.spi.SourceSchema;
@@ -79,7 +80,7 @@ class GeoJsonSourceReaderTest {
 			assertThat(feature.attributes().get("name")).isEqualTo("Alster");
 			assertThat(feature.attributes().get("flaeche")).isEqualTo(18.4);
 			assertThat(feature.attributes().get("anzahl")).isEqualTo(3L);
-			assertThat(reader.schema().geometryType()).isEqualTo(SourceSchema.GeometryType.MULTIPOINT);
+			assertThat(reader.schema().geometryType()).isEqualTo(GeometryType.MULTIPOINT);
 		}
 	}
 

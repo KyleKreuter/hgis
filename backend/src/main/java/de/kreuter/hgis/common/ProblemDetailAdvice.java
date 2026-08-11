@@ -59,6 +59,19 @@ public class ProblemDetailAdvice {
 		return problem;
 	}
 
+	/**
+	 * A business rule caught what {@code @Valid} could not -- an enum token, a
+	 * cross-field duplicate check. Same "errors" shape as {@link #handleValidation}, one
+	 * entry, so the frontend's per-field lookup works the same regardless of which
+	 * layer rejected the value.
+	 */
+	@ExceptionHandler(FieldValidationException.class)
+	public ProblemDetail handleFieldValidation(FieldValidationException ex) {
+		ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Eingabe ungültig", ex.getMessage());
+		problem.setProperty("errors", Map.of(ex.getField(), ex.getMessage()));
+		return problem;
+	}
+
 	/** A malformed UUID in the path is a client error, not a server fault. */
 	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
 	public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex) {

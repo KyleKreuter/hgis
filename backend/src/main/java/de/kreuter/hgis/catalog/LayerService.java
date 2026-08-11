@@ -2,10 +2,17 @@ package de.kreuter.hgis.catalog;
 
 import de.kreuter.hgis.catalog.dto.LayerDtos;
 import de.kreuter.hgis.common.BadRequestException;
+import de.kreuter.hgis.common.FieldType;
+import de.kreuter.hgis.common.FieldValidationException;
+import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
+import de.kreuter.hgis.common.TableCreator;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -20,18 +27,24 @@ import tools.jackson.databind.JsonNode;
 @Service
 public class LayerService {
 
+	/** Matches the CONTRACT: enough for a genuine attribute schema, not enough to be a dump. */
+	private static final int MAX_FIELDS = 50;
+
 	private final LayerRepository layerRepository;
 	private final LayerFieldRepository fieldRepository;
 	private final ProjectRepository projectRepository;
 	private final LayerStyleService styleService;
+	private final TableCreator tableCreator;
 	private final JdbcClient jdbc;
 
 	LayerService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
-			ProjectRepository projectRepository, LayerStyleService styleService, JdbcClient jdbc) {
+			ProjectRepository projectRepository, LayerStyleService styleService, TableCreator tableCreator,
+			JdbcClient jdbc) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.projectRepository = projectRepository;
 		this.styleService = styleService;
+		this.tableCreator = tableCreator;
 		this.jdbc = jdbc;
 	}
 
@@ -48,6 +61,26 @@ public class LayerService {
 	@Transactional(readOnly = true)
 	public LayerDtos.Detail get(UUID layerId) {
 		return toDetail(require(layerId));
+	}
+
+	/**
+	 * Creates a brand-new, empty layer -- name, geometry type and optional attribute
+	 * fields, nothing else. What makes it usable right away is {@link TableCreator}: the
+	 * same DDL an import runs, so an {@code EditService.apply} create against the fresh
+	 * table works with no further setup.
+	 */
+	@Transactional
+	public LayerDtos.Summary create(UUID projectId, LayerDtos.CreateRequest request) {
+		Project project = projectRepository.findById(projectId)
+				.orElseThrow(() -> new NotFoundException("Projekt " + projectId + " existiert nicht"));
+
+		GeometryType geometryType = parseGeometryType(request.geometryType());
+		List<TableCreator.NewField> fields = validateFields(request.fields());
+
+		TableCreator.CreatedLayer created = tableCreator.createLayerTable(
+				project, geometryType, fields, request.name().trim());
+
+		return toSummary(created.layer());
 	}
 
 	@Transactional
@@ -147,6 +180,73 @@ public class LayerService {
 		jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(layer.getTableName()))
 				.update();
 		layerRepository.delete(layer);
+	}
+
+	// --- create validation -------------------------------------------------------
+
+	/**
+	 * Missing or blank is already caught by {@code @NotBlank} before this runs; what is
+	 * left is checking the token names one of the three drawable types, and rejecting
+	 * {@code GEOMETRY} explicitly rather than letting an unmatched enum value fall
+	 * through with the same generic message an unknown token gets.
+	 */
+	private GeometryType parseGeometryType(String raw) {
+		GeometryType parsed;
+		try {
+			parsed = GeometryType.valueOf(raw);
+		}
+		catch (IllegalArgumentException e) {
+			throw new FieldValidationException("geometryType", "Unbekannter Geometrietyp: " + raw);
+		}
+		if (parsed == GeometryType.GEOMETRY) {
+			throw new FieldValidationException("geometryType",
+					"GEOMETRY ist beim Anlegen eines Layers nicht zulässig, es muss MULTIPOINT, "
+							+ "MULTILINESTRING oder MULTIPOLYGON gewählt werden");
+		}
+		return parsed;
+	}
+
+	/**
+	 * All rules from the CONTRACT that span more than one field -- the 50-entry cap, a
+	 * name repeated case-insensitively, an unknown type token -- land on the same
+	 * "fields" error rather than an indexed path, since the request field they concern is
+	 * the list as a whole, not one array slot a form could highlight on its own.
+	 */
+	private List<TableCreator.NewField> validateFields(List<LayerDtos.CreateRequest.Field> requested) {
+		if (requested.size() > MAX_FIELDS) {
+			throw new FieldValidationException("fields", "Es sind höchstens " + MAX_FIELDS + " Felder erlaubt");
+		}
+
+		List<TableCreator.NewField> fields = new ArrayList<>(requested.size());
+		Set<String> seen = new HashSet<>();
+		for (LayerDtos.CreateRequest.Field field : requested) {
+			String name = field.name() == null ? "" : field.name().trim();
+			if (name.isEmpty()) {
+				throw new FieldValidationException("fields", "Ein Feldname darf nicht leer sein");
+			}
+			if (name.length() > 200) {
+				throw new FieldValidationException("fields",
+						"Feldname '" + name + "' ist länger als 200 Zeichen");
+			}
+			if (!seen.add(name.toLowerCase(Locale.ROOT))) {
+				throw new FieldValidationException("fields",
+						"Der Feldname '" + name + "' wird mehrfach verwendet");
+			}
+			fields.add(new TableCreator.NewField(name, parseFieldType(field.type())));
+		}
+		return fields;
+	}
+
+	private FieldType parseFieldType(String raw) {
+		if (raw == null) {
+			throw new FieldValidationException("fields", "Feldtyp fehlt");
+		}
+		try {
+			return FieldType.valueOf(raw);
+		}
+		catch (IllegalArgumentException e) {
+			throw new FieldValidationException("fields", "Unbekannter Feldtyp: " + raw);
+		}
 	}
 
 	// --- helpers ---------------------------------------------------------------

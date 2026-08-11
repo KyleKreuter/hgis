@@ -1,5 +1,6 @@
 package de.kreuter.hgis.ingest;
 
+import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.ingest.spi.SourceFeature;
 import de.kreuter.hgis.ingest.spi.SourceField;
 import de.kreuter.hgis.ingest.spi.SourceReader;
@@ -79,7 +80,7 @@ final class FakeSourceReader implements SourceReader {
 			features.add(new SourceFeature(geometry, attributes));
 		}
 
-		SourceSchema schema = new SourceSchema(SourceSchema.GeometryType.MULTIPOLYGON, srid, fields,
+		SourceSchema schema = new SourceSchema(GeometryType.MULTIPOLYGON, srid, fields,
 				"UTF-8", SourceSchema.CrsConfidence.DECLARED, (long) count);
 		return new FakeSourceReader(schema, features, 0);
 	}
@@ -98,7 +99,7 @@ final class FakeSourceReader implements SourceReader {
 		Polygon polygon = square(500_000, 5_800_000, 25);
 		SourceFeature feature = new SourceFeature(polygon, Map.of("name", "Einzelpolygon"));
 
-		SourceSchema schema = new SourceSchema(SourceSchema.GeometryType.MULTIPOLYGON, srid, fields,
+		SourceSchema schema = new SourceSchema(GeometryType.MULTIPOLYGON, srid, fields,
 				"UTF-8", SourceSchema.CrsConfidence.DECLARED, 1L);
 		return new FakeSourceReader(schema, List.of(feature), 0);
 	}
@@ -120,7 +121,7 @@ final class FakeSourceReader implements SourceReader {
 			features.add(new SourceFeature(multiSquare(500_000 + i, 5_800_000, 10), attributes));
 		}
 
-		SourceSchema schema = new SourceSchema(SourceSchema.GeometryType.MULTIPOLYGON, srid, fields,
+		SourceSchema schema = new SourceSchema(GeometryType.MULTIPOLYGON, srid, fields,
 				"UTF-8", SourceSchema.CrsConfidence.DECLARED, 3L);
 		return new FakeSourceReader(schema, features, 0);
 	}
@@ -146,7 +147,7 @@ final class FakeSourceReader implements SourceReader {
 		badAttributes.put("count", "nicht-numerisch"); // violates the declared Integer type
 		features.add(new SourceFeature(multiSquare(500_000 + goodCount, 5_800_000, 10), badAttributes));
 
-		SourceSchema schema = new SourceSchema(SourceSchema.GeometryType.MULTIPOLYGON, srid, fields,
+		SourceSchema schema = new SourceSchema(GeometryType.MULTIPOLYGON, srid, fields,
 				"UTF-8", SourceSchema.CrsConfidence.DECLARED, (long) (goodCount + 1));
 		return new FakeSourceReader(schema, features, 0);
 	}

@@ -2,6 +2,7 @@ package de.kreuter.hgis.ingest.reader;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.ingest.reader.support.TestShapefiles;
 import de.kreuter.hgis.ingest.reader.support.TestShapefiles.CharsetHint;
 import de.kreuter.hgis.ingest.reader.support.TestZips;
@@ -42,7 +43,7 @@ class ShapefileSourceReaderTest {
 
 		try (SourceReader reader = SourceReaderFactory.open(zip, null, null)) {
 			SourceSchema schema = reader.schema();
-			assertThat(schema.geometryType()).isEqualTo(SourceSchema.GeometryType.MULTIPOLYGON);
+			assertThat(schema.geometryType()).isEqualTo(GeometryType.MULTIPOLYGON);
 			assertThat(readAll(reader)).hasSize(2);
 		}
 	}

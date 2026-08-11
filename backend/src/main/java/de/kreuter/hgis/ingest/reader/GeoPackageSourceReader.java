@@ -1,9 +1,9 @@
 package de.kreuter.hgis.ingest.reader;
 
+import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.ingest.spi.SourceFeature;
 import de.kreuter.hgis.ingest.spi.SourceField;
 import de.kreuter.hgis.ingest.spi.SourceSchema;
-import de.kreuter.hgis.ingest.spi.SourceSchema.GeometryType;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.Connection;
