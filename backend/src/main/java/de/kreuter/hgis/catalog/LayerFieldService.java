@@ -3,6 +3,7 @@ package de.kreuter.hgis.catalog;
 import de.kreuter.hgis.catalog.dto.LayerDtos;
 import de.kreuter.hgis.common.FieldType;
 import de.kreuter.hgis.common.FieldValidationException;
+import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.common.TableCreator;
@@ -12,20 +13,28 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Adds attribute fields to an existing layer and renames them -- the two schema changes
- * CONTRACT.md phase 11 allows once a layer already has a physical table. Deleting a
- * field, changing its type or reordering it are explicitly out of scope: nothing here
- * ever narrows a table or touches a column {@link TableCreator} already created, it only
- * ever widens one or relabels an entry in the catalog.
+ * Adds, renames and deletes attribute fields of an existing layer -- the schema changes
+ * CONTRACT.md phases 11 and 12 allow once a layer already has a physical table.
+ * Changing a field's type or reordering it stay out of scope: nothing here ever alters
+ * a column {@link TableCreator} already created, it only ever widens, narrows,
+ * relabels or removes an entry in the catalog.
  *
- * <p>No {@code data_version} or {@code style_version} bump happens here. A new column
- * carries no data yet -- the frontend invalidates its own feature cache after adding one
- * -- and a rename only ever changes {@code source_name}, which neither tiles nor a
- * stored style (both keyed by {@code column_name}) ever see.
+ * <p>Adding and renaming bump neither {@code data_version} nor {@code style_version}: a
+ * new column carries no data yet -- the frontend invalidates its own feature cache
+ * after adding one -- and a rename only ever changes {@code source_name}, which
+ * neither tiles nor a stored style (both keyed by {@code column_name}) ever see.
+ *
+ * <p>Deleting one is different: the column genuinely disappears, and if the layer's
+ * style classified or labelled by it, that style is rewritten in the same transaction
+ * and {@code style_version} moves along with it -- see {@link #deleteField} and
+ * {@link LayerStyleService#cleanupAfterFieldRemoval}. {@code data_version} still never
+ * moves; a tile's content is unaffected by a column that never travelled inside one
+ * (see {@link LayerStyleService#tileColumns}).
  */
 @Service
 public class LayerFieldService {
@@ -36,12 +45,16 @@ public class LayerFieldService {
 	private final LayerRepository layerRepository;
 	private final LayerFieldRepository fieldRepository;
 	private final TableCreator tableCreator;
+	private final LayerStyleService styleService;
+	private final JdbcClient jdbc;
 
 	LayerFieldService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
-			TableCreator tableCreator) {
+			TableCreator tableCreator, LayerStyleService styleService, JdbcClient jdbc) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.tableCreator = tableCreator;
+		this.styleService = styleService;
+		this.jdbc = jdbc;
 	}
 
 	/**
@@ -102,7 +115,78 @@ public class LayerFieldService {
 		return toDto(field);
 	}
 
+	/**
+	 * What deleting this field would touch, for the confirmation dialog (CONTRACT.md
+	 * phase 12): how many objects would lose a value, and whether the layer's style
+	 * classifies or labels by it. {@code count(column)} rather than {@code count(*)} --
+	 * it counts exactly the non-null values, the objects a deletion actually affects.
+	 */
+	@Transactional(readOnly = true)
+	public LayerDtos.FieldUsage usage(UUID layerId, UUID fieldId) {
+		Layer layer = requireLayer(layerId);
+		LayerField field = requireField(layerId, fieldId);
+
+		long valueCount = jdbc.sql("SELECT count(%s) FROM %s".formatted(
+						SqlIdentifier.quoteColumn(field.getColumnName()),
+						SqlIdentifier.quoteLayerTable(layer.getTableName())))
+				.query(Long.class)
+				.single();
+
+		LayerStyleService.FieldUsage styleUsage = styleService.fieldUsage(layer.getStyle(), field.getColumnName());
+		return new LayerDtos.FieldUsage(valueCount, styleUsage.usedByRenderer(), styleUsage.usedByLabels());
+	}
+
+	/**
+	 * Drops a field for good: the physical column, its {@code layer_field} row and, if
+	 * the style depended on it, the reference in {@code layer.style} -- all in one
+	 * transaction, so a crash midway never leaves a style pointing at a column that no
+	 * longer exists (CONTRACT.md phase 12, "die Sackgasse").
+	 *
+	 * <p>No business rule stands in the way here, unlike {@link #addField} or
+	 * {@link #renameField}: the contract is explicit that deleting the last field of a
+	 * layer, or one currently classified on, is allowed outright. The confirmation is
+	 * the frontend's job, informed by {@link #usage}, not a check this method repeats.
+	 */
+	@Transactional
+	public void deleteField(UUID layerId, UUID fieldId) {
+		Layer layer = requireLayer(layerId);
+		List<LayerField> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
+		LayerField field = fields.stream()
+				.filter(candidate -> candidate.getId().equals(fieldId))
+				.findFirst()
+				.orElseThrow(() -> new NotFoundException("Feld " + fieldId + " existiert nicht"));
+
+		// Captured against the full field list, exactly like applyStyle captures "before"
+		// against the layer's current fields -- the point of comparison is what the
+		// currently stored style resolves to right now, prior to anything this method does.
+		Set<String> before = styleService.tileColumns(layer.getStyle(), fields);
+
+		tableCreator.dropColumn(layer.getTableName(), field.getColumnName());
+		fieldRepository.delete(field);
+
+		List<LayerField> remaining = fields.stream()
+				.filter(candidate -> !candidate.getId().equals(fieldId))
+				.toList();
+		GeometryType geometryType = GeometryType.valueOf(layer.getGeometryType());
+		String cleanedStyle = styleService.cleanupAfterFieldRemoval(
+				layer.getStyle(), field.getColumnName(), remaining, geometryType);
+
+		Set<String> after = styleService.tileColumns(cleanedStyle, remaining);
+
+		layer.setStyle(cleanedStyle);
+		if (!before.equals(after)) {
+			layer.bumpStyleVersion();
+		}
+	}
+
 	// --- internals -----------------------------------------------------------------
+
+	private LayerField requireField(UUID layerId, UUID fieldId) {
+		return fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId).stream()
+				.filter(candidate -> candidate.getId().equals(fieldId))
+				.findFirst()
+				.orElseThrow(() -> new NotFoundException("Feld " + fieldId + " existiert nicht"));
+	}
 
 	/**
 	 * Derives the column name for a brand-new field and rejects it outright if that

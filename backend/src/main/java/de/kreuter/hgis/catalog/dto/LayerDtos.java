@@ -196,6 +196,18 @@ public final class LayerDtos {
 	}
 
 	/**
+	 * Answer to {@code GET .../fields/{fieldId}/usage} -- what deleting this field would
+	 * touch (CONTRACT.md phase 12), for the confirmation dialog to name a real
+	 * consequence instead of asking an empty question.
+	 *
+	 * @param valueCount     objects with a non-null value in this column
+	 * @param usedByRenderer the style classifies by this field
+	 * @param usedByLabels   the (enabled) labels are drawn from this field
+	 */
+	public record FieldUsage(long valueCount, boolean usedByRenderer, boolean usedByLabels) {
+	}
+
+	/**
 	 * New stacking order for a whole project.
 	 *
 	 * <p>The field name states the direction because getting it wrong is invisible until
