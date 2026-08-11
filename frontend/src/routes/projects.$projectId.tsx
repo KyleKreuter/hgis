@@ -8,7 +8,7 @@ import { Separator } from '@/components/ui/separator'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ApiError } from '@/api/client'
 import { ensureProjectLoaded, projectDetailQuery } from '@/api/projects'
-import { ImportDialog, LayerTree } from '@/layers'
+import { ImportDialog, LayerProperties, LayerTree } from '@/layers'
 import { ProjectMap, type ZoomRequest } from '@/map'
 import { SymbologyPanel } from '@/styling'
 import { AttributeTable } from '@/table'
@@ -174,6 +174,7 @@ function Workspace() {
                 while editing, the attributes of the selected object are what matters. */}
             {!editing.active && activeLayer && (
               <div className="max-h-[55%] shrink-0 overflow-auto border-t">
+                <LayerProperties layer={activeLayer} projectId={projectId} />
                 <SymbologyPanel layer={activeLayer} projectId={projectId} />
               </div>
             )}
