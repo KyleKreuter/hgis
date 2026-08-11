@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react'
 import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowLeft, Upload } from 'lucide-react'
+import { ArrowLeft, Plus, Upload } from 'lucide-react'
 import { WorkspaceLayout } from '@/layout/WorkspaceLayout'
 import { Separator } from '@/components/ui/separator'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ApiError } from '@/api/client'
 import { ensureProjectLoaded, projectDetailQuery } from '@/api/projects'
 import { formatCount } from '@/lib/format'
-import { ImportDialog, LayerProperties, LayerTree } from '@/layers'
+import { CreateLayerDialog, ImportDialog, LayerProperties, LayerTree } from '@/layers'
 import { ProjectMap, type ZoomRequest } from '@/map'
 import { SymbologyPanel } from '@/styling'
 import {
@@ -68,6 +68,7 @@ function Workspace() {
   const { data: project } = useSuspenseQuery(projectDetailQuery(projectId, true))
   const { data: layers } = useQuery(layerListQuery(projectId))
   const [importOpen, setImportOpen] = useState(false)
+  const [createLayerOpen, setCreateLayerOpen] = useState(false)
   // A counter, not a timestamp: zooming to the same layer twice has to produce a new
   // request object, and a counter does that without depending on the clock.
   const [zoomTo, setZoomTo] = useState<ZoomRequest | null>(null)
@@ -155,6 +156,12 @@ function Workspace() {
   return (
     <>
       <ImportDialog projectId={projectId} open={importOpen} onOpenChange={setImportOpen} />
+      <CreateLayerDialog
+        projectId={projectId}
+        open={createLayerOpen}
+        onOpenChange={setCreateLayerOpen}
+        onCreated={(layerId) => selectLayer(layerId)}
+      />
       <InvalidGeometryDialog
         message={editing.invalidGeometry}
         onRepair={() => void editing.save(true)}
@@ -203,10 +210,16 @@ function Workspace() {
                 snapUnavailableReason={editing.snapUnavailableReason ?? undefined}
               />
               {!editing.active && (
-                <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-                  <Upload className="size-3.5" />
-                  Importieren
-                </Button>
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+                    <Upload className="size-3.5" />
+                    Importieren
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setCreateLayerOpen(true)}>
+                    <Plus className="size-3.5" />
+                    Neuer Layer
+                  </Button>
+                </>
               )}
             </div>
           </>
@@ -220,6 +233,7 @@ function Workspace() {
                 onSelectLayer={selectLayer}
                 onZoomToLayer={requestZoom}
                 onImportClick={() => setImportOpen(true)}
+                onCreateLayerClick={() => setCreateLayerOpen(true)}
                 snapSources={editing.active ? editing.snapSourceLayerIds : null}
                 onToggleSnapSource={editing.toggleSnapSource}
               />
