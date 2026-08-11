@@ -97,13 +97,45 @@ herausgezoomt unbrauchbar und hineingezoomt wirkungslos. Gerastet wird auf Stüt
 Schnittpunkte und Kanten — in dieser Reihenfolge, nicht nach Abstand: die ersten beiden
 sind Orte, die die Daten auszeichnen, ein Kantenpunkt ist nur der, an dem der Zeiger
 zufällig stand. Andere Layer lassen sich im Editiermodus als Fangquelle dazuschalten;
-ihre Objekte sind dann Ziel, bleiben aber unveränderbar.
+ihre Objekte sind dann Ziel, bleiben aber unveränderbar. Punkte rasten ebenfalls ein,
+allerdings über einen anderen Weg: terra-draw bietet die Option nur für Linien und
+Flächen an, deshalb wird ein gesetzter Punkt nachträglich auf das Ziel gezogen, das der
+Marker angezeigt hat — was man sieht, ist was man bekommt.
+
+**Berechnete Fangpunkte werden gerundet, gefundene nicht.** Ein Stützpunkt wird
+unverändert durchgereicht; er ist die Koordinate, die in den Daten steht. Ein Punkt auf
+einer Kante oder ein Schnittpunkt wird dagegen *gerechnet* und trägt die volle Genauigkeit
+eines `double` — rund fünfzehn Nachkommastellen, wo die Feature-API neun liefert. Das ist
+nicht nur erfundene Genauigkeit: terra-draw weist eine Geometrie mit mehr als neun Stellen
+rundweg zurück, weshalb ein auf eine Kante gezeichnetes Objekt sich nicht wiederherstellen
+ließ — Rückgängig leerte die Zeichenfläche endgültig, während der Zähler die Änderung als
+zurückgeholt auswies. Deshalb werden nur die berechneten Positionen auf neun Stellen
+gerundet.
 
 **Editieren arbeitet auf Einzelgeometrien, gespeichert wird multi.** Layerspalten sind
 immer multi-typisiert (`ST_Multi` beim Import), terra-draw kennt aber nur Point,
 LineString und Polygon. Beim Laden in den Editor wird deshalb ausgepackt — und was
 wirklich mehrteilig ist, bleibt unbearbeitbar, statt stillschweigend auf seinen ersten
 Teil reduziert zu werden. Beim Schreiben hebt `ST_Multi` wieder an, genau wie im Import.
+
+**Zeichenwerkzeug und Edit-Buffer sind zwei Kopien derselben Sache.** terra-draw hält die
+Geometrien, die man auf dem Bildschirm anfasst; der Buffer hält, was gespeichert wird.
+Jede Änderung muss in beide — und in beide Richtungen, was leicht übersehen wird:
+Rückgängig setzt Patches auf den Buffer an, wovon das Zeichenwerkzeug nichts mitbekommt,
+und das Löschen mit der Entf-Taste passiert im Zeichenwerkzeug, wovon der Buffer nichts
+mitbekommt. Beides war zunächst nur einseitig verdrahtet, und beide Male log die
+Oberfläche: einmal stand »keine Änderungen« unter einer Fläche, die noch zu sehen war;
+einmal verschwand ein Objekt von der Karte und stand nach dem Neuladen wieder da. Der
+Abgleich nach Rückgängig baut die Zeichenfläche deshalb aus dem Buffer neu auf statt
+Patches nachzuspielen — ein Patch sagt, wie der Buffer sich geändert hat, nicht was die
+Karte nun zeigen soll. Ein Flag schaltet dabei die Gegenrichtung stumm, sonst legte der
+Abgleich die zurückgenommene Änderung sofort neu an.
+
+**Was noch gezeichnet wird, gehört noch nicht in den Buffer.** Eine entstehende Fläche
+wächst mit jeder Zeigerbewegung, und terra-draw meldet jeden Zwischenstand als Änderung.
+Aufgezeichnet ergaben drei Ecken acht Verlaufseinträge — acht Klicks auf Rückgängig für
+ein Dreieck, genau die Umständlichkeit, die Abschnitt D.2 des Plans vermeiden will. Ein
+Objekt tritt einmal in den Buffer ein, wenn `finish` es für fertig erklärt.
 
 **Die `fid` ist die Feature-ID der Kachel, kein Attribut.** `ST_AsMVT(…, 'geom', 'fid')`
 benennt `fid` als ID-Spalte, deshalb taucht sie nicht unter den Properties auf.

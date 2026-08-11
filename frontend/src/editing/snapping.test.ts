@@ -257,6 +257,72 @@ describe('findSnapTarget', () => {
   })
 })
 
+describe('precision of computed positions', () => {
+  /** Decimal places of a number, the way the drawing tool counts them. */
+  function places(value: number): number {
+    const text = String(value)
+    const dot = text.indexOf('.')
+    return dot < 0 ? 0 : text.length - dot - 1
+  }
+
+  it('keeps a snapped edge position within nine decimal places', () => {
+    // Interpolating along an edge yields the full precision of a double -- around fifteen
+    // places. terra-draw rejects such a feature outright ("coordinates with excessive
+    // precision"), which surfaced as undo being unable to restore a drawn shape.
+    const line = candidate({
+      type: 'LineString',
+      coordinates: [
+        [9.981234567, 53.541234567],
+        [9.987654321, 53.547654321],
+      ],
+    })
+
+    const target = findSnapTarget([9.9845, 53.5443], [line], project)
+
+    expect(target?.kind).toBe('edge')
+    expect(places(target!.position[0])).toBeLessThanOrEqual(9)
+    expect(places(target!.position[1])).toBeLessThanOrEqual(9)
+  })
+
+  it('keeps a crossing within nine decimal places', () => {
+    const a = candidate({
+      type: 'LineString',
+      coordinates: [
+        [9.981111111, 53.541111111],
+        [9.989999999, 53.549999999],
+      ],
+    })
+    const b = candidate({
+      type: 'LineString',
+      coordinates: [
+        [9.981111111, 53.549999999],
+        [9.989999999, 53.541111111],
+      ],
+    })
+
+    const target = findSnapTarget([9.9855, 53.54555], [a, b], project)
+
+    expect(target?.kind).toBe('intersection')
+    expect(places(target!.position[0])).toBeLessThanOrEqual(9)
+    expect(places(target!.position[1])).toBeLessThanOrEqual(9)
+  })
+
+  it('still returns a vertex bit for bit', () => {
+    // The rounding must never reach a vertex: that coordinate is what the data states,
+    // and shaving it is the silent gap between neighbouring parcels (plan section D.1).
+    const precise = candidate({
+      type: 'Point',
+      coordinates: [9.9812345678901, 53.5412345678901],
+    })
+
+    const target = findSnapTarget([9.98123456, 53.54123456], [precise], project)
+
+    expect(target?.kind).toBe('vertex')
+    expect(target?.position[0]).toBe(9.9812345678901)
+    expect(target?.position[1]).toBe(53.5412345678901)
+  })
+})
+
 describe('isTargetInReach', () => {
   const target: SnapTarget = {
     position: [9.98, 53.54],

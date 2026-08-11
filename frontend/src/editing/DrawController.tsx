@@ -112,6 +112,16 @@ export function DrawController({
    * position the marker promised is the only honest answer at that moment.
    */
   const previewTarget = useRef<SnapTarget | null>(null)
+  /**
+   * Set while the undo/redo sync writes into terra-draw.
+   *
+   * terra-draw reports those writes as changes like any other. Feeding them back into the
+   * buffer would recreate the very change that was just taken back, and undo would appear
+   * to do nothing at all.
+   */
+  const applyingFromBuffer = useRef(false)
+  const historyNonce = useEditing((state) => state.historyNonce)
+  const lastHistoryNonce = useRef(historyNonce)
 
   /** Everything snapping may attach to: this layer's features plus the marked sources. */
   const allSnapCandidates = useCallback(
@@ -194,6 +204,21 @@ export function DrawController({
         eigene: snapCandidates.current.size,
         fremde: externalCandidates.current.length,
       })
+      // The buffer and the drawing surface are two copies of the same thing, and when they
+      // disagree neither one says so. Seeing both at once is what turned "undo does
+      // nothing" into a precise cause.
+      ;(window as unknown as Record<string, unknown>).__hgisBuffer = () => {
+        const { buffer, undoStack, redoStack, historyNonce: nonce } = useEditing.getState()
+        return {
+          creates: Object.keys(buffer.creates).map(Number),
+          updates: Object.keys(buffer.updates).map(Number),
+          deletes: buffer.deletes,
+          undoStack: undoStack.length,
+          redoStack: redoStack.length,
+          historyNonce: nonce,
+          geladen: originals.current.size,
+        }
+      }
     }
 
     /**
@@ -253,11 +278,33 @@ export function DrawController({
     draw.on('deselect', () => onSelectFeature(null))
 
     draw.on('change', (ids, type) => {
+      // The sync below writes into terra-draw itself and keeps every ref in step as it
+      // goes. Acting on its echo here would undo the undo.
+      if (applyingFromBuffer.current) return
+
       // Snap candidates are maintained for every kind of change, not just edits: a
       // feature added from anywhere -- drawn, loaded, inserted -- has to be attachable
       // right away, and one that is gone must stop attracting the cursor.
       if (type === 'delete') {
-        for (const id of ids) snapCandidates.current.delete(Number(id))
+        const { buffer } = useEditing.getState()
+        for (const id of ids) {
+          const fid = Number(id)
+          snapCandidates.current.delete(fid)
+
+          // terra-draw's own handles are deleted whenever a selection ends, and they
+          // report through this same event. By then the feature is gone from the store,
+          // so `isHandle` has nothing left to inspect -- but a handle was never loaded
+          // and never added to the buffer, and that tells them apart just as well.
+          const original = originals.current.get(fid)
+          if (!original && !buffer.creates[fid]) continue
+
+          // Without this a deletion lived only in terra-draw: the feature vanished from
+          // the map, the change counter stayed at zero, and saving wrote nothing. The
+          // row came back on the next reload, having never been deleted at all.
+          useEditing.getState().removeFeature(fid, original)
+          lastGeometry.current.delete(fid)
+          onSelectFeature(null)
+        }
         return
       }
       if (type === 'create') {
@@ -272,11 +319,19 @@ export function DrawController({
       }
       if (type !== 'update') return
       const snapshot = draw.getSnapshot()
+      const { buffer: current } = useEditing.getState()
 
       for (const id of ids) {
         const fid = Number(id)
         const feature = snapshot.find((entry) => entry.id === id)
         if (!feature || isHandle(feature)) continue
+
+        // A shape still being drawn grows with every pointer move, and terra-draw reports
+        // each step as an update. Recording them turned a three-corner polygon into eight
+        // undo entries -- so taking it back meant pressing undo eight times, exactly the
+        // frustration plan section D.2 asks to avoid. It enters the buffer once, when
+        // `finish` says it is a shape; until then it belongs to the tool alone.
+        if (!originals.current.has(fid) && !current.creates[fid]) continue
 
         // terra-draw reports an update whenever a feature's properties change too --
         // selecting one is an update. Without this comparison a plain click would mark
@@ -489,6 +544,91 @@ export function DrawController({
       cancelled = true
     }
   }, [mapRef, isLoaded, layerId, queryClient, snapSourceLayerIds])
+
+  /**
+   * Brings the drawing surface back in line after undo or redo.
+   *
+   * Undo applies patches to the buffer, and nothing else notices: terra-draw keeps its own
+   * copy of every geometry. Without this the counter dropped to "keine Änderungen" while
+   * the taken-back shape stayed on screen -- and saving then wrote something different
+   * from what was visible.
+   *
+   * Rebuilt from the buffer rather than played back step by step: a patch says how the
+   * buffer changed, not what the map should now show, and the two would drift apart over
+   * a long history.
+   */
+  useEffect(() => {
+    if (lastHistoryNonce.current === historyNonce) return
+    lastHistoryNonce.current = historyNonce
+
+    const draw = drawRef.current
+    if (!draw) return
+    const { buffer } = useEditing.getState()
+
+    // What the surface should hold: everything loaded, minus what is deleted, with edited
+    // geometry taking precedence -- plus everything drawn since.
+    const wanted = new Map<number, GeoJSON.Geometry>()
+    for (const [fid, original] of originals.current) {
+      if (buffer.deletes.includes(fid)) continue
+      wanted.set(fid, buffer.updates[fid]?.geometry ?? original.geometry)
+    }
+    for (const draft of Object.values(buffer.creates)) {
+      wanted.set(draft.fid, draft.geometry)
+    }
+
+    const present = new Map(
+      draw
+        .getSnapshot()
+        .filter((feature) => !isHandle(feature))
+        .map((feature) => [Number(feature.id), feature]),
+    )
+
+    const obsolete = [...present.keys()].filter((fid) => !wanted.has(fid))
+
+    applyingFromBuffer.current = true
+    try {
+      if (obsolete.length > 0) {
+        draw.removeFeatures(obsolete)
+        for (const fid of obsolete) {
+          snapCandidates.current.delete(fid)
+          lastGeometry.current.delete(fid)
+        }
+      }
+
+      const missing: Parameters<typeof draw.addFeatures>[0] = []
+      for (const [fid, geometry] of wanted) {
+        const serialised = JSON.stringify(geometry)
+        const existing = present.get(fid)
+        if (!existing) {
+          missing.push({
+            id: fid,
+            type: 'Feature',
+            geometry: geometry as GeoJSON.Point | GeoJSON.LineString | GeoJSON.Polygon,
+            properties: { mode: modeFor(geometry) },
+          })
+        } else if (JSON.stringify(existing.geometry) !== serialised) {
+          draw.updateFeatureGeometry(fid, geometry as GeoJSON.Point | GeoJSON.LineString | GeoJSON.Polygon)
+        } else {
+          continue
+        }
+        lastGeometry.current.set(fid, serialised)
+        snapCandidates.current.set(fid, { geometry, bounds: boundsOf(geometry) })
+      }
+      if (missing.length > 0) {
+        // Checked rather than fired and forgotten. terra-draw refuses a feature whose
+        // coordinates carry more than nine decimal places, and it did: a shape drawn onto
+        // a snapped edge could not be restored, so undo emptied the surface for good while
+        // the counter claimed the change was back. Rounding computed snap positions fixed
+        // the cause; this keeps the next such refusal from being silent.
+        const rejected = draw.addFeatures(missing).filter((entry) => !entry.valid)
+        if (rejected.length > 0) {
+          toast.warning(`${rejected.length} Objekte konnten nicht wiederhergestellt werden.`)
+        }
+      }
+    } finally {
+      applyingFromBuffer.current = false
+    }
+  }, [historyNonce])
 
   // Switching tools must not tear the instance down: terra-draw carries the working copy,
   // and recreating it would drop everything drawn so far.

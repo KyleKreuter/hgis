@@ -38,6 +38,26 @@ export type Project = (position: [number, number]) => { x: number; y: number }
  */
 export const SNAP_TOLERANCE_PX = 12
 
+/**
+ * Decimal places a *computed* snap position may carry.
+ *
+ * Nine is what the feature API returns -- about a tenth of a millimetre in degrees -- and
+ * also the most terra-draw accepts before it refuses a feature outright. A position
+ * interpolated along an edge or solved for a crossing carries the full precision of a
+ * double, some fifteen places: accuracy the data never had, and a shape the drawing tool
+ * will not take back on undo.
+ *
+ * Applied to computed positions only. A vertex is passed through untouched -- it is a
+ * coordinate the data states outright, and rounding it is the very error this module
+ * exists to prevent (plan section D.1).
+ */
+const COMPUTED_PRECISION = 9
+
+function roundComputed(position: [number, number]): [number, number] {
+  const factor = 10 ** COMPUTED_PRECISION
+  return [Math.round(position[0] * factor) / factor, Math.round(position[1] * factor) / factor]
+}
+
 function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(a.x - b.x, a.y - b.y)
 }
@@ -169,10 +189,10 @@ export function findSnapTarget(
         if (edgeDistance <= tolerancePx && (!bestEdge || edgeDistance < bestEdge.distancePx)) {
           bestEdge = {
             // Interpolated in map coordinates, not unprojected from pixels.
-            position: [
+            position: roundComputed([
               previous[0] + ratio * (coordinate[0] - previous[0]),
               previous[1] + ratio * (coordinate[1] - previous[1]),
-            ],
+            ]),
             kind: 'edge',
             distancePx: edgeDistance,
           }
@@ -254,7 +274,7 @@ function intersectSegments(first: Segment, second: Segment): [number, number] | 
   if (t < 0 || t > 1 || u < 0 || u > 1) {
     return null
   }
-  return [first.a[0] + t * r[0], first.a[1] + t * r[1]]
+  return roundComputed([first.a[0] + t * r[0], first.a[1] + t * r[1]])
 }
 
 /**

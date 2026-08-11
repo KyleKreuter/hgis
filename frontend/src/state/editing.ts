@@ -38,6 +38,15 @@ interface EditingState {
    * the drawing tool would then hold two different features under one id.
    */
   nextTempId: number
+  /**
+   * Counts undo and redo steps, and nothing else.
+   *
+   * The drawing tool holds its own copy of every geometry and cannot see a patch being
+   * applied here. Every other change to the buffer starts in the tool itself, so this is
+   * the one signal that says "the buffer moved without you". Monotonic on purpose --
+   * resetting it on `begin` would make a later step collide with an earlier value.
+   */
+  historyNonce: number
 
   begin: (layerId: string) => void
   end: () => void
@@ -125,6 +134,7 @@ export const useEditing = create<EditingState>((set, get) => {
     undoStack: [],
     redoStack: [],
     nextTempId: -1,
+    historyNonce: 0,
 
     begin: (layerId) =>
       set({ layerId, buffer: EMPTY_BUFFER, undoStack: [], redoStack: [], nextTempId: -1 }),
@@ -182,24 +192,26 @@ export const useEditing = create<EditingState>((set, get) => {
       }, 'Objekt gelöscht'),
 
     undo: () => {
-      const { buffer, undoStack, redoStack } = get()
+      const { buffer, undoStack, redoStack, historyNonce } = get()
       const entry = undoStack.at(-1)
       if (!entry) return
       set({
         buffer: applyPatches(buffer, entry.inversePatches),
         undoStack: undoStack.slice(0, -1),
         redoStack: [...redoStack, entry],
+        historyNonce: historyNonce + 1,
       })
     },
 
     redo: () => {
-      const { buffer, undoStack, redoStack } = get()
+      const { buffer, undoStack, redoStack, historyNonce } = get()
       const entry = redoStack.at(-1)
       if (!entry) return
       set({
         buffer: applyPatches(buffer, entry.patches),
         undoStack: [...undoStack, entry],
         redoStack: redoStack.slice(0, -1),
+        historyNonce: historyNonce + 1,
       })
     },
 
