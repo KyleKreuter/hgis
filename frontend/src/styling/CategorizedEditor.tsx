@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Shuffle } from 'lucide-react'
 import type { GeometryType, LayerField } from '@/api/layers'
 import { layerValuesQuery, type FieldValue } from '@/api/layers'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCount } from '@/lib/format'
-import { buildCategories, columnNameOfField, fieldIdOfColumn } from './classification'
+import { buildCategories, columnNameOfField, fieldIdOfColumn, sourceNameOfField } from './classification'
 import { ColorInput, Row } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
 import { formatCategoryValue } from './fields'
@@ -92,7 +92,9 @@ export function CategorizedEditor({
       <Row label="Feld">
         <Select value={fieldIdOfColumn(fields, renderer.field)} onValueChange={(value) => value && selectField(value)}>
           <SelectTrigger size="sm" className="w-full">
-            <SelectValue placeholder="Feld wählen" />
+            <SelectValue placeholder="Feld wählen">
+              {(value: string) => sourceNameOfField(fields, value) || 'Feld wählen'}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {fields.map((field) => (
@@ -106,14 +108,19 @@ export function CategorizedEditor({
 
       <Row label="Farben">
         <PaletteSelect value={palette} onValueChange={recolor} />
+        {/* An icon, not a label: with the palette select beside it the row is 286px wide
+            in a dock that is 257px across at its default size, and the whole panel would
+            scroll sideways -- in a tool panel that is worse than an icon with a title. */}
         <Button
           variant="outline"
-          size="sm"
-          className="h-7 px-2 text-xs"
+          size="icon-sm"
+          className="size-7 shrink-0"
           disabled={categories.length === 0}
+          title="Farben neu über die Kategorien verteilen"
+          aria-label="Farben neu über die Kategorien verteilen"
           onClick={() => recolor(palette)}
         >
-          Neu verteilen
+          <Shuffle className="size-3.5" />
         </Button>
       </Row>
 

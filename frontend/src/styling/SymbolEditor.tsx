@@ -1,6 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { ColorInput, NumberInput, Row } from './controls'
+import { DASH_LABELS, DASH_PATTERNS, dashKeyOf, labelOf, type DashKey } from './labels'
 import type { LayerSymbol } from './types'
 
 interface SymbolEditorProps {
@@ -75,7 +76,7 @@ export function SymbolEditor({ symbol, onChange }: SymbolEditorProps) {
             }
           >
             <SelectTrigger size="sm" className="w-full">
-              <SelectValue />
+              <SelectValue>{(value: string) => labelOf(DASH_LABELS, value)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {DASH_LABELS.map(([key, label]) => (
@@ -125,29 +126,4 @@ export function SymbolEditor({ symbol, onChange }: SymbolEditorProps) {
       </Row>
     </>
   )
-}
-
-/** Lengths are multiples of the line width, which is how MapLibre reads a dash array. */
-const DASH_PATTERNS = {
-  solid: null,
-  dashed: [3, 2],
-  dotted: [1, 2],
-  dashdot: [4, 2, 1, 2],
-} satisfies Record<string, number[] | null>
-
-type DashKey = keyof typeof DASH_PATTERNS
-
-const DASH_LABELS: [DashKey, string][] = [
-  ['solid', 'Durchgezogen'],
-  ['dashed', 'Gestrichelt'],
-  ['dotted', 'Gepunktet'],
-  ['dashdot', 'Strichpunkt'],
-]
-
-function dashKeyOf(dashArray: number[] | null | undefined): DashKey {
-  if (!dashArray || dashArray.length === 0) return 'solid'
-  const match = (Object.keys(DASH_PATTERNS) as DashKey[]).find(
-    (key) => JSON.stringify(DASH_PATTERNS[key]) === JSON.stringify(dashArray),
-  )
-  return match ?? 'dashed'
 }
