@@ -14,6 +14,7 @@ const SELECTION = 'hgis-layer-gebaeude-selected'
 const SELECTION_OUTLINE = 'hgis-layer-gebaeude-selected-outline'
 const SKETCH_FILL = 'hgis-measurement-fill'
 const SKETCH_VERTEX = 'hgis-measurement-vertex'
+const RECT_FILL = 'hgis-rectangle-select-fill'
 
 /**
  * Ein Stellvertreter für maplibregl.Map, der nur die Reihenfolge führt -- `moveLayer`
@@ -40,9 +41,10 @@ function createFakeMap(initial: string[]) {
 }
 
 describe('overlayTier', () => {
-  it('erkennt Auswahl und Messung, aber keinen Datenlayer', () => {
+  it('erkennt Auswahl, Messung und Rechteckauswahl, aber keinen Datenlayer', () => {
     expect(overlayTier(SELECTION)).toBe(0)
     expect(overlayTier(SKETCH_FILL)).toBe(1)
+    expect(overlayTier(RECT_FILL)).toBe(2)
     expect(overlayTier(DATA)).toBe(-1)
     expect(overlayTier('basemap:osm')).toBe(-1)
     expect(isOverlayLayer(LABEL)).toBe(false)
@@ -52,6 +54,14 @@ describe('overlayTier', () => {
 describe('overlayOrder', () => {
   it('stellt die Messung über die Auswahl, unabhängig davon, wer zuerst da war', () => {
     expect(overlayOrder([SKETCH_FILL, SELECTION, DATA])).toEqual([SELECTION, SKETCH_FILL])
+  })
+
+  it('stellt die Rechteckauswahl über Auswahl und Messung', () => {
+    expect(overlayOrder([RECT_FILL, SKETCH_FILL, SELECTION, DATA])).toEqual([
+      SELECTION,
+      SKETCH_FILL,
+      RECT_FILL,
+    ])
   })
 
   it('behält innerhalb einer Stufe die bestehende Reihenfolge', () => {

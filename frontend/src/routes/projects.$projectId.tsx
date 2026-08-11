@@ -26,6 +26,9 @@ import { layerDetailQuery, layerListQuery } from '@/api/layers'
 import { featureDetailQuery } from '@/api/features'
 import { useSelection } from '@/state/selection'
 import { boundsOfGeometry } from '@/map/geometryBounds'
+import { RectangleSelectTool } from '@/map/RectangleSelectTool'
+import { RectangleSelectToolbar } from '@/map/RectangleSelectToolbar'
+import { useIsRectangleSelecting } from '@/map/rectangleSelectStore'
 
 interface WorkspaceSearch {
   /** Active layer. Lives in the URL so a working state survives a reload and can be shared. */
@@ -66,6 +69,7 @@ function Workspace() {
   // Only the on/off fact, not the running measurement -- the sketch changes with every
   // mouse move, and re-rendering the whole workspace for that would be absurd.
   const measuring = useIsMeasuring()
+  const rectSelecting = useIsRectangleSelecting()
   // Only the detail carries the field list the attribute form is generated from.
   const { data: activeLayerDetail } = useQuery({
     ...layerDetailQuery(activeLayerId ?? ''),
@@ -131,6 +135,8 @@ function Workspace() {
                   stands before the editing tools rather than inside them. */}
               <MeasurementToolbar disabled={editing.active} />
               <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
+              <RectangleSelectToolbar disabled={editing.active} canUse={Boolean(activeLayer)} />
+              <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
               <EditToolbar
                 active={editing.active}
                 geometryType={activeLayer?.geometryType}
@@ -195,8 +201,9 @@ function Workspace() {
             project={project}
             zoomTo={zoomTo}
             activeLayerId={activeLayerId ?? null}
-            // Identify would consume the same click the measuring tool needs.
-            identifyEnabled={!editing.active && !measuring}
+            // Identify would consume the same click the measuring and rectangle select
+            // tools need.
+            identifyEnabled={!editing.active && !measuring && !rectSelecting}
           >
             {editing.active && activeLayer && (
               <>
@@ -216,6 +223,7 @@ function Workspace() {
               </>
             )}
             {measuring && <MeasurementOverlay />}
+            {rectSelecting && activeLayer && <RectangleSelectTool layerId={activeLayer.id} />}
           </ProjectMap>
         }
         attributes={

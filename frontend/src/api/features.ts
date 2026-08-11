@@ -25,6 +25,13 @@ export interface FeaturePage {
   totalCount?: number
 }
 
+/**
+ * How `bbox` is matched against a feature's geometry -- see CONTRACT.md. Absent means
+ * the backend's old, bounding-box-only behaviour; `DrawController`'s snap/edit loads
+ * rely on exactly that and must keep leaving `mode` unset.
+ */
+export type SpatialMode = 'intersects' | 'contains'
+
 export interface FeatureQuery {
   layerId: string
   /** Field to sort by, source name or column name; fid when omitted. */
@@ -33,6 +40,8 @@ export interface FeatureQuery {
   filter?: string
   /** [minLng, minLat, maxLng, maxLat] in EPSG:4326. */
   bbox?: [number, number, number, number]
+  /** Only meaningful together with `bbox`; see `SpatialMode`. */
+  mode?: SpatialMode
   geometry?: boolean
   size?: number
 }
@@ -54,6 +63,7 @@ function buildSearch(query: FeatureQuery, cursor?: string): string {
   if (query.desc) search.set('desc', 'true')
   if (query.filter?.trim()) search.set('filter', query.filter.trim())
   if (query.bbox) search.set('bbox', query.bbox.join(','))
+  if (query.mode) search.set('mode', query.mode)
   if (query.geometry) search.set('geometry', 'true')
   if (query.size) search.set('size', String(query.size))
   if (cursor) search.set('cursor', cursor)
@@ -82,6 +92,18 @@ export const featurePagesQuery = (query: FeatureQuery) =>
     }),
     enabled: Boolean(query.layerId),
   })
+
+/**
+ * One page of a bbox query, fetched directly rather than through the query cache.
+ *
+ * Used by the rectangle select tool, which drives its own pagination loop (count check,
+ * then page after page until `nextCursor` is empty) and whose results are transient --
+ * caching them under `featureKeys.page` would grow the cache by one entry per rectangle
+ * ever drawn, for data nothing else reads.
+ */
+export function fetchFeaturePage(query: FeatureQuery, cursor?: string): Promise<FeaturePage> {
+  return api.get<FeaturePage>(`/api/layers/${query.layerId}/features?${buildSearch(query, cursor)}`)
+}
 
 /** One feature with all attributes and its geometry -- what Identify displays. */
 export const featureDetailQuery = (layerId: string, fid: number) =>
