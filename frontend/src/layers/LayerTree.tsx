@@ -6,6 +6,9 @@ import {
   ChevronUp,
   Circle,
   Crosshair,
+  Download,
+  FileDown,
+  Loader2,
   Magnet,
   MoreHorizontal,
   Pencil,
@@ -28,6 +31,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { formatCount } from '@/lib/format'
+import { exportErrorMessage, useExportLayer } from '@/api/export'
 import {
   layerListQuery,
   useReorderLayers,
@@ -35,6 +39,7 @@ import {
   type GeometryType,
   type LayerSummary,
 } from '@/api/layers'
+import { useSelection } from '@/state/selection'
 import { previewColorOf } from '@/styling'
 import { DeleteLayerDialog } from './DeleteLayerDialog'
 import { GEOMETRY_LABELS } from './geometry'
@@ -250,6 +255,38 @@ function LayerRow({
   const Icon = GEOMETRY_ICONS[layer.geometryType]
   const previewColor = previewColorOf(layer.style)
 
+  // Two instances so the spinner lands on the entry the user actually clicked -- not for
+  // independent disabling, which is the opposite of what `isExporting` below does.
+  const exportLayerMutation = useExportLayer()
+  const exportSelectionMutation = useExportLayer()
+  // Deliberately shared, not per-entry: the backend export pool has four concurrent
+  // slots and a queue of eight. Two exports fired from the same row would tie up two of
+  // those slots for what the pool sees as the same click, so both entries disable
+  // together while either request is in flight.
+  const isExporting = exportLayerMutation.isPending || exportSelectionMutation.isPending
+  const canExportSelection = useSelection(
+    (state) => state.layerId === layer.id && state.selected.size > 0,
+  )
+
+  function handleExportLayer() {
+    exportLayerMutation.mutate(
+      { layerId: layer.id },
+      { onError: (caught) => toast.error(exportErrorMessage(caught)) },
+    )
+  }
+
+  function handleExportSelection() {
+    // Re-read the store instead of trusting `canExportSelection`: the menu item's
+    // disabled state can lag a beat behind a selection change elsewhere, and sending an
+    // empty selection downloads an empty file where the user expects the selected data.
+    const { layerId: selectedLayerId, selected } = useSelection.getState()
+    if (selectedLayerId !== layer.id || selected.size === 0) return
+    exportSelectionMutation.mutate(
+      { layerId: layer.id, fids: Array.from(selected) },
+      { onError: (caught) => toast.error(exportErrorMessage(caught)) },
+    )
+  }
+
   return (
     <li
       draggable
@@ -347,6 +384,26 @@ function LayerRow({
           <DropdownMenuItem onClick={onRename}>
             <Pencil className="size-3.5" />
             Umbenennen
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleExportLayer} disabled={isExporting}>
+            {exportLayerMutation.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Download className="size-3.5" />
+            )}
+            {exportLayerMutation.isPending ? 'Wird exportiert…' : 'Layer exportieren'}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={handleExportSelection}
+            disabled={!canExportSelection || isExporting}
+          >
+            {exportSelectionMutation.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <FileDown className="size-3.5" />
+            )}
+            {exportSelectionMutation.isPending ? 'Wird exportiert…' : 'Auswahl exportieren'}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={onMoveUp} disabled={!canMoveUp}>
