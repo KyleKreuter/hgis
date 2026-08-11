@@ -188,7 +188,7 @@ public class LayerService {
 				layer.getFeatureCount(), layer.isVisible(), layer.getZIndex(),
 				layer.getMinZoom(), layer.getMaxZoom(),
 				layer.getDataVersion(), layer.getStyleVersion(),
-				toBbox(layer.getExtent()));
+				toBbox(layer.getExtent()), layer.getStyle());
 	}
 
 	private LayerDtos.Detail toDetail(Layer layer) {
@@ -201,9 +201,8 @@ public class LayerService {
 				layer.getFeatureCount(), layer.isVisible(), layer.getZIndex(),
 				layer.getMinZoom(), layer.getMaxZoom(),
 				layer.getDataVersion(), layer.getStyleVersion(),
-				toBbox(layer.getExtent()),
-				fields, layer.getStyle(),
-				layer.getCreatedAt(), layer.getUpdatedAt());
+				toBbox(layer.getExtent()), layer.getStyle(),
+				fields, layer.getCreatedAt(), layer.getUpdatedAt());
 	}
 
 	private static double[] toBbox(Polygon polygon) {

@@ -37,14 +37,35 @@ public final class LayerDtos {
 			long styleVersion,
 
 			/** [minLng, minLat, maxLng, maxLat] in EPSG:4326, or null if the layer is empty. */
-			double[] extent) {
+			double[] extent,
+
+			/**
+			 * The layer's style, see {@link StyleDtos}, or absent for the default monochrome
+			 * rendering.
+			 *
+			 * <p>Part of the summary and not only of the detail because the map synchronises
+			 * itself against this list. Everything it needs to draw a layer has to be in the
+			 * same response, or opening a project would cost one detail request per layer
+			 * before the first feature can be coloured.
+			 *
+			 * <p>Held as the stored JSON and written straight through rather than parsed and
+			 * re-serialised: it was canonicalised by {@code LayerStyleService} on the way in,
+			 * so a round trip would only be an opportunity to drift.
+			 */
+			@JsonRawValue
+			@JsonInclude(JsonInclude.Include.NON_NULL)
+			String style) {
 	}
 
 	/** One entry of {@code LayerDetail.fields}. */
 	public record Field(UUID id, String sourceName, String columnName, String dataType) {
 	}
 
-	/** Full layer, returned for a single layer. All of {@link Summary} plus attributes. */
+	/**
+	 * Full layer, returned for a single layer. Exactly {@link Summary} plus the attribute
+	 * list and the timestamps -- the members are kept in that order so the relationship
+	 * stays readable.
+	 */
 	public record Detail(
 			UUID id,
 			String name,
@@ -58,19 +79,13 @@ public final class LayerDtos {
 			long dataVersion,
 			long styleVersion,
 			double[] extent,
-			List<Field> fields,
 
-			/**
-			 * The layer's style, see {@link StyleDtos}, or absent for the default
-			 * monochrome rendering.
-			 *
-			 * <p>Held as the stored JSON and written straight through rather than parsed
-			 * and re-serialised: it was canonicalised by {@code LayerStyleService} on the
-			 * way in, so a round trip would only be an opportunity to drift.
-			 */
+			/** @see Summary#style() */
 			@JsonRawValue
 			@JsonInclude(JsonInclude.Include.NON_NULL)
 			String style,
+
+			List<Field> fields,
 			Instant createdAt,
 			Instant updatedAt) {
 	}

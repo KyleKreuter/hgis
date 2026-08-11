@@ -148,14 +148,20 @@ class LayerStyleTest {
 	void changingTheAttributeSetInvalidatesTiles() throws Exception {
 		long unstyled = styleVersion();
 
-		patchStyle(CATEGORIZED_BY_USE).andExpect(status().isOk());
+		// Asserted on the PATCH response, not only on the reloaded row: the client decides
+		// from exactly this number whether to rebuild its tile URL or to recolour in place.
+		patchStyle(CATEGORIZED_BY_USE)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.styleVersion").value((int) unstyled + 1));
 		long classified = styleVersion();
 		assertThat(classified).isGreaterThan(unstyled);
 
 		patchStyle("""
 				{ "style": { "renderer": { "type": "categorized", "field": "einwohner",
 				  "categories": [ { "value": 1, "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
-				""").andExpect(status().isOk());
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.styleVersion").value((int) classified + 1));
 
 		assertThat(styleVersion()).isGreaterThan(classified);
 	}
@@ -250,6 +256,22 @@ class LayerStyleTest {
 	}
 
 	// --- what ends up stored ----------------------------------------------------------
+
+	@Test
+	@DisplayName("the layer list carries the style, so the map needs no request per layer")
+	void styleIsPartOfTheLayerList() throws Exception {
+		mockMvc.perform(get("/api/projects/{projectId}/layers", project.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].style").doesNotExist());
+
+		patchStyle(CATEGORIZED_BY_USE).andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/projects/{projectId}/layers", project.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].style.renderer.type").value("categorized"))
+				.andExpect(jsonPath("$[0].style.renderer.field").value("nutzungsart"))
+				.andExpect(jsonPath("$[0].styleVersion").value(2));
+	}
 
 	@Test
 	@DisplayName("the stored style comes back as an object, not as a string")
