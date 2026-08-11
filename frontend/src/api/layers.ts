@@ -247,6 +247,55 @@ export function useUpdateLayerStyle(layerId: string, projectId: string) {
   })
 }
 
+export interface AddLayerFieldInput {
+  name: string
+  type: FieldType
+}
+
+/**
+ * Adds an attribute field to an existing layer (contract "Attributfelder hinzufügen").
+ * Existing objects get `NULL` in the new column, so every already-fetched feature row
+ * is out of date the moment this succeeds -- unlike a rename, which only relabels, this
+ * has to drop the feature caches too, not just the layer's own metadata.
+ */
+export function useAddLayerField(layerId: string, projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: AddLayerFieldInput) =>
+      api.post<LayerField>(`/api/layers/${layerId}/fields`, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: layerKeys.detail(layerId) })
+      queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
+      // New column on every row -- feature pages and single features are both stale
+      // now, the key prefix covers both (same trick useApplyEdits uses in api/edits.ts).
+      queryClient.invalidateQueries({ queryKey: ['layers', layerId, 'features'] })
+    },
+  })
+}
+
+export interface RenameLayerFieldInput {
+  fieldId: string
+  name: string
+}
+
+/**
+ * Renames a field's display name (contract "Attributfelder umbenennen"). `columnName`
+ * and `dataType` never change, so every feature row already in the cache is still
+ * correct as it stands -- only the layer's own field list (source of the label) is out
+ * of date.
+ */
+export function useRenameLayerField(layerId: string, projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ fieldId, name }: RenameLayerFieldInput) =>
+      api.patch<LayerField>(`/api/layers/${layerId}/fields/${fieldId}`, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: layerKeys.detail(layerId) })
+      queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
+    },
+  })
+}
+
 /**
  * Creates an empty layer that can be drawn into right away (contract "Layer selbst
  * anlegen"). The response is the same `LayerSummary` shape the list endpoint returns
