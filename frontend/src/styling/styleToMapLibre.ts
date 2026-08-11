@@ -8,7 +8,16 @@ import type {
 } from 'maplibre-gl'
 import type { LayerSummary } from '@/api/layers'
 import { GEOMETRY_FILTERS, TILE_SOURCE_LAYER, layerIdsFor, layerSpecsFor } from '@/map/layerSpecs'
-import { DEFAULT_FILL, DEFAULT_LINE, DEFAULT_MARKER, primaryColorOf, roleFor } from './defaults'
+import {
+  DEFAULT_FILL,
+  DEFAULT_LABELS,
+  DEFAULT_LINE,
+  DEFAULT_MARKER,
+  colorOr,
+  numberOr,
+  primaryColorOf,
+  roleFor,
+} from './defaults'
 import type {
   FillSymbol,
   LabelStyle,
@@ -37,6 +46,10 @@ export function styleToMapLibre(
   if (!style) return layerSpecsFor(layer, sourceId)
 
   const labels = activeLabels(style)
+  // Read once and defaulted: `opacity` multiplies into every paint value below, so a
+  // missing one would not produce a wrong colour but NaN -- which MapLibre rejects
+  // exactly as harshly as undefined, by dropping the layer.
+  const opacity = numberOr(style.opacity, 1)
   const ids = layerIdsFor(layer.id, layer.geometryType, { labeled: labels !== null })
   const [minzoom, maxzoom] = zoomRange(layer, style)
   const common = {
@@ -50,12 +63,12 @@ export function styleToMapLibre(
   const specs: LayerSpecification[] = []
   if (layer.geometryType === 'GEOMETRY') {
     const [polygonId, lineId, pointId] = ids
-    specs.push({ id: polygonId, type: 'fill', filter: GEOMETRY_FILTERS.polygon, paint: fillPaint(style), ...common })
-    specs.push({ id: lineId, type: 'line', filter: GEOMETRY_FILTERS.line, paint: linePaint(style), ...common })
-    specs.push({ id: pointId, type: 'circle', filter: GEOMETRY_FILTERS.point, paint: circlePaint(style), ...common })
+    specs.push({ id: polygonId, type: 'fill', filter: GEOMETRY_FILTERS.polygon, paint: fillPaint(style, opacity), ...common })
+    specs.push({ id: lineId, type: 'line', filter: GEOMETRY_FILTERS.line, paint: linePaint(style, opacity), ...common })
+    specs.push({ id: pointId, type: 'circle', filter: GEOMETRY_FILTERS.point, paint: circlePaint(style, opacity), ...common })
   }
   else {
-    specs.push(geometrySpec(ids[0], layer, style, common))
+    specs.push(geometrySpec(ids[0], layer, style, opacity, common))
   }
 
   if (labels) {
@@ -65,7 +78,7 @@ export function styleToMapLibre(
       ...common,
       // Text below its own minimum zoom is not hidden but simply never requested, so
       // the labels' own threshold narrows the layer's rather than replacing it.
-      minzoom: Math.max(minzoom, labels.minZoom),
+      minzoom: Math.max(minzoom, numberOr(labels.minZoom, DEFAULT_LABELS.minZoom)),
       layout: { ...common.layout, ...labelLayout(labels, layer) },
       paint: labelPaint(labels),
     } satisfies SymbolLayerSpecification)
@@ -82,15 +95,15 @@ type Common = {
   layout: { visibility: 'visible' | 'none' }
 }
 
-function geometrySpec(id: string, layer: LayerSummary, style: LayerStyle, common: Common): LayerSpecification {
+function geometrySpec(id: string, layer: LayerSummary, style: LayerStyle, opacity: number, common: Common): LayerSpecification {
   const role = roleFor(layer.geometryType)
   if (role === 'point') {
-    return { id, type: 'circle', paint: circlePaint(style), ...common } satisfies CircleLayerSpecification
+    return { id, type: 'circle', paint: circlePaint(style, opacity), ...common } satisfies CircleLayerSpecification
   }
   if (role === 'line') {
-    return { id, type: 'line', paint: linePaint(style), ...common } satisfies LineLayerSpecification
+    return { id, type: 'line', paint: linePaint(style, opacity), ...common } satisfies LineLayerSpecification
   }
-  return { id, type: 'fill', paint: fillPaint(style), ...common } satisfies FillLayerSpecification
+  return { id, type: 'fill', paint: fillPaint(style, opacity), ...common } satisfies FillLayerSpecification
 }
 
 /** Labels only count as active with a field to read; an empty one would render nothing. */
@@ -100,75 +113,89 @@ function activeLabels(style: LayerStyle): LabelStyle | null {
 }
 
 function zoomRange(layer: LayerSummary, style: LayerStyle): [number, number] {
-  const min = Math.max(layer.minZoom, style.minZoom ?? 0)
+  const min = Math.max(numberOr(layer.minZoom, 0), numberOr(style.minZoom, 0))
   // The style can only narrow the layer's range, never widen it past what the source
   // actually serves. Never below `min`, which MapLibre would reject outright.
-  return [min, Math.max(min, Math.min(layer.maxZoom, style.maxZoom ?? 22))]
+  return [min, Math.max(min, Math.min(numberOr(layer.maxZoom, 22), numberOr(style.maxZoom, 22)))]
 }
 
 // -- paint ------------------------------------------------------------------------
 
-function fillPaint(style: LayerStyle): FillLayerSpecification['paint'] {
-  return {
+/**
+ * Last line of defence: strips members whose value came out `undefined`.
+ *
+ * With every member defaulted above this should never have anything to do. It stays
+ * because of how unforgiving the failure is -- MapLibre answers one `undefined` paint
+ * value by discarding the entire layer, not the one property, and says so only on the
+ * error event. An absent property costs its MapLibre default instead, which is a
+ * visible detail rather than a layer that silently disappeared.
+ */
+function defined<T extends object>(properties: T): T {
+  const entries = Object.entries(properties).filter(([, value]) => value !== undefined)
+  return Object.fromEntries(entries) as T
+}
+
+function fillPaint(style: LayerStyle, opacity: number): FillLayerSpecification['paint'] {
+  return defined<NonNullable<FillLayerSpecification['paint']>>({
     'fill-color': dataDriven(style.renderer, asFill, (symbol) => symbol.fillColor),
     'fill-opacity': dataDriven(style.renderer, asFill, (symbol) =>
-      effectiveOpacity(symbol.fillOpacity * style.opacity),
+      effectiveOpacity(symbol.fillOpacity * opacity),
     ),
     // MapLibre's fill layer draws a hairline outline and nothing else -- `outlineWidth`
     // has no counterpart and is not honoured. A wider outline would need a second line
     // layer per catalog layer, which is out of scope here.
     'fill-outline-color': dataDriven(style.renderer, asFill, (symbol) => symbol.outlineColor),
-  }
+  })
 }
 
-function linePaint(style: LayerStyle): LineLayerSpecification['paint'] {
+function linePaint(style: LayerStyle, opacity: number): LineLayerSpecification['paint'] {
   // `line-dasharray` is not data-driven in MapLibre, so one pattern has to stand for the
   // whole layer: the single symbol, or the fallback of a classified renderer.
   const dashArray = asLine(representativeSymbol(style.renderer)).dashArray
-  return {
+  return defined<NonNullable<LineLayerSpecification['paint']>>({
     'line-color': dataDriven(style.renderer, asLine, (symbol) => symbol.color),
     'line-width': dataDriven(style.renderer, asLine, (symbol) => symbol.width),
     // Only written when it differs from MapLibre's own default, so an unmodified style
     // produces byte-for-byte the same paint object as no style at all.
-    ...(style.opacity < 1 ? { 'line-opacity': effectiveOpacity(style.opacity) } : {}),
+    ...(opacity < 1 ? { 'line-opacity': effectiveOpacity(opacity) } : {}),
     ...(dashArray && dashArray.length > 0 ? { 'line-dasharray': dashArray } : {}),
-  }
+  })
 }
 
-function circlePaint(style: LayerStyle): CircleLayerSpecification['paint'] {
-  return {
+function circlePaint(style: LayerStyle, opacity: number): CircleLayerSpecification['paint'] {
+  return defined<NonNullable<CircleLayerSpecification['paint']>>({
     // `size` is the radius in pixels, not the diameter -- that is what makes the default
     // symbol identical to the unstyled `circle-radius: 3`.
     'circle-radius': dataDriven(style.renderer, asMarker, (symbol) => symbol.size),
     'circle-color': dataDriven(style.renderer, asMarker, (symbol) => symbol.fillColor),
     'circle-stroke-width': dataDriven(style.renderer, asMarker, (symbol) => symbol.strokeWidth),
     'circle-stroke-color': dataDriven(style.renderer, asMarker, (symbol) => symbol.strokeColor),
-    ...(style.opacity < 1
+    ...(opacity < 1
       ? {
-          'circle-opacity': effectiveOpacity(style.opacity),
-          'circle-stroke-opacity': effectiveOpacity(style.opacity),
+          'circle-opacity': effectiveOpacity(opacity),
+          'circle-stroke-opacity': effectiveOpacity(opacity),
         }
       : {}),
-  }
+  })
 }
 
 function labelLayout(labels: LabelStyle, layer: LayerSummary): SymbolLayerSpecification['layout'] {
-  return {
+  return defined<NonNullable<SymbolLayerSpecification['layout']>>({
     'text-field': ['get', labels.field],
     'text-font': LABEL_FONT,
-    'text-size': labels.size,
-    'text-allow-overlap': labels.allowOverlap,
+    'text-size': numberOr(labels.size, DEFAULT_LABELS.size),
+    'text-allow-overlap': labels.allowOverlap === true,
     // Street names read along the line, everything else sits on the centroid.
     'symbol-placement': layer.geometryType === 'MULTILINESTRING' ? 'line' : 'point',
-  }
+  })
 }
 
 function labelPaint(labels: LabelStyle): SymbolLayerSpecification['paint'] {
-  return {
-    'text-color': labels.color,
-    'text-halo-color': labels.haloColor,
-    'text-halo-width': labels.haloWidth,
-  }
+  return defined<NonNullable<SymbolLayerSpecification['paint']>>({
+    'text-color': colorOr(labels.color, DEFAULT_LABELS.color),
+    'text-halo-color': colorOr(labels.haloColor, DEFAULT_LABELS.haloColor),
+    'text-halo-width': numberOr(labels.haloWidth, DEFAULT_LABELS.haloWidth),
+  })
 }
 
 /**
@@ -181,26 +208,59 @@ export const LABEL_FONT = ['Noto Sans Regular']
 // -- symbol resolution ------------------------------------------------------------
 
 /**
+ * What actually arrives. The schema types every member of a symbol as present, but the
+ * server omits null members, so a stored symbol may carry `kind` and nothing else.
+ */
+type Incoming<T> = { [K in keyof T]?: T[K] }
+
+/**
  * A symbol always renders in the role its sublayer demands, not in the one its `kind`
  * names. A GEOMETRY layer draws the very same category symbol as polygon, line and
  * marker; only its colour carries across, everything else falls back to the default
  * for that role.
+ *
+ * Every member is filled in individually, including when `kind` already matches and the
+ * symbol could be passed through. A spread would not do: `{...DEFAULT_FILL, ...symbol}`
+ * lets a key that is present but `undefined` overwrite the default with nothing, and
+ * `undefined` in a paint property makes MapLibre discard the whole layer -- the objects
+ * vanish from the map, with one line on the console as the only sign.
  */
 function asFill(symbol: LayerSymbol): FillSymbol {
-  if (symbol.kind === 'fill') return symbol
-  return { ...DEFAULT_FILL, fillColor: primaryColorOf(symbol) }
+  if (symbol.kind !== 'fill') return { ...DEFAULT_FILL, fillColor: primaryColorOf(symbol) }
+  const fill = symbol as Incoming<FillSymbol>
+  return {
+    kind: 'fill',
+    fillColor: colorOr(fill.fillColor, DEFAULT_FILL.fillColor),
+    fillOpacity: numberOr(fill.fillOpacity, DEFAULT_FILL.fillOpacity),
+    outlineColor: colorOr(fill.outlineColor, DEFAULT_FILL.outlineColor),
+    outlineWidth: numberOr(fill.outlineWidth, DEFAULT_FILL.outlineWidth),
+  }
 }
 
 function asLine(symbol: LayerSymbol): LineSymbol {
-  if (symbol.kind === 'line') return symbol
-  return { ...DEFAULT_LINE, color: primaryColorOf(symbol) }
+  if (symbol.kind !== 'line') return { ...DEFAULT_LINE, color: primaryColorOf(symbol) }
+  const line = symbol as Incoming<LineSymbol>
+  return {
+    kind: 'line',
+    color: colorOr(line.color, DEFAULT_LINE.color),
+    width: numberOr(line.width, DEFAULT_LINE.width),
+    dashArray: line.dashArray,
+  }
 }
 
 function asMarker(symbol: LayerSymbol): MarkerSymbol {
-  if (symbol.kind === 'marker') return symbol
   // The stroke stays the default light halo: it separates the marker from whatever is
   // beneath it, it is not part of the category's identity the way the fill is.
-  return { ...DEFAULT_MARKER, fillColor: primaryColorOf(symbol) }
+  if (symbol.kind !== 'marker') return { ...DEFAULT_MARKER, fillColor: primaryColorOf(symbol) }
+  const marker = symbol as Incoming<MarkerSymbol>
+  return {
+    kind: 'marker',
+    shape: marker.shape ?? DEFAULT_MARKER.shape,
+    size: numberOr(marker.size, DEFAULT_MARKER.size),
+    fillColor: colorOr(marker.fillColor, DEFAULT_MARKER.fillColor),
+    strokeColor: colorOr(marker.strokeColor, DEFAULT_MARKER.strokeColor),
+    strokeWidth: numberOr(marker.strokeWidth, DEFAULT_MARKER.strokeWidth),
+  }
 }
 
 function representativeSymbol(renderer: Renderer): LayerSymbol {
