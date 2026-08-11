@@ -328,6 +328,38 @@ class LayerStyleTest {
 	}
 
 	@Test
+	@DisplayName("a category for the features without a value keeps its explicit null")
+	void aNullCategoryValueSurvives() throws Exception {
+		// The one member that is written even when null. Colouring "objects without a use
+		// type" is a category like any other -- dropped from the document it would read as
+		// an entry whose value was never picked, and nothing could tell the two apart.
+		patchStyle("""
+				{ "style": { "renderer": { "type": "categorized", "field": "nutzungsart",
+				  "categories": [
+				    { "value": "Wohnen", "symbol": { "kind": "fill", "fillColor": "#e74c3c" } },
+				    { "value": null, "label": "Ohne Angabe",
+				      "symbol": { "kind": "fill", "fillColor": "#999999" } } ] } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.categories", Matchers.hasSize(2)))
+				.andExpect(jsonPath("$.style.renderer.categories[1].label").value("Ohne Angabe"))
+				.andExpect(jsonPath("$.style.renderer.categories[1]",
+						Matchers.hasKey("value")))
+				.andExpect(jsonPath("$.style.renderer.categories[1].value").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("an empty category list stays an empty list, it does not vanish")
+	void anEmptyCategoryListIsKept() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "categorized", "field": "nutzungsart",
+				  "categories": [] } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.categories", Matchers.hasSize(0)));
+	}
+
+	@Test
 	@DisplayName("a numeric category value stays a number, it does not become a string")
 	void numericCategoryValuesKeepTheirType() throws Exception {
 		patchStyle("""
