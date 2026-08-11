@@ -13,6 +13,7 @@ import de.kreuter.hgis.features.dto.EditDtos;
 import de.kreuter.hgis.features.dto.FeatureDtos;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -324,14 +325,14 @@ public class EditService {
 	 * <p>Jackson decodes the request body generically -- every JSON value becomes
 	 * whatever plain Java type the token implies (String, Boolean, Integer/Long/Double),
 	 * with no awareness of the column it is destined for. That already matches what JDBC
-	 * needs for the numeric types and boolean. It does not for {@code date},
+	 * needs for the numeric types and boolean. It does not for {@code date}, {@code time},
 	 * {@code timestamptz}, {@code uuid} and {@code bytea}: {@link FeatureQueryService}
-	 * reads all four back as JSON strings (dates and timestamps as ISO-8601 text, bytea
-	 * as base64), and PostgreSQL has no implicit cast from varchar to any of them --
+	 * reads all five back as JSON strings (dates, times and timestamps as ISO-8601 text,
+	 * bytea as base64), and PostgreSQL has no implicit cast from varchar to any of them --
 	 * binding the raw string sends the parameter as varchar and the statement is
 	 * rejected outright.
 	 *
-	 * <p>Parsing every column here, not only those four, is also what turns a value that
+	 * <p>Parsing every column here, not only those five, is also what turns a value that
 	 * plain does not fit the column -- a string where {@code layer_field.data_type} says
 	 * a number, an unparsable date -- into a {@link BadRequestException} naming the
 	 * field, instead of a bare 500 once PostgreSQL rejects the statement.
@@ -348,6 +349,7 @@ public class EditService {
 			case "numeric", "decimal" -> asBigDecimal(field, value);
 			case "boolean" -> asBoolean(field, value);
 			case "date" -> asLocalDate(field, value);
+			case "time" -> asLocalTime(field, value);
 			case "uuid" -> asUuid(field, value);
 			case "bytea" -> asBytes(field, value);
 			// timestamptz is the only timestamp-like type this application ever creates
@@ -386,6 +388,24 @@ public class EditService {
 	private static LocalDate asLocalDate(LayerField field, Object value) {
 		try {
 			return LocalDate.parse(asText(field, value));
+		}
+		catch (DateTimeParseException ex) {
+			throw typeMismatch(field, value);
+		}
+	}
+
+	/**
+	 * Unlike {@code date}, a {@code time} column already reads back correctly as a plain
+	 * {@code "HH:mm:ss"} string -- {@link FeatureQueryService} needs no conversion for it,
+	 * because Jackson's own handling of {@link java.sql.Time} formats the time of day
+	 * directly and does not go through the timezone-dependent {@code java.util.Date}
+	 * instant logic that made {@code date} read back wrong. Only the write side has the
+	 * same problem as the other four: the incoming string is Jackson's generic type, and
+	 * PostgreSQL has no implicit cast from varchar to {@code time}.
+	 */
+	private static LocalTime asLocalTime(LayerField field, Object value) {
+		try {
+			return LocalTime.parse(asText(field, value));
 		}
 		catch (DateTimeParseException ex) {
 			throw typeMismatch(field, value);

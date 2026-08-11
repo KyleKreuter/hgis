@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.List;
@@ -43,17 +44,20 @@ import tools.jackson.databind.ObjectMapper;
  * <p>{@code FeatureQueryService.toFeature} converts a {@code date} column's raw
  * {@link java.sql.Date} into a {@link java.time.LocalDate} before handing the row to
  * Jackson; every other type already reads back correctly as whatever the JDBC driver
- * hands over. {@code EditService.collectProperties} looks up each property's
- * {@code layer_field.data_type} and parses the incoming JSON value into the matching
- * Java type before binding it -- {@code date}, {@code timestamptz}, {@code uuid} and
- * {@code bytea} need that parsing because JDBC would otherwise bind Jackson's generic
- * {@code String} as varchar, which PostgreSQL has no implicit cast for. A value that does
- * not fit its column -- an unparsable date, a string where a number belongs -- is
- * rejected as a 400 naming the field, rather than reaching PostgreSQL and surfacing as a
- * bare 500.
+ * hands over -- {@code time} included: {@link java.sql.Time} also extends
+ * {@code java.util.Date}, but Jackson's handling of it already formats the time of day
+ * directly rather than going through the timezone-dependent instant logic that made
+ * {@code date} read back wrong. {@code EditService.collectProperties} looks up each
+ * property's {@code layer_field.data_type} and parses the incoming JSON value into the
+ * matching Java type before binding it -- {@code date}, {@code time}, {@code timestamptz},
+ * {@code uuid} and {@code bytea} need that parsing because JDBC would otherwise bind
+ * Jackson's generic {@code String} as varchar, which PostgreSQL has no implicit cast for.
+ * A value that does not fit its column -- an unparsable date, a string where a number
+ * belongs -- is rejected as a 400 naming the field, rather than reaching PostgreSQL and
+ * surfacing as a bare 500.
  *
  * <p>This test is the contract for both directions: what {@code GET} produces for each
- * of the ten types, and that writing exactly that value back through the edit endpoint
+ * of the eleven types, and that writing exactly that value back through the edit endpoint
  * round-trips to the same value again.
  */
 @Import(TestcontainersConfiguration.class)
@@ -72,6 +76,7 @@ class FeaturePropertyWireFormatTest {
 	private static final BigDecimal STORED_NUMERIC = new BigDecimal("1234.50");
 	private static final LocalDate STORED_DATE = LocalDate.of(2024, 3, 1);
 	private static final OffsetDateTime STORED_TIMESTAMP = OffsetDateTime.parse("2024-03-01T10:15:30+02:00");
+	private static final LocalTime STORED_TIME = LocalTime.of(8, 15, 30);
 	private static final UUID STORED_UUID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 	private static final byte[] STORED_BYTES = { (byte) 0xDE, (byte) 0xAD, (byte) 0xBE, (byte) 0xEF };
 
@@ -117,12 +122,13 @@ class FeaturePropertyWireFormatTest {
 				    datecol   date,
 				    tscol     timestamptz,
 				    uuidcol   uuid,
-				    byteacol  bytea
+				    byteacol  bytea,
+				    timecol   time
 				)
 				""".formatted(table())).update();
 
 		filledFid = insertFilledRow();
-		nullFid = insertRow(null, null, null, null, null, null, null, null, null, null);
+		nullFid = insertRow(null, null, null, null, null, null, null, null, null, null, null);
 
 		Layer newLayer = new Layer(layerId, project, "Wire-Format", tableName, "MULTIPOINT", 4326);
 		newLayer.setFeatureCount(2);
@@ -138,6 +144,7 @@ class FeaturePropertyWireFormatTest {
 		fieldRepository.saveAndFlush(new LayerField(layer, "Zeitstempel", "tscol", "timestamptz", 7));
 		fieldRepository.saveAndFlush(new LayerField(layer, "Kennung", "uuidcol", "uuid", 8));
 		fieldRepository.saveAndFlush(new LayerField(layer, "Binärdaten", "byteacol", "bytea", 9));
+		fieldRepository.saveAndFlush(new LayerField(layer, "Uhrzeit", "timecol", "time", 10));
 	}
 
 	@AfterAll
@@ -237,6 +244,21 @@ class FeaturePropertyWireFormatTest {
 		}
 	}
 
+	@Test
+	@DisplayName("time reads back as a plain ISO time, independent of the server's time zone")
+	void readsTimeAsAPlainIsoTime() throws Exception {
+		JsonNode node = getFeature(filledFid).json().get("properties").get("timecol");
+
+		// Unlike date, this one needed no fix on the read side: java.sql.Time also
+		// extends java.util.Date, but Jackson's handling of it formats the time of day
+		// directly rather than going through the "midnight in the JVM's zone, converted
+		// to UTC" instant logic that made date read back wrong. Verified with the server
+		// forced to UTC+14 (-Duser.timezone=Pacific/Kiritimati) -- the wire value did not
+		// move; measured, not assumed, per the date fix's lesson.
+		assertThat(node.isString()).isTrue();
+		assertThat(node.asString()).isEqualTo(STORED_TIME.toString());
+	}
+
 	// --- writing: the types that work -------------------------------------------------
 
 	@Test
@@ -260,17 +282,17 @@ class FeaturePropertyWireFormatTest {
 	// --- writing: the types that need conversion ------------------------------------------
 
 	@Test
-	@DisplayName("date, timestamptz, uuid and bytea round-trip in the exact shape GET returns")
+	@DisplayName("date, timestamptz, uuid, bytea and time round-trip in the exact shape GET returns")
 	void roundTripsStringEncodedTypes() throws Exception {
 		JsonNode before = getFeature(filledFid).json().get("properties");
 
-		for (String column : List.of("datecol", "tscol", "uuidcol", "byteacol")) {
+		for (String column : List.of("datecol", "tscol", "uuidcol", "byteacol", "timecol")) {
 			MockHttpServletResponse response = putProperties(filledFid, rawProperties(before, column));
 
 			// EditService.toColumnValue looks up layer_field.data_type for the column and
 			// parses Jackson's generic String into the matching java.time / java.util type
 			// before binding it, so JDBC sends a properly typed parameter instead of
-			// varchar -- unlike the numeric types and boolean above, these four cannot be
+			// varchar -- unlike the numeric types and boolean above, these five cannot be
 			// bound as whatever plain Java type Jackson produced from the JSON literal.
 			assertThat(response.getStatus())
 					.as("column %s: writing back exactly what GET produced", column)
@@ -282,6 +304,7 @@ class FeaturePropertyWireFormatTest {
 		assertThat(after.get("tscol")).isEqualTo(before.get("tscol"));
 		assertThat(after.get("uuidcol")).isEqualTo(before.get("uuidcol"));
 		assertThat(after.get("byteacol")).isEqualTo(before.get("byteacol"));
+		assertThat(after.get("timecol")).isEqualTo(before.get("timecol"));
 	}
 
 	// --- writing: invalid values --------------------------------------------------------
@@ -313,6 +336,17 @@ class FeaturePropertyWireFormatTest {
 		assertThat(body).as("names the field by its source name").contains("Datum");
 	}
 
+	@Test
+	@DisplayName("an unparsable time is a 400 naming the field, not a generic 500")
+	void rejectsATypeMismatchedTimeWith400() throws Exception {
+		MockHttpServletResponse response = putProperties(filledFid, "{\"timecol\":\"keine-uhrzeit\"}");
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+		assertThat(body).as("names the field by its source name").contains("Uhrzeit");
+	}
+
 	// --- writing: null vs. absent --------------------------------------------------------
 
 	@Test
@@ -337,7 +371,7 @@ class FeaturePropertyWireFormatTest {
 	// --- fixture -----------------------------------------------------------------------
 
 	private static final List<String> ALL_COLUMNS = List.of("txt", "intcol", "bigcol", "dblcol",
-			"numcol", "boolcol", "datecol", "tscol", "uuidcol", "byteacol");
+			"numcol", "boolcol", "datecol", "tscol", "uuidcol", "byteacol", "timecol");
 
 	private String table() {
 		return SqlIdentifier.quoteLayerTable(tableName);
@@ -346,17 +380,18 @@ class FeaturePropertyWireFormatTest {
 	private long insertFilledRow() {
 		return insertRow(STORED_TEXT, STORED_INT, STORED_BIGINT, STORED_DOUBLE, STORED_NUMERIC,
 				true, STORED_DATE.toString(), STORED_TIMESTAMP.toString(), STORED_UUID.toString(),
-				STORED_BYTES);
+				STORED_BYTES, STORED_TIME.toString());
 	}
 
 	private long insertRow(String txt, Integer intcol, Long bigcol, Double dblcol,
 			BigDecimal numcol, Boolean boolcol, String datecol, String tscol, String uuidcol,
-			byte[] byteacol) {
+			byte[] byteacol, String timecol) {
 		return jdbc.sql("INSERT INTO " + table() + " (geom, txt, intcol, bigcol, dblcol, numcol, "
-						+ "boolcol, datecol, tscol, uuidcol, byteacol) VALUES ("
+						+ "boolcol, datecol, tscol, uuidcol, byteacol, timecol) VALUES ("
 						+ "ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), :txt, :intcol, :bigcol, "
 						+ ":dblcol, :numcol, :boolcol, CAST(:datecol AS date), "
-						+ "CAST(:tscol AS timestamptz), CAST(:uuidcol AS uuid), :byteacol) "
+						+ "CAST(:tscol AS timestamptz), CAST(:uuidcol AS uuid), :byteacol, "
+						+ "CAST(:timecol AS time)) "
 						+ "RETURNING fid")
 				.param("txt", txt)
 				.param("intcol", intcol)
@@ -368,6 +403,7 @@ class FeaturePropertyWireFormatTest {
 				.param("tscol", tscol)
 				.param("uuidcol", uuidcol)
 				.param("byteacol", byteacol)
+				.param("timecol", timecol)
 				.query(Long.class).single();
 	}
 
