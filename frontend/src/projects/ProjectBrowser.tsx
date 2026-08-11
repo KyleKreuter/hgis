@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { projectListQuery, type ProjectSummary } from '@/api/projects'
+import { Brand } from '@/layout/Brand'
 import { formatCount, formatRelative } from '@/lib/format'
 import { CreateProjectDialog } from './CreateProjectDialog'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
@@ -47,10 +48,7 @@ export function ProjectBrowser() {
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <header className="flex h-12 shrink-0 items-center justify-between border-b px-4">
-        <div className="flex items-center gap-2">
-          <Layers className="size-4" strokeWidth={1.75} />
-          <span className="font-semibold">hgis</span>
-        </div>
+        <Brand />
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           <Plus className="size-3.5" />
           Neues Projekt
