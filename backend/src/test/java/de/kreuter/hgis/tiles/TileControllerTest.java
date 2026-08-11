@@ -2,11 +2,14 @@ package de.kreuter.hgis.tiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import de.kreuter.hgis.TestcontainersConfiguration;
 import de.kreuter.hgis.catalog.Layer;
+import de.kreuter.hgis.catalog.LayerField;
+import de.kreuter.hgis.catalog.LayerFieldRepository;
 import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
@@ -15,12 +18,14 @@ import de.kreuter.hgis.tiles.LayerTableFixture.TestLayer;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -48,6 +53,9 @@ class TileControllerTest {
 	@Autowired
 	private LayerRepository layerRepository;
 
+	@Autowired
+	private LayerFieldRepository layerFieldRepository;
+
 	private TestLayer testLayer;
 	private Layer layer;
 
@@ -61,6 +69,9 @@ class TileControllerTest {
 		Layer newLayer = new Layer(UUID.randomUUID(), project, "Testlayer",
 				testLayer.tableName(), "MULTIPOLYGON", 25832);
 		layer = layerRepository.saveAndFlush(newLayer);
+
+		layerFieldRepository.saveAndFlush(new LayerField(layer, "Nutzungsart",
+				LayerTableFixture.CATEGORY_COLUMN, "text", 0));
 	}
 
 	@AfterEach
@@ -85,6 +96,31 @@ class TileControllerTest {
 		assertThat(layers).hasSize(1);
 		assertThat(layers.get(0).featureIds())
 				.containsExactlyInAnyOrderElementsOf(testLayer.featureIds());
+	}
+
+	@Test
+	@DisplayName("a styled layer serves its classification attribute in the tile")
+	void carriesTheAttributeTheStyleClassifiesBy() throws Exception {
+		mockMvc.perform(patch("/api/layers/{layerId}", layer.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{ "style": { "renderer": { "type": "categorized", "field": "Nutzungsart",
+								  "categories": [ { "value": "Wohnen",
+								                    "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+								"""))
+				.andExpect(status().isOk());
+
+		MvcResult result = mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt",
+						layer.getId(), testLayer.zoom(), testLayer.tileX(), testLayer.tileY()))
+				.andExpect(status().isOk())
+				.andReturn();
+
+		var decoded = MvtTileDecoder.decode(result.getResponse().getContentAsByteArray()).get(0);
+		assertThat(decoded.keys()).containsExactly(LayerTableFixture.CATEGORY_COLUMN);
+		assertThat(decoded.features())
+				.allSatisfy(feature -> assertThat(feature.properties())
+						.containsEntry(LayerTableFixture.CATEGORY_COLUMN,
+								testLayer.categories().get(feature.id())));
 	}
 
 	@Test
