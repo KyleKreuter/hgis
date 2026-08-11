@@ -55,6 +55,21 @@ export interface LayerDetail extends LayerSummary {
 }
 
 /**
+ * What depends on one field -- fetched right before the delete confirmation is shown
+ * (contract "Attributfelder löschen"). Without these numbers that confirmation would be
+ * an empty formality: the count is the only thing that says what is actually at stake,
+ * and the two flags are what warn that deleting also resets part of the style.
+ */
+export interface LayerFieldUsage {
+  /** Objects with a non-NULL value in this field. */
+  valueCount: number
+  /** The renderer classifies by this field. */
+  usedByRenderer: boolean
+  /** The active label uses this field. */
+  usedByLabels: boolean
+}
+
+/**
  * Field types accepted when creating a layer from scratch (contract "Layer selbst
  * anlegen"). `uuid` and `bytea` are deliberately absent from this list -- both are
  * read-only in the attribute editor (phase 9), so offering them here would create a
@@ -129,6 +144,8 @@ export const layerKeys = {
   /** Layer list of one project -- what `MapLayerSync` diffs against the map. */
   list: (projectId: string) => ['projects', projectId, 'layers'] as const,
   detail: (layerId: string) => ['layers', layerId] as const,
+  fieldUsage: (layerId: string, fieldId: string) =>
+    ['layers', layerId, 'fields', fieldId, 'usage'] as const,
   values: (layerId: string, field: string) => ['layers', layerId, 'values', field] as const,
   classify: (layerId: string, field: string, method: ClassifyMethod, classes: number) =>
     ['layers', layerId, 'classify', field, method, classes] as const,
@@ -144,6 +161,13 @@ export const layerDetailQuery = (layerId: string) =>
   queryOptions({
     queryKey: layerKeys.detail(layerId),
     queryFn: () => api.get<LayerDetail>(`/api/layers/${layerId}`),
+  })
+
+export const layerFieldUsageQuery = (layerId: string, fieldId: string) =>
+  queryOptions({
+    queryKey: layerKeys.fieldUsage(layerId, fieldId),
+    queryFn: () =>
+      api.get<LayerFieldUsage>(`/api/layers/${layerId}/fields/${fieldId}/usage`),
   })
 
 /**
@@ -292,6 +316,26 @@ export function useRenameLayerField(layerId: string, projectId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: layerKeys.detail(layerId) })
       queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
+    },
+  })
+}
+
+/**
+ * Deletes a field irreversibly (contract "Attributfelder löschen"). The backend drops
+ * the column and, if the renderer or labels pointed at it, resets that part of the
+ * style too -- all in one transaction -- so both the detail cache (carries the style)
+ * and the list cache (carries `styleVersion`) are stale, on top of every feature row
+ * losing a column, same as `useAddLayerField`.
+ */
+export function useDeleteLayerField(layerId: string, projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (fieldId: string) => api.delete<void>(`/api/layers/${layerId}/fields/${fieldId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: layerKeys.detail(layerId) })
+      queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
+      // The column is gone from every row now, same trick useAddLayerField uses.
+      queryClient.invalidateQueries({ queryKey: ['layers', layerId, 'features'] })
     },
   })
 }
