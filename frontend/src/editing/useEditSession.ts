@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { useApplyEdits, type EditRequest } from '@/api/edits'
@@ -172,19 +172,11 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
     selectFeature(null, null)
   }, [selectedFid, selectFeature])
 
-  // Closing the tab with unsaved edits. The browser shows its own wording; all we can do
-  // is ask for the prompt at all (plan section D.8).
-  useEffect(() => {
-    if (pending === 0) return
-
-    function warn(event: BeforeUnloadEvent) {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [pending])
+  // Closing the tab, navigating away, and switching layers with unsaved edits are all
+  // covered by one workspace-wide guard now -- `leaveGuard` in
+  // `routes/projects.$projectId.tsx`, built on `useBlocker` -- rather than a beforeunload
+  // listener owned by this hook alone. That guard watches the table's buffer too, so a
+  // single mechanism asks regardless of which mode is dirty (plan section D.8).
 
   const selectedFeature = resolveSelectedFeature(buffer, selectedFid, selectedOriginal)
 

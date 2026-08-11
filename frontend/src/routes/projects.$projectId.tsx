@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router'
+import { useCallback, useEffect, useState } from 'react'
+import { createFileRoute, Link, useBlocker, useNavigate, useRouter } from '@tanstack/react-router'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ArrowLeft, Plus, Upload } from 'lucide-react'
@@ -8,7 +8,13 @@ import { Separator } from '@/components/ui/separator'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ApiError } from '@/api/client'
 import { ensureProjectLoaded, projectDetailQuery } from '@/api/projects'
-import { formatCount } from '@/lib/format'
+import { countChanges, useEditing } from '@/state/editing'
+import {
+  describeUnsavedChanges,
+  hasUnsavedChanges,
+  totalUnsavedChanges,
+  unsavedChangesVerb,
+} from '@/state/unsavedChanges'
 import { CreateLayerDialog, ImportDialog, LayerProperties, LayerTree } from '@/layers'
 import { ProjectMap, type ZoomRequest } from '@/map'
 import { SymbologyPanel } from '@/styling'
@@ -98,6 +104,8 @@ function Workspace() {
   function selectLayer(layerId: string | null) {
     // A fid means nothing outside its layer, so a selection cannot survive the switch.
     clearSelection()
+    // This `navigate` is exactly what `leaveGuard` below intercepts: switching layers
+    // with unsaved edits open asks before it goes through, the same as leaving the page.
     navigate({ search: { layer: layerId ?? undefined }, replace: true })
   }
 
@@ -141,17 +149,47 @@ function Workspace() {
   }
 
   // Switching the active layer leaves a running table session pointed at fids and
-  // columns that belong to a different layer -- rather than let that show stale dirty
-  // highlights, the session ends with it (map editing already has no guard against a
-  // layer switch either, so this does not introduce a new inconsistency, only closes
-  // the same gap for the table).
+  // columns that belong to a different layer. A dirty session can no longer reach this
+  // effect at all: `leaveGuard` below asks before the URL -- and therefore
+  // `activeLayerId` -- is allowed to change while the table buffer holds anything, and
+  // confirming there already ends the session before the switch goes through. What is
+  // left to handle here is the clean case, which is not a loss and may end quietly, same
+  // as before.
   useEffect(() => {
     if (tableActive && tableLayerId !== null && tableLayerId !== activeLayerId) {
       useTableEditing.getState().end()
-      toast.info('Tabellenbearbeitung beendet: anderer Layer ausgewählt')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLayerId])
+
+  const unsavedChangesCount = totalUnsavedChanges(editing.pending, tableChanges)
+
+  // Reads both buffers fresh at call time rather than closing over `editing.pending` /
+  // `tableChanges` -- `shouldBlockFn` and `enableBeforeUnload` both run outside React's
+  // render cycle, and a save that just happened has to be visible immediately, not
+  // whatever was current when this function was created.
+  const hasPendingWork = useCallback(
+    () =>
+      hasUnsavedChanges(
+        countChanges(useEditing.getState().buffer),
+        tableChangeCount(useTableEditing.getState()),
+      ),
+    [],
+  )
+
+  // Guards every way of leaving this page while work is unsaved: the "Zur Projektliste"
+  // link, switching the active layer (also a navigation, see `selectLayer`), the
+  // browser's back/forward buttons, and closing the tab. Deliberately blanket rather than
+  // distinguishing `current`/`next` -- everything this route holds unsaved lives only
+  // here, so any navigation away from it would lose the same thing. Separate from
+  // `pendingSwitch` above on purpose: that one guards switching between map- and
+  // table-editing *mode*, a local state change that never touches the URL, while this one
+  // guards the router itself -- neither can fire for the other's trigger.
+  const leaveGuard = useBlocker({
+    shouldBlockFn: hasPendingWork,
+    enableBeforeUnload: hasPendingWork,
+    withResolver: true,
+  })
 
   return (
     <>
@@ -211,10 +249,15 @@ function Workspace() {
               />
               {!editing.active && (
                 <>
-                  <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-                    <Upload className="size-3.5" />
-                    Importieren
-                  </Button>
+                  {/* Not just !editing.active: an import lands new features into the
+                      catalog while a table edit session is buffering its own pending
+                      writes against it, which the two were never meant to race. */}
+                  {!tableActive && (
+                    <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+                      <Upload className="size-3.5" />
+                      Importieren
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" onClick={() => setCreateLayerOpen(true)}>
                     <Plus className="size-3.5" />
                     Neuer Layer
@@ -303,7 +346,7 @@ function Workspace() {
       <DiscardEditsDialog
         open={pendingSwitch === 'toTable'}
         title="Karten-Editiermodus verlassen?"
-        description={`Es gibt ${formatCount(editing.pending)} ungespeicherte Änderungen im Karten-Editiermodus. Sie gehen verloren, wenn jetzt die Tabelle bearbeitet wird.`}
+        description={`Es gibt ${describeUnsavedChanges(editing.pending)} im Karten-Editiermodus. Sie ${unsavedChangesVerb(editing.pending)} verloren, wenn jetzt die Tabelle bearbeitet wird.`}
         confirmLabel="Änderungen verwerfen"
         onConfirm={() => {
           editing.stop()
@@ -315,7 +358,7 @@ function Workspace() {
       <DiscardEditsDialog
         open={pendingSwitch === 'toMap'}
         title="Tabellenbearbeitung verlassen?"
-        description={`Es gibt ${formatCount(tableChanges)} ungespeicherte Änderungen in der Tabelle. Sie gehen verloren, wenn jetzt der Karten-Editiermodus gestartet wird.`}
+        description={`Es gibt ${describeUnsavedChanges(tableChanges)} in der Tabelle. Sie ${unsavedChangesVerb(tableChanges)} verloren, wenn jetzt der Karten-Editiermodus gestartet wird.`}
         confirmLabel="Änderungen verwerfen"
         onConfirm={() => {
           useTableEditing.getState().end()
@@ -323,6 +366,21 @@ function Workspace() {
           setPendingSwitch(null)
         }}
         onCancel={() => setPendingSwitch(null)}
+      />
+      <DiscardEditsDialog
+        open={leaveGuard.status === 'blocked'}
+        title="Ungespeicherte Änderungen verwerfen?"
+        description={`${describeUnsavedChanges(unsavedChangesCount)} ${unsavedChangesVerb(unsavedChangesCount)} verloren, wenn Sie jetzt fortfahren.`}
+        confirmLabel="Änderungen verwerfen"
+        onConfirm={() => {
+          // Whichever mode is dirty is the one `hasPendingWork` blocked on -- ending both
+          // unconditionally is harmless (a clean session simply resets to the same idle
+          // state) and cheaper than working out which one it was.
+          if (editing.active) editing.stop()
+          if (tableActive) useTableEditing.getState().end()
+          leaveGuard.proceed?.()
+        }}
+        onCancel={() => leaveGuard.reset?.()}
       />
     </>
   )

@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { formatCount } from '@/lib/format'
 import { useDeleteLayer, type LayerSummary } from '@/api/layers'
+import { useEditing } from '@/state/editing'
+import { useTableEditing } from '@/table/useTableEditing'
 
 interface DeleteLayerDialogProps {
   layer: LayerSummary | null
@@ -33,8 +35,18 @@ export function DeleteLayerDialog({
 }: DeleteLayerDialogProps) {
   const deleteLayer = useDeleteLayer(projectId)
 
+  // Locked while this exact layer has an open edit session, map or table -- dropping its
+  // table out from under a running buffer would leave that buffer pointed at a layer that
+  // no longer exists. Same reasoning, and the same `deleteLocked` shape, as the field-
+  // delete lock in `ManageFieldsDialog`; a different layer being edited elsewhere is
+  // unaffected.
+  const mapEditingLayerId = useEditing((state) => state.layerId)
+  const tableEditingLayerId = useTableEditing((state) => state.layerId)
+  const deleteLocked =
+    Boolean(layer) && (mapEditingLayerId === layer?.id || tableEditingLayerId === layer?.id)
+
   async function handleDelete() {
-    if (!layer) return
+    if (!layer || deleteLocked) return
     try {
       await deleteLayer.mutateAsync(layer.id)
       toast.success(`Layer „${layer.name}" gelöscht`)
@@ -51,7 +63,13 @@ export function DeleteLayerDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Layer löschen?</AlertDialogTitle>
           <AlertDialogDescription>
-            {layer && (
+            {layer && deleteLocked && (
+              <>
+                „{layer.name}" wird gerade bearbeitet und lässt sich deshalb nicht löschen.
+                Erst die laufende Bearbeitung speichern oder verwerfen.
+              </>
+            )}
+            {layer && !deleteLocked && (
               <>
                 „{layer.name}" wird mit{' '}
                 <span className="tabular-nums">{formatCount(layer.featureCount)}</span>{' '}
@@ -65,7 +83,7 @@ export function DeleteLayerDialog({
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
-            disabled={deleteLayer.isPending}
+            disabled={deleteLayer.isPending || deleteLocked}
             className="bg-destructive text-white hover:bg-destructive/90"
           >
             {deleteLayer.isPending ? 'Wird gelöscht…' : 'Löschen'}
