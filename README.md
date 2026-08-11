@@ -41,12 +41,20 @@ Geometrieart (Punkte, Linien oder Flächen) und beliebig viele Attributfelder mi
 jeweils passenden Typ. Danach lässt sich sofort hineinzeichnen; alles Weitere,
 Einrasten und Rückgängig eingeschlossen, funktioniert wie bei importierten Daten.
 
-Attributfelder lassen sich auch nachträglich ergänzen — „Felder verwalten“ im Aktionsmenü
-des Layers legt neue an und benennt vorhandene um, bei importierten Layern ebenso wie bei
-selbst angelegten. Bestehende Objekte bekommen bei einem neuen Feld zunächst keinen Wert.
-Nicht möglich sind das Löschen eines Feldes und das Ändern seines Typs: Beides würde
-bestehende Daten oder eine darauf aufgebaute Darstellung beschädigen. Der Typ wird deshalb
-angezeigt, aber nicht zur Bearbeitung angeboten.
+Attributfelder lassen sich auch nachträglich verwalten — „Felder verwalten“ im
+Aktionsmenü des Layers legt neue an, benennt vorhandene um und löscht sie, bei
+importierten Layern ebenso wie bei selbst angelegten. Bestehende Objekte bekommen bei
+einem neuen Feld zunächst keinen Wert.
+
+Vor dem Löschen wird gefragt, und die Frage nennt, worum es geht: wie viele Objekte einen
+Wert in diesem Feld haben, und ob eine Einfärbung oder Beschriftung darauf aufbaut. Ist
+das der Fall, wird sie beim Löschen zurückgesetzt — andernfalls ließe sich die Symbologie
+des Layers anschließend gar nicht mehr speichern. Solange an dem Layer ungespeicherte
+Änderungen offen sind, ist das Löschen gesperrt.
+
+Der Feldtyp bleibt unveränderlich. Er wird angezeigt, aber nicht zur Bearbeitung
+angeboten: Eine Umwandlung scheitert an jedem Wert, der sich nicht überführen lässt, und
+hinterließe eine halb umgestellte Spalte.
 
 ### Sachdaten bearbeiten
 
