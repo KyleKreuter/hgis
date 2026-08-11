@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select'
 import { ApiError } from '@/api/client'
 import { useCreateProject } from '@/api/projects'
+import { BASEMAPS, DEFAULT_BASEMAP_ID, resolveBasemap } from '@/map/basemap'
 
 /**
  * Common storage CRS. The backend validates against spatial_ref_sys, so any EPSG code
@@ -50,12 +51,14 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [srid, setSrid] = useState('25832')
+  const [basemap, setBasemap] = useState<string>(DEFAULT_BASEMAP_ID)
   const [nameError, setNameError] = useState<string>()
 
   function reset() {
     setName('')
     setDescription('')
     setSrid('25832')
+    setBasemap(DEFAULT_BASEMAP_ID)
     setNameError(undefined)
   }
 
@@ -68,6 +71,7 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
         name,
         description: description.trim() || undefined,
         srid: Number(srid),
+        basemap,
       })
       toast.success(`Projekt „${project.name}" angelegt`)
       reset()
@@ -151,6 +155,28 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
                 Nach dem Anlegen nicht mehr änderbar — ein Wechsel müsste jede
                 Layertabelle neu schreiben.
               </p>
+            </div>
+
+            {/* The same catalog the map's picker offers, so a project can start on the
+                right background instead of on OSM and being corrected afterwards.
+                Changeable at any time -- unlike the CRS above. */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="project-basemap">Hintergrundkarte</Label>
+              <Select value={basemap} onValueChange={(value) => value && setBasemap(value)}>
+                <SelectTrigger id="project-basemap" className="w-full">
+                  <SelectValue>{(value: string) => resolveBasemap(value).label}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {BASEMAPS.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      <span className="flex flex-col items-start">
+                        <span>{option.label}</span>
+                        <span className="text-xs text-muted-foreground">{option.hint}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

@@ -36,7 +36,11 @@ export function ProjectMap({
   children,
 }: ProjectMapProps) {
   return (
-    <MapCanvas initialView={computeInitialView(project)}>
+    <MapCanvas
+      initialView={computeInitialView(project)}
+      basemapId={project.basemap}
+      projectId={project.id}
+    >
       <MapLayerSync projectId={project.id} />
       <ViewportPersistence projectId={project.id} />
       <ZoomToExtent request={zoomTo} />
