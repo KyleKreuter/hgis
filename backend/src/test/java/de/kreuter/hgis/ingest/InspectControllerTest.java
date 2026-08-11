@@ -200,6 +200,29 @@ class InspectControllerTest {
 	}
 
 	@Test
+	@DisplayName("meldet keine Kodierung für ein Format, das keine Wahl lässt")
+	void reportsNoCharsetForAFormatThatLeavesNoChoice(@TempDir Path dir) throws Exception {
+		MockMultipartFile geojson = upload(dir, "orte.geojson", """
+				{"type":"FeatureCollection","features":[
+				  {"type":"Feature","geometry":{"type":"Point","coordinates":[9.99,53.55]},
+				   "properties":{"strasse":"Müllerstraße"}}
+				]}
+				""", StandardCharsets.UTF_8);
+
+		JsonNode inspection = inspect(geojson);
+
+		assertThat(inspection.get("charset").isNull())
+				.as("GeoJSON is UTF-8 by specification -- offering a choice would be a lie")
+				.isTrue();
+		assertThat(inspection.get("srid").asInt()).isEqualTo(4326);
+		assertThat(inspection.get("crsConfidence").asString()).isEqualTo("ASSUMED");
+		assertThat(inspection.get("featureCount").isNull())
+				.as("GeoJSON does not know its total before it is read")
+				.isTrue();
+		assertThat(sampleValues(fieldNamed(inspection, "strasse"))).containsExactly("Müllerstraße");
+	}
+
+	@Test
 	@DisplayName("legt beim Inspizieren keinen Job an")
 	void createsNoJobWhileInspecting(@TempDir Path dir) throws Exception {
 		long before = countJobs();
