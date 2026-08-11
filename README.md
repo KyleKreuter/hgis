@@ -69,6 +69,11 @@ Möglichkeit. Gearbeitet wird mit der Tastatur: Pfeiltasten bewegen den Fokus, E
 Lostippen öffnet eine Zelle, Enter springt eine Zeile tiefer, Tab eine Spalte weiter,
 Escape verwirft.
 
+Ungespeicherte Änderungen gehen nicht unbemerkt verloren: Wer die Ansicht verlässt, den
+Layer wechselt, zurückgeht oder den Tab schließt, wird gefragt — mit der Zahl der
+Änderungen, um die es geht. Ein Layer, an dem gerade gearbeitet wird, lässt sich
+außerdem nicht löschen.
+
 Geändert wird zunächst nur im Arbeitsspeicher; ein Zähler zeigt die offenen Änderungen,
 Speichern und Verwerfen sind getrennte Aktionen. Beim Speichern prüft der Server, ob die
 Zeile inzwischen von jemand anderem geändert wurde, und lehnt in diesem Fall den ganzen
