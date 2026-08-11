@@ -36,6 +36,7 @@ import {
   type LayerSummary,
 } from '@/api/layers'
 import { DeleteLayerDialog } from './DeleteLayerDialog'
+import { GEOMETRY_LABELS } from './geometry'
 import { RenameLayerDialog } from './RenameLayerDialog'
 import { isNoOpMove, reorderedIdsBottomToTop } from './reorder'
 
@@ -44,13 +45,6 @@ const GEOMETRY_ICONS: Record<GeometryType, typeof Square> = {
   MULTILINESTRING: Spline,
   MULTIPOINT: Circle,
   GEOMETRY: Shapes,
-}
-
-const GEOMETRY_LABELS: Record<GeometryType, string> = {
-  MULTIPOLYGON: 'Flächen',
-  MULTILINESTRING: 'Linien',
-  MULTIPOINT: 'Punkte',
-  GEOMETRY: 'gemischte Geometrien',
 }
 
 interface LayerTreeProps {

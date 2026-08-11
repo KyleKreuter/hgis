@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { TriangleAlertIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,6 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress'
 import {
   Select,
@@ -20,13 +22,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import { ApiError } from '@/api/client'
 import {
   isJobFinished,
   useImportJob,
+  useInspection,
   useRefreshAfterImport,
   useStartImport,
+  type Inspection,
+  type InspectedField,
 } from '@/api/imports'
+import { GEOMETRY_LABELS } from './geometry'
+import {
+  CRS_CONFIDENCE_LABELS,
+  formatCharset,
+  formatFeatureCount,
+  formatLocation,
+  formatSample,
+} from './inspection'
 
 /**
  * Extensions SourceReaderFactory dispatches on. A bare .shp is deliberately absent:
@@ -35,9 +57,15 @@ import {
  */
 const ACCEPTED = '.zip,.gpkg,.geojson,.json,.csv'
 
-/** Mirrors spring.servlet.multipart.max-file-size -- checked here so a 500 MB upload
- *  is not transferred just to be rejected at the end. */
+/** Mirrors spring.servlet.multipart.max-file-size -- checked on selection, before the
+ *  inspection would transfer an oversized file just to have it rejected. */
 const MAX_BYTES = 500 * 1024 * 1024
+
+/**
+ * Sample values shown per field. Ten arrive; three fit on one line and are enough to
+ * recognise mangled umlauts, which is what the values are here for.
+ */
+const SAMPLES_SHOWN = 3
 
 const AUTO = 'auto'
 
@@ -92,6 +120,14 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
   // The name field is only auto-filled from the file until the user types their own.
   const nameTouched = useRef(false)
 
+  const sridOverride = srid === AUTO ? undefined : Number(srid)
+  const charsetOverride = charset === AUTO ? undefined : charset
+  const tooLarge = file !== null && file.size > MAX_BYTES
+
+  // Runs on selection and again after every override, so the user sees what the import
+  // would produce -- with the file transferred once, not once per correction.
+  const inspection = useInspection(projectId, tooLarge ? null : file, sridOverride, charsetOverride)
+
   const { data: job } = useImportJob(jobId)
   const finished = isJobFinished(job?.status)
   const running = jobId !== null && !finished
@@ -122,21 +158,20 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    if (!file) return
+    if (!file || tooLarge) return
     setError(undefined)
 
-    if (file.size > MAX_BYTES) {
-      setError(`Die Datei ist ${formatBytes(file.size)} groß, erlaubt sind 500 MB.`)
-      return
-    }
+    const options = { name, srid: sridOverride, charset: charsetOverride }
 
     try {
-      const started = await startImport.mutateAsync({
-        file,
-        name,
-        srid: srid === AUTO ? undefined : Number(srid),
-        charset: charset === AUTO ? undefined : charset,
-      })
+      // The inspection already carried the file over, so the import refers to it by id.
+      // Without one -- the inspection failed, or the endpoint is not there -- the file
+      // goes along as before: a preview that did not work must not block the import.
+      const started = await startImport.mutateAsync(
+        inspection.data
+          ? { ...options, uploadId: inspection.data.uploadId }
+          : { ...options, file },
+      )
       setJobId(started.id)
     } catch (caught) {
       // The endpoint opens and inspects the file synchronously, so this is where an
@@ -160,7 +195,9 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      {/* The preview makes the dialog tall: on a short window it scrolls rather than
+          running off the screen. */}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Daten importieren</DialogTitle>
@@ -185,8 +222,14 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
                     className="file:mr-3 file:text-xs file:text-muted-foreground"
                   />
                   {file && (
-                    <p className="text-xs text-muted-foreground tabular-nums">
+                    <p
+                      className={cn(
+                        'text-xs tabular-nums',
+                        tooLarge ? 'text-destructive' : 'text-muted-foreground',
+                      )}
+                    >
                       {formatBytes(file.size)}
+                      {tooLarge && ' — erlaubt sind 500 MB.'}
                     </p>
                   )}
                 </div>
@@ -246,8 +289,11 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
                 <p className="text-xs text-muted-foreground">
                   Beide Angaben sind nur nötig, wenn die Datei sie nicht mitbringt: CSV
                   führt nie ein Koordinatensystem, Shapefiles ohne <code>.prj</code> auch
-                  nicht. Die Kodierung betrifft die Attributwerte von Shapefiles.
+                  nicht. Die Kodierung betrifft die Attributwerte von Shapefiles. Die
+                  Vorschau zeigt, was dabei herauskommt.
                 </p>
+
+                {file && !tooLarge && <ImportPreview inspection={inspection} />}
 
                 {error && (
                   <Alert variant="destructive">
@@ -273,7 +319,15 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
                 >
                   {running ? 'Im Hintergrund fortsetzen' : 'Abbrechen'}
                 </Button>
-                <Button type="submit" disabled={!file || startImport.isPending || running}>
+                <Button
+                  type="submit"
+                  // Disabled while the inspection runs: its result decides whether the
+                  // file still has to be sent, and a preview nobody has seen yet is no
+                  // basis for writing anything.
+                  disabled={
+                    !file || tooLarge || startImport.isPending || running || inspection.isFetching
+                  }
+                >
                   {startImport.isPending ? 'Wird übertragen…' : 'Importieren'}
                 </Button>
               </>
@@ -282,6 +336,157 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * What the file contains, before a single row is written.
+ *
+ * The frame stays put while the content changes, so switching the encoding does not
+ * make the dialog jump: the previous result keeps standing, dimmed, until the new one
+ * arrives.
+ */
+function ImportPreview({ inspection }: { inspection: ReturnType<typeof useInspection> }) {
+  return (
+    <div className="grid gap-2 rounded-md border p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium tracking-wide uppercase text-muted-foreground">
+          Vorschau
+        </span>
+        {inspection.isFetching && (
+          <span className="text-xs text-muted-foreground">wird geprüft…</span>
+        )}
+      </div>
+      <PreviewBody inspection={inspection} />
+    </div>
+  )
+}
+
+function PreviewBody({ inspection }: { inspection: ReturnType<typeof useInspection> }) {
+  if (inspection.isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Vorschau nicht möglich</AlertTitle>
+        <AlertDescription>
+          {inspection.error instanceof ApiError
+            ? inspection.error.message
+            : 'Die Datei konnte nicht gelesen werden.'}
+          <span className="block text-xs">
+            Ein Import ist trotzdem möglich, die Datei wird dann erst beim Start geprüft.
+          </span>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (!inspection.data) {
+    return <p className="text-xs text-muted-foreground">Datei wird übertragen und geprüft…</p>
+  }
+
+  return (
+    <InspectionSummary inspection={inspection.data} outdated={inspection.isPlaceholderData} />
+  )
+}
+
+function InspectionSummary({
+  inspection,
+  outdated,
+}: {
+  inspection: Inspection
+  outdated: boolean
+}) {
+  const location = formatLocation(inspection.extentWgs84)
+
+  return (
+    <div className={cn('grid gap-2', outdated && 'opacity-50')}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        <Badge variant="secondary">{GEOMETRY_LABELS[inspection.geometryType]}</Badge>
+        <span className="tabular-nums">{formatFeatureCount(inspection.featureCount)}</span>
+        <span className="text-muted-foreground">·</span>
+        <span className="tabular-nums">
+          EPSG:{inspection.srid}{' '}
+          <span className="text-muted-foreground">
+            ({CRS_CONFIDENCE_LABELS[inspection.crsConfidence]})
+          </span>
+        </span>
+        <span className="text-muted-foreground">·</span>
+        <span>{formatCharset(inspection.charset)}</span>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        {location
+          ? `Daten liegen bei ${location}.`
+          : 'Die Lage der Daten ließ sich nicht bestimmen.'}
+      </p>
+
+      {inspection.crsConfidence === 'GUESSED' && (
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>Koordinatensystem nur geraten</AlertTitle>
+          <AlertDescription>
+            Die Datei nennt keines; EPSG:{inspection.srid} ist aus der Lage der Koordinaten
+            abgeleitet. Stimmt die Verortung oben nicht, hier korrigieren — sonst fällt
+            der Fehler erst auf, wenn die Daten längst geschrieben sind.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {inspection.fields.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Die Datei führt keine Attributfelder.</p>
+      ) : (
+        <div className="max-h-40 overflow-y-auto rounded-md border">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-popover">
+              <TableRow>
+                <TableHead className="h-7 text-xs">Feld</TableHead>
+                <TableHead className="h-7 text-xs">Typ</TableHead>
+                <TableHead className="h-7 text-xs">Beispielwerte</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {inspection.fields.map((field) => (
+                <FieldRow key={field.name} field={field} />
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FieldRow({ field }: { field: InspectedField }) {
+  return (
+    <TableRow>
+      <TableCell className="p-1.5 text-xs font-medium">{field.name}</TableCell>
+      <TableCell className="p-1.5 text-xs text-muted-foreground">{field.dataType}</TableCell>
+      <TableCell className="p-1.5 text-xs">
+        <div className="flex items-center gap-1">
+          {field.sampleValues.length === 0 ? (
+            <span className="text-muted-foreground/50 italic">keine Werte</span>
+          ) : (
+            field.sampleValues.slice(0, SAMPLES_SHOWN).map((value, index) => {
+              const sample = formatSample(value)
+              return (
+                <span
+                  // Sample values repeat and may be null, so their position is the only key.
+                  key={index}
+                  className={cn(
+                    'max-w-40 truncate',
+                    sample.placeholder
+                      ? 'text-muted-foreground/50 italic'
+                      : 'rounded bg-muted px-1',
+                  )}
+                  title={sample.text}
+                >
+                  {sample.text}
+                </span>
+              )
+            })
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
   )
 }
 

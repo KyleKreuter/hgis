@@ -69,9 +69,14 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
-  /** Multipart upload -- see the Content-Type note in `request`. */
-  postForm: <T>(path: string, form: FormData) =>
-    request<T>(path, { method: 'POST', body: form }),
+  /**
+   * Multipart upload -- see the Content-Type note in `request`.
+   *
+   * @param signal aborts the transfer. Worth passing for uploads that a newer request
+   *   supersedes: without it the browser keeps pushing a file nobody waits for.
+   */
+  postForm: <T>(path: string, form: FormData, signal?: AbortSignal) =>
+    request<T>(path, { method: 'POST', body: form, signal }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   patch: <T>(path: string, body: unknown) =>
