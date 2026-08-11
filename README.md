@@ -27,12 +27,23 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Strecken und Flächen in der Karte messen, mit laufender Anzeige beim Zeichnen
 - Hintergrundkarte je Projekt wählen: OpenStreetMap, eine helle oder dunkle Variante
   davon, OpenTopoMap oder gar keine
+- Objekte per Rechteck auswählen, wahlweise berührte oder vollständig eingeschlossene,
+  und die Auswahl mit Umschalt ergänzen oder mit Alt abziehen
+- Einen Layer oder die aktuelle Auswahl als GeoJSON herunterladen
 
-### Nur über die Programmierschnittstelle
+### Auswählen und exportieren
 
-Der Layer-Export nach GeoJSON ist im Backend fertig, hat aber **noch keine Bedienung in
-der Oberfläche** — weder für den ganzen Layer noch für eine Auswahl. Erreichbar ist er
-direkt über die API:
+Das Rechteckwerkzeug fragt die Objekte in der Datenbank ab, nicht im gezeichneten
+Kartenbild. Das ist der Unterschied, der zählt: Vektorkacheln schneiden Geometrien an
+ihren Rändern und zeigen je nach Zoomstufe nicht alles, was da ist — eine Auswahl aus dem
+Bild wäre deshalb stillschweigend unvollständig. Umfasst ein Rechteck mehr als tausend
+Objekte, fragt die Anwendung vor dem Laden nach.
+
+Der Export liegt im Aktionsmenü jedes Layers, einmal für den ganzen Layer und einmal für
+die Auswahl. Geliefert wird eine `FeatureCollection` nach RFC 7946: Geometrien in
+EPSG:4326, Attribute unter ihren ursprünglichen Feldnamen, jedes Objekt mit seiner `fid`.
+
+Beide Endpunkte lassen sich auch direkt ansprechen:
 
 ```
 GET  /api/layers/{layerId}/export.geojson             ganzer Layer
@@ -41,10 +52,8 @@ POST /api/layers/{layerId}/export.geojson             dieselbe Auswahl als JSON-
                                                       für Auswahlen, die nicht in eine URL passen
 ```
 
-Die Antwort ist eine `FeatureCollection` nach RFC 7946: Geometrien in EPSG:4326,
-Attribute unter ihren ursprünglichen Feldnamen, jedes Objekt mit seiner `fid`. Ein leer
-übergebener Parameter bedeutet ausdrücklich „nichts auswählen“ und liefert eine leere
-Datei — nicht den ganzen Layer. Der Export nach GeoPackage fehlt noch.
+Dabei gilt: Ein leer übergebener Parameter bedeutet ausdrücklich „nichts auswählen“ und
+liefert eine leere Datei — nicht den ganzen Layer. Der Export nach GeoPackage fehlt noch.
 
 ## Fachliches Konzept
 
