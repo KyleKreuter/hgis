@@ -15,6 +15,7 @@ import org.locationtech.jts.geom.Polygon;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
 
 @Service
 public class LayerService {
@@ -22,13 +23,15 @@ public class LayerService {
 	private final LayerRepository layerRepository;
 	private final LayerFieldRepository fieldRepository;
 	private final ProjectRepository projectRepository;
+	private final LayerStyleService styleService;
 	private final JdbcClient jdbc;
 
 	LayerService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
-			ProjectRepository projectRepository, JdbcClient jdbc) {
+			ProjectRepository projectRepository, LayerStyleService styleService, JdbcClient jdbc) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.projectRepository = projectRepository;
+		this.styleService = styleService;
 		this.jdbc = jdbc;
 	}
 
@@ -78,6 +81,9 @@ public class LayerService {
 		}
 		if (request.maxZoom() != null) {
 			layer.setMaxZoom(request.maxZoom());
+		}
+		if (request.style() != null) {
+			applyStyle(layer, request.style());
 		}
 
 		// Flush so updatedAt (set by the database trigger / @UpdateTimestamp on write)
@@ -144,6 +150,28 @@ public class LayerService {
 	}
 
 	// --- helpers ---------------------------------------------------------------
+
+	/**
+	 * Stores a validated style and moves {@code style_version} only when it has to.
+	 *
+	 * <p>The counter is part of the tile URL, so bumping it discards every cached tile of
+	 * the layer. That is necessary exactly when the tiles would have to carry a different
+	 * set of attributes, and pointless otherwise: a new colour is applied by the client on
+	 * the tiles it already has. Bumping on every style write would turn dragging a colour
+	 * picker into a full reload of the visible map on every pixel of travel.
+	 */
+	private void applyStyle(Layer layer, JsonNode style) {
+		List<LayerField> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layer.getId());
+		String canonical = styleService.validateAndSerialize(style, fields);
+
+		Set<String> before = styleService.tileColumns(layer.getStyle(), fields);
+		Set<String> after = styleService.tileColumns(canonical, fields);
+
+		layer.setStyle(canonical);
+		if (!before.equals(after)) {
+			layer.bumpStyleVersion();
+		}
+	}
 
 	private Layer require(UUID layerId) {
 		return layerRepository.findById(layerId)

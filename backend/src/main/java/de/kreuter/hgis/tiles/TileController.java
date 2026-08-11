@@ -2,6 +2,7 @@ package de.kreuter.hgis.tiles;
 
 import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerRepository;
+import de.kreuter.hgis.catalog.LayerStyleService;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.NotFoundException;
 import java.util.UUID;
@@ -40,10 +41,13 @@ public class TileController {
 
 	private final MvtService mvtService;
 	private final LayerRepository layerRepository;
+	private final LayerStyleService styleService;
 
-	TileController(MvtService mvtService, LayerRepository layerRepository) {
+	TileController(MvtService mvtService, LayerRepository layerRepository,
+			LayerStyleService styleService) {
 		this.mvtService = mvtService;
 		this.layerRepository = layerRepository;
+		this.styleService = styleService;
 	}
 
 	@GetMapping("/{z}/{x}/{y}.mvt")
@@ -68,7 +72,10 @@ public class TileController {
 					.build();
 		}
 
-		byte[] mvt = mvtService.renderTile(layer.getTableName(), layer.getSrid(), z, x, y);
+		// After the ETag check, not before: a client that already holds this tile gets its
+		// 304 without the style ever being read, let alone its fields looked up.
+		byte[] mvt = mvtService.renderTile(layer.getTableName(), layer.getSrid(),
+				styleService.tileColumns(layer), z, x, y);
 
 		ResponseEntity.BodyBuilder response = ResponseEntity
 				.status(mvt == null ? HttpStatus.NO_CONTENT : HttpStatus.OK)
