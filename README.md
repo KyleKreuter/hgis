@@ -209,6 +209,10 @@ WMS/WMTS/WFS über einen Backend-Proxy · Multi-User mit Spring Security.
 
 ---
 
-Der ursprüngliche Plan mit allen Detailabschnitten liegt unter
-`~/.claude/plans/melodic-greeting-lollipop.md`. Er ist der Stand **vor** der Umsetzung und
-wird bewusst nicht fortgeschrieben — was gilt, steht hier.
+Der Plan mit allen Detailabschnitten liegt im Projekt unter [`PLAN.md`](PLAN.md) und wird
+gepflegt: Wo die Umsetzung vom Entwurf abwich, steht dort der tatsächliche Stand samt
+Grund, markiert mit **[Abweichung]**. Diese Übersicht sagt *was* offen ist, `PLAN.md` sagt
+*warum* etwas so gebaut wurde.
+
+Der unveränderte Entwurfsstand von vor der Umsetzung liegt weiterhin unter
+`~/.claude/plans/melodic-greeting-lollipop.md`.
