@@ -383,10 +383,22 @@ class FeatureQueryServiceTest {
 				.isInstanceOf(NotFoundException.class);
 	}
 
+	/**
+	 * The wording is part of the contract with the client, not just a nicety: the
+	 * attribute table matches on it to tell this apart from a bad filter expression
+	 * ("Unbekanntes Feld"), which is a 400 as well but must be left alone. Sorting is
+	 * local state the table resets on its own; a filter is what the user typed.
+	 *
+	 * <p>So if this assertion ever fails, adjusting it is not enough --
+	 * {@code frontend/src/table/sortValidity.ts} has to move with it, or the table stops
+	 * recovering from a sort field that was deleted and sits on a 400 the user cannot
+	 * clear from where they are.
+	 */
 	@Test
 	void rejectsAnUnknownSortField() {
 		assertThatThrownBy(() -> service.list(layer.getId(), query("gibtsnicht", false, null, 10)))
 				.isInstanceOf(BadRequestException.class)
+				.as("frontend/src/table/sortValidity.ts matches on this wording -- change both or neither")
 				.hasMessageContaining("Unbekanntes Sortierfeld");
 	}
 
