@@ -34,8 +34,16 @@ final class ZipExtractor {
 	}
 
 	static Path extract(Path zipFile) {
+		// Creating the directory sits outside the try below on purpose: if it fails, there is
+		// nothing to clean up, and the try/catch that follows must only ever delete a
+		// directory that is actually on disk.
+		Path targetDir = createTargetDir(zipFile);
+
+		// From here on, the caller only learns targetDir's path if this method returns
+		// normally. Every throw below -- bounds tripped, zip slip, or a plain IOException --
+		// means the caller never gets the path, so this method must delete what it already
+		// wrote itself; nobody else can.
 		try {
-			Path targetDir = Files.createTempDirectory("hgis-shp-");
 			long totalBytes = 0;
 			int entryCount = 0;
 
@@ -64,6 +72,23 @@ final class ZipExtractor {
 				}
 			}
 			return targetDir;
+		}
+		catch (IOException e) {
+			FileTree.deleteQuietly(targetDir);
+			throw new SourceReadException("ZIP konnte nicht entpackt werden: " + zipFile, e);
+		}
+		catch (RuntimeException e) {
+			// The bounds above (MAX_ENTRIES, copyBounded, safeResolve) throw SourceReadException,
+			// a RuntimeException, not an IOException -- it must be caught here too, or the
+			// directory a tripped bound was written into would outlive the exception it caused.
+			FileTree.deleteQuietly(targetDir);
+			throw e;
+		}
+	}
+
+	private static Path createTargetDir(Path zipFile) {
+		try {
+			return Files.createTempDirectory("hgis-shp-");
 		}
 		catch (IOException e) {
 			throw new SourceReadException("ZIP konnte nicht entpackt werden: " + zipFile, e);
