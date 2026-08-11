@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -8,10 +8,17 @@ import { Separator } from '@/components/ui/separator'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ApiError } from '@/api/client'
 import { ensureProjectLoaded, projectDetailQuery } from '@/api/projects'
+import { formatCount } from '@/lib/format'
 import { ImportDialog, LayerProperties, LayerTree } from '@/layers'
 import { ProjectMap, type ZoomRequest } from '@/map'
 import { SymbologyPanel } from '@/styling'
-import { AttributeTable } from '@/table'
+import {
+  AttributeTable,
+  DiscardEditsDialog,
+  tableChangeCount,
+  useIsTableEditing,
+  useTableEditing,
+} from '@/table'
 import {
   AttributeForm,
   DrawController,
@@ -70,6 +77,11 @@ function Workspace() {
   // mouse move, and re-rendering the whole workspace for that would be absurd.
   const measuring = useIsMeasuring()
   const rectSelecting = useIsRectangleSelecting()
+  const tableActive = useIsTableEditing()
+  const tableChanges = useTableEditing(tableChangeCount)
+  const tableLayerId = useTableEditing((state) => state.layerId)
+  // Which dirty session a mode switch would discard -- null means neither is blocked.
+  const [pendingSwitch, setPendingSwitch] = useState<'toTable' | 'toMap' | null>(null)
   // Only the detail carries the field list the attribute form is generated from.
   const { data: activeLayerDetail } = useQuery({
     ...layerDetailQuery(activeLayerId ?? ''),
@@ -102,6 +114,43 @@ function Workspace() {
       toast.error('Objekt konnte nicht geladen werden')
     }
   }
+
+  // Two edit buffers on the same features are unmanageable, so only one of the map's
+  // and the table's edit modes is ever on at a time (CONTRACT.md). Starting one ends a
+  // dirty other one only after asking -- discarding unsaved work without a word is not
+  // acceptable in either direction.
+
+  function requestStartMapEditing() {
+    if (tableActive && tableChanges > 0) {
+      setPendingSwitch('toMap')
+      return
+    }
+    if (tableActive) useTableEditing.getState().end()
+    editing.start()
+  }
+
+  function requestStartTableEditing() {
+    if (!activeLayerId) return
+    if (editing.active && editing.pending > 0) {
+      setPendingSwitch('toTable')
+      return
+    }
+    if (editing.active) editing.stop()
+    useTableEditing.getState().begin(activeLayerId)
+  }
+
+  // Switching the active layer leaves a running table session pointed at fids and
+  // columns that belong to a different layer -- rather than let that show stale dirty
+  // highlights, the session ends with it (map editing already has no guard against a
+  // layer switch either, so this does not introduce a new inconsistency, only closes
+  // the same gap for the table).
+  useEffect(() => {
+    if (tableActive && tableLayerId !== null && tableLayerId !== activeLayerId) {
+      useTableEditing.getState().end()
+      toast.info('Tabellenbearbeitung beendet: anderer Layer ausgewählt')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLayerId])
 
   return (
     <>
@@ -142,7 +191,7 @@ function Workspace() {
                 geometryType={activeLayer?.geometryType}
                 tool={editing.tool}
                 onToolChange={editing.setTool}
-                onStart={editing.start}
+                onStart={requestStartMapEditing}
                 onSave={() => void editing.save()}
                 onDiscard={editing.discard}
                 onDelete={editing.deleteSelected}
@@ -230,9 +279,36 @@ function Workspace() {
           <AttributeTable
             layerId={activeLayerId ?? null}
             layerName={activeLayer?.name}
+            projectId={projectId}
             onZoomToFeature={zoomToFeature}
+            onRequestEdit={requestStartTableEditing}
           />
         }
+      />
+
+      <DiscardEditsDialog
+        open={pendingSwitch === 'toTable'}
+        title="Karten-Editiermodus verlassen?"
+        description={`Es gibt ${formatCount(editing.pending)} ungespeicherte Änderungen im Karten-Editiermodus. Sie gehen verloren, wenn jetzt die Tabelle bearbeitet wird.`}
+        confirmLabel="Änderungen verwerfen"
+        onConfirm={() => {
+          editing.stop()
+          if (activeLayerId) useTableEditing.getState().begin(activeLayerId)
+          setPendingSwitch(null)
+        }}
+        onCancel={() => setPendingSwitch(null)}
+      />
+      <DiscardEditsDialog
+        open={pendingSwitch === 'toMap'}
+        title="Tabellenbearbeitung verlassen?"
+        description={`Es gibt ${formatCount(tableChanges)} ungespeicherte Änderungen in der Tabelle. Sie gehen verloren, wenn jetzt der Karten-Editiermodus gestartet wird.`}
+        confirmLabel="Änderungen verwerfen"
+        onConfirm={() => {
+          useTableEditing.getState().end()
+          editing.start()
+          setPendingSwitch(null)
+        }}
+        onCancel={() => setPendingSwitch(null)}
       />
     </>
   )

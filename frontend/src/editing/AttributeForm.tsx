@@ -1,34 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Eraser } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { cn } from '@/lib/utils'
 import type { LayerField } from '@/api/layers'
 import { useEditing, type DraftFeature } from '@/state/editing'
-
-const NULL_OPTION = '__null__'
-
-type FieldKind = 'text' | 'integer' | 'decimal' | 'boolean' | 'date' | 'timestamp' | 'readonly'
-
-/** Maps a PostgreSQL column type to the input it deserves (plan section D.4). */
-function kindOf(dataType: string): FieldKind {
-  const type = dataType.toLowerCase()
-  if (type.startsWith('timestamp')) return 'timestamp'
-  if (type === 'date') return 'date'
-  if (type === 'boolean') return 'boolean'
-  if (type === 'uuid') return 'readonly'
-  if (/^(smallint|integer|bigint)$/.test(type)) return 'integer'
-  if (/^(double precision|numeric|real|decimal)/.test(type)) return 'decimal'
-  return 'text'
-}
+import { FieldInput } from '@/table/FieldInput'
+import { kindOf } from '@/table/fieldKind'
 
 interface AttributeFormProps {
   fields: LayerField[]
@@ -121,86 +98,4 @@ export function AttributeForm({ fields, feature }: AttributeFormProps) {
       })}
     </div>
   )
-}
-
-function FieldInput({
-  id,
-  kind,
-  value,
-  onChange,
-}: {
-  id: string
-  kind: FieldKind
-  value: unknown
-  onChange: (value: unknown) => void
-}) {
-  const isNull = value === null || value === undefined
-
-  if (kind === 'boolean') {
-    // Three states, not a switch: a nullable boolean has one more value than a switch can
-    // show, and guessing which of the two it means is exactly the wrong move.
-    return (
-      <Select
-        value={isNull ? NULL_OPTION : String(value)}
-        onValueChange={(next) => {
-          if (!next) return
-          onChange(next === NULL_OPTION ? null : next === 'true')
-        }}
-      >
-        <SelectTrigger id={id} className="h-7 w-full text-xs">
-          <SelectValue>
-            {(current: string) =>
-              current === NULL_OPTION ? 'NULL' : current === 'true' ? 'ja' : 'nein'
-            }
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="true">ja</SelectItem>
-          <SelectItem value="false">nein</SelectItem>
-          <SelectItem value={NULL_OPTION}>NULL</SelectItem>
-        </SelectContent>
-      </Select>
-    )
-  }
-
-  if (kind === 'readonly') {
-    return (
-      <Input id={id} value={isNull ? '' : String(value)} readOnly className="h-7 text-xs" />
-    )
-  }
-
-  const inputType =
-    kind === 'integer' || kind === 'decimal'
-      ? 'number'
-      : kind === 'date'
-        ? 'date'
-        : kind === 'timestamp'
-          ? 'datetime-local'
-          : 'text'
-
-  return (
-    <Input
-      id={id}
-      type={inputType}
-      step={kind === 'integer' ? 1 : kind === 'decimal' ? 'any' : undefined}
-      value={isNull ? '' : toInputValue(value, kind)}
-      className={cn('h-7 text-xs', isNull && 'placeholder:italic')}
-      placeholder={isNull ? 'NULL' : undefined}
-      onChange={(event) => {
-        const raw = event.target.value
-        // An emptied field means NULL, not "". The eraser button is the explicit route,
-        // this is the one people take by habit -- both have to land on the same value.
-        if (raw === '') return onChange(null)
-        onChange(kind === 'integer' || kind === 'decimal' ? Number(raw) : raw)
-      }}
-    />
-  )
-}
-
-/** datetime-local wants "YYYY-MM-DDTHH:mm"; the API delivers a full ISO timestamp. */
-function toInputValue(value: unknown, kind: FieldKind): string {
-  const text = String(value)
-  if (kind === 'timestamp') return text.slice(0, 16)
-  if (kind === 'date') return text.slice(0, 10)
-  return text
 }
