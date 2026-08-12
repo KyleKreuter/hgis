@@ -23,6 +23,11 @@ import org.springframework.stereotype.Service;
  * {@code step} instead of asking the server for one map layer per category -- and
  * keeping it to those attributes is what keeps a tile small: everything else a client
  * wants about a feature comes from the feature API, which has no tile budget to spend.
+ *
+ * A layer can also be rendered clipped to a mask layer's polygons (CONTRACT.md phase
+ * 19). Whether that applies -- and to which table -- is entirely the caller's decision;
+ * this class only ever intersects against the mask table it is given, it never looks at
+ * z-index or which layer is marked as a project's mask.
  */
 @Service
 public class MvtService {
@@ -42,6 +47,48 @@ public class MvtService {
 			WHERE tile.geom IS NOT NULL
 			""";
 
+	/**
+	 * Same shape as {@link #TILE_QUERY}, plus a clip mask: every feature is intersected
+	 * with the union of the mask's polygons touching the tile before encoding, so a
+	 * feature straddling the mask edge is cut, not just kept or dropped whole.
+	 *
+	 * <p>{@code ST_Union} is not optional. Without it, a feature crossing two mask
+	 * polygons would join twice and reach {@code ST_AsMVT} as two overlapping rows for
+	 * the same {@code fid} -- invisible on an opaque fill, but visibly darker wherever
+	 * semi-transparent fills overlap.
+	 *
+	 * <p>The mask is unioned only within the tile ({@code m.geom && b.native}), never
+	 * across the whole table: a mask layer can hold thousands of polygons, and the tile
+	 * envelope is what keeps this cheap.
+	 *
+	 * <p>{@code l.geom && b.native} still runs against the raw column, exactly as in
+	 * {@link #TILE_QUERY} -- the intersection lives only in the SELECT list, never in
+	 * the layer table's predicate, so the GiST index on {@code geom} still applies. The
+	 * mask is compared to the tile envelope in the layer's own SRID, no transform: every
+	 * layer of a project already shares one SRID, so mask and layer are directly
+	 * comparable.
+	 */
+	private static final String CLIPPED_TILE_QUERY = """
+			WITH bounds AS (
+			  SELECT ST_TileEnvelope(:z, :x, :y) AS merc,
+			         ST_Transform(ST_TileEnvelope(:z, :x, :y), :srid) AS native
+			),
+			mask AS (
+			  SELECT ST_Union(m.geom) AS geom
+			  FROM %s m, bounds b
+			  WHERE m.geom && b.native
+			)
+			SELECT ST_AsMVT(tile, 'layer', 4096, 'geom', 'fid')
+			FROM (
+			  SELECT l.fid,%s
+			         ST_AsMVTGeom(ST_Transform(ST_Intersection(l.geom, mask.geom), 3857),
+			                      b.merc, 4096, 64, true) AS geom
+			  FROM %s l, bounds b, mask
+			  WHERE l.geom && b.native AND l.geom && mask.geom
+			) AS tile
+			WHERE tile.geom IS NOT NULL
+			""";
+
 	private final JdbcClient jdbc;
 
 	MvtService(JdbcClient jdbc) {
@@ -55,10 +102,15 @@ public class MvtService {
 	 * @param attributeColumns column names to carry as tile properties, resolved from the
 	 *                         layer's style through {@code layer_field}; never a name that
 	 *                         came out of the style document itself
+	 * @param maskTableName    the clip mask's table, or {@code null} to render unclipped
+	 *                         -- exactly the query this method ran before CONTRACT.md
+	 *                         phase 19 introduced clip masks. The caller decides whether
+	 *                         a mask applies to this particular layer; passing one here
+	 *                         always clips, regardless of z-index.
 	 */
 	public byte[] renderTile(String tableName, int srid, Collection<String> attributeColumns,
-			int z, int x, int y) {
-		byte[] mvt = jdbc.sql(query(tableName, attributeColumns))
+			String maskTableName, int z, int x, int y) {
+		byte[] mvt = jdbc.sql(query(tableName, attributeColumns, maskTableName))
 				.param("z", z)
 				.param("x", x)
 				.param("y", y)
@@ -74,8 +126,8 @@ public class MvtService {
 	 * prove the predicate stays index-friendly; never called at runtime.
 	 */
 	String explainTile(String tableName, int srid, Collection<String> attributeColumns,
-			int z, int x, int y) {
-		String sql = "EXPLAIN (ANALYZE, FORMAT JSON) " + query(tableName, attributeColumns);
+			String maskTableName, int z, int x, int y) {
+		String sql = "EXPLAIN (ANALYZE, FORMAT JSON) " + query(tableName, attributeColumns, maskTableName);
 		return jdbc.sql(sql)
 				.param("z", z)
 				.param("x", x)
@@ -85,10 +137,13 @@ public class MvtService {
 				.single();
 	}
 
-	private String query(String tableName, Collection<String> attributeColumns) {
-		return TILE_QUERY.formatted(
-				selectedAttributes(attributeColumns),
-				SqlIdentifier.quoteLayerTable(tableName));
+	private String query(String tableName, Collection<String> attributeColumns, String maskTableName) {
+		String attributes = selectedAttributes(attributeColumns);
+		String layerTable = SqlIdentifier.quoteLayerTable(tableName);
+		if (maskTableName == null) {
+			return TILE_QUERY.formatted(attributes, layerTable);
+		}
+		return CLIPPED_TILE_QUERY.formatted(SqlIdentifier.quoteLayerTable(maskTableName), attributes, layerTable);
 	}
 
 	/**

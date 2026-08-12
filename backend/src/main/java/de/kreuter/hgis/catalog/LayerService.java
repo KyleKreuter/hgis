@@ -33,6 +33,10 @@ public class LayerService {
 	/** The server does not know the basemap catalogue, only how long a token may be. */
 	private static final int MAX_BASEMAP_LENGTH = 64;
 
+	/** Only these can act as a clip mask (CONTRACT.md phase 19) -- a point or line mask would clip everything to nothing. */
+	private static final Set<String> CLIP_MASK_GEOMETRY_TYPES =
+			Set.of(GeometryType.MULTIPOLYGON.name(), GeometryType.GEOMETRY.name());
+
 	private final LayerRepository layerRepository;
 	private final LayerFieldRepository fieldRepository;
 	private final ProjectRepository projectRepository;
@@ -56,14 +60,18 @@ public class LayerService {
 		if (!projectRepository.existsById(projectId)) {
 			throw new NotFoundException("Projekt " + projectId + " existiert nicht");
 		}
-		return layersByProjectOrdered(projectId).stream()
-				.map(LayerService::toSummary)
+		List<Layer> layers = layersByProjectOrdered(projectId);
+		Layer maskLayer = findMask(layers);
+		return layers.stream()
+				.map(layer -> toSummary(layer, maskLayer))
 				.toList();
 	}
 
 	@Transactional(readOnly = true)
 	public LayerDtos.Detail get(UUID layerId) {
-		return toDetail(require(layerId));
+		Layer layer = require(layerId);
+		Layer maskLayer = layerRepository.findClipMask(layer.getProject().getId()).orElse(null);
+		return toDetail(layer, maskLayer, null);
 	}
 
 	/**
@@ -83,7 +91,10 @@ public class LayerService {
 		TableCreator.CreatedLayer created = tableCreator.createLayerTable(
 				project, geometryType, fields, request.name().trim());
 
-		return toSummary(created.layer());
+		// A brand-new layer is never itself a mask, but an existing project mask may
+		// already sit below it and clip it from the first tile it ever serves.
+		Layer maskLayer = layerRepository.findClipMask(projectId).orElse(null);
+		return toSummary(created.layer(), maskLayer);
 	}
 
 	@Transactional
@@ -127,11 +138,19 @@ public class LayerService {
 		if (request.basemapOpacity() != null) {
 			layer.setBasemapOpacity(parseBasemapOpacity(request.basemapOpacity()));
 		}
+		UUID previousClipMaskLayerId = null;
+		if (request.clipMask() != null) {
+			previousClipMaskLayerId = applyClipMask(layer, request.clipMask());
+		}
 
 		// Flush so updatedAt (set by the database trigger / @UpdateTimestamp on write)
-		// is current in the response, not the value from before this update.
+		// is current in the response, not the value from before this update, and so the
+		// clip mask lookup just below sees this layer's own new clipMask state.
 		layerRepository.flush();
-		return toDetail(layer);
+
+		Layer maskLayer = layer.isClipMask() ? layer
+				: layerRepository.findClipMask(layer.getProject().getId()).orElse(null);
+		return toDetail(layer, maskLayer, previousClipMaskLayerId);
 	}
 
 	/**
@@ -172,8 +191,12 @@ public class LayerService {
 		}
 		layerRepository.flush();
 
-		return layersByProjectOrdered(projectId).stream()
-				.map(LayerService::toSummary)
+		// Moving a layer across the mask changes what it clips to without touching the
+		// layer itself, so its clipVersion has to be recomputed from the new order too.
+		List<Layer> reordered = layersByProjectOrdered(projectId);
+		Layer maskLayer = findMask(reordered);
+		return reordered.stream()
+				.map(layer -> toSummary(layer, maskLayer))
 				.toList();
 	}
 
@@ -314,6 +337,41 @@ public class LayerService {
 		return value;
 	}
 
+	/**
+	 * Applies a {@code clipMask} change from an update request.
+	 *
+	 * <p>Turning the mark off never fails. Turning it on is rejected for a layer whose
+	 * geometry could never sensibly mask anything, and otherwise demotes whichever other
+	 * layer of the same project carried the mark before -- CONTRACT.md phase 19 allows at
+	 * most one per project.
+	 *
+	 * @return the id of a different layer that lost the clip mask marking because of this
+	 *         change, or null if none did
+	 */
+	private UUID applyClipMask(Layer layer, boolean clipMask) {
+		if (!clipMask) {
+			layer.setClipMask(false);
+			return null;
+		}
+		if (!CLIP_MASK_GEOMETRY_TYPES.contains(layer.getGeometryType())) {
+			throw new FieldValidationException("clipMask", "Nur Flächenlayer können eine Maske sein");
+		}
+		UUID previousClipMaskLayerId = layerRepository.findClipMask(layer.getProject().getId())
+				.filter(existing -> !existing.getId().equals(layer.getId()))
+				.map(existing -> {
+					existing.setClipMask(false);
+					return existing.getId();
+				})
+				.orElse(null);
+		layer.setClipMask(true);
+		return previousClipMaskLayerId;
+	}
+
+	/** The one layer of {@code layers} marked as the project's clip mask, or null if none is. */
+	private static Layer findMask(List<Layer> layers) {
+		return layers.stream().filter(Layer::isClipMask).findFirst().orElse(null);
+	}
+
 	private Layer require(UUID layerId) {
 		return layerRepository.findById(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
@@ -323,17 +381,18 @@ public class LayerService {
 		return layerRepository.findByProjectOrdered(projectId);
 	}
 
-	private static LayerDtos.Summary toSummary(Layer layer) {
+	private static LayerDtos.Summary toSummary(Layer layer, Layer maskLayer) {
 		return new LayerDtos.Summary(
 				layer.getId(), layer.getName(), layer.getGeometryType(), layer.getSrid(),
 				layer.getFeatureCount(), layer.isVisible(), layer.getZIndex(),
 				layer.getMinZoom(), layer.getMaxZoom(),
 				layer.getDataVersion(), layer.getStyleVersion(),
 				toBbox(layer.getExtent()), layer.getStyle(),
-				layer.getBasemap(), layer.getBasemapOpacity());
+				layer.getBasemap(), layer.getBasemapOpacity(),
+				layer.isClipMask(), layer.clipVersion(maskLayer));
 	}
 
-	private LayerDtos.Detail toDetail(Layer layer) {
+	private LayerDtos.Detail toDetail(Layer layer, Layer maskLayer, UUID previousClipMaskLayerId) {
 		List<LayerDtos.Field> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layer.getId()).stream()
 				.map(f -> new LayerDtos.Field(f.getId(), f.getSourceName(), f.getColumnName(), f.getDataType()))
 				.toList();
@@ -345,7 +404,9 @@ public class LayerService {
 				layer.getDataVersion(), layer.getStyleVersion(),
 				toBbox(layer.getExtent()), layer.getStyle(),
 				layer.getBasemap(), layer.getBasemapOpacity(),
-				fields, layer.getCreatedAt(), layer.getUpdatedAt());
+				layer.isClipMask(), layer.clipVersion(maskLayer),
+				fields, layer.getCreatedAt(), layer.getUpdatedAt(),
+				previousClipMaskLayerId);
 	}
 
 	private static double[] toBbox(Polygon polygon) {

@@ -3,6 +3,7 @@ package de.kreuter.hgis.tiles;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import de.kreuter.hgis.TestcontainersConfiguration;
+import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.tiles.LayerTableFixture.TestLayer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -53,7 +54,7 @@ class MvtServiceTest {
 	@Test
 	@DisplayName("renders a tile containing exactly the known signal features")
 	void rendersExpectedFeatures() {
-		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(),
+		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		assertThat(mvt).isNotNull();
@@ -68,7 +69,7 @@ class MvtServiceTest {
 	@Test
 	@DisplayName("an unstyled layer carries no attributes beyond its feature ids")
 	void tileWithoutStyleCarriesNoAttributes() {
-		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(),
+		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		assertThat(MvtTileDecoder.decode(mvt).get(0).keys()).isEmpty();
@@ -78,7 +79,7 @@ class MvtServiceTest {
 	@DisplayName("a requested attribute reaches the tile, keyed by its column name")
 	void tileCarriesTheRequestedAttribute() {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832,
-				List.of(LayerTableFixture.CATEGORY_COLUMN),
+				List.of(LayerTableFixture.CATEGORY_COLUMN), null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		MvtTileDecoder.Layer decoded = MvtTileDecoder.decode(mvt).get(0);
@@ -95,7 +96,7 @@ class MvtServiceTest {
 	@DisplayName("only the requested attributes reach the tile, not every column")
 	void tileOmitsAttributesNoStyleAskedFor() {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832,
-				List.of(LayerTableFixture.CATEGORY_COLUMN),
+				List.of(LayerTableFixture.CATEGORY_COLUMN), null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		assertThat(MvtTileDecoder.decode(mvt).get(0).keys())
@@ -107,14 +108,14 @@ class MvtServiceTest {
 	void emptyTileRendersToNull() {
 		// z=0 with the corner tile (0,0) is a fixed point far from every possible
 		// signal/noise coordinate this fixture ever produces -- no guessing involved.
-		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), 0, 0, 0);
+		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, 0, 0, 0);
 		assertThat(mvt).isNull();
 	}
 
 	@Test
 	@DisplayName("the tile query uses the GiST index, not a sequential scan")
 	void queryPlanIsIndexFriendly() throws Exception {
-		assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(),
+		assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(), null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
 	}
 
@@ -122,8 +123,21 @@ class MvtServiceTest {
 	@DisplayName("selecting style attributes leaves the query plan index-friendly")
 	void queryPlanStaysIndexFriendlyWithAttributes() throws Exception {
 		assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832,
-				List.of(LayerTableFixture.CATEGORY_COLUMN, LayerTableFixture.NUMERIC_COLUMN),
+				List.of(LayerTableFixture.CATEGORY_COLUMN, LayerTableFixture.NUMERIC_COLUMN), null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
+	}
+
+	@Test
+	@DisplayName("a clip mask leaves the query plan index-friendly too")
+	void queryPlanStaysIndexFriendlyWithAMask() throws Exception {
+		String maskTable = LayerTableFixture.create(jdbc, 1).tableName();
+		try {
+			assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(), maskTable,
+					testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(maskTable)).update();
+		}
 	}
 
 	private void assertIndexFriendly(String json) throws Exception {
