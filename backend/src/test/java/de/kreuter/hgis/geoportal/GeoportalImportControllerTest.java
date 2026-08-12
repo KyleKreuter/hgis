@@ -205,6 +205,19 @@ class GeoportalImportControllerTest {
 		assertThat(layer.getSourceFeatureIdField()).isEqualTo("gid");
 		assertThat(layer.getSourceFetchedAt()).isNotNull();
 
+		// CONTRACT.md 11.7 (clarified): "source" must reach the client from the *list*
+		// endpoint, not only from the single-layer detail -- the map and the layer tree
+		// both render from LayerDtos.Summary, and a licence notice that only arrived with
+		// a detail request would never reach the bottom-right attribution.
+		mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+						.get("/api/projects/" + project.getId() + "/layers"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].source.attribution")
+						.value("Freie und Hansestadt Hamburg, Behörde für Umwelt, Klima, Energie und Agrarwirtschaft"))
+				.andExpect(jsonPath("$[0].source.licenseName").value(GeoportalLicense.NAME))
+				.andExpect(jsonPath("$[0].source.datasetId").value(DATASET_ID))
+				.andExpect(jsonPath("$[0].source.featureIdField").value("gid"));
+
 		mockGeoportalServer.verify();
 	}
 
