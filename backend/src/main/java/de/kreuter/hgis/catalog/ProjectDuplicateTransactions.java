@@ -92,7 +92,8 @@ class ProjectDuplicateTransactions {
 				source.getGeometryType(), source.getSrid());
 		copy.setCopyMetadata(source.getFeatureCount(), source.isVisible(), source.getZIndex(),
 				source.getMinZoom(), source.getMaxZoom(), source.getStyle(),
-				source.getBasemap(), source.getBasemapOpacity(), source.getClipMode(), source.getExtent());
+				source.getBasemap(), source.getBasemapOpacity(), source.getClipMode(), source.getExtent(),
+				source.getProvenance());
 		copy = layerRepository.save(copy);
 		for (LayerField field : fieldRepository.findByLayerIdOrderByOrdinalAsc(sourceLayerId)) {
 			fieldRepository.save(new LayerField(copy, field.getSourceName(), field.getColumnName(),

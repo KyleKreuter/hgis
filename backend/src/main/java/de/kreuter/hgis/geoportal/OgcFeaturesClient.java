@@ -20,7 +20,7 @@ import tools.jackson.databind.ObjectMapper;
  * imported. {@link de.kreuter.hgis.ingest.reader.OgcFeaturesSourceReader} does the actual
  * importing and, deliberately, does not share this class -- {@code ingest.reader} must not
  * depend on {@code geoportal} (that dependency only ever runs the other way), so its own
- * small, separate fetch of the same two documents lives there instead.
+ * small, separate fetch of the same documents lives there instead.
  */
 @Component
 class OgcFeaturesClient {
@@ -43,6 +43,25 @@ class OgcFeaturesClient {
 	 *                    (CONTRACT.md 11.4: {@code storageSrid})
 	 */
 	record CollectionInfo(Long itemCount, double[] bboxWgs84, Integer storageSrid) {
+	}
+
+	/**
+	 * CONTRACT.md 11.4's {@code description}. Not carried by the collection endpoint at
+	 * all -- measured live against several collections, none returned the key -- but the
+	 * API's own landing page, one level up, does. For an API with more than one collection
+	 * this describes the whole API rather than the one collection picked, the same
+	 * approximation {@link de.kreuter.hgis.geoportal.CatalogLoader} already makes when it
+	 * binds a dataset row to the first collection it finds.
+	 *
+	 * @return null when the landing page carries none
+	 */
+	String fetchApiDescription(String apiUrl) {
+		URI uri = UriComponentsBuilder.fromUriString(apiUrl)
+				.queryParam("f", "json")
+				.build()
+				.encode()
+				.toUri();
+		return getJson(uri).path("description").asString(null);
 	}
 
 	CollectionInfo fetchCollection(String apiUrl, String collection) {

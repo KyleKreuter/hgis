@@ -1,5 +1,6 @@
 package de.kreuter.hgis.catalog;
 
+import de.kreuter.hgis.common.LayerProvenance;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -397,9 +398,16 @@ public class Layer {
 	 *                 keeps its own masks untouched, and every layer of the target
 	 *                 -- mask or not -- is copied the same way, one call per layer, so a
 	 *                 project with several masks keeps every one of them.
+	 * @param source   the source layer's Geoportal provenance (CONTRACT.md phase 23.7,
+	 *                 {@link #getProvenance()}), or null for a layer that was drawn by
+	 *                 hand or imported from a file. Without this a duplicated Geoportal
+	 *                 layer would show no attribution at all, even though the data still
+	 *                 carries the licence's clause 2 obligation -- copying loses nothing
+	 *                 about where a layer's data came from, only its editing history.
 	 */
 	public void setCopyMetadata(long featureCount, boolean visible, int zIndex, int minZoom,
-			int maxZoom, String style, String basemap, Double basemapOpacity, String clipMode, Polygon extent) {
+			int maxZoom, String style, String basemap, Double basemapOpacity, String clipMode, Polygon extent,
+			LayerProvenance source) {
 		this.featureCount = featureCount;
 		this.visible = visible;
 		this.zIndex = zIndex;
@@ -410,6 +418,10 @@ public class Layer {
 		this.basemapOpacity = basemapOpacity;
 		this.clipMode = clipMode;
 		this.extent = extent;
+		if (source != null) {
+			setSource(source.attribution(), source.licenseName(), source.licenseUrl(), source.datasetUri(),
+					source.metadataUrl(), source.datasetId(), source.featureIdField(), source.fetchedAt());
+		}
 	}
 
 	public Instant getCreatedAt() {
@@ -471,5 +483,20 @@ public class Layer {
 		this.sourceDatasetId = datasetId;
 		this.sourceFeatureIdField = featureIdField;
 		this.sourceFetchedAt = fetchedAt;
+	}
+
+	/**
+	 * This layer's Geoportal provenance as one value, or null for a layer not imported
+	 * from there -- {@code sourceAttribution} is null exactly then, since all eight
+	 * columns are written together in {@link #setSource} or not at all. Used by {@link
+	 * de.kreuter.hgis.catalog.ProjectDuplicateTransactions} to carry a layer's provenance
+	 * into its copy via {@link #setCopyMetadata}.
+	 */
+	public LayerProvenance getProvenance() {
+		if (sourceAttribution == null) {
+			return null;
+		}
+		return new LayerProvenance(sourceAttribution, sourceLicenseName, sourceLicenseUrl, sourceDatasetUri,
+				sourceMetadataUrl, sourceDatasetId, sourceFeatureIdField, sourceFetchedAt);
 	}
 }
