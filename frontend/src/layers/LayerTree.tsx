@@ -17,6 +17,7 @@ import {
   Pencil,
   Plus,
   Scissors,
+  ScissorsLineDashed,
   Shapes,
   Spline,
   Square,
@@ -27,10 +28,14 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -43,12 +48,21 @@ import {
   layerListQuery,
   useReorderLayers,
   useUpdateLayer,
+  type ClipMode,
   type GeometryType,
   type LayerSummary,
 } from '@/api/layers'
 import { useSelection } from '@/state/selection'
 import { previewColorOf } from '@/styling'
-import { clipMaskLockedReason, clipMaskReplacedMessage, findOtherClipMask } from './clipMask'
+import {
+  availableClipModes,
+  clipMaskBadgeAriaLabel,
+  clipMaskBadgeTooltip,
+  clipMaskLockedReason,
+  clipMaskReplacedMessage,
+  clipModeLabel,
+  findOtherClipMask,
+} from './clipMask'
 import { DeleteLayerDialog } from './DeleteLayerDialog'
 import { GEOMETRY_LABELS } from './geometry'
 import { LayerBasemapDialog } from './LayerBasemapDialog'
@@ -61,6 +75,17 @@ const GEOMETRY_ICONS: Record<GeometryType, typeof Square> = {
   MULTILINESTRING: Spline,
   MULTIPOINT: Circle,
   GEOMETRY: Shapes,
+}
+
+/**
+ * The mask badge's icon, by direction. Both read as "this is a cut" at a glance --
+ * the dashed blades on `outside` are the visual cue that the cut runs the other way,
+ * the tooltip (`clipMaskBadgeTooltip`) carries the rest. `inside` keeps the plain
+ * `Scissors` it always used, so the far more common mode looks unchanged.
+ */
+const CLIP_MODE_ICONS: Record<ClipMode, typeof Scissors> = {
+  inside: Scissors,
+  outside: ScissorsLineDashed,
 }
 
 interface LayerTreeProps {
@@ -295,20 +320,21 @@ function LayerRow({
   const Icon = GEOMETRY_ICONS[layer.geometryType]
   const previewColor = previewColorOf(layer.style)
   const clipMaskLocked = clipMaskLockedReason(layer.geometryType)
+  const ClipModeIcon = layer.clipMode != null ? CLIP_MODE_ICONS[layer.clipMode] : null
 
-  function handleToggleClipMask(next: boolean) {
+  function handleClipModeChange(mode: ClipMode | null) {
     updateLayer.mutate(
-      { clipMask: next },
+      { clipMode: mode },
       {
         // Derived from the client's own list, not from the response: the server only
         // describes the layer it just patched, and the invariant "at most one mask per
         // project" already tells us who lost the role (contract "Höchstens eine Maske
         // je Projekt"). `useUpdateLayer`'s own invalidation brings that other row's
-        // `clipMask` back in line right after.
+        // `clipMode` back in line right after.
         onSuccess: () => {
-          if (next && otherClipMask) toast.info(clipMaskReplacedMessage(otherClipMask))
+          if (mode !== null && otherClipMask) toast.info(clipMaskReplacedMessage(otherClipMask))
         },
-        onError: () => toast.error('Das Programm konnte die Maske nicht ändern'),
+        onError: () => toast.error('Das Programm konnte den Zuschnitt nicht ändern'),
       },
     )
   }
@@ -404,24 +430,26 @@ function LayerRow({
           on clipping everything above it while switched off (contract "Eine unsichtbar
           geschaltete Maske wirkt weiter"). A badge that faded with the checkbox would
           hide the one fact the user needs to explain the cut. */}
-      {layer.clipMask && (
+      {layer.clipMode != null && ClipModeIcon && (
         <Tooltip>
           <TooltipTrigger
             render={
-              <span tabIndex={0} className="shrink-0 text-foreground" aria-label="Maske für den Zuschnitt">
-                <Scissors className="size-3" />
+              <span
+                tabIndex={0}
+                className="shrink-0 text-foreground"
+                aria-label={clipMaskBadgeAriaLabel(layer.clipMode)}
+              >
+                <ClipModeIcon className="size-3" />
               </span>
             }
           />
-          <TooltipContent className="max-w-xs">
-            Maske für den Zuschnitt. Wirkt auch, wenn der Layer ausgeblendet ist.
-          </TooltipContent>
+          <TooltipContent className="max-w-xs">{clipMaskBadgeTooltip(layer.clipMode)}</TooltipContent>
         </Tooltip>
       )}
 
       {/* Secondary, so muted rather than full-strength -- unlike the mask badge above,
           missing this one costs nothing but a bit of context. */}
-      {!layer.clipMask && (layer.clipVersion ?? 0) > 0 && (
+      {layer.clipMode == null && (layer.clipVersion ?? 0) > 0 && (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -491,23 +519,36 @@ function LayerRow({
           </DropdownMenuItem>
           {/* Shown for every geometry type, disabled with a reason for the two that
               cannot hold a mask -- contract "erscheint gesperrt mit dem Grund, nicht
-              wortlos". A checkbox item, not a plain one: unlike every other entry here
-              this one reflects a state (is this layer the mask right now?) and toggles
-              it, the same role `Checkbox` plays for `visible` above. */}
-          <DropdownMenuCheckboxItem
-            checked={layer.clipMask ?? false}
-            disabled={clipMaskLocked !== null}
-            onCheckedChange={handleToggleClipMask}
-          >
-            {clipMaskLocked ? (
-              <span className="flex flex-col">
-                <span>Als Zuschnitt für alles darüber</span>
-                <span className="text-xs text-muted-foreground">{clipMaskLocked}</span>
-              </span>
-            ) : (
-              'Als Zuschnitt für alles darüber'
-            )}
-          </DropdownMenuCheckboxItem>
+              wortlos". A submenu, not a checkbox item: this is now a choice between
+              three states (no clip, inside, outside), not a single flag to toggle
+              (contract "keine Ja/Nein-Marke mehr"). */}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={clipMaskLocked !== null}>
+              <Scissors className="size-3.5" />
+              {clipMaskLocked ? (
+                <span className="flex flex-col">
+                  <span>Zuschnitt für alles darüber</span>
+                  <span className="text-xs text-muted-foreground">{clipMaskLocked}</span>
+                </span>
+              ) : (
+                'Zuschnitt für alles darüber'
+              )}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {/* A `DropdownMenuRadioGroup`, not a plain list of items: the three choices
+                  are mutually exclusive, the same role radio buttons play in a form. */}
+              <DropdownMenuRadioGroup
+                value={layer.clipMode ?? null}
+                onValueChange={(value) => handleClipModeChange(value as ClipMode | null)}
+              >
+                {availableClipModes(layer.geometryType).map((mode) => (
+                  <DropdownMenuRadioItem key={mode ?? 'none'} value={mode}>
+                    {clipModeLabel(mode)}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleExportLayer} disabled={isExporting}>
             {exportLayerMutation.isPending ? (

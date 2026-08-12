@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { LayerSummary } from '@/api/layers'
-import { canBeClipMask, clipMaskLockedReason, clipMaskReplacedMessage, findOtherClipMask } from './clipMask'
+import {
+  availableClipModes,
+  canBeClipMask,
+  clipMaskBadgeAriaLabel,
+  clipMaskBadgeTooltip,
+  clipMaskLockedReason,
+  clipMaskReplacedMessage,
+  clipModeLabel,
+  findOtherClipMask,
+} from './clipMask'
 
 function makeLayer(overrides: Partial<LayerSummary> = {}): LayerSummary {
   return {
@@ -16,7 +25,7 @@ function makeLayer(overrides: Partial<LayerSummary> = {}): LayerSummary {
     dataVersion: 1,
     styleVersion: 1,
     extent: null,
-    clipMask: false,
+    clipMode: null,
     clipVersion: 0,
     ...overrides,
   }
@@ -46,16 +55,63 @@ describe('clipMaskLockedReason', () => {
   })
 })
 
-describe('findOtherClipMask', () => {
-  it('findet die aktuelle Maske eines anderen Layers', () => {
-    const mask = makeLayer({ id: 'a', clipMask: true })
-    const other = makeLayer({ id: 'b', clipMask: false })
+describe('availableClipModes', () => {
+  it('bietet alle drei Modi für Flächen- und gemischte Layer', () => {
+    expect(availableClipModes('MULTIPOLYGON')).toEqual([null, 'inside', 'outside'])
+    expect(availableClipModes('GEOMETRY')).toEqual([null, 'inside', 'outside'])
+  })
 
-    expect(findOtherClipMask([mask, other], 'b')).toBe(mask)
+  it('bietet nur "kein Zuschnitt" für Punkt- und Linienlayer', () => {
+    expect(availableClipModes('MULTIPOINT')).toEqual([null])
+    expect(availableClipModes('MULTILINESTRING')).toEqual([null])
+  })
+})
+
+describe('clipModeLabel', () => {
+  it('beschriftet jeden der drei Modi', () => {
+    expect(clipModeLabel(null)).toBe('Kein Zuschnitt')
+    expect(clipModeLabel('inside')).toBe('Nur innerhalb zeigen')
+    expect(clipModeLabel('outside')).toBe('Nur außerhalb zeigen')
+  })
+})
+
+describe('clipMaskBadgeAriaLabel', () => {
+  it('unterscheidet die Richtung', () => {
+    expect(clipMaskBadgeAriaLabel('inside')).not.toBe(clipMaskBadgeAriaLabel('outside'))
+    expect(clipMaskBadgeAriaLabel('inside')).toMatch(/innerhalb/)
+    expect(clipMaskBadgeAriaLabel('outside')).toMatch(/außerhalb/)
+  })
+})
+
+describe('clipMaskBadgeTooltip', () => {
+  it('unterscheidet die Richtung und nennt beide Male, dass die Maske trotz Ausblenden wirkt', () => {
+    const inside = clipMaskBadgeTooltip('inside')
+    const outside = clipMaskBadgeTooltip('outside')
+
+    expect(inside).not.toBe(outside)
+    expect(inside).toMatch(/innerhalb/)
+    expect(outside).toMatch(/außerhalb/)
+    expect(inside).toMatch(/ausgeblendet/)
+    expect(outside).toMatch(/ausgeblendet/)
+  })
+})
+
+describe('findOtherClipMask', () => {
+  it('findet die aktuelle Maske eines anderen Layers, gleich in welchem Modus', () => {
+    const insideMask = makeLayer({ id: 'a', clipMode: 'inside' })
+    const other = makeLayer({ id: 'b', clipMode: null })
+
+    expect(findOtherClipMask([insideMask, other], 'b')).toBe(insideMask)
+  })
+
+  it('findet auch eine Maske im Modus "outside"', () => {
+    const outsideMask = makeLayer({ id: 'a', clipMode: 'outside' })
+
+    expect(findOtherClipMask([outsideMask], 'b')).toBe(outsideMask)
   })
 
   it('ignoriert den eigenen Layer, auch wenn er bereits die Maske ist', () => {
-    const self = makeLayer({ id: 'a', clipMask: true })
+    const self = makeLayer({ id: 'a', clipMode: 'inside' })
 
     expect(findOtherClipMask([self], 'a')).toBeNull()
   })
