@@ -50,6 +50,11 @@ class ProjectDuplicateTransactions {
 		target.setCenter(source.getCenter());
 		target.setZoom(source.getZoom());
 		target.setExtent(source.getExtent());
+		// view_state is deliberately NOT copied. It names layer ids of the source project,
+		// and the target gets fresh ones, so a copied value would point at nothing and be
+		// discarded the moment it was read anyway (ProjectService.viewState cleans up
+		// entries for layers that do not exist). A new copy also should not inherit the
+		// source's selection and filters -- it is meant to open clean.
 		target = projectRepository.saveAndFlush(target);
 
 		List<Layer> layers = layerRepository.findByProjectOrdered(sourceProjectId);
