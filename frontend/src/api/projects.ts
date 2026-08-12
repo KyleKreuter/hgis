@@ -22,6 +22,8 @@ export interface ProjectSummary {
 
 export interface ProjectDetail extends ProjectSummary {
   basemap: string
+  /** Opacity of the background map, 0..1. Always set -- a project has no "unset" state. */
+  basemapOpacity: number
   /** [lng, lat] in EPSG:4326, or null while the project has never been viewed. */
   center: [number, number] | null
   zoom: number | null
@@ -46,6 +48,7 @@ export interface UpdateProjectInput {
   name?: string
   description?: string
   basemap?: string
+  basemapOpacity?: number
   center?: [number, number]
   zoom?: number
 }

@@ -11,6 +11,9 @@ export type BasemapMapLike = Pick<
   'getStyle' | 'addSource' | 'removeSource' | 'getSource' | 'addLayer' | 'getLayer' | 'removeLayer'
 >
 
+/** The subset `applyBasemapOpacity` touches -- a plain read plus one paint write. */
+export type BasemapOpacityMapLike = Pick<MapLibreMap, 'getStyle' | 'getLayer' | 'setPaintProperty'>
+
 /**
  * Swaps the basemap on a live map, in place.
  *
@@ -56,4 +59,27 @@ export function applyBasemap(map: BasemapMapLike, next: BasemapDefinition): bool
 
 function isSameOrder(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index])
+}
+
+/**
+ * Sets the background map's opacity on a live map, in place.
+ *
+ * Separate from `applyBasemap` on purpose: that function only swaps layers when the
+ * basemap itself changes, and returns early otherwise (CONTRACT.md -- without the early
+ * return the map would flicker on every render). The opacity, though, can change on its
+ * own while the same basemap stays on screen, so it needs its own write that runs
+ * independently of that early return. `raster-opacity` is set through `setPaintProperty`
+ * rather than by re-adding the layer, which is what lets the two stay independent: the
+ * variant's own `raster-saturation`/`raster-brightness-*`/`raster-contrast` (see
+ * `basemap.ts`) are untouched.
+ *
+ * A no-op for "no basemap": there is no raster layer to carry an opacity.
+ */
+export function applyBasemapOpacity(map: BasemapOpacityMapLike, opacity: number): void {
+  const style = map.getStyle()
+  for (const layer of style?.layers ?? []) {
+    if (isBasemapId(layer.id) && map.getLayer(layer.id)) {
+      map.setPaintProperty(layer.id, 'raster-opacity', opacity)
+    }
+  }
 }

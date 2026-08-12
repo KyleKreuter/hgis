@@ -11,6 +11,7 @@ import {
   FileDown,
   Loader2,
   Magnet,
+  Map as MapIcon,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -45,6 +46,7 @@ import { useSelection } from '@/state/selection'
 import { previewColorOf } from '@/styling'
 import { DeleteLayerDialog } from './DeleteLayerDialog'
 import { GEOMETRY_LABELS } from './geometry'
+import { LayerBasemapDialog } from './LayerBasemapDialog'
 import { ManageFieldsDialog } from './ManageFieldsDialog'
 import { RenameLayerDialog } from './RenameLayerDialog'
 import { isNoOpMove, reorderedIdsBottomToTop } from './reorder'
@@ -83,6 +85,7 @@ export function LayerTree({
 
   const [renaming, setRenaming] = useState<LayerSummary | null>(null)
   const [managingFields, setManagingFields] = useState<LayerSummary | null>(null)
+  const [settingBasemap, setSettingBasemap] = useState<LayerSummary | null>(null)
   const [deleting, setDeleting] = useState<LayerSummary | null>(null)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dropBefore, setDropBefore] = useState<number | null>(null)
@@ -182,6 +185,7 @@ export function LayerTree({
               }}
               onRename={() => setRenaming(layer)}
               onManageFields={() => setManagingFields(layer)}
+              onSetBasemap={() => setSettingBasemap(layer)}
               onDelete={() => setDeleting(layer)}
               onMoveUp={() => move(layer, -1)}
               onMoveDown={() => move(layer, 1)}
@@ -201,6 +205,11 @@ export function LayerTree({
         layer={managingFields}
         projectId={projectId}
         onOpenChange={() => setManagingFields(null)}
+      />
+      <LayerBasemapDialog
+        layer={settingBasemap}
+        projectId={projectId}
+        onOpenChange={() => setSettingBasemap(null)}
       />
       <DeleteLayerDialog
         layer={deleting}
@@ -241,6 +250,7 @@ interface LayerRowProps {
   onZoom: () => void
   onRename: () => void
   onManageFields: () => void
+  onSetBasemap: () => void
   onDelete: () => void
   onMoveUp: () => void
   onMoveDown: () => void
@@ -264,6 +274,7 @@ function LayerRow({
   onZoom,
   onRename,
   onManageFields,
+  onSetBasemap,
   onDelete,
   onMoveUp,
   onMoveDown,
@@ -408,6 +419,10 @@ function LayerRow({
           <DropdownMenuItem onClick={onManageFields}>
             <Columns3 className="size-3.5" />
             Felder verwalten
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onSetBasemap}>
+            <MapIcon className="size-3.5" />
+            Hintergrundkarte
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleExportLayer} disabled={isExporting}>

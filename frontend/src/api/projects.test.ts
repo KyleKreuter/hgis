@@ -23,6 +23,7 @@ function project(overrides: Partial<ProjectDetail> = {}): ProjectDetail {
     lastOpenedAt: null,
     createdAt: '2026-01-01T00:00:00Z',
     basemap: 'osm',
+    basemapOpacity: 1,
     center: null,
     zoom: null,
     extent: null,

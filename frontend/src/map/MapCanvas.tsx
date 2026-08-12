@@ -4,8 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Map as MapLibreMap, prewarm } from 'maplibre-gl'
 import { MapContext } from './MapContext'
 import { buildBasemapStyle, resolveBasemap } from './basemap'
-import { applyBasemap } from './applyBasemap'
-import { BasemapControl } from './BasemapControl'
+import { applyBasemap, applyBasemapOpacity } from './applyBasemap'
 
 export type InitialView =
   | { center: [number, number]; zoom: number }
@@ -15,12 +14,14 @@ export type InitialView =
 interface MapCanvasProps {
   initialView: InitialView
   /**
-   * The project's stored basemap. Unknown values fall back to OSM, and leaving it out
-   * (a map outside a project) does the same.
+   * The background map to show, already resolved by the caller (the active layer's own
+   * basemap if it has one, the project's otherwise -- see `resolveBasemapSettings`).
+   * Unknown values fall back to OSM, and leaving it out (a map outside a project) does
+   * the same. `MapCanvas` itself knows nothing about layers or projects.
    */
   basemapId?: string | null
-  /** Enables the basemap picker, which persists the choice to that project. */
-  projectId?: string
+  /** The background map's opacity, already resolved the same way. Defaults to full. */
+  basemapOpacity?: number
   children?: ReactNode
 }
 
@@ -35,7 +36,7 @@ interface MapCanvasProps {
  * no-op, and the cleanup calling `map.remove()` is what makes the reset safe --
  * without it two maps would end up sharing the same container.
  */
-export function MapCanvas({ initialView, basemapId, projectId, children }: MapCanvasProps) {
+export function MapCanvas({ initialView, basemapId, basemapOpacity = 1, children }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
@@ -44,8 +45,9 @@ export function MapCanvas({ initialView, basemapId, projectId, children }: MapCa
   const initialViewRef = useRef(initialView)
   // Same reasoning for the basemap, but for a different reason: the constructor style
   // must be the stored one so the map never starts on OSM and then swaps. Every later
-  // change is handled by the effect below, on the live map.
+  // change is handled by the effects below, on the live map.
   const initialBasemapRef = useRef(basemapId)
+  const initialOpacityRef = useRef(basemapOpacity)
   const basemap = resolveBasemap(basemapId)
 
   useEffect(() => {
@@ -65,7 +67,7 @@ export function MapCanvas({ initialView, basemapId, projectId, children }: MapCa
     const view = initialViewRef.current
     const map = new MapLibreMap({
       container,
-      style: buildBasemapStyle(initialBasemapRef.current),
+      style: buildBasemapStyle(initialBasemapRef.current, initialOpacityRef.current),
       // Our own controls replace the MapLibre defaults (zoom buttons, scale,
       // attribution) -- see the `controls/` components rendered as children.
       attributionControl: false,
@@ -121,6 +123,17 @@ export function MapCanvas({ initialView, basemapId, projectId, children }: MapCa
     applyBasemap(map, basemap)
   }, [basemap, isLoaded])
 
+  // Independent of the swap above on purpose (CONTRACT.md): the opacity can change
+  // while the same basemap stays on screen, e.g. dragging the slider in `BasemapControl`,
+  // and `applyBasemap` must keep its early return for that case or the map would flash
+  // on every unrelated render. Runs after a swap too (same dependency array plus
+  // `basemap`), since `addLayer` above does not carry the current opacity on its own.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isLoaded) return
+    applyBasemapOpacity(map, basemapOpacity)
+  }, [basemap, basemapOpacity, isLoaded])
+
   return (
     <MapContext value={{ mapRef, isLoaded }}>
       {/* A container, so the overlays can react to the width of the map panel rather
@@ -136,14 +149,6 @@ export function MapCanvas({ initialView, basemapId, projectId, children }: MapCa
           drops it, collapsing the container to zero height.
           Overlay controls below are siblings, positioned against the wrapper. */}
         <div ref={containerRef} className="h-full w-full" />
-        {/* Top right, immediately left of the zoom stack (`right-11` clears its 28px
-            column plus a gap): the top left corner is where the measurement readout
-            appears, and the two must not sit on top of each other. */}
-        {projectId && (
-          <div className="absolute top-2 right-11 z-10">
-            <BasemapControl projectId={projectId} basemapId={basemapId} />
-          </div>
-        )}
         {children}
         {/* Follows the selection: the OSM notice must not stay up over OpenTopoMap's
             tiles, and "no basemap" credits nobody -- there is nothing to credit.

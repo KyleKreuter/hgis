@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AddLayerObject, LayerSpecification, SourceSpecification } from 'maplibre-gl'
-import { applyBasemap, type BasemapMapLike } from './applyBasemap'
+import { applyBasemap, applyBasemapOpacity, type BasemapMapLike, type BasemapOpacityMapLike } from './applyBasemap'
 import { buildBasemapStyle, resolveBasemap } from './basemap'
 
 const GLYPHS = 'http://localhost:5173/api/glyphs/{fontstack}/{range}.pbf'
@@ -15,7 +15,7 @@ function createFakeMap(initial: { sources?: Record<string, SourceSpecification>;
   const sources: Record<string, SourceSpecification> = { ...initial.sources }
   const layers: LayerSpecification[] = [...(initial.layers ?? [])]
 
-  const map: BasemapMapLike = {
+  const map: BasemapMapLike & BasemapOpacityMapLike = {
     getStyle: vi.fn(() => ({
       version: 8,
       glyphs: GLYPHS,
@@ -41,6 +41,11 @@ function createFakeMap(initial: { sources?: Record<string, SourceSpecification>;
     getLayer: vi.fn((id: string) =>
       layers.find((layer) => layer.id === id) as unknown as ReturnType<BasemapMapLike['getLayer']>,
     ) as unknown as BasemapMapLike['getLayer'],
+    setPaintProperty: vi.fn((id: string, name: string, value: unknown) => {
+      const layer = layers.find((existing) => existing.id === id)
+      if (!layer) return
+      layer.paint = { ...(layer.paint ?? {}), [name]: value }
+    }) as unknown as BasemapOpacityMapLike['setPaintProperty'],
   }
 
   return { map, sources, layers }
@@ -129,5 +134,46 @@ describe('applyBasemap', () => {
     applyBasemap(map, resolveBasemap('mapbox-satellite'))
 
     expect(layers.map((layer) => layer.id)).toEqual(['basemap:osm'])
+  })
+})
+
+describe('applyBasemapOpacity', () => {
+  it('sets raster-opacity on the current basemap layer, on top of its own paint', () => {
+    const { map, layers } = createLoadedMap()
+
+    applyBasemapOpacity(map, 0.4)
+
+    expect(layers[0].id).toBe('basemap:osm')
+    expect(layers[0].paint).toMatchObject({ 'raster-opacity': 0.4 })
+  })
+
+  it('never touches a data layer', () => {
+    const { map, layers } = createLoadedMap()
+
+    applyBasemapOpacity(map, 0.4)
+
+    const dataLayer = layers.find((layer) => layer.id === 'layer:gebaeude-fill')
+    expect(dataLayer?.paint).toBeUndefined()
+  })
+
+  it('keeps the variant paint properties, opacity only adds to them', () => {
+    const { map, layers } = createLoadedMap()
+
+    applyBasemap(map, resolveBasemap('osm-dark'))
+    applyBasemapOpacity(map, 0.6)
+
+    expect(layers[0].paint).toMatchObject({
+      'raster-opacity': 0.6,
+      'raster-brightness-max': 0.38,
+    })
+  })
+
+  it('does nothing for "no basemap", which has no raster layer to carry an opacity', () => {
+    const { map } = createLoadedMap()
+
+    applyBasemap(map, resolveBasemap('none'))
+    applyBasemapOpacity(map, 0.4)
+
+    expect(map.setPaintProperty).not.toHaveBeenCalled()
   })
 })
