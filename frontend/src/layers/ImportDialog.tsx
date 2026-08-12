@@ -188,7 +188,7 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
   function handleOpenChange(next: boolean) {
     if (!next) {
       if (running) {
-        toast.info('Der Import läuft im Hintergrund weiter.')
+        toast.info('Der Import läuft im Hintergrund weiter')
       }
       reset()
     }

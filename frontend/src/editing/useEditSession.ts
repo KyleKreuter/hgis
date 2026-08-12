@@ -145,7 +145,7 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
         }
         if (error instanceof ApiError && error.status === 409) {
           toast.error(error.message, {
-            description: 'Laden Sie die Ansicht neu, um den aktuellen Stand zu sehen.',
+            description: 'Laden Sie die Ansicht neu, um den aktuellen Stand zu sehen',
           })
           return
         }

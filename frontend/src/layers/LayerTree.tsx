@@ -175,7 +175,7 @@ export function LayerTree({
               onSelect={() => onSelectLayer(layer.id)}
               onZoom={() => {
                 if (!layer.extent) {
-                  toast.info(`„${layer.name}" enthält keine Objekte.`)
+                  toast.info(`„${layer.name}" enthält keine Objekte`)
                   return
                 }
                 onZoomToLayer(layer.extent)

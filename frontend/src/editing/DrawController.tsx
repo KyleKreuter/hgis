@@ -442,7 +442,7 @@ export function DrawController({
 
         if (multipart > 0) {
           toast.warning(
-            `${multipart} mehrteilige Objekte sind nicht bearbeitbar und bleiben unverändert.`,
+            `${multipart} mehrteilige Objekte sind nicht bearbeitbar und bleiben unverändert`,
           )
         }
         if (editable.length === 0) return
@@ -474,7 +474,7 @@ export function DrawController({
 
         const rejected = added.filter((entry) => !entry.valid).length
         if (rejected > 0) {
-          toast.warning(`Das Programm konnte ${rejected} Objekte nicht zum Bearbeiten laden.`)
+          toast.warning(`Das Programm konnte ${rejected} Objekte nicht zum Bearbeiten laden`)
         }
       } catch {
         toast.error('Das Programm konnte die Objekte nicht zum Bearbeiten laden')
@@ -638,7 +638,7 @@ export function DrawController({
         // the cause; this keeps the next such refusal from being silent.
         const rejected = draw.addFeatures(missing).filter((entry) => !entry.valid)
         if (rejected.length > 0) {
-          toast.warning(`${rejected.length} Objekte konnten nicht wiederhergestellt werden.`)
+          toast.warning(`Das Programm konnte ${rejected.length} Objekte nicht wiederherstellen`)
         }
       }
     } finally {
