@@ -289,8 +289,15 @@ public class Layer {
 		this.extent = extent;
 	}
 
+	/**
+	 * @param clipMask whether the source is the project's clip mask (CONTRACT.md phase
+	 *                 19). A duplicate is a project of its own, so copying this is safe
+	 *                 even though at most one layer per project may carry it: the source
+	 *                 project keeps its own mask untouched, and the target starts with at
+	 *                 most one too, since {@code source} could only ever be marked once.
+	 */
 	public void setCopyMetadata(long featureCount, boolean visible, int zIndex, int minZoom,
-			int maxZoom, String style, String basemap, Double basemapOpacity, Polygon extent) {
+			int maxZoom, String style, String basemap, Double basemapOpacity, boolean clipMask, Polygon extent) {
 		this.featureCount = featureCount;
 		this.visible = visible;
 		this.zIndex = zIndex;
@@ -299,6 +306,7 @@ public class Layer {
 		this.style = style;
 		this.basemap = basemap;
 		this.basemapOpacity = basemapOpacity;
+		this.clipMask = clipMask;
 		this.extent = extent;
 	}
 
