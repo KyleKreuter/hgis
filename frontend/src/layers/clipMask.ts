@@ -23,14 +23,14 @@ export function clipMaskLockedReason(geometryType: GeometryType): string | null 
  *
  * Marking a layer as the mask unmarks whichever layer held it before (contract
  * "Höchstens eine Maske je Projekt", enforced server-side). The client already has
- * every layer's `isClipMask` in the list it diffs the tree against, so it can name that
+ * every layer's `clipMask` in the list it diffs the tree against, so it can name that
  * previous holder itself instead of waiting on a server response shaped for it.
  */
 export function findOtherClipMask(
   layers: LayerSummary[],
   excludingLayerId: string,
 ): LayerSummary | null {
-  return layers.find((layer) => layer.id !== excludingLayerId && layer.isClipMask) ?? null
+  return layers.find((layer) => layer.id !== excludingLayerId && layer.clipMask) ?? null
 }
 
 /** Info toast shown after marking a layer as the mask demotes a previous one. */

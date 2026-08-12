@@ -79,7 +79,7 @@ function makeLayer(overrides: Partial<LayerSummary> = {}): LayerSummary {
     dataVersion: 1,
     styleVersion: 1,
     extent: null,
-    isClipMask: false,
+    clipMask: false,
     clipVersion: 0,
     ...overrides,
   }

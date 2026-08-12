@@ -58,7 +58,7 @@ export interface LayerSummary {
    * which is the right default and keeps every existing fixture that builds a
    * `LayerSummary` without it (outside this phase's ownership) compiling unchanged.
    */
-  isClipMask?: boolean
+  clipMask?: boolean
   /**
    * `0` when no mask affects this layer, otherwise a value that changes whenever the
    * mask, its geometries, or this layer's position relative to it changes. Folded into
@@ -66,7 +66,7 @@ export interface LayerSummary {
    * because the tile content now depends on it too -- without it in the URL, an edited
    * mask would leave every clipped layer showing the old cut for as long as the tiles
    * stay cached (they are served `immutable`). Optional for the same reason
-   * `isClipMask` is; missing reads as `0`, "no clip in effect".
+   * `clipMask` is; missing reads as `0`, "no clip in effect".
    */
   clipVersion?: number
 }
@@ -152,10 +152,10 @@ export interface UpdateLayerInput {
    * Marks or unmarks this layer as the project's clip mask. Marking a second layer
    * silently unmarks whichever one held it before (contract "Höchstens eine Maske je
    * Projekt") -- `useUpdateLayer`'s trailing `invalidateQueries` is what brings that
-   * other layer's `isClipMask` back in line, since the response here only describes
+   * other layer's `clipMask` back in line, since the response here only describes
    * the layer actually being patched.
    */
-  isClipMask?: boolean
+  clipMask?: boolean
 }
 
 export type ClassifyMethod = 'quantile' | 'equalInterval' | 'naturalBreaks'

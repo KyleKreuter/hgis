@@ -16,7 +16,7 @@ function makeLayer(overrides: Partial<LayerSummary> = {}): LayerSummary {
     dataVersion: 1,
     styleVersion: 1,
     extent: null,
-    isClipMask: false,
+    clipMask: false,
     clipVersion: 0,
     ...overrides,
   }
@@ -48,14 +48,14 @@ describe('clipMaskLockedReason', () => {
 
 describe('findOtherClipMask', () => {
   it('findet die aktuelle Maske eines anderen Layers', () => {
-    const mask = makeLayer({ id: 'a', isClipMask: true })
-    const other = makeLayer({ id: 'b', isClipMask: false })
+    const mask = makeLayer({ id: 'a', clipMask: true })
+    const other = makeLayer({ id: 'b', clipMask: false })
 
     expect(findOtherClipMask([mask, other], 'b')).toBe(mask)
   })
 
   it('ignoriert den eigenen Layer, auch wenn er bereits die Maske ist', () => {
-    const self = makeLayer({ id: 'a', isClipMask: true })
+    const self = makeLayer({ id: 'a', clipMask: true })
 
     expect(findOtherClipMask([self], 'a')).toBeNull()
   })

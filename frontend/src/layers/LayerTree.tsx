@@ -298,13 +298,13 @@ function LayerRow({
 
   function handleToggleClipMask(next: boolean) {
     updateLayer.mutate(
-      { isClipMask: next },
+      { clipMask: next },
       {
         // Derived from the client's own list, not from the response: the server only
         // describes the layer it just patched, and the invariant "at most one mask per
         // project" already tells us who lost the role (contract "Höchstens eine Maske
         // je Projekt"). `useUpdateLayer`'s own invalidation brings that other row's
-        // `isClipMask` back in line right after.
+        // `clipMask` back in line right after.
         onSuccess: () => {
           if (next && otherClipMask) toast.info(clipMaskReplacedMessage(otherClipMask))
         },
@@ -404,7 +404,7 @@ function LayerRow({
           on clipping everything above it while switched off (contract "Eine unsichtbar
           geschaltete Maske wirkt weiter"). A badge that faded with the checkbox would
           hide the one fact the user needs to explain the cut. */}
-      {layer.isClipMask && (
+      {layer.clipMask && (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -421,7 +421,7 @@ function LayerRow({
 
       {/* Secondary, so muted rather than full-strength -- unlike the mask badge above,
           missing this one costs nothing but a bit of context. */}
-      {!layer.isClipMask && (layer.clipVersion ?? 0) > 0 && (
+      {!layer.clipMask && (layer.clipVersion ?? 0) > 0 && (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -495,7 +495,7 @@ function LayerRow({
               this one reflects a state (is this layer the mask right now?) and toggles
               it, the same role `Checkbox` plays for `visible` above. */}
           <DropdownMenuCheckboxItem
-            checked={layer.isClipMask}
+            checked={layer.clipMask ?? false}
             disabled={clipMaskLocked !== null}
             onCheckedChange={handleToggleClipMask}
           >
