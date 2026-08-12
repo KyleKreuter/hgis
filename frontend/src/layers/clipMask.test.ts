@@ -1,35 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { LayerSummary } from '@/api/layers'
 import {
   availableClipModes,
   canBeClipMask,
   clipMaskBadgeAriaLabel,
   clipMaskBadgeTooltip,
   clipMaskLockedReason,
-  clipMaskReplacedMessage,
   clipModeLabel,
-  findOtherClipMask,
 } from './clipMask'
-
-function makeLayer(overrides: Partial<LayerSummary> = {}): LayerSummary {
-  return {
-    id: 'layer-1',
-    name: 'Gebäude',
-    geometryType: 'MULTIPOLYGON',
-    srid: 25832,
-    featureCount: 100,
-    visible: true,
-    zIndex: 0,
-    minZoom: 0,
-    maxZoom: 22,
-    dataVersion: 1,
-    styleVersion: 1,
-    extent: null,
-    clipMode: null,
-    clipVersion: 0,
-    ...overrides,
-  }
-}
 
 describe('canBeClipMask', () => {
   it('erlaubt MULTIPOLYGON und GEOMETRY', () => {
@@ -56,9 +33,21 @@ describe('clipMaskLockedReason', () => {
 })
 
 describe('availableClipModes', () => {
-  it('bietet alle drei Modi für Flächen- und gemischte Layer', () => {
-    expect(availableClipModes('MULTIPOLYGON')).toEqual([null, 'inside', 'outside'])
-    expect(availableClipModes('GEOMETRY')).toEqual([null, 'inside', 'outside'])
+  it('bietet alle vier Modi für Flächen- und gemischte Layer', () => {
+    expect(availableClipModes('MULTIPOLYGON')).toEqual([
+      null,
+      'insideWhole',
+      'insideClipped',
+      'outsideWhole',
+      'outsideClipped',
+    ])
+    expect(availableClipModes('GEOMETRY')).toEqual([
+      null,
+      'insideWhole',
+      'insideClipped',
+      'outsideWhole',
+      'outsideClipped',
+    ])
   })
 
   it('bietet nur "kein Zuschnitt" für Punkt- und Linienlayer', () => {
@@ -68,63 +57,54 @@ describe('availableClipModes', () => {
 })
 
 describe('clipModeLabel', () => {
-  it('beschriftet jeden der drei Modi', () => {
+  it('beschriftet jeden der vier Modi und den leeren Zustand', () => {
     expect(clipModeLabel(null)).toBe('Kein Zuschnitt')
-    expect(clipModeLabel('inside')).toBe('Nur innerhalb zeigen')
-    expect(clipModeLabel('outside')).toBe('Nur außerhalb zeigen')
+    expect(clipModeLabel('insideWhole')).toBe('Nur innerhalb')
+    expect(clipModeLabel('insideClipped')).toBe('Nur innerhalb + geschnitten')
+    expect(clipModeLabel('outsideWhole')).toBe('Nur außerhalb')
+    expect(clipModeLabel('outsideClipped')).toBe('Nur außerhalb + geschnitten')
   })
 })
 
 describe('clipMaskBadgeAriaLabel', () => {
-  it('unterscheidet die Richtung', () => {
-    expect(clipMaskBadgeAriaLabel('inside')).not.toBe(clipMaskBadgeAriaLabel('outside'))
-    expect(clipMaskBadgeAriaLabel('inside')).toMatch(/innerhalb/)
-    expect(clipMaskBadgeAriaLabel('outside')).toMatch(/außerhalb/)
+  it('unterscheidet alle vier Modi', () => {
+    const labels = [
+      clipMaskBadgeAriaLabel('insideWhole'),
+      clipMaskBadgeAriaLabel('insideClipped'),
+      clipMaskBadgeAriaLabel('outsideWhole'),
+      clipMaskBadgeAriaLabel('outsideClipped'),
+    ]
+
+    expect(new Set(labels).size).toBe(labels.length)
+    expect(clipMaskBadgeAriaLabel('insideWhole')).toMatch(/innerhalb/)
+    expect(clipMaskBadgeAriaLabel('insideClipped')).toMatch(/innerhalb/)
+    expect(clipMaskBadgeAriaLabel('outsideWhole')).toMatch(/außerhalb/)
+    expect(clipMaskBadgeAriaLabel('outsideClipped')).toMatch(/außerhalb/)
   })
 })
 
 describe('clipMaskBadgeTooltip', () => {
-  it('unterscheidet die Richtung und nennt beide Male, dass die Maske trotz Ausblenden wirkt', () => {
-    const inside = clipMaskBadgeTooltip('inside')
-    const outside = clipMaskBadgeTooltip('outside')
+  it('unterscheidet alle vier Modi und nennt jedes Mal, dass die Maske trotz Ausblenden wirkt', () => {
+    const insideWhole = clipMaskBadgeTooltip('insideWhole')
+    const insideClipped = clipMaskBadgeTooltip('insideClipped')
+    const outsideWhole = clipMaskBadgeTooltip('outsideWhole')
+    const outsideClipped = clipMaskBadgeTooltip('outsideClipped')
+    const all = [insideWhole, insideClipped, outsideWhole, outsideClipped]
 
-    expect(inside).not.toBe(outside)
-    expect(inside).toMatch(/innerhalb/)
-    expect(outside).toMatch(/außerhalb/)
-    expect(inside).toMatch(/ausgeblendet/)
-    expect(outside).toMatch(/ausgeblendet/)
-  })
-})
-
-describe('findOtherClipMask', () => {
-  it('findet die aktuelle Maske eines anderen Layers, gleich in welchem Modus', () => {
-    const insideMask = makeLayer({ id: 'a', clipMode: 'inside' })
-    const other = makeLayer({ id: 'b', clipMode: null })
-
-    expect(findOtherClipMask([insideMask, other], 'b')).toBe(insideMask)
+    expect(new Set(all).size).toBe(all.length)
+    for (const tooltip of all) {
+      expect(tooltip).toMatch(/ausgeblendet/)
+    }
+    expect(insideWhole).toMatch(/innerhalb/)
+    expect(insideClipped).toMatch(/innerhalb/)
+    expect(outsideWhole).toMatch(/außerhalb/)
+    expect(outsideClipped).toMatch(/außerhalb/)
   })
 
-  it('findet auch eine Maske im Modus "outside"', () => {
-    const outsideMask = makeLayer({ id: 'a', clipMode: 'outside' })
-
-    expect(findOtherClipMask([outsideMask], 'b')).toBe(outsideMask)
-  })
-
-  it('ignoriert den eigenen Layer, auch wenn er bereits die Maske ist', () => {
-    const self = makeLayer({ id: 'a', clipMode: 'inside' })
-
-    expect(findOtherClipMask([self], 'a')).toBeNull()
-  })
-
-  it('liefert null, wenn im Projekt noch keine Maske gesetzt ist', () => {
-    const layers = [makeLayer({ id: 'a' }), makeLayer({ id: 'b' })]
-
-    expect(findOtherClipMask(layers, 'a')).toBeNull()
-  })
-})
-
-describe('clipMaskReplacedMessage', () => {
-  it('nennt den Namen der abgelösten Maske', () => {
-    expect(clipMaskReplacedMessage(makeLayer({ name: 'Straßen' }))).toBe('„Straßen" ist keine Maske mehr')
+  it('nennt die Grenzregel nur bei den beiden "Whole"-Modi', () => {
+    expect(clipMaskBadgeTooltip('insideWhole')).toMatch(/Grenze zählt als innerhalb/)
+    expect(clipMaskBadgeTooltip('outsideWhole')).toMatch(/Grenze zählt als innerhalb/)
+    expect(clipMaskBadgeTooltip('insideClipped')).not.toMatch(/Grenze/)
+    expect(clipMaskBadgeTooltip('outsideClipped')).not.toMatch(/Grenze/)
   })
 })

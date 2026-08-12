@@ -20,8 +20,8 @@ interface RectangleSelectToolbarProps {
   /**
    * The active layer's `clipVersion` (contract phase 19), or `0` when no mask applies
    * to it. A rectangle selection queries the database, not the map picture, so it also
-   * finds objects the clip mask hides -- worth a standing note while the tool is armed
-   * on such a layer, not a toast repeated on every drag.
+   * finds objects a mask hides -- worth a standing note while the tool is armed on
+   * such a layer, not a toast repeated on every drag.
    */
   clipVersion?: number
 }
@@ -99,7 +99,9 @@ export function RectangleSelectToolbar({ disabled = false, canUse, clipVersion =
           {/* A standing note, not a message per drag: the tool stays armed for many
               selections in a row, and repeating this on every one would train users to
               dismiss it without reading. Shown only while it actually applies -- the
-              active layer carries a mask's cut right now. */}
+              active layer carries a mask's cut right now. Speaks of "eine Maske", not
+              "der Maske": a project can hold any number of masks (contract phase 21),
+              so the text no longer assumes there is exactly one. */}
           {clipVersion > 0 && (
             <Tooltip>
               <TooltipTrigger
@@ -114,7 +116,8 @@ export function RectangleSelectToolbar({ disabled = false, canUse, clipVersion =
                 }
               />
               <TooltipContent className="max-w-xs">
-                Der Zuschnitt betrifft nur die Darstellung. Die Auswahl findet auch Objekte außerhalb der Maske.
+                Der Zuschnitt betrifft nur die Darstellung. Die Auswahl findet auch Objekte, die eine Maske
+                ausblendet.
               </TooltipContent>
             </Tooltip>
           )}

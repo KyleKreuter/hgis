@@ -10,6 +10,8 @@ import {
   Crosshair,
   Download,
   FileDown,
+  Filter,
+  FilterX,
   Loader2,
   Magnet,
   Map as MapIcon,
@@ -59,9 +61,7 @@ import {
   clipMaskBadgeAriaLabel,
   clipMaskBadgeTooltip,
   clipMaskLockedReason,
-  clipMaskReplacedMessage,
   clipModeLabel,
-  findOtherClipMask,
 } from './clipMask'
 import { DeleteLayerDialog } from './DeleteLayerDialog'
 import { GEOMETRY_LABELS } from './geometry'
@@ -78,14 +78,19 @@ const GEOMETRY_ICONS: Record<GeometryType, typeof Square> = {
 }
 
 /**
- * The mask badge's icon, by direction. Both read as "this is a cut" at a glance --
- * the dashed blades on `outside` are the visual cue that the cut runs the other way,
- * the tooltip (`clipMaskBadgeTooltip`) carries the rest. `inside` keeps the plain
- * `Scissors` it always used, so the far more common mode looks unchanged.
+ * The mask badge's icon, by mode. The two `*Clipped` modes keep the scissors that
+ * the old `inside`/`outside` modes always used -- geometry actually gets cut there.
+ * The two `*Whole` modes get `Filter`/`FilterX` instead: nothing is cut, an object is
+ * only kept or dropped whole (contract "ein Symbol, das 'ganz, aber gefiltert'
+ * trifft"). Direction lines up across the pair: `insideWhole`/`insideClipped` share
+ * the plain shape, `outsideWhole`/`outsideClipped` the dashed/crossed one, so the same
+ * direction always reads the same regardless of mode.
  */
 const CLIP_MODE_ICONS: Record<ClipMode, typeof Scissors> = {
-  inside: Scissors,
-  outside: ScissorsLineDashed,
+  insideWhole: Filter,
+  insideClipped: Scissors,
+  outsideWhole: FilterX,
+  outsideClipped: ScissorsLineDashed,
 }
 
 interface LayerTreeProps {
@@ -195,7 +200,6 @@ export function LayerTree({
               key={layer.id}
               layer={layer}
               projectId={projectId}
-              otherClipMask={findOtherClipMask(displayed, layer.id)}
               isActive={layer.id === activeLayerId}
               isDragged={layer.id === draggedId}
               dropIndicator={
@@ -269,8 +273,6 @@ function Panel({ children, count }: { children: React.ReactNode; count?: number 
 interface LayerRowProps {
   layer: LayerSummary
   projectId: string
-  /** The project's mask, if it is a *different* layer than this row -- null otherwise. */
-  otherClipMask: LayerSummary | null
   isActive: boolean
   isSnapSource: boolean
   showSnapToggle: boolean
@@ -295,7 +297,6 @@ interface LayerRowProps {
 function LayerRow({
   layer,
   projectId,
-  otherClipMask,
   isActive,
   isSnapSource,
   showSnapToggle,
@@ -323,19 +324,13 @@ function LayerRow({
   const ClipModeIcon = layer.clipMode != null ? CLIP_MODE_ICONS[layer.clipMode] : null
 
   function handleClipModeChange(mode: ClipMode | null) {
+    // Setting a mode here never touches another layer's `clipMode` -- a project can
+    // hold any number of masks at once (contract phase 21), so there is no other row
+    // to report on and `useUpdateLayer`'s own invalidation is enough to keep the tree
+    // in line.
     updateLayer.mutate(
       { clipMode: mode },
-      {
-        // Derived from the client's own list, not from the response: the server only
-        // describes the layer it just patched, and the invariant "at most one mask per
-        // project" already tells us who lost the role (contract "Höchstens eine Maske
-        // je Projekt"). `useUpdateLayer`'s own invalidation brings that other row's
-        // `clipMode` back in line right after.
-        onSuccess: () => {
-          if (mode !== null && otherClipMask) toast.info(clipMaskReplacedMessage(otherClipMask))
-        },
-        onError: () => toast.error('Das Programm konnte den Zuschnitt nicht ändern'),
-      },
+      { onError: () => toast.error('Das Programm konnte den Zuschnitt nicht ändern') },
     )
   }
 
@@ -448,7 +443,10 @@ function LayerRow({
       )}
 
       {/* Secondary, so muted rather than full-strength -- unlike the mask badge above,
-          missing this one costs nothing but a bit of context. */}
+          missing this one costs nothing but a bit of context. Says "Masken", plural
+          and without an article, because any number of layers below this one in the
+          tree could be marking it -- contract phase 21 drops the old one-mask-per-
+          project limit that let this name "the" mask. */}
       {layer.clipMode == null && (layer.clipVersion ?? 0) > 0 && (
         <Tooltip>
           <TooltipTrigger
@@ -456,13 +454,13 @@ function LayerRow({
               <span
                 tabIndex={0}
                 className="shrink-0 text-muted-foreground"
-                aria-label="Wird durch die Maske zugeschnitten"
+                aria-label="Wird durch Masken zugeschnitten"
               >
                 <Crop className="size-3" />
               </span>
             }
           />
-          <TooltipContent className="max-w-xs">Wird durch die Maske zugeschnitten</TooltipContent>
+          <TooltipContent className="max-w-xs">Wird durch Masken zugeschnitten</TooltipContent>
         </Tooltip>
       )}
 
@@ -519,9 +517,9 @@ function LayerRow({
           </DropdownMenuItem>
           {/* Shown for every geometry type, disabled with a reason for the two that
               cannot hold a mask -- contract "erscheint gesperrt mit dem Grund, nicht
-              wortlos". A submenu, not a checkbox item: this is now a choice between
-              three states (no clip, inside, outside), not a single flag to toggle
-              (contract "keine Ja/Nein-Marke mehr"). */}
+              wortlos". A submenu, not a checkbox item: this is a choice between five
+              states (no clip, plus the four modes from CONTRACT.md phase 21), not a
+              single flag to toggle (contract "keine Ja/Nein-Marke mehr"). */}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger disabled={clipMaskLocked !== null}>
               <Scissors className="size-3.5" />
@@ -535,7 +533,7 @@ function LayerRow({
               )}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-              {/* A `DropdownMenuRadioGroup`, not a plain list of items: the three choices
+              {/* A `DropdownMenuRadioGroup`, not a plain list of items: the five choices
                   are mutually exclusive, the same role radio buttons play in a form. */}
               <DropdownMenuRadioGroup
                 value={layer.clipMode ?? null}
