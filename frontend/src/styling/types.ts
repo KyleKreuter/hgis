@@ -6,6 +6,8 @@
  * that knows about MapLibre; everything else in the app works against these types.
  */
 
+import type { ClassifyMethod } from '@/api/layers'
+
 export type RendererType = 'single' | 'categorized' | 'graduated'
 
 /**
@@ -58,8 +60,33 @@ export interface StyleClass {
 
 export type Renderer =
   | { type: 'single'; symbol: LayerSymbol }
-  | { type: 'categorized'; field: string; categories: StyleCategory[]; fallbackSymbol: LayerSymbol }
-  | { type: 'graduated'; field: string; classes: StyleClass[]; fallbackSymbol: LayerSymbol }
+  | {
+      type: 'categorized'
+      field: string
+      categories: StyleCategory[]
+      fallbackSymbol: LayerSymbol
+      /**
+       * Which named palette produced `categories`' colours -- a display name the
+       * client owns, not a value the server interprets. Optional: absent on a style
+       * saved before this field existed, and on one whose categories were coloured by
+       * hand, one at a time, rather than through a palette. Reread when the panel
+       * opens so a re-classification (a field change, "Farben neu verteilen") starts
+       * from the palette that was actually used, not always the default.
+       */
+      palette?: string
+    }
+  | {
+      type: 'graduated'
+      field: string
+      classes: StyleClass[]
+      fallbackSymbol: LayerSymbol
+      /** Which of `/classify`'s methods computed `classes`' bounds. */
+      method?: ClassifyMethod
+      /** How many classes were requested -- `classes` itself may hold fewer, see `buildClasses`. */
+      classCount?: number
+      /** Which named ramp produced `classes`' colours, the graduated counterpart to `palette` above. */
+      ramp?: string
+    }
 
 export interface LabelStyle {
   enabled: boolean

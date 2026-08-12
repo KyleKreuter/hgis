@@ -1,11 +1,17 @@
 import { useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RotateCcw } from 'lucide-react'
 import { layerDetailQuery, type LayerSummary } from '@/api/layers'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { CategorizedEditor } from './CategorizedEditor'
+import {
+  initialCategorizedPalette,
+  initialGraduatedControls,
+  requestCategorizedCategories,
+  requestGraduatedClasses,
+} from './classification'
 import { Row, Section } from './controls'
 import { defaultStyleFor } from './defaults'
 import { GraduatedEditor } from './GraduatedEditor'
@@ -13,7 +19,7 @@ import { LabelEditor } from './LabelEditor'
 import { RENDERER_LABELS, labelOf } from './labels'
 import { convertRenderer } from './renderer'
 import { SymbolEditor } from './SymbolEditor'
-import type { LabelStyle, Renderer, RendererType } from './types'
+import type { LabelStyle, LayerStyle, Renderer, RendererType } from './types'
 import { useStyleEditor } from './useStyleEditor'
 
 interface SymbologyPanelProps {
@@ -29,6 +35,7 @@ interface SymbologyPanelProps {
  * the only thing that lags behind.
  */
 export function SymbologyPanel({ layer, projectId }: SymbologyPanelProps) {
+  const queryClient = useQueryClient()
   const { data: detail } = useQuery(layerDetailQuery(layer.id))
   const { style: stored, apply } = useStyleEditor(layer, projectId)
   const fields = detail?.fields ?? []
@@ -46,8 +53,60 @@ export function SymbologyPanel({ layer, projectId }: SymbologyPanelProps) {
     apply({ ...style, labels }, options)
   }
 
-  function switchRenderer(type: RendererType) {
-    apply({ ...style, renderer: convertRenderer(style, type, layer.geometryType, fields) })
+  /**
+   * `convertRenderer` can carry a field over with nothing classified yet -- switching
+   * from categorized to graduated keeps a numeric field, switching between either and
+   * back keeps it too (see `renderer.ts`). Classifying that field is part of this same
+   * action, not a background effect: `GraduatedEditor`/`CategorizedEditor` no longer
+   * watch state on their own, on purpose (CONTRACT.md, package B1) -- an effect that
+   * did would be exactly the pattern that turned "open the panel" into "lose the saved
+   * classes".
+   */
+  async function switchRenderer(type: RendererType) {
+    const base: LayerStyle = { ...style, renderer: convertRenderer(style, type, layer.geometryType, fields) }
+    apply(base)
+    const renderer = base.renderer
+
+    if (renderer.type === 'graduated' && renderer.field) {
+      const { method, classCount, ramp } = initialGraduatedControls(renderer, renderer.classes ?? [])
+      try {
+        const { classes } = await requestGraduatedClasses(
+          queryClient,
+          layer.id,
+          layer.geometryType,
+          renderer.field,
+          method,
+          classCount,
+          ramp,
+          renderer.classes ?? [],
+          renderer.fallbackSymbol,
+        )
+        apply({ ...base, renderer: { ...renderer, classes } })
+      }
+      catch {
+        // The field stays selected with an empty class list; GraduatedEditor's own
+        // controls (Methode, Klassen, Farbverlauf) offer a retry.
+      }
+    }
+
+    if (renderer.type === 'categorized' && renderer.field) {
+      try {
+        const { categories } = await requestCategorizedCategories(
+          queryClient,
+          layer.id,
+          layer.geometryType,
+          renderer.field,
+          initialCategorizedPalette(renderer),
+          renderer.categories ?? [],
+          renderer.fallbackSymbol,
+        )
+        apply({ ...base, renderer: { ...renderer, categories } })
+      }
+      catch {
+        // Same as above: the field stays selected, CategorizedEditor's own Feld picker
+        // offers a retry.
+      }
+    }
   }
 
   return (
