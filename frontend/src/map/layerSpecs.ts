@@ -24,16 +24,23 @@ export function sourceIdFor(layerId: string): string {
  * and on this layer's position relative to it (CONTRACT.md phase 19) -- none of which
  * `dataVersion`/`styleVersion` alone would catch. It is always appended, even at its
  * baseline `0`, so a layer gaining or losing a mask still changes the URL.
+ *
+ * `renderVersion` closes the gap all three of those leave open: they follow the data,
+ * so none of them moves when the server's rendering changes meaning for data that
+ * stayed the same (CONTRACT.md phase 21a). The server owns the value; this only passes
+ * it through. Missing reads as `1`, the value it was introduced at, so a summary built
+ * without it in a test fixture still produces the same URL the server would serve.
  */
 export function buildTileUrl(
-  layer: Pick<LayerSummary, 'id' | 'dataVersion' | 'styleVersion' | 'clipVersion'>,
+  layer: Pick<LayerSummary, 'id' | 'dataVersion' | 'styleVersion' | 'clipVersion' | 'renderVersion'>,
 ): string {
   // Absolute on purpose. MapLibre resolves tile templates in a worker, where there is
   // no document base URL to resolve a leading-slash path against -- a relative template
   // is dropped without any error event, and the layer simply stays empty.
   const origin = typeof window === 'undefined' ? '' : window.location.origin
   const clipVersion = layer.clipVersion ?? 0
-  return `${origin}/api/layers/${layer.id}/tiles/{z}/{x}/{y}.mvt?v=${layer.dataVersion}.${layer.styleVersion}.${clipVersion}`
+  const renderVersion = layer.renderVersion ?? 1
+  return `${origin}/api/layers/${layer.id}/tiles/{z}/{x}/{y}.mvt?v=${layer.dataVersion}.${layer.styleVersion}.${clipVersion}.r${renderVersion}`
 }
 
 /**

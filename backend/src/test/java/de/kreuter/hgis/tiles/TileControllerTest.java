@@ -14,6 +14,7 @@ import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
 import de.kreuter.hgis.common.SqlIdentifier;
+import de.kreuter.hgis.common.TileRenderVersion;
 import de.kreuter.hgis.tiles.LayerTableFixture.TestLayer;
 import java.util.List;
 import java.util.Map;
@@ -216,5 +217,44 @@ class TileControllerTest {
 						layer.getId(), testLayer.zoom(), testLayer.tileX(), testLayer.tileY())
 						.header(HttpHeaders.IF_NONE_MATCH, etag))
 				.andExpect(status().isNotModified());
+	}
+
+	/**
+	 * The ETag has to carry {@link TileRenderVersion} as well as the layer's own three
+	 * versions (CONTRACT.md phase 21a). Without it, a client holding a tile from before
+	 * a rendering change sends its old {@code If-None-Match}, matches, and is told 304 --
+	 * so it keeps the stale picture even at the moment it asked whether to.
+	 */
+	@Test
+	void theEtagCarriesTheRenderVersion() throws Exception {
+		MvcResult result = mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt",
+						layer.getId(), testLayer.zoom(), testLayer.tileX(), testLayer.tileY()))
+				.andExpect(status().isOk())
+				.andReturn();
+
+		assertThat(result.getResponse().getHeader(HttpHeaders.ETAG))
+				.endsWith("-r" + TileRenderVersion.CURRENT + "\"");
+	}
+
+	/**
+	 * And a client presenting an ETag from a different render version must be served the
+	 * tile again, not a 304. This is the half that actually protects the user; the test
+	 * above only proves the value is present.
+	 */
+	@Test
+	void anEtagFromAnotherRenderVersionDoesNotMatch() throws Exception {
+		MvcResult first = mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt",
+						layer.getId(), testLayer.zoom(), testLayer.tileX(), testLayer.tileY()))
+				.andExpect(status().isOk())
+				.andReturn();
+
+		String currentEtag = first.getResponse().getHeader(HttpHeaders.ETAG);
+		String olderEtag = currentEtag.replace("-r" + TileRenderVersion.CURRENT + "\"",
+				"-r" + (TileRenderVersion.CURRENT - 1) + "\"");
+
+		mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt",
+						layer.getId(), testLayer.zoom(), testLayer.tileX(), testLayer.tileY())
+						.header(HttpHeaders.IF_NONE_MATCH, olderEtag))
+				.andExpect(status().isOk());
 	}
 }

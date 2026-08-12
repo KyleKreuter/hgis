@@ -89,7 +89,16 @@ public final class LayerDtos {
 			 * any mask takes effect immediately, with no invalidation step to get wrong.
 			 * See {@link de.kreuter.hgis.catalog.Layer#clipVersion}.
 			 */
-			long clipVersion) {
+			long clipVersion,
+
+			/**
+			 * The fourth and last part of the tile address: how this build renders a
+			 * tile, identical for every layer of every project. The other three versions
+			 * follow the data; this one follows the code, and it is what makes a change
+			 * in rendering <em>meaning</em> reach clients that hold an immutable tile.
+			 * See {@link de.kreuter.hgis.common.TileRenderVersion} for when it is raised.
+			 */
+			int renderVersion) {
 	}
 
 	/** One entry of {@code LayerDetail.fields}. */
@@ -131,6 +140,9 @@ public final class LayerDtos {
 
 			/** @see Summary#clipVersion() */
 			long clipVersion,
+
+			/** @see Summary#renderVersion() */
+			int renderVersion,
 
 			List<Field> fields,
 			Instant createdAt,

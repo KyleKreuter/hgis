@@ -95,11 +95,11 @@ describe('syncMapLayers', () => {
 
     expect(sources.has('hgis-layer-layer-1')).toBe(true)
     expect(sources.get('hgis-layer-layer-1')?.spec.tiles).toEqual([
-      '/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=1.1.0',
+      '/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=1.1.0.r1',
     ])
     expect([...layers.keys()]).toEqual(['hgis-layer-layer-1-render'])
     expect(layers.get('hgis-layer-layer-1-render')?.type).toBe('fill')
-    expect(applied.get('layer-1')).toMatchObject({ tileUrl: '/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=1.1.0' })
+    expect(applied.get('layer-1')).toMatchObject({ tileUrl: '/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=1.1.0.r1' })
   })
 
   it('legt für einen GEOMETRY-Layer drei nach geometry-type gefilterte Sublayer an', () => {
@@ -150,9 +150,9 @@ describe('syncMapLayers', () => {
 
     syncMapLayers(map, [makeLayer({ dataVersion: 2 })], applied)
 
-    expect(setTilesSpy).toHaveBeenCalledWith(['/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=2.1.0'])
+    expect(setTilesSpy).toHaveBeenCalledWith(['/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=2.1.0.r1'])
     expect((map.addSource as ReturnType<typeof vi.fn>).mock.calls.length).toBe(addSourceCallsBefore)
-    expect(applied.get('layer-1')?.tileUrl).toBe('/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=2.1.0')
+    expect(applied.get('layer-1')?.tileUrl).toBe('/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=2.1.0.r1')
   })
 
   /**
@@ -171,9 +171,9 @@ describe('syncMapLayers', () => {
 
     syncMapLayers(map, [makeLayer({ clipVersion: 1 })], applied)
 
-    expect(setTilesSpy).toHaveBeenCalledWith(['/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=1.1.1'])
+    expect(setTilesSpy).toHaveBeenCalledWith(['/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=1.1.1.r1'])
     expect((map.addSource as ReturnType<typeof vi.fn>).mock.calls.length).toBe(addSourceCallsBefore)
-    expect(applied.get('layer-1')?.tileUrl).toBe('/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=1.1.1')
+    expect(applied.get('layer-1')?.tileUrl).toBe('/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=1.1.1.r1')
   })
 
   it('fällt auf entfernen+neu anlegen zurück, wenn die Source kein setTiles unterstützt', () => {
@@ -185,7 +185,7 @@ describe('syncMapLayers', () => {
 
     expect(map.removeSource).toHaveBeenCalledWith('hgis-layer-layer-1')
     expect(sources.get('hgis-layer-layer-1')?.spec.tiles).toEqual([
-      '/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=2.1.0',
+      '/api/layers/layer-1/tiles/{z}/{x}/{y}.mvt?v=2.1.0.r1',
     ])
   })
 

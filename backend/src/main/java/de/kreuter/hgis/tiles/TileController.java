@@ -5,6 +5,7 @@ import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.LayerStyleService;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.NotFoundException;
+import de.kreuter.hgis.common.TileRenderVersion;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
@@ -36,6 +37,10 @@ import org.springframework.web.bind.annotation.RestController;
  * from the current catalog on every request via {@link Layer#clipVersion}, never stored,
  * so a redrawn mask or a reordered layer takes effect on the very next request without
  * anything to invalidate.
+ *
+ * A fourth part, {@link TileRenderVersion}, closes the one gap those three leave: they all
+ * follow the data, so none of them moves when the rendering itself changes meaning for
+ * unchanged data. See that class for what raises it.
  */
 @RestController
 @RequestMapping("/api/layers/{layerId}/tiles")
@@ -119,8 +124,14 @@ public class TileController {
 		}
 	}
 
+	/**
+	 * Carries {@link TileRenderVersion} as well as the layer's three data-driven
+	 * versions, for the reason that constant exists at all: without it a client holding
+	 * a tile from before a rendering change would send its old {@code If-None-Match},
+	 * match, and be told 304 -- keeping the stale picture even after deciding to ask.
+	 */
 	private static String quotedETag(Layer layer, long clipVersion) {
 		return "\"" + layer.getId() + "-" + layer.getDataVersion() + "-" + layer.getStyleVersion()
-				+ "-" + clipVersion + "\"";
+				+ "-" + clipVersion + "-r" + TileRenderVersion.CURRENT + "\"";
 	}
 }

@@ -77,6 +77,18 @@ export interface LayerSummary {
    * reason `clipMode` is; missing reads as `0`, "no clip in effect".
    */
   clipVersion?: number
+  /**
+   * How the server's current build renders a tile -- the same value for every layer of
+   * every project, and the fourth part of the tile address (`buildTileUrl`).
+   *
+   * The other three versions all follow the data, so none of them moves when the
+   * rendering itself changes meaning for data that stayed the same. That is not
+   * hypothetical: narrowing "Nur innerhalb" to fully-contained objects (CONTRACT.md
+   * phase 21a) left every input to the tile address untouched, so clients kept showing
+   * the old cut -- and tiles are served `immutable` with a year's lifetime. The server
+   * raises this by hand when that happens. Optional; missing reads as `1`.
+   */
+  renderVersion?: number
 }
 
 export interface LayerField {

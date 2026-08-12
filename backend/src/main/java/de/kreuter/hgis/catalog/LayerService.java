@@ -6,6 +6,7 @@ import de.kreuter.hgis.common.FieldType;
 import de.kreuter.hgis.common.FieldValidationException;
 import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.common.NotFoundException;
+import de.kreuter.hgis.common.TileRenderVersion;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.common.TableCreator;
 import java.util.ArrayList;
@@ -390,7 +391,7 @@ public class LayerService {
 				layer.getDataVersion(), layer.getStyleVersion(),
 				toBbox(layer.getExtent()), layer.getStyle(),
 				layer.getBasemap(), layer.getBasemapOpacity(),
-				layer.getClipMode(), layer.clipVersion(projectMasks));
+				layer.getClipMode(), layer.clipVersion(projectMasks), TileRenderVersion.CURRENT);
 	}
 
 	private LayerDtos.Detail toDetail(Layer layer, List<Layer> projectMasks) {
@@ -405,7 +406,7 @@ public class LayerService {
 				layer.getDataVersion(), layer.getStyleVersion(),
 				toBbox(layer.getExtent()), layer.getStyle(),
 				layer.getBasemap(), layer.getBasemapOpacity(),
-				layer.getClipMode(), layer.clipVersion(projectMasks),
+				layer.getClipMode(), layer.clipVersion(projectMasks), TileRenderVersion.CURRENT,
 				fields, layer.getCreatedAt(), layer.getUpdatedAt());
 	}
 
