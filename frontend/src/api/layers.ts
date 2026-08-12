@@ -39,6 +39,16 @@ export interface LayerSummary {
    * server simply omits the field, which then reads as "no style" like it should.
    */
   style?: LayerStyle | null
+  /**
+   * The layer's own background map; `null` means it follows the project's (CONTRACT.md
+   * phase 18). Part of the summary for the same reason `style` is: the map resolves the
+   * basemap for the active layer straight from the layer list, without a detail fetch.
+   * Optional in the type for the same reason `style` is: an older server omits it, which
+   * then reads as "no override" like it should.
+   */
+  basemap?: string | null
+  /** The layer's own background opacity; `null` or missing means it follows the project's. */
+  basemapOpacity?: number | null
 }
 
 export interface LayerField {
@@ -114,6 +124,10 @@ export interface UpdateLayerInput {
   maxZoom?: number
   /** `null` resets the layer to the default rendering. */
   style?: LayerStyle | null
+  /** `null` resets the layer to the project's background map. */
+  basemap?: string | null
+  /** `null` resets the layer to the project's background opacity. */
+  basemapOpacity?: number | null
 }
 
 export type ClassifyMethod = 'quantile' | 'equalInterval' | 'naturalBreaks'

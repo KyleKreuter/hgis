@@ -198,4 +198,21 @@ describe('buildBasemapStyle', () => {
   it('falls back to OSM instead of rendering nothing for an unknown id', () => {
     expect(buildBasemapStyle('stamen-toner').layers.map((layer) => layer.id)).toEqual(['basemap:osm'])
   })
+
+  it('defaults to full opacity', () => {
+    const style = buildBasemapStyle('osm')
+    expect(style.layers[0].paint).toMatchObject({ 'raster-opacity': 1 })
+  })
+
+  it('bakes a reduced opacity into the layer paint, on top of the variant paint', () => {
+    const style = buildBasemapStyle('osm-dark', 0.4)
+    expect(style.layers[0].paint).toMatchObject({
+      'raster-opacity': 0.4,
+      'raster-brightness-max': 0.38,
+    })
+  })
+
+  it('carries no opacity paint for "no basemap", which has no layer to carry it on', () => {
+    expect(buildBasemapStyle('none', 0.4).layers).toEqual([])
+  })
 })

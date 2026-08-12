@@ -196,8 +196,13 @@ export function isBasemapId(id: string): boolean {
  * The initial style handed to the `Map` constructor. Later changes go through
  * `applyBasemap` instead, which swaps only the basemap layers and leaves the data
  * layers (and this style's glyph configuration) untouched.
+ *
+ * `opacity` is baked into the layers' own paint here, rather than left for a
+ * post-`load` `setPaintProperty` call, because MapLibre's `load` event fires only
+ * once the first frame is already drawn -- a style built at the default opacity would
+ * paint one real frame at full strength before anything could turn it down.
  */
-export function buildBasemapStyle(basemapId?: string | null): StyleSpecification {
+export function buildBasemapStyle(basemapId?: string | null, opacity = 1): StyleSpecification {
   const basemap = resolveBasemap(basemapId)
   // Absolute on purpose, same reason as tile URLs in `layerSpecs`: MapLibre may
   // resolve glyph templates without a reliable document base. Relative paths have
@@ -208,7 +213,10 @@ export function buildBasemapStyle(basemapId?: string | null): StyleSpecification
     version: 8,
     glyphs: `${origin}/api/glyphs/{fontstack}/{range}.pbf`,
     sources: { ...basemap.sources },
-    layers: basemap.layers.map((layer) => ({ ...layer })),
+    layers: basemap.layers.map((layer) => ({
+      ...layer,
+      paint: { ...layer.paint, 'raster-opacity': opacity },
+    })),
   }
 }
 

@@ -327,7 +327,7 @@ function Workspace() {
           <ProjectMap
             project={project}
             zoomTo={zoomTo}
-            activeLayerId={activeLayerId ?? null}
+            activeLayer={activeLayer}
             // Identify would consume the same click the measuring and rectangle select
             // tools need.
             identifyEnabled={!editing.active && !measuring && !rectSelecting}
