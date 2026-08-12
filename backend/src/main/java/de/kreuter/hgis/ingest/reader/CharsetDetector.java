@@ -90,7 +90,7 @@ final class CharsetDetector {
 			}
 			return new InputStreamReader(pushback, charset);
 		} catch (IOException e) {
-			throw new SourceReadException("Datei konnte nicht geöffnet werden: " + file, e);
+			throw new SourceReadException("Das Programm kann die Datei nicht öffnen: " + file, e);
 		}
 	}
 
@@ -101,7 +101,7 @@ final class CharsetDetector {
 			String raw = Files.readString(cpgFile, StandardCharsets.ISO_8859_1).strip();
 			return parseCpgLabel(raw);
 		} catch (IOException e) {
-			throw new SourceReadException("CPG-Datei konnte nicht gelesen werden: " + cpgFile, e);
+			throw new SourceReadException("Das Programm kann die CPG-Datei nicht lesen: " + cpgFile, e);
 		}
 	}
 
@@ -157,7 +157,7 @@ final class CharsetDetector {
 			int ldid = header[29] & 0xFF;
 			return charsetForLdid(ldid);
 		} catch (IOException e) {
-			throw new SourceReadException("DBF-Header konnte nicht gelesen werden: " + dbfFile, e);
+			throw new SourceReadException("Das Programm kann den DBF-Header nicht lesen: " + dbfFile, e);
 		}
 	}
 
@@ -238,7 +238,7 @@ final class CharsetDetector {
 				}
 			}
 		} catch (IOException e) {
-			throw new SourceReadException("DBF-Datei konnte nicht gelesen werden: " + dbfFile, e);
+			throw new SourceReadException("Das Programm kann die DBF-Datei nicht lesen: " + dbfFile, e);
 		}
 		return samples;
 	}
@@ -268,7 +268,7 @@ final class CharsetDetector {
 		try (Stream<Path> files = Files.list(dir)) {
 			return files.filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).equals(wanted)).findFirst();
 		} catch (IOException e) {
-			throw new SourceReadException("Verzeichnis konnte nicht gelesen werden: " + dir, e);
+			throw new SourceReadException("Das Programm kann das Verzeichnis nicht lesen: " + dir, e);
 		}
 	}
 
@@ -281,7 +281,7 @@ final class CharsetDetector {
 		try (InputStream in = Files.newInputStream(file)) {
 			return in.readNBytes(maxBytes);
 		} catch (IOException e) {
-			throw new SourceReadException("Datei konnte nicht gelesen werden: " + file, e);
+			throw new SourceReadException("Das Programm kann die Datei nicht lesen: " + file, e);
 		}
 	}
 

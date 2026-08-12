@@ -123,7 +123,7 @@ final class CsvSourceReader extends AbstractSourceReader {
 
 			this.schema = new SourceSchema(sample.geometryType(), crs.srid(), fields, charset.name(), crs.confidence(), null);
 		} catch (IOException e) {
-			throw new SourceReadException("CSV-Datei konnte nicht gelesen werden: " + file, e);
+			throw new SourceReadException("Das Programm kann die CSV-Datei nicht lesen: " + file, e);
 		}
 	}
 
@@ -164,7 +164,7 @@ final class CsvSourceReader extends AbstractSourceReader {
 			csvReader = openCsvReader();
 			csvReader.readNextSilently(); // skip the header
 		} catch (IOException e) {
-			throw new SourceReadException("CSV-Datei konnte nicht gelesen werden: " + file, e);
+			throw new SourceReadException("Das Programm kann die CSV-Datei nicht lesen: " + file, e);
 		}
 		Iterator<SourceFeature> iterator = new Iterator<>() {
 			private SourceFeature pending = advance();
@@ -175,7 +175,7 @@ final class CsvSourceReader extends AbstractSourceReader {
 					try {
 						row = csvReader.readNextSilently();
 					} catch (IOException e) {
-						throw new SourceReadException("CSV-Datei konnte nicht vollständig gelesen werden", e);
+						throw new SourceReadException("Das Programm kann die CSV-Datei nicht vollständig lesen", e);
 					}
 					if (row == null) {
 						return null;
@@ -382,7 +382,7 @@ final class CsvSourceReader extends AbstractSourceReader {
 			}
 			return lines;
 		} catch (IOException e) {
-			throw new SourceReadException("CSV-Datei konnte nicht gelesen werden: " + file, e);
+			throw new SourceReadException("Das Programm kann die CSV-Datei nicht lesen: " + file, e);
 		}
 	}
 

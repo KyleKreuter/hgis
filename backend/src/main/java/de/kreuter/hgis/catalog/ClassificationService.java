@@ -56,7 +56,7 @@ public class ClassificationService {
 	public ClassificationDtos.Breaks classify(UUID layerId, String field, String method, int classes) {
 		if (classes < MIN_CLASSES || classes > MAX_CLASSES) {
 			throw new BadRequestException("classes muss zwischen " + MIN_CLASSES + " und "
-					+ MAX_CLASSES + " liegen, war " + classes);
+					+ MAX_CLASSES + " liegen. Wert war " + classes + ".");
 		}
 		String normalizedMethod = normalizeMethod(method);
 
@@ -236,7 +236,7 @@ public class ClassificationService {
 				fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId));
 		if (!LayerFields.isNumeric(resolved)) {
 			throw new BadRequestException("Feld " + resolved.getSourceName() + " ist vom Typ "
-					+ resolved.getDataType() + " und kann nicht in Klassen eingeteilt werden");
+					+ resolved.getDataType() + ". Klasseneinteilung ist für diesen Feldtyp nicht möglich.");
 		}
 		return resolved;
 	}

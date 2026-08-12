@@ -68,7 +68,7 @@ public class LayerFieldService {
 		List<LayerField> existing = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
 		if (existing.size() >= MAX_FIELDS) {
 			throw new FieldValidationException("name",
-					"Der Layer hat bereits " + MAX_FIELDS + " Felder, mehr sind nicht erlaubt");
+					"Der Layer hat bereits " + MAX_FIELDS + " Felder. Mehr Felder sind nicht erlaubt.");
 		}
 
 		String name = request.name().trim();
@@ -107,7 +107,7 @@ public class LayerFieldService {
 			if (other.getSourceName().toLowerCase(Locale.ROOT).equals(wanted)
 					|| other.getColumnName().toLowerCase(Locale.ROOT).equals(wanted)) {
 				throw new FieldValidationException("name",
-						"Der Feldname '" + name + "' wird bereits von einem anderen Feld dieses Layers verwendet");
+						"Ein anderes Feld dieses Layers hat bereits den Namen '" + name + "'.");
 			}
 		}
 
@@ -208,7 +208,7 @@ public class LayerFieldService {
 		String candidate = SqlIdentifier.toColumnName(name, Set.of());
 		if (existingColumns.contains(candidate)) {
 			throw new FieldValidationException("name", "Der Feldname '" + name
-					+ "' ergibt denselben Spaltennamen wie ein bereits vorhandenes Feld dieses Layers");
+					+ "' ergibt denselben Spaltennamen wie ein vorhandenes Feld. Wählen Sie einen anderen Namen.");
 		}
 		return candidate;
 	}

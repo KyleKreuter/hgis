@@ -124,7 +124,7 @@ public class ImportController {
 	private StoredUpload resolveUpload(MultipartFile file, UUID uploadId) {
 		boolean hasFile = file != null && !file.isEmpty();
 		if (hasFile && uploadId != null) {
-			throw new BadRequestException("Bitte entweder eine Datei oder eine uploadId senden, nicht beides");
+			throw new BadRequestException("Senden Sie entweder eine Datei oder eine uploadId, nicht beides");
 		}
 		if (hasFile) {
 			return uploadStorage.store(file);
@@ -137,7 +137,7 @@ public class ImportController {
 		if (file != null) {
 			throw new BadRequestException("Die hochgeladene Datei ist leer");
 		}
-		throw new BadRequestException("Es fehlt die hochzuladende Datei oder eine uploadId");
+		throw new BadRequestException("Es fehlt eine Datei oder eine uploadId");
 	}
 
 	private static Charset parseCharset(String name) {

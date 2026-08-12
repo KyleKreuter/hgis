@@ -155,7 +155,7 @@ public class ProjectService {
 				.single();
 		if (!known) {
 			throw new BadRequestException(
-					"EPSG:" + srid + " ist der Datenbank nicht bekannt und kann nicht als Projekt-CRS dienen");
+					"EPSG:" + srid + " ist der Datenbank nicht bekannt. Es kann nicht als Projekt-CRS dienen.");
 		}
 	}
 
@@ -185,7 +185,7 @@ public class ProjectService {
 		double lat = lngLat[1];
 		if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
 			throw new BadRequestException(
-					"center liegt ausserhalb des gueltigen Bereichs fuer EPSG:4326");
+					"center liegt außerhalb des gültigen Bereichs für EPSG:4326");
 		}
 		Point point = geometryFactory.createPoint(new Coordinate(lng, lat));
 		point.setSRID(GeometryConfig.WGS84);

@@ -223,7 +223,7 @@ public class LayerService {
 			}
 			if (!seen.add(name.toLowerCase(Locale.ROOT))) {
 				throw new FieldValidationException("fields",
-						"Der Feldname '" + name + "' wird mehrfach verwendet");
+						"Der Feldname '" + name + "' kommt mehrfach vor");
 			}
 			fields.add(new TableCreator.NewField(name, parseFieldType(field.type())));
 		}

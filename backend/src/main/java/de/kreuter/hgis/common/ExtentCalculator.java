@@ -53,7 +53,7 @@ public class ExtentCalculator {
 			return toPolygon(extent.getEnvelopeInternal());
 		}
 		catch (ParseException ex) {
-			throw new IllegalStateException("Von PostGIS gelieferte Extent-Geometrie ist nicht lesbar", ex);
+			throw new IllegalStateException("Das Programm kann die Extent-Geometrie von PostGIS nicht lesen", ex);
 		}
 	}
 
@@ -85,7 +85,7 @@ public class ExtentCalculator {
 				combined.expandToInclude(reader.read(wkb).getEnvelopeInternal());
 			}
 			catch (ParseException ex) {
-				throw new IllegalStateException("Layer-Extent ist nicht lesbar", ex);
+				throw new IllegalStateException("Das Programm kann den Layer-Extent nicht lesen", ex);
 			}
 		}
 		return toPolygon(combined);

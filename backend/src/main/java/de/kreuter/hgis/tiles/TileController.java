@@ -91,11 +91,11 @@ public class TileController {
 	/** z is a Web Mercator zoom level; x/y must address a tile that actually exists within it. */
 	private static void validateCoordinates(int z, int x, int y) {
 		if (z < 0 || z > MAX_ZOOM) {
-			throw new BadRequestException("z muss zwischen 0 und " + MAX_ZOOM + " liegen, war " + z);
+			throw new BadRequestException("z muss zwischen 0 und " + MAX_ZOOM + " liegen. Wert war " + z + ".");
 		}
 		long tilesPerAxis = 1L << z;
 		if (x < 0 || x >= tilesPerAxis || y < 0 || y >= tilesPerAxis) {
-			throw new BadRequestException("x/y liegen ausserhalb des gueltigen Bereichs fuer z=" + z);
+			throw new BadRequestException("x/y liegen außerhalb des gültigen Bereichs für z=" + z);
 		}
 	}
 
