@@ -18,23 +18,32 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
- * Proves that {@link MvtService#renderTile} actually clips against a mask table in
- * {@code inside} mode (CONTRACT.md phase 19), not just filters whole features: a feature
- * straddling the mask edge has to come back smaller, one entirely outside the mask has to
- * vanish, and one crossing two mask polygons has to appear exactly once -- the
- * {@code ST_Union} in {@code MvtService}'s clipped query is what makes that last one true.
- * The {@code outside} mode introduced in CONTRACT.md phase 20 is covered separately, by
- * {@code MvtServiceOutsideClipTest}.
+ * Proves that {@link MvtService#renderTile} actually clips against mask tables in the
+ * two "inside" modes, {@code insideClipped} and {@code insideWhole} (CONTRACT.md phase
+ * 19/21), not just filters whole features where clipping was meant, or clips where
+ * keeping-whole was meant: a feature straddling the {@code insideClipped} mask edge has
+ * to come back smaller, one entirely outside has to vanish, and one crossing two mask
+ * polygons has to appear exactly once -- the {@code ST_Union} in {@code MvtService}'s
+ * clipped query is what makes that last one true. A feature straddling an {@code
+ * insideWhole} mask's edge instead has to come back at its full, unclipped area, since
+ * that mode never cuts geometry, only decides whether a feature is shown at all. This
+ * class also covers what happens when several masks act on the same layer at once,
+ * across both {@code *Clipped} modes and across a mask acting on another mask. The
+ * {@code outside} modes are covered separately, by {@code MvtServiceOutsideClipTest}.
  *
  * Every fixture geometry is placed as a fraction of one fixed tile's native bounding
  * box, computed once in {@link #computeTile()}, rather than as raw metre offsets from a
  * point: that keeps every feature safely inside the same tile regardless of where
- * exactly the anchor point happens to sit relative to the tile grid.
+ * exactly the anchor point happens to sit relative to the tile grid. The one test that
+ * needs two adjacent tiles, {@link #insideWholeKeepsAFeatureWholeAcrossATileItDoesNotTouch()},
+ * computes a second tile's bounds locally instead.
  *
- * Whether z-index decides which layers get clipped at all is {@link TileController}'s
- * job, not {@link MvtService}'s, and is covered by {@code TileControllerClipTest}.
- * Whether the clipped query stays index-friendly is covered by
- * {@link MvtServiceTest#queryPlanStaysIndexFriendlyWithAMask()}.
+ * Whether z-index decides which layers get clipped at all, and by which masks, is
+ * {@link TileController}'s job, not {@link MvtService}'s, and is covered by
+ * {@code TileControllerClipTest}. Whether the clipped query stays index-friendly,
+ * including for a chain of several masks and for the {@code *Whole} modes, is covered
+ * by {@link MvtServiceTest#queryPlanStaysIndexFriendlyWithAMask()} and
+ * {@link MvtServiceTest#queryPlanStaysIndexFriendlyWithAChainOfMasks()}.
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
@@ -67,17 +76,7 @@ class MvtServiceClipTest {
 		int[] tile = tileForNativePoint(ANCHOR_X, ANCHOR_Y, ZOOM);
 		tileX = tile[0];
 		tileY = tile[1];
-		bounds = jdbc.sql("""
-				SELECT ST_XMin(t) AS xmin, ST_YMin(t) AS ymin, ST_XMax(t) AS xmax, ST_YMax(t) AS ymax
-				FROM (SELECT ST_Transform(ST_TileEnvelope(:z, :x, :y), :srid) AS t) s
-				""")
-				.param("z", ZOOM)
-				.param("x", tileX)
-				.param("y", tileY)
-				.param("srid", SRID)
-				.query((rs, rowNum) -> new double[] {
-						rs.getDouble("xmin"), rs.getDouble("ymin"), rs.getDouble("xmax"), rs.getDouble("ymax") })
-				.single();
+		bounds = nativeBoundsOfTile(tileX, tileY, ZOOM);
 	}
 
 	@AfterEach
@@ -89,8 +88,8 @@ class MvtServiceClipTest {
 	}
 
 	@Test
-	@DisplayName("a feature straddling the mask edge comes out with a smaller area than unclipped")
-	void clippingReducesAStraddlingFeaturesArea() {
+	@DisplayName("insideClipped: a feature straddling the mask edge comes out with a smaller area than unclipped")
+	void insideClippedReducesAStraddlingFeaturesArea() {
 		String layerTable = createTable();
 		String maskTable = createTable();
 
@@ -99,8 +98,8 @@ class MvtServiceClipTest {
 		insertRectangle(layerTable, fx(0.20), fy(0.20), fx(0.40), fy(0.40));
 		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.30), fy(0.40));
 
-		double unclippedArea = firstFeature(render(layerTable, null)).area();
-		double clippedArea = firstFeature(render(layerTable, maskTable)).area();
+		double unclippedArea = firstFeature(render(layerTable, List.of())).area();
+		double clippedArea = firstFeature(render(layerTable, List.of(mask(maskTable, "insideClipped")))).area();
 
 		assertThat(clippedArea)
 				.as("geklippte Fläche muss kleiner als die ungeklippte sein")
@@ -113,8 +112,8 @@ class MvtServiceClipTest {
 	}
 
 	@Test
-	@DisplayName("a feature entirely outside the mask is missing from the clipped tile")
-	void anObjectOutsideTheMaskIsMissing() {
+	@DisplayName("insideClipped: a feature entirely outside the mask is missing from the clipped tile")
+	void insideClippedDropsAnObjectOutsideTheMask() {
 		String layerTable = createTable();
 		String maskTable = createTable();
 
@@ -123,13 +122,13 @@ class MvtServiceClipTest {
 		insertRectangle(layerTable, fx(0.70), fy(0.70), fx(0.75), fy(0.75));
 		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.30), fy(0.40));
 
-		assertThat(render(layerTable, null)).isNotNull();
-		assertThat(render(layerTable, maskTable)).isNull();
+		assertThat(render(layerTable, List.of())).isNotNull();
+		assertThat(render(layerTable, List.of(mask(maskTable, "insideClipped")))).isNull();
 	}
 
 	@Test
-	@DisplayName("a feature crossing two overlapping mask polygons appears exactly once, not twice")
-	void anObjectCrossingTwoMaskPolygonsAppearsOnce() {
+	@DisplayName("insideClipped: a feature crossing two overlapping mask polygons appears exactly once, not twice")
+	void insideClippedFeatureCrossingTwoMaskPolygonsAppearsOnce() {
 		String layerTable = createTable();
 		String maskTable = createTable();
 
@@ -140,9 +139,208 @@ class MvtServiceClipTest {
 		insertRectangle(maskTable, fx(0.10), fy(0.10), fx(0.60), fy(0.20));
 		insertRectangle(maskTable, fx(0.40), fy(0.10), fx(0.90), fy(0.20));
 
-		MvtTileDecoder.Layer layer = MvtTileDecoder.decode(render(layerTable, maskTable)).get(0);
+		MvtTileDecoder.Layer layer =
+				MvtTileDecoder.decode(render(layerTable, List.of(mask(maskTable, "insideClipped")))).get(0);
 		assertThat(layer.featureIds()).containsExactly(fid);
 		assertThat(layer.features()).hasSize(1);
+	}
+
+	/** CONTRACT.md phase 21, requirement 1: insideWhole never cuts geometry, only filters. */
+	@Test
+	@DisplayName("insideWhole: a feature straddling the mask edge keeps its full, unclipped area")
+	void insideWholeKeepsAStraddlingFeatureAtFullArea() {
+		String layerTable = createTable();
+		String maskTable = createTable();
+
+		insertRectangle(layerTable, fx(0.20), fy(0.20), fx(0.40), fy(0.40));
+		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.30), fy(0.40));
+
+		double unclippedArea = firstFeature(render(layerTable, List.of())).area();
+		double wholeArea = firstFeature(render(layerTable, List.of(mask(maskTable, "insideWhole")))).area();
+
+		assertThat(wholeArea).isEqualTo(unclippedArea);
+	}
+
+	@Test
+	@DisplayName("insideWhole: a feature that never touches the mask is dropped entirely")
+	void insideWholeDropsAFeatureThatNeverTouchesTheMask() {
+		String layerTable = createTable();
+		String maskTable = createTable();
+
+		insertRectangle(layerTable, fx(0.70), fy(0.70), fx(0.75), fy(0.75));
+		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.30), fy(0.40));
+
+		assertThat(render(layerTable, List.of())).isNotNull();
+		assertThat(render(layerTable, List.of(mask(maskTable, "insideWhole")))).isNull();
+	}
+
+	/**
+	 * CONTRACT.md phase 21, requirement 3: over the same mask, insideWhole and
+	 * outsideWhole together account for exactly every feature, with no feature in both
+	 * and none in neither -- a straddling feature counts as touching (the boundary rule:
+	 * {@code ST_Intersects} includes the edge), so it belongs to insideWhole, and a
+	 * feature with no shared point at all belongs to outsideWhole.
+	 */
+	@Test
+	@DisplayName("insideWhole and outsideWhole over the same mask partition every feature, with no overlap")
+	void insideAndOutsideWholeTogetherPartitionAllFeatures() {
+		String layerTable = createTable();
+		String maskTable = createTable();
+
+		long straddling = insertRectangle(layerTable, fx(0.20), fy(0.20), fx(0.40), fy(0.40));
+		long untouched = insertRectangle(layerTable, fx(0.70), fy(0.70), fx(0.75), fy(0.75));
+		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.30), fy(0.40));
+
+		List<Long> insideIds =
+				MvtTileDecoder.decode(render(layerTable, List.of(mask(maskTable, "insideWhole")))).get(0).featureIds();
+		List<Long> outsideIds =
+				MvtTileDecoder.decode(render(layerTable, List.of(mask(maskTable, "outsideWhole")))).get(0).featureIds();
+
+		assertThat(insideIds).containsExactly(straddling);
+		assertThat(outsideIds).containsExactly(untouched);
+	}
+
+	/**
+	 * CONTRACT.md phase 21, requirement 4: whether a feature touches an {@code
+	 * insideWhole} mask is a property of the whole feature, never of the tile it is
+	 * rendered into. A feature spanning two tiles, touching the mask only within one of
+	 * them, must still appear -- with its own portion -- in both.
+	 *
+	 * <p>This is the test the {@code EXISTS} against the mask's full table in {@code
+	 * MvtService} exists for. A wrong implementation that instead filters against a
+	 * tile-bounded union of the mask (the shortcut correctly taken for the {@code
+	 * *Clipped} modes) would find no mask polygon in the second tile at all and drop the
+	 * feature there, even though it is kept whole in the first.
+	 */
+	@Test
+	@DisplayName("insideWhole: a feature spanning two tiles, touching the mask in only one, appears in both")
+	void insideWholeKeepsAFeatureWholeAcrossATileItDoesNotTouch() {
+		String layerTable = createTable();
+		String maskTable = createTable();
+
+		int[] eastTile = { tileX + 1, tileY };
+		double[] eastBounds = nativeBoundsOfTile(eastTile[0], eastTile[1], ZOOM);
+
+		// The feature spans from 80% across the first (fixed) tile to 20% across its
+		// east neighbour -- straddling the shared tile boundary.
+		double x0 = bounds[0] + 0.80 * (bounds[2] - bounds[0]);
+		double x1 = eastBounds[0] + 0.20 * (eastBounds[2] - eastBounds[0]);
+		double y0 = fy(0.40);
+		double y1 = fy(0.60);
+		insertRectangle(layerTable, x0, y0, x1, y1);
+
+		// The mask sits entirely within the first tile, comfortably clear of the shared
+		// tile boundary (unlike the feature, which has to reach right up to it), while
+		// still overlapping the feature's own portion within the first tile.
+		insertRectangle(maskTable, fx(0.80), fy(0.40), fx(0.90), fy(0.60));
+
+		List<MvtService.ClipMask> masks = List.of(mask(maskTable, "insideWhole"));
+		byte[] firstTile = mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, tileX, tileY);
+		byte[] secondTile = mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, eastTile[0], eastTile[1]);
+
+		assertThat(firstTile).as("Objekt muss in der ersten Kachel erscheinen, dort berührt es die Maske").isNotNull();
+		assertThat(secondTile)
+				.as("Objekt muss auch in der zweiten Kachel erscheinen, obwohl die Maske dort nicht liegt")
+				.isNotNull();
+	}
+
+	/**
+	 * CONTRACT.md phase 21, requirement 5 (first half): two insideClipped masks combine
+	 * as their intersection -- only the part of the feature inside both survives.
+	 */
+	@Test
+	@DisplayName("two insideClipped masks combine as their intersection")
+	void twoInsideClippedMasksCombineAsTheirIntersection() {
+		String layerTable = createTable();
+		String maskTableA = createTable();
+		String maskTableB = createTable();
+
+		insertRectangle(layerTable, fx(0.10), fy(0.10), fx(0.90), fy(0.90));
+		insertRectangle(maskTableA, fx(0.10), fy(0.10), fx(0.60), fy(0.90));
+		insertRectangle(maskTableB, fx(0.40), fy(0.10), fx(0.90), fy(0.90));
+
+		double unclippedArea = firstFeature(render(layerTable, List.of())).area();
+		double combinedArea = firstFeature(render(layerTable,
+				List.of(mask(maskTableA, "insideClipped"), mask(maskTableB, "insideClipped")))).area();
+
+		// The two masks overlap only between fx 0.40 and 0.60 -- a fifth of the layer
+		// feature's own 0.10-0.90 span -- so the combined clip should land well under
+		// either mask's own share, not just under the smaller of the two.
+		assertThat(combinedArea).isPositive();
+		assertThat(combinedArea).isLessThan(unclippedArea * 0.35);
+	}
+
+	/**
+	 * CONTRACT.md phase 21, requirement 5 (second half): an insideClipped mask plus an
+	 * outsideClipped mask combine as the inside of the one without the other.
+	 */
+	@Test
+	@DisplayName("an insideClipped and an outsideClipped mask combine as the inside of one without the other")
+	void insideClippedAndOutsideClippedMasksCombine() {
+		String layerTable = createTable();
+		String insideMaskTable = createTable();
+		String outsideMaskTable = createTable();
+
+		insertRectangle(layerTable, fx(0.10), fy(0.10), fx(0.90), fy(0.90));
+		insertRectangle(insideMaskTable, fx(0.10), fy(0.10), fx(0.60), fy(0.90));
+		insertRectangle(outsideMaskTable, fx(0.40), fy(0.10), fx(0.90), fy(0.90));
+
+		double insideOnlyArea = firstFeature(render(layerTable, List.of(mask(insideMaskTable, "insideClipped")))).area();
+		double combinedArea = firstFeature(render(layerTable,
+				List.of(mask(insideMaskTable, "insideClipped"), mask(outsideMaskTable, "outsideClipped")))).area();
+
+		// Subtracting the outside mask's share (fx 0.40-0.60 of the inside mask's own
+		// fx 0.10-0.60 area) must shrink the result below what the inside mask alone left.
+		assertThat(combinedArea).isPositive();
+		assertThat(combinedArea).isLessThan(insideOnlyArea);
+	}
+
+	/**
+	 * CONTRACT.md phase 21, requirement 6: the same masks in a different list order
+	 * produce the same clipped area -- intersection and difference are set operations
+	 * and commute, so the caller's ordering must not matter.
+	 */
+	@Test
+	@DisplayName("combining an insideClipped and an outsideClipped mask is independent of their order in the list")
+	void combiningTwoMasksIsOrderIndependent() {
+		String layerTable = createTable();
+		String insideMaskTable = createTable();
+		String outsideMaskTable = createTable();
+
+		insertRectangle(layerTable, fx(0.10), fy(0.10), fx(0.90), fy(0.90));
+		insertRectangle(insideMaskTable, fx(0.10), fy(0.10), fx(0.60), fy(0.90));
+		insertRectangle(outsideMaskTable, fx(0.40), fy(0.10), fx(0.90), fy(0.90));
+
+		MvtService.ClipMask insideMask = mask(insideMaskTable, "insideClipped");
+		MvtService.ClipMask outsideMask = mask(outsideMaskTable, "outsideClipped");
+
+		double areaInOrder = firstFeature(render(layerTable, List.of(insideMask, outsideMask))).area();
+		double areaReversed = firstFeature(render(layerTable, List.of(outsideMask, insideMask))).area();
+
+		assertThat(areaReversed).isEqualTo(areaInOrder);
+	}
+
+	/**
+	 * CONTRACT.md phase 21, requirement 7: a mask is a layer like any other, so a mask
+	 * sitting above another mask is itself cut by the one below it. {@code MvtService}
+	 * has no notion of "mask" versus "layer" at all -- this only exercises the same
+	 * {@code renderTile} call with the upper mask's own table as the thing being
+	 * rendered, to document that the rule holds in practice, not only in theory.
+	 */
+	@Test
+	@DisplayName("a mask above another mask is itself clipped by the one below it")
+	void aMaskAboveAnotherMaskIsItselfClipped() {
+		String upperMaskTable = createTable();
+		String lowerMaskTable = createTable();
+
+		insertRectangle(upperMaskTable, fx(0.20), fy(0.20), fx(0.40), fy(0.40));
+		insertRectangle(lowerMaskTable, fx(0.20), fy(0.20), fx(0.30), fy(0.40));
+
+		double unclippedArea = firstFeature(render(upperMaskTable, List.of())).area();
+		double clippedArea =
+				firstFeature(render(upperMaskTable, List.of(mask(lowerMaskTable, "insideClipped")))).area();
+
+		assertThat(clippedArea).isLessThan(unclippedArea);
 	}
 
 	// --- fixture helpers ---------------------------------------------------------
@@ -153,6 +351,10 @@ class MvtServiceClipTest {
 
 	private double fy(double fraction) {
 		return bounds[1] + fraction * (bounds[3] - bounds[1]);
+	}
+
+	private static MvtService.ClipMask mask(String tableName, String mode) {
+		return new MvtService.ClipMask(tableName, mode);
 	}
 
 	private String createTable() {
@@ -184,13 +386,26 @@ class MvtServiceClipTest {
 				.single();
 	}
 
-	private byte[] render(String layerTable, String maskTable) {
-		String clipMode = maskTable == null ? null : "inside";
-		return mvtService.renderTile(layerTable, SRID, List.of(), maskTable, clipMode, ZOOM, tileX, tileY);
+	private byte[] render(String layerTable, List<MvtService.ClipMask> masks) {
+		return mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, tileX, tileY);
 	}
 
 	private static MvtTileDecoder.Feature firstFeature(byte[] mvt) {
 		return MvtTileDecoder.decode(mvt).get(0).features().get(0);
+	}
+
+	private double[] nativeBoundsOfTile(int x, int y, int zoom) {
+		return jdbc.sql("""
+				SELECT ST_XMin(t) AS xmin, ST_YMin(t) AS ymin, ST_XMax(t) AS xmax, ST_YMax(t) AS ymax
+				FROM (SELECT ST_Transform(ST_TileEnvelope(:z, :x, :y), :srid) AS t) s
+				""")
+				.param("z", zoom)
+				.param("x", x)
+				.param("y", y)
+				.param("srid", SRID)
+				.query((rs, rowNum) -> new double[] {
+						rs.getDouble("xmin"), rs.getDouble("ymin"), rs.getDouble("xmax"), rs.getDouble("ymax") })
+				.single();
 	}
 
 	/**

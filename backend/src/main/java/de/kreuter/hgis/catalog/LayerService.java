@@ -37,8 +37,9 @@ public class LayerService {
 	private static final Set<String> CLIP_MASK_GEOMETRY_TYPES =
 			Set.of(GeometryType.MULTIPOLYGON.name(), GeometryType.GEOMETRY.name());
 
-	/** The two known values of {@code layer.clip_mode} besides null (CONTRACT.md phase 20). */
-	private static final Set<String> CLIP_MODES = Set.of("inside", "outside");
+	/** The four known values of {@code layer.clip_mode} besides null (CONTRACT.md phase 21). */
+	private static final Set<String> CLIP_MODES =
+			Set.of("insideWhole", "insideClipped", "outsideWhole", "outsideClipped");
 
 	private final LayerRepository layerRepository;
 	private final LayerFieldRepository fieldRepository;
@@ -64,17 +65,17 @@ public class LayerService {
 			throw new NotFoundException("Projekt " + projectId + " existiert nicht");
 		}
 		List<Layer> layers = layersByProjectOrdered(projectId);
-		Layer maskLayer = findMask(layers);
+		List<Layer> masks = findMasks(layers);
 		return layers.stream()
-				.map(layer -> toSummary(layer, maskLayer))
+				.map(layer -> toSummary(layer, masks))
 				.toList();
 	}
 
 	@Transactional(readOnly = true)
 	public LayerDtos.Detail get(UUID layerId) {
 		Layer layer = require(layerId);
-		Layer maskLayer = layerRepository.findClipMask(layer.getProject().getId()).orElse(null);
-		return toDetail(layer, maskLayer, null);
+		List<Layer> masks = layerRepository.findClipMasks(layer.getProject().getId());
+		return toDetail(layer, masks);
 	}
 
 	/**
@@ -94,10 +95,10 @@ public class LayerService {
 		TableCreator.CreatedLayer created = tableCreator.createLayerTable(
 				project, geometryType, fields, request.name().trim());
 
-		// A brand-new layer is never itself a mask, but an existing project mask may
+		// A brand-new layer is never itself a mask, but existing project masks may
 		// already sit below it and clip it from the first tile it ever serves.
-		Layer maskLayer = layerRepository.findClipMask(projectId).orElse(null);
-		return toSummary(created.layer(), maskLayer);
+		List<Layer> masks = layerRepository.findClipMasks(projectId);
+		return toSummary(created.layer(), masks);
 	}
 
 	@Transactional
@@ -141,9 +142,8 @@ public class LayerService {
 		if (request.basemapOpacity() != null) {
 			layer.setBasemapOpacity(parseBasemapOpacity(request.basemapOpacity()));
 		}
-		UUID previousClipMaskLayerId = null;
 		if (request.clipMode() != null) {
-			previousClipMaskLayerId = applyClipMode(layer, request.clipMode());
+			applyClipMode(layer, request.clipMode());
 		}
 
 		// Flush so updatedAt (set by the database trigger / @UpdateTimestamp on write)
@@ -151,9 +151,8 @@ public class LayerService {
 		// clip mask lookup just below sees this layer's own new clipMode state.
 		layerRepository.flush();
 
-		Layer maskLayer = layer.isMask() ? layer
-				: layerRepository.findClipMask(layer.getProject().getId()).orElse(null);
-		return toDetail(layer, maskLayer, previousClipMaskLayerId);
+		List<Layer> masks = layerRepository.findClipMasks(layer.getProject().getId());
+		return toDetail(layer, masks);
 	}
 
 	/**
@@ -194,12 +193,12 @@ public class LayerService {
 		}
 		layerRepository.flush();
 
-		// Moving a layer across the mask changes what it clips to without touching the
-		// layer itself, so its clipVersion has to be recomputed from the new order too.
+		// Moving a layer across a mask changes what clips it without touching the layer
+		// itself, so its clipVersion has to be recomputed from the new order too.
 		List<Layer> reordered = layersByProjectOrdered(projectId);
-		Layer maskLayer = findMask(reordered);
+		List<Layer> masks = findMasks(reordered);
 		return reordered.stream()
-				.map(layer -> toSummary(layer, maskLayer))
+				.map(layer -> toSummary(layer, masks))
 				.toList();
 	}
 
@@ -341,22 +340,20 @@ public class LayerService {
 	}
 
 	/**
-	 * Applies a {@code clipMode} change from an update request (CONTRACT.md phase 20).
+	 * Applies a {@code clipMode} change from an update request (CONTRACT.md phase 21).
 	 *
 	 * <p>An explicit JSON null clears the mode -- this layer stops being a mask, and that
 	 * never fails. Setting a mode is rejected for a layer whose geometry could never
-	 * sensibly mask anything, and for any token beyond the two known modes; otherwise it
-	 * demotes whichever other layer of the same project carried a mode before --
-	 * CONTRACT.md phase 19/20 allows at most one mask per project.
+	 * sensibly mask anything, and for any token beyond the four known modes. Unlike
+	 * before phase 21, marking this layer never touches any other layer: any number of
+	 * layers in a project may be masks at once, so there is nothing left to demote.
 	 *
 	 * @param node the {@code clipMode} member of the request; a JSON null clears the mode
-	 * @return the id of a different layer that lost its clip mode because of this change,
-	 *         or null if none did
 	 */
-	private UUID applyClipMode(Layer layer, JsonNode node) {
+	private void applyClipMode(Layer layer, JsonNode node) {
 		if (node.isNull()) {
 			layer.setClipMode(null);
-			return null;
+			return;
 		}
 		if (!node.isString()) {
 			throw new FieldValidationException("clipMode", "Der Zuschnittmodus muss eine Zeichenkette sein");
@@ -368,20 +365,12 @@ public class LayerService {
 		if (!CLIP_MASK_GEOMETRY_TYPES.contains(layer.getGeometryType())) {
 			throw new FieldValidationException("clipMode", "Nur Flächenlayer können eine Maske sein");
 		}
-		UUID previousClipMaskLayerId = layerRepository.findClipMask(layer.getProject().getId())
-				.filter(existing -> !existing.getId().equals(layer.getId()))
-				.map(existing -> {
-					existing.setClipMode(null);
-					return existing.getId();
-				})
-				.orElse(null);
 		layer.setClipMode(mode);
-		return previousClipMaskLayerId;
 	}
 
-	/** The one layer of {@code layers} marked as the project's clip mask, or null if none is. */
-	private static Layer findMask(List<Layer> layers) {
-		return layers.stream().filter(Layer::isMask).findFirst().orElse(null);
+	/** Every layer of {@code layers} marked as one of the project's clip masks, unterste zuerst. */
+	private static List<Layer> findMasks(List<Layer> layers) {
+		return layers.stream().filter(Layer::isMask).toList();
 	}
 
 	private Layer require(UUID layerId) {
@@ -393,7 +382,7 @@ public class LayerService {
 		return layerRepository.findByProjectOrdered(projectId);
 	}
 
-	private static LayerDtos.Summary toSummary(Layer layer, Layer maskLayer) {
+	private static LayerDtos.Summary toSummary(Layer layer, List<Layer> projectMasks) {
 		return new LayerDtos.Summary(
 				layer.getId(), layer.getName(), layer.getGeometryType(), layer.getSrid(),
 				layer.getFeatureCount(), layer.isVisible(), layer.getZIndex(),
@@ -401,10 +390,10 @@ public class LayerService {
 				layer.getDataVersion(), layer.getStyleVersion(),
 				toBbox(layer.getExtent()), layer.getStyle(),
 				layer.getBasemap(), layer.getBasemapOpacity(),
-				layer.getClipMode(), layer.clipVersion(maskLayer));
+				layer.getClipMode(), layer.clipVersion(projectMasks));
 	}
 
-	private LayerDtos.Detail toDetail(Layer layer, Layer maskLayer, UUID previousClipMaskLayerId) {
+	private LayerDtos.Detail toDetail(Layer layer, List<Layer> projectMasks) {
 		List<LayerDtos.Field> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layer.getId()).stream()
 				.map(f -> new LayerDtos.Field(f.getId(), f.getSourceName(), f.getColumnName(), f.getDataType()))
 				.toList();
@@ -416,9 +405,8 @@ public class LayerService {
 				layer.getDataVersion(), layer.getStyleVersion(),
 				toBbox(layer.getExtent()), layer.getStyle(),
 				layer.getBasemap(), layer.getBasemapOpacity(),
-				layer.getClipMode(), layer.clipVersion(maskLayer),
-				fields, layer.getCreatedAt(), layer.getUpdatedAt(),
-				previousClipMaskLayerId);
+				layer.getClipMode(), layer.clipVersion(projectMasks),
+				fields, layer.getCreatedAt(), layer.getUpdatedAt());
 	}
 
 	private static double[] toBbox(Polygon polygon) {

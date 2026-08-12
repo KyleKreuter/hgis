@@ -2,6 +2,7 @@ package de.kreuter.hgis.tiles;
 
 import de.kreuter.hgis.common.SqlIdentifier;
 import java.util.Collection;
+import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -24,11 +25,11 @@ import org.springframework.stereotype.Service;
  * keeping it to those attributes is what keeps a tile small: everything else a client
  * wants about a feature comes from the feature API, which has no tile budget to spend.
  *
- * A layer can also be rendered clipped to a mask layer's polygons, either to what lies
- * inside them or to what lies outside (CONTRACT.md phase 19/20). Whether that applies --
- * to which table, and in which mode -- is entirely the caller's decision; this class only
- * ever cuts against the mask table and mode it is given, it never looks at z-index or
- * which layer is marked as a project's mask.
+ * A layer can also be rendered clipped to any number of mask layers' polygons, each in
+ * one of four modes (CONTRACT.md phase 21). Whether a mask applies -- to which table,
+ * and in which mode -- is entirely the caller's decision; this class only ever cuts
+ * against the masks it is given, it never looks at z-index or which layers are marked
+ * as a project's masks.
  */
 @Service
 public class MvtService {
@@ -48,99 +49,14 @@ public class MvtService {
 			WHERE tile.geom IS NOT NULL
 			""";
 
-	/**
-	 * Same shape as {@link #TILE_QUERY}, plus a clip mask in {@code inside} mode: every
-	 * feature is intersected with the union of the mask's polygons touching the tile
-	 * before encoding, so a feature straddling the mask edge is cut, not just kept or
-	 * dropped whole.
-	 *
-	 * <p>{@code ST_Union} is not optional. Without it, a feature crossing two mask
-	 * polygons would join twice and reach {@code ST_AsMVT} as two overlapping rows for
-	 * the same {@code fid} -- invisible on an opaque fill, but visibly darker wherever
-	 * semi-transparent fills overlap.
-	 *
-	 * <p>The mask is unioned only within the tile ({@code m.geom && b.native}), never
-	 * across the whole table: a mask layer can hold thousands of polygons, and the tile
-	 * envelope is what keeps this cheap.
-	 *
-	 * <p>{@code l.geom && b.native} still runs against the raw column, exactly as in
-	 * {@link #TILE_QUERY} -- the intersection lives only in the SELECT list, never in
-	 * the layer table's predicate, so the GiST index on {@code geom} still applies. The
-	 * mask is compared to the tile envelope in the layer's own SRID, no transform: every
-	 * layer of a project already shares one SRID, so mask and layer are directly
-	 * comparable.
-	 *
-	 * <p>{@code l.geom && mask.geom} additionally keeps only features that actually touch
-	 * the mask -- correct here, since a feature that never touches the mask can have
-	 * nothing inside it to keep. CONTRACT.md phase 20 lays out why that same predicate
-	 * would be exactly backwards for {@link #OUTSIDE_CLIPPED_TILE_QUERY}.
-	 */
-	private static final String INSIDE_CLIPPED_TILE_QUERY = """
-			WITH bounds AS (
-			  SELECT ST_TileEnvelope(:z, :x, :y) AS merc,
-			         ST_Transform(ST_TileEnvelope(:z, :x, :y), :srid) AS native
-			),
-			mask AS (
-			  SELECT ST_Union(m.geom) AS geom
-			  FROM %s m, bounds b
-			  WHERE m.geom && b.native
-			)
-			SELECT ST_AsMVT(tile, 'layer', 4096, 'geom', 'fid')
-			FROM (
-			  SELECT l.fid,%s
-			         ST_AsMVTGeom(ST_Transform(ST_Intersection(l.geom, mask.geom), 3857),
-			                      b.merc, 4096, 64, true) AS geom
-			  FROM %s l, bounds b, mask
-			  WHERE l.geom && b.native AND l.geom && mask.geom
-			) AS tile
-			WHERE tile.geom IS NOT NULL
-			""";
+	/** The four clip modes {@code layer.clip_mode} may carry (CONTRACT.md phase 21). */
+	private static final String MODE_INSIDE_WHOLE = "insideWhole";
+	private static final String MODE_INSIDE_CLIPPED = "insideClipped";
+	private static final String MODE_OUTSIDE_WHOLE = "outsideWhole";
+	private static final String MODE_OUTSIDE_CLIPPED = "outsideClipped";
 
-	/**
-	 * Same shape as {@link #INSIDE_CLIPPED_TILE_QUERY}, but keeps what lies outside the
-	 * mask instead of inside it (CONTRACT.md phase 20). Two changes make that correct,
-	 * and both are easy to get backwards:
-	 *
-	 * <ol>
-	 *   <li>No {@code l.geom && mask.geom} predicate. That predicate keeps only features
-	 *       touching the mask -- right for {@code inside}, where nothing outside the mask
-	 *       could keep anything, but exactly wrong here: it would keep only the features
-	 *       this mode is supposed to cut away, and drop everything meant to survive
-	 *       untouched.</li>
-	 *   <li>A {@code CASE} around {@code ST_Difference}. {@code mask.geom} is {@code NULL}
-	 *       whenever the mask has no polygon touching this tile -- {@code ST_Union} over
-	 *       zero rows -- and {@code ST_Difference(geom, NULL)} is itself {@code NULL}.
-	 *       Left unguarded, every tile the mask never reaches would render as empty, which
-	 *       is backwards for {@code outside}: such a tile has to show its layer whole. For
-	 *       {@code inside} the same {@code NULL} is correct as is, which is why
-	 *       {@link #INSIDE_CLIPPED_TILE_QUERY} carries no such guard.</li>
-	 * </ol>
-	 */
-	private static final String OUTSIDE_CLIPPED_TILE_QUERY = """
-			WITH bounds AS (
-			  SELECT ST_TileEnvelope(:z, :x, :y) AS merc,
-			         ST_Transform(ST_TileEnvelope(:z, :x, :y), :srid) AS native
-			),
-			mask AS (
-			  SELECT ST_Union(m.geom) AS geom
-			  FROM %s m, bounds b
-			  WHERE m.geom && b.native
-			)
-			SELECT ST_AsMVT(tile, 'layer', 4096, 'geom', 'fid')
-			FROM (
-			  SELECT l.fid,%s
-			         ST_AsMVTGeom(ST_Transform(
-			           CASE WHEN mask.geom IS NULL THEN l.geom
-			                ELSE ST_Difference(l.geom, mask.geom) END, 3857),
-			           b.merc, 4096, 64, true) AS geom
-			  FROM %s l, bounds b, mask
-			  WHERE l.geom && b.native
-			) AS tile
-			WHERE tile.geom IS NOT NULL
-			""";
-
-	/** The one clip mode besides {@code "inside"} -- see CONTRACT.md phase 20. */
-	private static final String CLIP_MODE_OUTSIDE = "outside";
+	/** One mask acting on a layer's tile: the table to cut against, and how. */
+	public record ClipMask(String tableName, String mode) {}
 
 	private final JdbcClient jdbc;
 
@@ -155,19 +71,16 @@ public class MvtService {
 	 * @param attributeColumns column names to carry as tile properties, resolved from the
 	 *                         layer's style through {@code layer_field}; never a name that
 	 *                         came out of the style document itself
-	 * @param maskTableName    the clip mask's table, or {@code null} to render unclipped
-	 *                         -- exactly the query this method ran before CONTRACT.md
-	 *                         phase 19 introduced clip masks. The caller decides whether
-	 *                         a mask applies to this particular layer; passing one here
-	 *                         always clips, regardless of z-index.
-	 * @param clipMode         {@code "inside"} or {@code "outside"} (CONTRACT.md phase
-	 *                         20); ignored when {@code maskTableName} is {@code null}.
-	 *                         Anything other than {@code "outside"} renders {@code inside},
-	 *                         matching the column's own default before phase 20 existed.
+	 * @param masks            the masks acting on this layer, unterste zuerst, or empty
+	 *                         to render unclipped -- never {@code null}. An empty list
+	 *                         produces exactly the query this method ran before
+	 *                         CONTRACT.md phase 19 introduced clip masks at all. The
+	 *                         caller decides which masks apply to this particular layer;
+	 *                         passing one here always clips, regardless of z-index.
 	 */
 	public byte[] renderTile(String tableName, int srid, Collection<String> attributeColumns,
-			String maskTableName, String clipMode, int z, int x, int y) {
-		byte[] mvt = jdbc.sql(query(tableName, attributeColumns, maskTableName, clipMode))
+			List<ClipMask> masks, int z, int x, int y) {
+		byte[] mvt = jdbc.sql(query(tableName, attributeColumns, masks))
 				.param("z", z)
 				.param("x", x)
 				.param("y", y)
@@ -183,8 +96,8 @@ public class MvtService {
 	 * prove the predicate stays index-friendly; never called at runtime.
 	 */
 	String explainTile(String tableName, int srid, Collection<String> attributeColumns,
-			String maskTableName, String clipMode, int z, int x, int y) {
-		String sql = "EXPLAIN (ANALYZE, FORMAT JSON) " + query(tableName, attributeColumns, maskTableName, clipMode);
+			List<ClipMask> masks, int z, int x, int y) {
+		String sql = "EXPLAIN (ANALYZE, FORMAT JSON) " + query(tableName, attributeColumns, masks);
 		return jdbc.sql(sql)
 				.param("z", z)
 				.param("x", x)
@@ -194,18 +107,122 @@ public class MvtService {
 				.single();
 	}
 
-	private String query(String tableName, Collection<String> attributeColumns, String maskTableName,
-			String clipMode) {
+	/**
+	 * Builds the query for {@code masks}. Unclipped when {@code masks} is empty, exactly
+	 * {@link #TILE_QUERY}. Otherwise builds it from parts (CONTRACT.md phase 21):
+	 *
+	 * <ul>
+	 *   <li>The two {@code *Whole} modes filter, they do not cut geometry. Each becomes
+	 *       an {@code EXISTS}/{@code NOT EXISTS} subquery against the mask's whole table
+	 *       -- never a tile-bounded union -- so a feature the mask reaches anywhere is
+	 *       kept or dropped as a whole, not split across tile boundaries.</li>
+	 *   <li>The two {@code *Clipped} modes cut. Each gets its own CTE that unions its
+	 *       polygons within the tile, and the rendered geometry expression grows from
+	 *       {@code l.geom} outward: an {@code ST_Intersection} per {@code insideClipped}
+	 *       mask, then an {@code ST_Difference} per {@code outsideClipped} mask. The two
+	 *       groups can be applied in either order -- intersection and difference are set
+	 *       operations, {@code (A ∩ B) \ C} and {@code (A \ C) ∩ B} are the same set --
+	 *       so applying every {@code insideClipped} mask before every {@code
+	 *       outsideClipped} one, regardless of how the caller ordered {@code masks},
+	 *       costs nothing in correctness and keeps this loop simple.</li>
+	 * </ul>
+	 */
+	private String query(String tableName, Collection<String> attributeColumns, List<ClipMask> masks) {
 		String attributes = selectedAttributes(attributeColumns);
 		String layerTable = SqlIdentifier.quoteLayerTable(tableName);
-		if (maskTableName == null) {
+		if (masks.isEmpty()) {
 			return TILE_QUERY.formatted(attributes, layerTable);
 		}
-		String maskTable = SqlIdentifier.quoteLayerTable(maskTableName);
-		if (CLIP_MODE_OUTSIDE.equals(clipMode)) {
-			return OUTSIDE_CLIPPED_TILE_QUERY.formatted(maskTable, attributes, layerTable);
+
+		StringBuilder ctes = new StringBuilder();
+		StringBuilder from = new StringBuilder(layerTable).append(" l, bounds b");
+		StringBuilder where = new StringBuilder("l.geom && b.native");
+		String geom = "l.geom";
+
+		int cteIndex = 0;
+		for (ClipMask mask : masks) {
+			if (!MODE_INSIDE_CLIPPED.equals(mask.mode())) {
+				continue;
+			}
+			String cte = "mask_" + cteIndex++;
+			ctes.append(",\n").append(clippedMaskCte(cte, mask.tableName()));
+			from.append(", ").append(cte);
+			where.append(" AND l.geom && ").append(cte).append(".geom");
+			geom = "ST_Intersection(%s, %s.geom)".formatted(geom, cte);
 		}
-		return INSIDE_CLIPPED_TILE_QUERY.formatted(maskTable, attributes, layerTable);
+		for (ClipMask mask : masks) {
+			if (!MODE_OUTSIDE_CLIPPED.equals(mask.mode())) {
+				continue;
+			}
+			String cte = "mask_" + cteIndex++;
+			ctes.append(",\n").append(clippedMaskCte(cte, mask.tableName()));
+			from.append(", ").append(cte);
+			geom = "CASE WHEN %1$s.geom IS NULL THEN %2$s ELSE ST_Difference(%2$s, %1$s.geom) END"
+					.formatted(cte, geom);
+		}
+		for (ClipMask mask : masks) {
+			if (MODE_INSIDE_WHOLE.equals(mask.mode())) {
+				where.append(" AND EXISTS (").append(wholeMaskSubquery(mask.tableName())).append(")");
+			}
+			else if (MODE_OUTSIDE_WHOLE.equals(mask.mode())) {
+				where.append(" AND NOT EXISTS (").append(wholeMaskSubquery(mask.tableName())).append(")");
+			}
+		}
+
+		return """
+				WITH bounds AS (
+				  SELECT ST_TileEnvelope(:z, :x, :y) AS merc,
+				         ST_Transform(ST_TileEnvelope(:z, :x, :y), :srid) AS native
+				)%s
+				SELECT ST_AsMVT(tile, 'layer', 4096, 'geom', 'fid')
+				FROM (
+				  SELECT l.fid,%s
+				         ST_AsMVTGeom(ST_Transform(%s, 3857), b.merc, 4096, 64, true) AS geom
+				  FROM %s
+				  WHERE %s
+				) AS tile
+				WHERE tile.geom IS NOT NULL
+				"""
+				.formatted(ctes, attributes, geom, from, where);
+	}
+
+	/**
+	 * A CTE unioning one {@code *Clipped} mask's polygons within the tile.
+	 *
+	 * <p>{@code ST_Union} is not optional. Without it, a feature crossing two mask
+	 * polygons would join twice and reach {@code ST_AsMVT} as two overlapping rows for
+	 * the same {@code fid} -- invisible on an opaque fill, but visibly darker wherever
+	 * semi-transparent fills overlap.
+	 *
+	 * <p>The mask is unioned only within the tile ({@code m.geom && b.native}), never
+	 * across the whole table: a mask layer can hold thousands of polygons, and the tile
+	 * envelope is what keeps this cheap. That is safe here specifically because the
+	 * {@code *Clipped} modes only ever cut geometry, never decide whether a whole
+	 * feature is kept -- see {@link #wholeMaskSubquery} for why the {@code *Whole} modes
+	 * cannot take the same shortcut.
+	 */
+	private static String clippedMaskCte(String cteName, String maskTableName) {
+		return "%s AS (\n  SELECT ST_Union(m.geom) AS geom FROM %s m, bounds b WHERE m.geom && b.native\n)"
+				.formatted(cteName, SqlIdentifier.quoteLayerTable(maskTableName));
+	}
+
+	/**
+	 * The correlated {@code EXISTS} subquery an {@code insideWhole}/{@code outsideWhole}
+	 * mask filters with, run against the mask's full table rather than a tile-bounded
+	 * union (CONTRACT.md phase 21).
+	 *
+	 * <p>This is the point at which the two {@code *Whole} modes could easily be built
+	 * wrong: whether a feature touches the mask is a property of the whole feature, never
+	 * of the tile it happens to be rendered into. Filtering against a tile-bounded union
+	 * -- the shortcut {@link #clippedMaskCte} takes for the {@code *Clipped} modes --
+	 * would make a feature vanish in exactly the tiles where it does not itself touch the
+	 * mask, so a long feature meant to be kept whole would fall apart across tile
+	 * boundaries. {@code m.geom && l.geom} keeps this affordable anyway: it still hits
+	 * the mask table's GiST index, one lookup per candidate feature.
+	 */
+	private static String wholeMaskSubquery(String maskTableName) {
+		return "SELECT 1 FROM %s m WHERE m.geom && l.geom AND ST_Intersects(m.geom, l.geom)"
+				.formatted(SqlIdentifier.quoteLayerTable(maskTableName));
 	}
 
 	/**

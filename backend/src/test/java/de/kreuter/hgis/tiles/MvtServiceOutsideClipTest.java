@@ -19,19 +19,24 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
- * Proves that {@link MvtService#renderTile} clips correctly in {@code outside} mode
- * (CONTRACT.md phase 20): the complement of {@code inside} mode, covered by
- * {@code MvtServiceClipTest}. Two traps make {@code outside} easy to get backwards, and
- * this class has one dedicated test for each:
+ * Proves that {@link MvtService#renderTile} clips correctly in the two "outside" modes,
+ * {@code outsideClipped} and {@code outsideWhole} (CONTRACT.md phase 20/21) -- the
+ * complements of {@code insideClipped}/{@code insideWhole}, covered by
+ * {@code MvtServiceClipTest}. Several traps make {@code outside} easy to get backwards,
+ * and this class has one dedicated test for each:
  *
  * <ol>
- *   <li>{@link #objectNotTouchingTheMaskIsUnaffected()} -- the {@code l.geom && mask.geom}
- *       predicate that is correct for {@code inside} would, if left in place for
- *       {@code outside}, keep only features touching the mask and drop everything meant
- *       to survive untouched.</li>
- *   <li>{@link #tileWithNoMaskPortionShowsEverything()} -- a tile the mask never reaches
- *       has to show its layer whole, not empty, even though {@code ST_Union} yields
- *       {@code NULL} there.</li>
+ *   <li>{@link #outsideClippedLeavesAnUntouchedObjectUnaffected()} -- the {@code
+ *       l.geom && mask.geom} predicate that is correct for {@code insideClipped} would,
+ *       if left in place for {@code outsideClipped}, keep only features touching the
+ *       mask and drop everything meant to survive untouched.</li>
+ *   <li>{@link #outsideClippedShowsEverythingWhenTheTileHoldsNoMaskPortion()} -- a tile
+ *       the mask never reaches has to show its layer whole, not empty, even though
+ *       {@code ST_Union} yields {@code NULL} there.</li>
+ *   <li>{@link #outsideWholeDropsAFeatureThatTouchesTheMask()} -- a feature the {@code
+ *       insideWhole} mode would keep whole has to be dropped entirely here, not cut down
+ *       like {@code outsideClipped} would; the two {@code outside} modes are easy to
+ *       conflate since both remove something.</li>
  * </ol>
  *
  * Every fixture geometry is placed as a fraction of one fixed tile's native bounding
@@ -92,8 +97,8 @@ class MvtServiceOutsideClipTest {
 
 	/** Trap 1: the {@code l.geom && mask.geom} predicate would be exactly backwards here. */
 	@Test
-	@DisplayName("trap 1: a feature that never touches the mask stays fully intact in outside mode")
-	void objectNotTouchingTheMaskIsUnaffected() {
+	@DisplayName("trap 1: a feature that never touches the mask stays fully intact under outsideClipped")
+	void outsideClippedLeavesAnUntouchedObjectUnaffected() {
 		String layerTable = createTable();
 		String maskTable = createTable();
 
@@ -102,8 +107,8 @@ class MvtServiceOutsideClipTest {
 		insertRectangle(layerTable, fx(0.70), fy(0.70), fx(0.80), fy(0.80));
 		insertRectangle(maskTable, fx(0.10), fy(0.10), fx(0.20), fy(0.20));
 
-		double unclippedArea = firstFeature(render(layerTable, null)).area();
-		byte[] outside = render(layerTable, maskTable, "outside");
+		double unclippedArea = firstFeature(render(layerTable, List.of())).area();
+		byte[] outside = render(layerTable, List.of(mask(maskTable, "outsideClipped")));
 
 		assertThat(outside).as("Objekt außerhalb der Maske darf nicht verschwinden").isNotNull();
 		assertThat(firstFeature(outside).area()).isEqualTo(unclippedArea);
@@ -111,8 +116,8 @@ class MvtServiceOutsideClipTest {
 
 	/** Trap 2: ST_Difference(geom, NULL) is NULL, and must not be allowed to empty the tile. */
 	@Test
-	@DisplayName("trap 2: a tile the mask never reaches shows its layer whole in outside mode")
-	void tileWithNoMaskPortionShowsEverything() {
+	@DisplayName("trap 2: a tile the mask never reaches shows its layer whole under outsideClipped")
+	void outsideClippedShowsEverythingWhenTheTileHoldsNoMaskPortion() {
 		String layerTable = createTable();
 		String maskTable = createTable();
 
@@ -121,24 +126,24 @@ class MvtServiceOutsideClipTest {
 		double far = bounds[2] + (bounds[2] - bounds[0]) * 5;
 		insertRectangle(maskTable, far, far, far + 100, far + 100);
 
-		byte[] unclipped = render(layerTable, null);
-		byte[] outside = render(layerTable, maskTable, "outside");
+		byte[] unclipped = render(layerTable, List.of());
+		byte[] outside = render(layerTable, List.of(mask(maskTable, "outsideClipped")));
 
 		assertThat(outside).isNotNull();
 		assertThat(firstFeature(outside).area()).isEqualTo(firstFeature(unclipped).area());
 	}
 
 	@Test
-	@DisplayName("an object entirely inside the mask disappears in outside mode")
-	void objectEntirelyInsideTheMaskDisappears() {
+	@DisplayName("an object entirely inside the mask disappears under outsideClipped")
+	void outsideClippedDropsAnObjectEntirelyInsideTheMask() {
 		String layerTable = createTable();
 		String maskTable = createTable();
 
 		insertRectangle(layerTable, fx(0.42), fy(0.42), fx(0.48), fy(0.48));
 		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.80), fy(0.80));
 
-		assertThat(render(layerTable, null)).isNotNull();
-		assertThat(render(layerTable, maskTable, "outside")).isNull();
+		assertThat(render(layerTable, List.of())).isNotNull();
+		assertThat(render(layerTable, List.of(mask(maskTable, "outsideClipped")))).isNull();
 	}
 
 	/**
@@ -147,17 +152,17 @@ class MvtServiceOutsideClipTest {
 	 * back up to the unclipped area, since together they cover it exactly once.
 	 */
 	@Test
-	@DisplayName("an object straddling the edge keeps its outer part, complementary to the inside clip")
-	void objectStraddlingTheEdgeKeepsTheOuterPart() {
+	@DisplayName("outsideClipped keeps the outer part of a straddling object, complementary to insideClipped")
+	void outsideClippedKeepsTheOuterPartOfAStraddlingObject() {
 		String layerTable = createTable();
 		String maskTable = createTable();
 
 		insertRectangle(layerTable, fx(0.20), fy(0.20), fx(0.40), fy(0.40));
 		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.30), fy(0.40));
 
-		double unclippedArea = firstFeature(render(layerTable, null)).area();
-		double insideArea = firstFeature(render(layerTable, maskTable, "inside")).area();
-		double outsideArea = firstFeature(render(layerTable, maskTable, "outside")).area();
+		double unclippedArea = firstFeature(render(layerTable, List.of())).area();
+		double insideArea = firstFeature(render(layerTable, List.of(mask(maskTable, "insideClipped")))).area();
+		double outsideArea = firstFeature(render(layerTable, List.of(mask(maskTable, "outsideClipped")))).area();
 
 		assertThat(outsideArea)
 				.as("geklippte Fläche außerhalb muss kleiner als die ungeklippte sein")
@@ -168,6 +173,46 @@ class MvtServiceOutsideClipTest {
 				.isCloseTo(unclippedArea, within(unclippedArea * 0.01));
 	}
 
+	/**
+	 * CONTRACT.md phase 21, requirement 2 (first half): an object with no shared point
+	 * with the mask stays at its full, unclipped area under outsideWhole -- the mirror
+	 * of {@link #outsideClippedLeavesAnUntouchedObjectUnaffected()}, but for the mode
+	 * that filters instead of cutting.
+	 */
+	@Test
+	@DisplayName("outsideWhole: a feature that never touches the mask keeps its full, unclipped area")
+	void outsideWholeKeepsAnUntouchedFeatureAtFullArea() {
+		String layerTable = createTable();
+		String maskTable = createTable();
+
+		insertRectangle(layerTable, fx(0.70), fy(0.70), fx(0.80), fy(0.80));
+		insertRectangle(maskTable, fx(0.10), fy(0.10), fx(0.20), fy(0.20));
+
+		double unclippedArea = firstFeature(render(layerTable, List.of())).area();
+		double wholeArea = firstFeature(render(layerTable, List.of(mask(maskTable, "outsideWhole")))).area();
+
+		assertThat(wholeArea).isEqualTo(unclippedArea);
+	}
+
+	/**
+	 * CONTRACT.md phase 21, requirement 2 (second half): the very feature that {@code
+	 * insideWhole} keeps whole -- one that only straddles the mask edge, not one fully
+	 * inside it -- has to be dropped entirely under outsideWhole, not merely cut down
+	 * the way outsideClipped would.
+	 */
+	@Test
+	@DisplayName("outsideWhole: a feature that touches the mask, even only partially, is dropped entirely")
+	void outsideWholeDropsAFeatureThatTouchesTheMask() {
+		String layerTable = createTable();
+		String maskTable = createTable();
+
+		insertRectangle(layerTable, fx(0.20), fy(0.20), fx(0.40), fy(0.40));
+		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.30), fy(0.40));
+
+		assertThat(render(layerTable, List.of())).isNotNull();
+		assertThat(render(layerTable, List.of(mask(maskTable, "outsideWhole")))).isNull();
+	}
+
 	// --- fixture helpers ---------------------------------------------------------
 
 	private double fx(double fraction) {
@@ -176,6 +221,10 @@ class MvtServiceOutsideClipTest {
 
 	private double fy(double fraction) {
 		return bounds[1] + fraction * (bounds[3] - bounds[1]);
+	}
+
+	private static MvtService.ClipMask mask(String tableName, String mode) {
+		return new MvtService.ClipMask(tableName, mode);
 	}
 
 	private String createTable() {
@@ -205,12 +254,8 @@ class MvtServiceOutsideClipTest {
 				.update();
 	}
 
-	private byte[] render(String layerTable, String maskTable) {
-		return render(layerTable, maskTable, null);
-	}
-
-	private byte[] render(String layerTable, String maskTable, String clipMode) {
-		return mvtService.renderTile(layerTable, SRID, List.of(), maskTable, clipMode, ZOOM, tileX, tileY);
+	private byte[] render(String layerTable, List<MvtService.ClipMask> masks) {
+		return mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, tileX, tileY);
 	}
 
 	private static MvtTileDecoder.Feature firstFeature(byte[] mvt) {

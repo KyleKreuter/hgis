@@ -54,7 +54,7 @@ class MvtServiceTest {
 	@Test
 	@DisplayName("renders a tile containing exactly the known signal features")
 	void rendersExpectedFeatures() {
-		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, null,
+		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), List.of(),
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		assertThat(mvt).isNotNull();
@@ -69,7 +69,7 @@ class MvtServiceTest {
 	@Test
 	@DisplayName("an unstyled layer carries no attributes beyond its feature ids")
 	void tileWithoutStyleCarriesNoAttributes() {
-		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, null,
+		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), List.of(),
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		assertThat(MvtTileDecoder.decode(mvt).get(0).keys()).isEmpty();
@@ -79,7 +79,7 @@ class MvtServiceTest {
 	@DisplayName("a requested attribute reaches the tile, keyed by its column name")
 	void tileCarriesTheRequestedAttribute() {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832,
-				List.of(LayerTableFixture.CATEGORY_COLUMN), null, null,
+				List.of(LayerTableFixture.CATEGORY_COLUMN), List.of(),
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		MvtTileDecoder.Layer decoded = MvtTileDecoder.decode(mvt).get(0);
@@ -96,7 +96,7 @@ class MvtServiceTest {
 	@DisplayName("only the requested attributes reach the tile, not every column")
 	void tileOmitsAttributesNoStyleAskedFor() {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832,
-				List.of(LayerTableFixture.CATEGORY_COLUMN), null, null,
+				List.of(LayerTableFixture.CATEGORY_COLUMN), List.of(),
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		assertThat(MvtTileDecoder.decode(mvt).get(0).keys())
@@ -108,30 +108,14 @@ class MvtServiceTest {
 	void emptyTileRendersToNull() {
 		// z=0 with the corner tile (0,0) is a fixed point far from every possible
 		// signal/noise coordinate this fixture ever produces -- no guessing involved.
-		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, null, 0, 0, 0);
+		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), List.of(), 0, 0, 0);
 		assertThat(mvt).isNull();
-	}
-
-	/**
-	 * CONTRACT.md phase 20: without a mask, a tile has to render exactly as it did
-	 * before this phase -- clipMode is then meaningless, and must not change a byte of
-	 * the output no matter what it is set to.
-	 */
-	@Test
-	@DisplayName("without a mask, clipMode makes no difference to the tile")
-	void unclippedTileIgnoresClipMode() {
-		byte[] withoutMode = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, null,
-				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
-		byte[] withIgnoredMode = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, "outside",
-				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
-
-		assertThat(withIgnoredMode).isEqualTo(withoutMode);
 	}
 
 	@Test
 	@DisplayName("the tile query uses the GiST index, not a sequential scan")
 	void queryPlanIsIndexFriendly() throws Exception {
-		assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(), null, null,
+		assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(), List.of(),
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
 	}
 
@@ -139,22 +123,46 @@ class MvtServiceTest {
 	@DisplayName("selecting style attributes leaves the query plan index-friendly")
 	void queryPlanStaysIndexFriendlyWithAttributes() throws Exception {
 		assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832,
-				List.of(LayerTableFixture.CATEGORY_COLUMN, LayerTableFixture.NUMERIC_COLUMN), null, null,
+				List.of(LayerTableFixture.CATEGORY_COLUMN, LayerTableFixture.NUMERIC_COLUMN), List.of(),
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
 	}
 
 	@Test
-	@DisplayName("a clip mask leaves the query plan index-friendly too, inside or outside")
+	@DisplayName("a clip mask leaves the query plan index-friendly too, in every mode")
 	void queryPlanStaysIndexFriendlyWithAMask() throws Exception {
 		String maskTable = LayerTableFixture.create(jdbc, 1).tableName();
 		try {
-			assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(), maskTable, "inside",
-					testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
-			assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(), maskTable, "outside",
-					testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
+			for (String mode : new String[] { "insideWhole", "insideClipped", "outsideWhole", "outsideClipped" }) {
+				assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(),
+						List.of(new MvtService.ClipMask(maskTable, mode)),
+						testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
+			}
 		}
 		finally {
 			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(maskTable)).update();
+		}
+	}
+
+	/**
+	 * CONTRACT.md phase 21: {@code assertIndexFriendly} has to keep holding for a chain
+	 * of several masks acting on the same layer at once, not just for one at a time --
+	 * each additional mask adds its own join or {@code EXISTS} subquery, and any of them
+	 * could in principle force a sequential scan on the layer table if built wrong.
+	 */
+	@Test
+	@DisplayName("a chain of several masks together still leaves the query plan index-friendly")
+	void queryPlanStaysIndexFriendlyWithAChainOfMasks() throws Exception {
+		String maskTableA = LayerTableFixture.create(jdbc, 1).tableName();
+		String maskTableB = LayerTableFixture.create(jdbc, 1).tableName();
+		try {
+			assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(),
+					List.of(new MvtService.ClipMask(maskTableA, "insideClipped"),
+							new MvtService.ClipMask(maskTableB, "outsideWhole")),
+					testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(maskTableA)).update();
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(maskTableB)).update();
 		}
 	}
 

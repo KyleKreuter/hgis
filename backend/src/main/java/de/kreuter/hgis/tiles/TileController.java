@@ -5,6 +5,7 @@ import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.LayerStyleService;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.NotFoundException;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -27,13 +28,14 @@ import org.springframework.web.bind.annotation.RestController;
  * on the client side; the server never reads it and always derives cache headers from
  * the layer's current, live state.
  *
- * clipVersion (CONTRACT.md phase 19) is what keeps that promise once a clip mask is in
- * play: a tile's content then also depends on which layer is marked as the project's
- * mask, that layer's geometry, and this layer's position relative to it -- none of
- * which the id/dataVersion/styleVersion triple could ever reflect on its own. It is
- * computed fresh from the current catalog on every request via
- * {@link Layer#clipVersion}, never stored, so a redrawn mask or a reordered layer takes
- * effect on the very next request without anything to invalidate.
+ * clipVersion (CONTRACT.md phase 19, extended in phase 21 to several masks at once) is
+ * what keeps that promise once one or more clip masks are in play: a tile's content then
+ * also depends on which layers are marked as the project's masks, their geometry and
+ * mode, and this layer's position relative to each -- none of which the
+ * id/dataVersion/styleVersion triple could ever reflect on its own. It is computed fresh
+ * from the current catalog on every request via {@link Layer#clipVersion}, never stored,
+ * so a redrawn mask or a reordered layer takes effect on the very next request without
+ * anything to invalidate.
  */
 @RestController
 @RequestMapping("/api/layers/{layerId}/tiles")
@@ -72,12 +74,12 @@ public class TileController {
 		Layer layer = layerRepository.findById(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
 
-		// One extra, cheap lookup per tile request (one row at most, per project) so the
+		// One extra, cheap lookup per tile request (every mask of the project) so the
 		// cache headers below always reflect whether a mask currently affects this layer
-		// -- see CONTRACT.md phase 19. It runs ahead of the expensive render, same as the
-		// rest of this method's cache-relevant state.
-		Layer maskLayer = layerRepository.findClipMask(layer.getProject().getId()).orElse(null);
-		long clipVersion = layer.clipVersion(maskLayer);
+		// -- see CONTRACT.md phase 19/21. It runs ahead of the expensive render, same as
+		// the rest of this method's cache-relevant state.
+		List<Layer> projectMasks = layerRepository.findClipMasks(layer.getProject().getId());
+		long clipVersion = layer.clipVersion(projectMasks);
 
 		String etag = quotedETag(layer, clipVersion);
 		if (etag.equals(ifNoneMatch == null ? null : ifNoneMatch.trim())) {
@@ -89,11 +91,11 @@ public class TileController {
 
 		// After the ETag check, not before: a client that already holds this tile gets its
 		// 304 without the style ever being read, let alone its fields looked up.
-		boolean clipped = layer.isClippedBy(maskLayer);
-		String maskTableName = clipped ? maskLayer.getTableName() : null;
-		String clipMode = clipped ? maskLayer.getClipMode() : null;
+		List<MvtService.ClipMask> masks = layer.effectiveMasks(projectMasks).stream()
+				.map(mask -> new MvtService.ClipMask(mask.getTableName(), mask.getClipMode()))
+				.toList();
 		byte[] mvt = mvtService.renderTile(layer.getTableName(), layer.getSrid(),
-				styleService.tileColumns(layer), maskTableName, clipMode, z, x, y);
+				styleService.tileColumns(layer), masks, z, x, y);
 
 		ResponseEntity.BodyBuilder response = ResponseEntity
 				.status(mvt == null ? HttpStatus.NO_CONTENT : HttpStatus.OK)
