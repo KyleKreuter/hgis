@@ -1,17 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Shuffle } from 'lucide-react'
-import type { GeometryType, LayerField } from '@/api/layers'
-import { layerValuesQuery, type FieldValue } from '@/api/layers'
+import type { FieldValue, FieldValuesResult, GeometryType, LayerField } from '@/api/layers'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCount } from '@/lib/format'
 import {
-  buildCategories,
   columnNameOfField,
   fieldIdOfColumn,
+  initialCategorizedPalette,
+  requestCategorizedCategories,
   sharedSymbolOf,
   sourceNameOfField,
   withSharedSymbol,
@@ -21,7 +21,7 @@ import { ColorInput, Row } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
 import { formatCategoryValue } from './fields'
 import { PaletteSelect } from './PaletteSelect'
-import { DEFAULT_CATEGORY_PALETTE, paletteColors } from './palettes'
+import { paletteColors } from './palettes'
 import { SymbolEditor } from './SymbolEditor'
 import type { LayerSymbol, Renderer, StyleCategory } from './types'
 
@@ -33,6 +33,13 @@ interface CategorizedEditorProps {
   onChange: (renderer: Renderer, options?: { defer?: boolean }) => void
 }
 
+/** What `/values` last answered, kept outside `useQuery` -- see the comment on `request` below. */
+interface ValuesState {
+  isFetching: boolean
+  isError: boolean
+  data?: FieldValuesResult
+}
+
 export function CategorizedEditor({
   layerId,
   geometryType,
@@ -40,40 +47,63 @@ export function CategorizedEditor({
   fields,
   onChange,
 }: CategorizedEditorProps) {
-  const [palette, setPalette] = useState(DEFAULT_CATEGORY_PALETTE)
+  const queryClient = useQueryClient()
+  // Seeded from the saved renderer, once -- see the matching comment in
+  // `GraduatedEditor`. A style saved before `palette` existed falls back to the
+  // default, same as it always did.
+  const [palette, setPalette] = useState(initialCategorizedPalette(renderer))
   // Defensive: the server omits every null member (@JsonInclude(NON_NULL)), so an
   // empty list may not arrive as `[]` at all. `undefined.length` here would take the
   // whole workspace down over an edge case that costs one line to survive.
   const categories = renderer.categories ?? []
-  const { data, isFetching, isError } = useQuery({
-    ...layerValuesQuery(layerId, renderer.field),
-    enabled: renderer.field !== '',
-  })
+  const [values, setValues] = useState<ValuesState>({ isFetching: false, isError: false })
 
-  // Deriving the categories from the loaded values, once per field. Doing it on arrival
-  // rather than behind a button saves the step that would follow every field change
-  // anyway; the ref is what keeps it from overwriting colours the user has since picked.
-  const generatedFor = useRef<string | null>(null)
-  useEffect(() => {
-    if (!data || data.field !== renderer.field) return
-    const key = `${layerId}:${data.field}`
-    if (generatedFor.current === key) return
-    generatedFor.current = key
-    if (categories.length > 0) return
-    const fresh = buildCategories(data.values, geometryType, palette)
-    // `buildCategories` gives every fresh category the layer's default symbol. This path
-    // only runs with an empty list (the guard above), which after a field change is
-    // exactly the moment `selectField` cleared `categories` but left `fallbackSymbol`
-    // alone -- so a size the user picked earlier is still there to carry over.
-    const shared = sharedSymbolOf(renderer.categories ?? [], renderer.fallbackSymbol)
-    onChange({ ...renderer, categories: withSharedSymbol(fresh, shared) })
-    // `categories.length`, not `categories` itself: the fallback to `[]` makes a fresh
-    // array on every render, which would re-run this effect forever.
-  }, [categories.length, data, geometryType, layerId, onChange, palette, renderer])
+  // No `useEffect` here on purpose (CONTRACT.md, package B1), same as `GraduatedEditor`.
+  // This editor used to have one too, watching `renderer`/`categories` and rebuilding
+  // whenever `data` arrived with an empty category list. Its own `if (categories.length
+  // > 0) return` guard happened to keep it from the graduated renderer's exact failure
+  // -- a *populated* list was never touched -- but the shape was still wrong: an effect
+  // cannot tell "the panel just mounted" from "the user changed something", because its
+  // guard ref starts out empty either way, and an empty ref reads as a change. Kept
+  // consistent with `GraduatedEditor` here rather than left as a narrower exception. Do
+  // not reintroduce an effect that watches `categories`/`renderer` -- initial values
+  // belong in `useState` (see `palette` above), rebuilds in a user action (see `request`
+  // below).
+
+  /**
+   * The only place `/values` is asked for and the result written back. Called from
+   * every control that can produce a new set of categories -- never from an effect
+   * that watches `renderer` or `categories`: that pattern is what let a mere reopen
+   * look exactly like a field change and overwrite hand-picked colours
+   * (`GraduatedEditor`'s equivalent, fixed alongside this one, CONTRACT.md package B1).
+   * `existingCategories` is passed in rather than read off `categories` above because
+   * `selectField` needs to say "empty" before `renderer` itself reflects that.
+   */
+  async function request(nextField: string, nextPalette: string, existingCategories: StyleCategory[]) {
+    if (!nextField) return
+    setValues((previous) => ({ ...previous, isFetching: true, isError: false }))
+    try {
+      const { categories: fresh, result } = await requestCategorizedCategories(
+        queryClient,
+        layerId,
+        geometryType,
+        nextField,
+        nextPalette,
+        existingCategories,
+        renderer.fallbackSymbol,
+      )
+      setValues({ isFetching: false, isError: false, data: result })
+      onChange({ ...renderer, field: nextField, palette: nextPalette, categories: fresh })
+    }
+    catch {
+      setValues((previous) => ({ ...previous, isFetching: false, isError: true }))
+    }
+  }
 
   function selectField(fieldId: string) {
-    generatedFor.current = null
-    onChange({ ...renderer, field: columnNameOfField(fields, fieldId), categories: [] })
+    const field = columnNameOfField(fields, fieldId)
+    onChange({ ...renderer, field, categories: [] })
+    void request(field, palette, [])
   }
 
   function recolor(paletteId: string) {
@@ -81,6 +111,7 @@ export function CategorizedEditor({
     const colors = paletteColors(paletteId, categories.length)
     onChange({
       ...renderer,
+      palette: paletteId,
       categories: categories.map((category, index) => ({
         ...category,
         symbol: withPrimaryColor(category.symbol, colors[index]),
@@ -118,7 +149,7 @@ export function CategorizedEditor({
     )
   }
 
-  const withoutValue = data?.values.find((entry) => entry.value === null)
+  const withoutValue = values.data?.values.find((entry) => entry.value === null)
 
   return (
     <>
@@ -157,18 +188,18 @@ export function CategorizedEditor({
         </Button>
       </Row>
 
-      {isFetching && (
+      {values.isFetching && (
         <div className="grid gap-1 py-1">
           <Skeleton className="h-5 w-full" />
           <Skeleton className="h-5 w-4/5" />
         </div>
       )}
 
-      {isError && (
+      {values.isError && (
         <p className="py-1 text-xs text-destructive">Das Programm konnte die Werte nicht laden</p>
       )}
 
-      {data?.truncated && (
+      {values.data?.truncated && (
         <p className="flex items-start gap-1.5 py-1 text-xs text-muted-foreground">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           Das Feld hat mehr verschiedene Werte, als die Liste zeigt. Eine kategorisierte
@@ -201,7 +232,7 @@ export function CategorizedEditor({
                   {label}
                 </span>
                 <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
-                  {countOf(data?.values, category.value)}
+                  {countOf(values.data?.values, category.value)}
                 </span>
               </li>
               )

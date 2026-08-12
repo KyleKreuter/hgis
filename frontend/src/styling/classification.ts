@@ -1,8 +1,18 @@
-import type { FieldValue, GeometryType, LayerField } from '@/api/layers'
+import type { QueryClient } from '@tanstack/react-query'
+import {
+  layerClassifyQuery,
+  layerValuesQuery,
+  type ClassifyMethod,
+  type ClassifyResult,
+  type FieldValue,
+  type FieldValuesResult,
+  type GeometryType,
+  type LayerField,
+} from '@/api/layers'
 import { defaultSymbolFor, primaryColorOf, withPrimaryColor } from './defaults'
 import { formatCategoryValue, formatClassLabel } from './fields'
-import { paletteColors } from './palettes'
-import type { LayerSymbol, StyleCategory, StyleClass } from './types'
+import { DEFAULT_CATEGORY_PALETTE, DEFAULT_RAMP, paletteColors } from './palettes'
+import type { LayerSymbol, Renderer, StyleCategory, StyleClass } from './types'
 
 /**
  * The field pickers carry the field's **id**, not either of its names.
@@ -106,10 +116,96 @@ export function withSharedSymbolShape(symbol: LayerSymbol, template: LayerSymbol
  *
  * The one function both directions need: reapplying a size the user has set across a
  * rebuild that would otherwise reset every symbol back to `defaultSymbolFor` (as
- * `GraduatedEditor`'s and `CategorizedEditor`'s effects do whenever method, class count,
- * ramp or field change), and applying a freshly picked size to every class at once when
- * the user edits the shared symbol directly.
+ * `requestGraduatedClasses`/`requestCategorizedCategories` do whenever method, class
+ * count, ramp or field change), and applying a freshly picked size to every class at
+ * once when the user edits the shared symbol directly.
  */
 export function withSharedSymbol<T extends { symbol: LayerSymbol }>(entries: T[], template: LayerSymbol): T[] {
   return entries.map((entry) => ({ ...entry, symbol: withSharedSymbolShape(entry.symbol, template) }))
+}
+
+/**
+ * Method, class count and ramp to open a graduated renderer's panel with -- what
+ * actually produced the stored `classes` if the style carries that (schema section A),
+ * today's ordinary defaults otherwise, for a style saved before these fields existed.
+ *
+ * `GraduatedEditor` reads this exactly once, as its `useState` initial value, and never
+ * again: nothing re-derives these controls from `renderer` after that, which is what
+ * keeps opening the panel from looking like the user changing something (CONTRACT.md,
+ * package B1). Exported for its own test, independent of the component around it.
+ */
+export function initialGraduatedControls(
+  renderer: Pick<Extract<Renderer, { type: 'graduated' }>, 'method' | 'classCount' | 'ramp'>,
+  classes: StyleClass[],
+): { method: ClassifyMethod; classCount: number; ramp: string } {
+  return {
+    method: renderer.method ?? 'quantile',
+    classCount: renderer.classCount ?? Math.max(2, classes.length || 5),
+    ramp: renderer.ramp ?? DEFAULT_RAMP,
+  }
+}
+
+/** The categorized counterpart to {@link initialGraduatedControls}: just the palette. */
+export function initialCategorizedPalette(
+  renderer: Pick<Extract<Renderer, { type: 'categorized' }>, 'palette'>,
+): string {
+  return renderer.palette ?? DEFAULT_CATEGORY_PALETTE
+}
+
+export interface GraduatedClassification {
+  classes: StyleClass[]
+  result: ClassifyResult
+}
+
+/**
+ * Turns "field, method, classCount, ramp" into stored classes -- the one place
+ * `/classify` is asked for a graduated renderer's classes. `queryClient.fetchQuery`
+ * keeps the same 5-minute cache `layerClassifyQuery` already carries, so revisiting a
+ * combination that was just requested does not cost another round trip.
+ *
+ * Called only from a user action: the Methode/Klassen/Farbverlauf controls in
+ * `GraduatedEditor`, its own Feld picker, and `SymbologyPanel` when a renderer switch
+ * carries a field over with nothing classified yet (`convertRenderer`). Never from an
+ * effect that watches state -- that is exactly what turned "open the panel" into "lose
+ * the saved classes" (CONTRACT.md, package B1).
+ */
+export async function requestGraduatedClasses(
+  queryClient: QueryClient,
+  layerId: string,
+  geometryType: GeometryType,
+  field: string,
+  method: ClassifyMethod,
+  classCount: number,
+  ramp: string,
+  existingClasses: StyleClass[],
+  fallbackSymbol: LayerSymbol,
+): Promise<GraduatedClassification> {
+  const result = await queryClient.fetchQuery(layerClassifyQuery(layerId, field, method, classCount))
+  const fresh = buildClasses(result.breaks, geometryType, ramp)
+  // Carries the existing size/width across, same as `GraduatedEditor`'s old effect did
+  // -- see `sharedSymbolOf` for why an empty `existingClasses` (a field that just
+  // changed) falls back to `fallbackSymbol` instead.
+  const shared = sharedSymbolOf(existingClasses, fallbackSymbol)
+  return { classes: withSharedSymbol(fresh, shared), result }
+}
+
+export interface CategorizedClassification {
+  categories: StyleCategory[]
+  result: FieldValuesResult
+}
+
+/** The categorized counterpart to {@link requestGraduatedClasses}, same rules. */
+export async function requestCategorizedCategories(
+  queryClient: QueryClient,
+  layerId: string,
+  geometryType: GeometryType,
+  field: string,
+  palette: string,
+  existingCategories: StyleCategory[],
+  fallbackSymbol: LayerSymbol,
+): Promise<CategorizedClassification> {
+  const result = await queryClient.fetchQuery(layerValuesQuery(layerId, field))
+  const fresh = buildCategories(result.values, geometryType, palette)
+  const shared = sharedSymbolOf(existingCategories, fallbackSymbol)
+  return { categories: withSharedSymbol(fresh, shared), result }
 }
