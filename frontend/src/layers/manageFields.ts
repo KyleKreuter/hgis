@@ -113,10 +113,10 @@ export function buildDeleteFieldWarning(usage: LayerFieldUsage): string {
       : `${formatCount(usage.valueCount)} ${usage.valueCount === 1 ? 'Objekt hat' : 'Objekte haben'} einen Wert in diesem Feld.`,
   ]
   if (usage.usedByRenderer) {
-    sentences.push('Die Einfärbung nach diesem Feld wird dabei zurückgesetzt.')
+    sentences.push('Das Programm setzt dabei die Einfärbung nach diesem Feld zurück.')
   }
   if (usage.usedByLabels) {
-    sentences.push('Die Beschriftung nach diesem Feld wird dabei deaktiviert.')
+    sentences.push('Das Programm deaktiviert dabei die Beschriftung nach diesem Feld.')
   }
   return sentences.join(' ')
 }

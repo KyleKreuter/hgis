@@ -52,7 +52,7 @@ export function DeleteFieldDialog({
       toast.success(`Feld „${field.sourceName}" gelöscht`)
       onOpenChange(false)
     } catch {
-      toast.error('Feld konnte nicht gelöscht werden')
+      toast.error('Das Programm konnte das Feld nicht löschen')
     }
   }
 
@@ -64,8 +64,8 @@ export function DeleteFieldDialog({
           <AlertDialogDescription>
             {field && (
               <>
-                „{field.sourceName}" wird unwiderruflich aus „{layerName}" entfernt.{' '}
-                {usage ? buildDeleteFieldWarning(usage) : 'Wird geprüft…'}
+                Das Programm löscht „{field.sourceName}" endgültig aus „{layerName}".{' '}
+                {usage ? buildDeleteFieldWarning(usage) : 'Prüft…'}
               </>
             )}
           </AlertDialogDescription>
@@ -77,7 +77,7 @@ export function DeleteFieldDialog({
             disabled={!usage || deleteField.isPending}
             className="bg-destructive text-white hover:bg-destructive/90"
           >
-            {deleteField.isPending ? 'Wird gelöscht…' : 'Löschen'}
+            {deleteField.isPending ? 'Löscht…' : 'Löschen'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

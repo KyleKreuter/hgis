@@ -94,7 +94,7 @@ export function LayerTree({
   function applyMove(from: number, before: number) {
     if (isNoOpMove(from, before)) return
     reorder.mutate(reorderedIdsBottomToTop(displayed, from, before), {
-      onError: () => toast.error('Reihenfolge konnte nicht gespeichert werden'),
+      onError: () => toast.error('Das Programm konnte die Reihenfolge nicht speichern'),
     })
   }
 
@@ -341,7 +341,7 @@ function LayerRow({
         onClick={onSelect}
         onDoubleClick={onZoom}
         className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-        title={`${layer.name} — ${GEOMETRY_LABELS[layer.geometryType]}, ${formatCount(layer.featureCount)} Objekte`}
+        title={`${layer.name} (${GEOMETRY_LABELS[layer.geometryType]}, ${formatCount(layer.featureCount)} Objekte)`}
       >
         {/* Filled, not outlined: an outlined square sitting next to the visibility
             checkbox reads as a second, unticked checkbox. Filled it reads as what it
@@ -416,7 +416,7 @@ function LayerRow({
             ) : (
               <Download className="size-3.5" />
             )}
-            {exportLayerMutation.isPending ? 'Wird exportiert…' : 'Layer exportieren'}
+            {exportLayerMutation.isPending ? 'Exportiert…' : 'Layer exportieren'}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handleExportSelection}
@@ -427,7 +427,7 @@ function LayerRow({
             ) : (
               <FileDown className="size-3.5" />
             )}
-            {exportSelectionMutation.isPending ? 'Wird exportiert…' : 'Auswahl exportieren'}
+            {exportSelectionMutation.isPending ? 'Exportiert…' : 'Auswahl exportieren'}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={onMoveUp} disabled={!canMoveUp}>

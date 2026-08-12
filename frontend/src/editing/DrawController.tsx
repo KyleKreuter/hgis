@@ -423,7 +423,7 @@ export function DrawController({
           // Snapping to a partial set is worse than not snapping: it would attach to
           // whichever features happened to load and quietly miss the ones that did not
           // (plan section D.1 asks for the reason to be stated, not for a silent retreat).
-          const reason = `Zu viele Objekte im Ausschnitt (${page.totalCount}) — zum Einrasten bitte hineinzoomen.`
+          const reason = `Zu viele Objekte im Ausschnitt (${page.totalCount}). Zoomen Sie näher heran, um sie einzurasten.`
           onSnapUnavailable(reason)
           toast.warning(reason)
         } else {
@@ -474,10 +474,10 @@ export function DrawController({
 
         const rejected = added.filter((entry) => !entry.valid).length
         if (rejected > 0) {
-          toast.warning(`${rejected} Objekte konnten nicht zum Bearbeiten geladen werden.`)
+          toast.warning(`Das Programm konnte ${rejected} Objekte nicht zum Bearbeiten laden.`)
         }
       } catch {
-        toast.error('Objekte konnten nicht zum Bearbeiten geladen werden')
+        toast.error('Das Programm konnte die Objekte nicht zum Bearbeiten laden')
       }
     }
 
@@ -548,7 +548,7 @@ export function DrawController({
             loaded.push({ geometry, bounds: boundsOf(geometry) })
           }
         } catch {
-          toast.error('Ein Layer konnte nicht als Fangquelle geladen werden')
+          toast.error('Das Programm konnte einen Layer nicht als Fangquelle laden')
         }
       }
 

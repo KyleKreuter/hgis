@@ -29,7 +29,7 @@ export function CoordinateReadout() {
 
   return (
     <div className="rounded bg-background/70 px-1.5 py-0.5 font-mono text-[0.625rem] tabular-nums text-muted-foreground">
-      {coords ? `${coordinateFormat.format(coords.lat)}, ${coordinateFormat.format(coords.lng)}` : '—, — (EPSG:4326)'}
+      {coords ? `${coordinateFormat.format(coords.lat)}, ${coordinateFormat.format(coords.lng)}` : '-, - (EPSG:4326)'}
     </div>
   )
 }

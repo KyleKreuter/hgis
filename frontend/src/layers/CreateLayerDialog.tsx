@@ -128,7 +128,7 @@ export function CreateLayerDialog({
         // but a generic message still has to reach the user if the server disagrees.
         if (!onName && !onFields && !error.fieldError('geometryType')) toast.error(error.message)
       } else {
-        toast.error('Layer konnte nicht angelegt werden')
+        toast.error('Das Programm konnte den Layer nicht anlegen')
       }
     }
   }
@@ -146,8 +146,7 @@ export function CreateLayerDialog({
           <DialogHeader>
             <DialogTitle>Neuer Layer</DialogTitle>
             <DialogDescription>
-              Legt einen leeren Layer an, in den sich anschließend direkt hineinzeichnen
-              lässt.
+              Legt einen leeren Layer an, in den Sie sofort zeichnen können.
             </DialogDescription>
           </DialogHeader>
 
@@ -210,9 +209,9 @@ export function CreateLayerDialog({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Optional — ein Layer ohne Felder lässt sich ebenso bezeichnen und
-                bearbeiten, die Attributtabelle zeigt dann nur die fortlaufende Nummer.
-                Felder lassen sich nach dem Anlegen nicht mehr ergänzen.
+                Ein Layer ohne Felder funktioniert genauso. Sie können ihn benennen und
+                bearbeiten. Die Attributtabelle zeigt dann nur die fortlaufende Nummer. Sie
+                können Felder nach dem Anlegen nicht mehr ergänzen.
               </p>
 
               {fields.length > 0 && (
@@ -275,7 +274,7 @@ export function CreateLayerDialog({
               Abbrechen
             </Button>
             <Button type="submit" disabled={!canSubmitLayer(name, fields) || createLayer.isPending}>
-              {createLayer.isPending ? 'Wird angelegt…' : 'Anlegen'}
+              {createLayer.isPending ? 'Legt an…' : 'Anlegen'}
             </Button>
           </DialogFooter>
         </form>

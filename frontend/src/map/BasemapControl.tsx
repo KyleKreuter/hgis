@@ -38,7 +38,7 @@ export function BasemapControl({ projectId, basemapId }: BasemapControlProps) {
     updateProject(
       { basemap },
       {
-        onError: () => toast.error('Hintergrundkarte konnte nicht gespeichert werden'),
+        onError: () => toast.error('Das Programm konnte die Hintergrundkarte nicht speichern'),
       },
     )
   }

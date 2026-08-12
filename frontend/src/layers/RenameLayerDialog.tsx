@@ -48,7 +48,7 @@ export function RenameLayerDialog({ layer, projectId, onOpenChange }: RenameLaye
       if (caught instanceof ApiError) {
         setError(caught.fieldError('name') ?? caught.message)
       } else {
-        toast.error('Layer konnte nicht umbenannt werden')
+        toast.error('Das Programm konnte den Layer nicht umbenennen')
       }
     }
   }
@@ -78,7 +78,7 @@ export function RenameLayerDialog({ layer, projectId, onOpenChange }: RenameLaye
               Abbrechen
             </Button>
             <Button type="submit" disabled={!name.trim() || updateLayer.isPending}>
-              {updateLayer.isPending ? 'Wird gespeichert…' : 'Speichern'}
+              {updateLayer.isPending ? 'Speichert…' : 'Speichern'}
             </Button>
           </DialogFooter>
         </form>

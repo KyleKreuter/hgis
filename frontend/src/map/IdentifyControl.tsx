@@ -163,7 +163,7 @@ function IdentifyPopup({
       </div>
 
       <div className="max-h-56 overflow-auto p-2">
-        {isPending && <p className="text-xs text-muted-foreground">Wird geladen…</p>}
+        {isPending && <p className="text-xs text-muted-foreground">Lädt…</p>}
         {isError && <p className="text-xs text-destructive">Attribute nicht abrufbar.</p>}
         {feature && layer && (
           <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">

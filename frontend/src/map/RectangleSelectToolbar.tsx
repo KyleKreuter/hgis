@@ -68,8 +68,8 @@ export function RectangleSelectToolbar({ disabled = false, canUse }: RectangleSe
         />
         <TooltipContent className="max-w-xs">
           {canUse
-            ? 'Objekte per Rechteck auswählen — ohne Taste ersetzen, Shift ergänzt, Alt zieht ab'
-            : 'Zuerst einen Layer im Layerbaum auswählen'}
+            ? 'Objekte per Rechteck auswählen: ohne Taste ersetzen, mit Shift ergänzen, mit Alt abziehen'
+            : 'Wählen Sie zuerst einen Layer im Layerbaum aus'}
         </TooltipContent>
       </Tooltip>
 

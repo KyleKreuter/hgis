@@ -71,10 +71,10 @@ const AUTO = 'auto'
 
 const CRS_OPTIONS = [
   { value: AUTO, label: 'Aus der Datei übernehmen' },
-  { value: '25832', label: 'EPSG:25832 — UTM 32N' },
-  { value: '25833', label: 'EPSG:25833 — UTM 33N' },
-  { value: '4326', label: 'EPSG:4326 — WGS 84' },
-  { value: '31467', label: 'EPSG:31467 — Gauß-Krüger 3' },
+  { value: '25832', label: 'EPSG:25832 (UTM 32N)' },
+  { value: '25833', label: 'EPSG:25833 (UTM 33N)' },
+  { value: '4326', label: 'EPSG:4326 (WGS 84)' },
+  { value: '31467', label: 'EPSG:31467 (Gauß-Krüger 3)' },
 ]
 
 const CHARSET_OPTIONS = [
@@ -178,7 +178,9 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
       // unknown format, an unreadable file or an implausible CRS arrives -- with a
       // message worth showing verbatim, since it usually names the actual problem.
       setError(
-        caught instanceof ApiError ? caught.message : 'Der Import konnte nicht gestartet werden.',
+        caught instanceof ApiError
+          ? caught.message
+          : 'Das Programm konnte den Import nicht starten.',
       )
     }
   }
@@ -229,7 +231,7 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
                       )}
                     >
                       {formatBytes(file.size)}
-                      {tooLarge && ' — erlaubt sind 500 MB.'}
+                      {tooLarge && '. Erlaubt sind höchstens 500 MB.'}
                     </p>
                   )}
                 </div>
@@ -243,7 +245,7 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
                       nameTouched.current = true
                       setName(e.target.value)
                     }}
-                    placeholder="Wird aus dem Dateinamen übernommen"
+                    placeholder="Übernimmt den Dateinamen"
                   />
                 </div>
 
@@ -287,10 +289,10 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
                 </div>
 
                 <p className="text-xs text-muted-foreground">
-                  Beide Angaben sind nur nötig, wenn die Datei sie nicht mitbringt: CSV
-                  führt nie ein Koordinatensystem, Shapefiles ohne <code>.prj</code> auch
-                  nicht. Die Kodierung betrifft die Attributwerte von Shapefiles. Die
-                  Vorschau zeigt, was dabei herauskommt.
+                  Beide Angaben sind nur nötig, wenn die Datei sie nicht mitbringt. CSV hat
+                  nie ein Koordinatensystem, Shapefiles ohne <code>.prj</code> auch nicht. Die
+                  Kodierung betrifft die Attributwerte von Shapefiles. Die Vorschau zeigt, was
+                  dabei herauskommt.
                 </p>
 
                 {file && !tooLarge && <ImportPreview inspection={inspection} />}
@@ -328,7 +330,7 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
                     !file || tooLarge || startImport.isPending || running || inspection.isFetching
                   }
                 >
-                  {startImport.isPending ? 'Wird übertragen…' : 'Importieren'}
+                  {startImport.isPending ? 'Überträgt…' : 'Importieren'}
                 </Button>
               </>
             )}
@@ -354,7 +356,7 @@ function ImportPreview({ inspection }: { inspection: ReturnType<typeof useInspec
           Vorschau
         </span>
         {inspection.isFetching && (
-          <span className="text-xs text-muted-foreground">wird geprüft…</span>
+          <span className="text-xs text-muted-foreground">Prüft…</span>
         )}
       </div>
       <PreviewBody inspection={inspection} />
@@ -370,9 +372,10 @@ function PreviewBody({ inspection }: { inspection: ReturnType<typeof useInspecti
         <AlertDescription>
           {inspection.error instanceof ApiError
             ? inspection.error.message
-            : 'Die Datei konnte nicht gelesen werden.'}
+            : 'Das Programm konnte die Datei nicht lesen.'}
           <span className="block text-xs">
-            Ein Import ist trotzdem möglich, die Datei wird dann erst beim Start geprüft.
+            Ein Import ist trotzdem möglich. Das Programm prüft die Datei dann erst beim
+            Start.
           </span>
         </AlertDescription>
       </Alert>
@@ -380,7 +383,7 @@ function PreviewBody({ inspection }: { inspection: ReturnType<typeof useInspecti
   }
 
   if (!inspection.data) {
-    return <p className="text-xs text-muted-foreground">Datei wird übertragen und geprüft…</p>
+    return <p className="text-xs text-muted-foreground">Überträgt und prüft die Datei…</p>
   }
 
   return (
@@ -416,7 +419,7 @@ function InspectionSummary({
       <p className="text-xs text-muted-foreground">
         {location
           ? `Daten liegen bei ${location}.`
-          : 'Die Lage der Daten ließ sich nicht bestimmen.'}
+          : 'Das Programm konnte die Lage der Daten nicht bestimmen.'}
       </p>
 
       {inspection.crsConfidence === 'GUESSED' && (
@@ -424,15 +427,16 @@ function InspectionSummary({
           <TriangleAlertIcon />
           <AlertTitle>Koordinatensystem nur geraten</AlertTitle>
           <AlertDescription>
-            Die Datei nennt keines; EPSG:{inspection.srid} ist aus der Lage der Koordinaten
-            abgeleitet. Stimmt die Verortung oben nicht, hier korrigieren — sonst fällt
-            der Fehler erst auf, wenn die Daten längst geschrieben sind.
+            Die Datei nennt kein Koordinatensystem. Das Programm hat EPSG:{inspection.srid}{' '}
+            aus der Lage der Koordinaten abgeleitet. Wenn die Verortung oben nicht stimmt,
+            korrigieren Sie sie hier. Sonst fällt der Fehler erst auf, wenn die Daten längst
+            geschrieben sind.
           </AlertDescription>
         </Alert>
       )}
 
       {inspection.fields.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Die Datei führt keine Attributfelder.</p>
+        <p className="text-xs text-muted-foreground">Die Datei hat keine Attributfelder.</p>
       ) : (
         <div className="max-h-40 overflow-y-auto rounded-md border">
           <Table>
@@ -492,7 +496,7 @@ function FieldRow({ field }: { field: InspectedField }) {
 
 function JobProgress({ job }: { job: ReturnType<typeof useImportJob>['data'] }) {
   if (!job) {
-    return <p className="text-sm text-muted-foreground">Import wird vorbereitet…</p>
+    return <p className="text-sm text-muted-foreground">Bereitet Import vor…</p>
   }
 
   if (job.status === 'FAILED') {
@@ -500,9 +504,10 @@ function JobProgress({ job }: { job: ReturnType<typeof useImportJob>['data'] }) 
       <Alert variant="destructive">
         <AlertTitle>Import fehlgeschlagen</AlertTitle>
         <AlertDescription>
-          {job.message ?? 'Der Grund wurde nicht übermittelt.'}
+          {job.message ?? 'Der Server hat keinen Grund genannt.'}
           <span className="block text-xs">
-            Es wurde nichts geschrieben — eine halb gefüllte Tabelle bleibt nicht zurück.
+            Das Programm hat nichts geschrieben. Es bleibt keine halb gefüllte Tabelle
+            zurück.
           </span>
         </AlertDescription>
       </Alert>
@@ -542,7 +547,7 @@ function JobProgress({ job }: { job: ReturnType<typeof useImportJob>['data'] }) 
         </p>
       ) : (
         <Progress value={percent}>
-          <ProgressLabel className="text-sm font-normal">Objekte werden geschrieben</ProgressLabel>
+          <ProgressLabel className="text-sm font-normal">Schreibt Objekte</ProgressLabel>
           {/* Base UI passes its own formatted percentage in; the raw counts are more
               use here, so the render function ignores the argument. */}
           <ProgressValue>
