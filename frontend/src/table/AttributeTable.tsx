@@ -450,14 +450,21 @@ export function AttributeTable({
         <Hint variant="error">{(query.error as Error).message}</Hint>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          <HeaderRow fields={fields} sort={sort} onSort={handleSortChange} />
-
+          {/*
+           * The header sits inside the scroller, not above it. Kept outside, it formed a
+           * second horizontal scroll layer: dragging the rows sideways left the header
+           * behind, so labels no longer matched their values. It also came out narrower
+           * than the rows -- the body reserves width for its vertical scrollbar, and the
+           * 1fr columns divide up whatever is left, so the two never agreed on a width.
+           * One scroller settles both: same width by construction, same offset always.
+           */}
           <div
             ref={scrollRef}
             className="min-h-0 flex-1 overflow-auto outline-none"
             tabIndex={active ? 0 : -1}
             onKeyDown={handleKeyDown}
           >
+            <HeaderRow fields={fields} sort={sort} onSort={handleSortChange} />
             {rows.length === 0 && !query.isPending ? (
               <Hint>
                 Keine Objekte{text ? (mode === 'filter' ? ' für diesen Filter' : ' für diese Suche') : ''}.
@@ -520,7 +527,13 @@ function HeaderRow({
 
   return (
     <div
-      className="grid shrink-0 items-center border-b bg-muted/40 text-xs font-medium text-muted-foreground"
+      /*
+       * Carries no background of its own -- each HeaderCell paints its own, see there.
+       * Opaque rather than the previous bg-muted/40, because inside the scroller the rows
+       * now pass underneath and would show through anything translucent; the color-mix
+       * reproduces exactly what 40% muted over the background used to look like.
+       */
+      className="sticky top-0 z-10 grid shrink-0 items-center text-xs font-medium text-muted-foreground"
       style={{ gridTemplateColumns: gridTemplate(fields) }}
     >
       <HeaderCell label="fid" active={!sort} onClick={() => onSort(null)} align="right" />
@@ -534,7 +547,9 @@ function HeaderRow({
           onClick={() => toggle(field.columnName)}
         />
       ))}
-      <span />
+      {/* Matches the trailing 2rem track of gridTemplate. Paints like a cell so the
+          header's strip does not stop short of the row-action column. */}
+      <span className="h-6 border-b bg-[color-mix(in_oklab,var(--muted)_40%,var(--background))]" />
     </div>
   )
 }
@@ -558,7 +573,11 @@ function HeaderCell({
       onClick={onClick}
       title={label}
       className={cn(
-        'flex h-6 items-center gap-1 truncate px-2 hover:text-foreground',
+        // Background and bottom border live on the cell, not on the grid around it. That
+        // grid is only as wide as the scroller (the columns overflow it), so a background
+        // on it would cover nothing once scrolled sideways and the rows would show
+        // through the header. The cells are laid out across the full scroll width.
+        'flex h-6 items-center gap-1 truncate border-b bg-[color-mix(in_oklab,var(--muted)_40%,var(--background))] px-2 hover:text-foreground',
         align === 'right' && 'justify-end',
         active && 'text-foreground',
       )}
