@@ -486,14 +486,23 @@ public class Layer {
 	}
 
 	/**
-	 * This layer's Geoportal provenance as one value, or null for a layer not imported
-	 * from there -- {@code sourceAttribution} is null exactly then, since all eight
-	 * columns are written together in {@link #setSource} or not at all. Used by {@link
-	 * de.kreuter.hgis.catalog.ProjectDuplicateTransactions} to carry a layer's provenance
-	 * into its copy via {@link #setCopyMetadata}.
+	 * This layer's Geoportal provenance as one value, or null for a layer not imported from
+	 * there. The marker is {@code sourceDatasetId}: the Geoportal catalog builds that id
+	 * itself and always fills it, so it is set exactly when the layer came from there.
+	 *
+	 * <p>Not {@code sourceAttribution}, which the live service shows to be a different
+	 * question: {@code grundwassermessstellen/grundwassermessstellen} (191,140 features,
+	 * importable) carries a licence and a metadata record but no attribution at all, because
+	 * the service directory leaves its agency blank. Keyed on attribution, duplicating such a
+	 * project silently dropped the copy's entire provenance -- licence notice included, which
+	 * is the one part CONTRACT.md 11.7 requires to be displayed. {@code LayerService#toSource}
+	 * made the same wrong assumption and is keyed the same way now.
+	 *
+	 * <p>Used by {@link de.kreuter.hgis.catalog.ProjectDuplicateTransactions} to carry a
+	 * layer's provenance into its copy via {@link #setCopyMetadata}.
 	 */
 	public LayerProvenance getProvenance() {
-		if (sourceAttribution == null) {
+		if (sourceDatasetId == null) {
 			return null;
 		}
 		return new LayerProvenance(sourceAttribution, sourceLicenseName, sourceLicenseUrl, sourceDatasetUri,

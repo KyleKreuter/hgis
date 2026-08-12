@@ -157,6 +157,46 @@ class ProjectDuplicateServiceTest {
 	}
 
 	/**
+	 * CONTRACT.md 11.7: {@code source} belongs to every layer imported from the Geoportal,
+	 * and {@code attribution} may be null within it -- the two are separate questions.
+	 * {@code grundwassermessstellen/grundwassermessstellen} (191,140 features, importable)
+	 * is exactly that case, measured live: a licence and a metadata record, but no
+	 * attribution, because the service directory leaves its agency blank. While "came from
+	 * the Geoportal" was keyed on the attribution, duplicating a project dropped such a
+	 * layer's provenance entirely, and the copy showed no licence notice at all -- the one
+	 * obligation clause 2 of the licence puts on this program.
+	 */
+	@Test
+	void duplicatingALayerWithoutAttributionStillCarriesItsProvenanceForward() {
+		Layer gebaeude = layers.findByProjectOrdered(source.getId()).getFirst();
+		gebaeude.setSource(
+				null,
+				"Datenlizenz Deutschland – Namensnennung – Version 2.0",
+				"https://www.govdata.de/dl-de/by-2-0",
+				null,
+				"https://metaver.de/trefferanzeige?docuuid=z",
+				"grundwassermessstellen/grundwassermessstellen",
+				"gid",
+				Instant.parse("2026-08-12T09:14:00Z"));
+		layers.saveAndFlush(gebaeude);
+
+		Job job = jobs.create(source.getId(), Job.Type.DUPLICATE, null);
+		duplicateService.runDuplicate(job.getId(), source.getId(), null);
+		JobDtos.Response result = jobs.get(job.getId());
+		assertThat(result.status()).isEqualTo("SUCCEEDED");
+
+		Layer copy = layers.findByProjectOrdered(result.outputProjectId()).getFirst();
+		assertThat(copy.getProvenance()).as("die Herkunft überlebt das Duplizieren").isNotNull();
+		assertThat(copy.getSourceAttribution()).as("und bleibt dabei ohne Quellenvermerk").isNull();
+		assertThat(copy.getSourceLicenseName()).isEqualTo("Datenlizenz Deutschland – Namensnennung – Version 2.0");
+		assertThat(copy.getSourceLicenseUrl()).isEqualTo("https://www.govdata.de/dl-de/by-2-0");
+		assertThat(copy.getSourceMetadataUrl()).isEqualTo("https://metaver.de/trefferanzeige?docuuid=z");
+		assertThat(copy.getSourceDatasetId()).isEqualTo("grundwassermessstellen/grundwassermessstellen");
+		assertThat(copy.getSourceFeatureIdField()).isEqualTo("gid");
+		assertThat(copy.getSourceFetchedAt()).isEqualTo(Instant.parse("2026-08-12T09:14:00Z"));
+	}
+
+	/**
 	 * CONTRACT.md phase 23, decision E6: a Geoportal layer carries a non-unique index on the
 	 * service's own feature id, and stage 5's reconcile is what it exists for. {@code LIKE
 	 * ... EXCLUDING INDEXES} drops every index of the source, not only the two whose
