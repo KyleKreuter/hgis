@@ -28,8 +28,8 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
   Klasse. Größe und Strichbreite gelten für alle Klassen gleich
 - Kartenobjekte anhand ihrer Felder beschriften
 - Strecken und Flächen in der Karte messen, mit laufender Anzeige beim Zeichnen
-- Hintergrundkarte je Projekt wählen: OpenStreetMap, eine helle oder dunkle Variante
-  davon, OpenTopoMap oder gar keine
+- Hintergrundkarte für Projekt oder einzelnen Layer wählen: OpenStreetMap, eine helle
+  oder dunkle Variante davon, OpenTopoMap oder gar keine, dazu die Deckkraft einstellen
 - Objekte per Rechteck auswählen, wahlweise berührte oder vollständig eingeschlossene,
   und die Auswahl mit Umschalt ergänzen oder mit Alt abziehen
 - Einen Layer oder die aktuelle Auswahl als GeoJSON herunterladen
@@ -91,6 +91,26 @@ gesperrt.
 Der Feldtyp bleibt unveränderlich. Das Programm zeigt ihn an, bietet ihn aber nicht zur
 Bearbeitung an. Eine Umwandlung würde an jedem Wert scheitern, der sich nicht überführen
 lässt, und eine halb umgestellte Spalte hinterlassen.
+
+### Hintergrundkarte wählen
+
+Jeder Layer kann sich eine eigene Hintergrundkarte merken. Wird er zum aktiven Layer,
+wechselt die Hintergrundkarte mit. Hat der Layer keine eigene, gilt die Hintergrundkarte
+des Projekts. Zusätzlich lässt sich die Deckkraft der Hintergrundkarte einstellen,
+getrennt für Projekt und Layer.
+
+Der Kartenpicker zeigt an, wofür die Wahl gilt: für das Projekt oder nur für den aktiven
+Layer. Er rät das nicht aus dem Zustand. Sonst würde dasselbe Bedienelement je nach Lage
+an zwei Orte schreiben, ohne dass Sie sähen, an welchen. Hat der aktive Layer eine eigene
+Karte, zeigt der Picker das an und bietet den Weg zurück zur Karte des Projekts. Das
+Aktionsmenü eines Layers enthält denselben Eintrag, für den direkten Weg ohne Umweg über
+die Karte.
+
+Die Deckkraft betrifft die Hintergrundkarte selbst, nicht die Objekte darauf. Für die
+Objekte gibt es die Deckkraft in der Symbologie. Bei „Keine Hintergrundkarte“ entfällt der
+Regler, denn es gibt nichts zu regeln. Eine Karte mit verringerter Deckkraft lässt den
+Anwendungshintergrund durchscheinen. Im dunklen Erscheinungsbild sieht sie deshalb anders
+aus als im hellen.
 
 ### Sachdaten bearbeiten
 
@@ -165,8 +185,9 @@ liefert eine leere Datei, nicht den ganzen Layer. Der Export nach GeoPackage feh
 ## Fachliches Konzept
 
 Ein Projekt bildet den Arbeitskontext. Es umfasst die enthaltenen Layer, deren
-Reihenfolge und Darstellung, die gewählte Hintergrundkarte sowie den zuletzt betrachteten
-Kartenausschnitt.
+Reihenfolge und Darstellung sowie den zuletzt betrachteten Kartenausschnitt. Das Projekt
+legt außerdem eine Hintergrundkarte fest. Ein Layer kann diese überschreiben und eine
+eigene Hintergrundkarte verwenden.
 
 Jeder Layer verbindet Geometrien mit ihren Sachdaten. Die Karte zeigt die räumliche
 Verteilung, während die Attributtabelle denselben Bestand tabellarisch zeigt. Auswahl und
