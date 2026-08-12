@@ -24,7 +24,8 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Attribute einzelner Kartenobjekte abfragen
 - Punkte, Linien und Flächen zeichnen, verschieben und löschen
 - Beim Digitalisieren auf Stützpunkte, Schnittpunkte und Kanten einrasten
-- Layer einheitlich, kategorisiert oder abgestuft darstellen
+- Layer einheitlich, kategorisiert oder abgestuft darstellen — Farbe je Klasse, Größe und
+  Strichbreite für alle Klassen gemeinsam
 - Kartenobjekte anhand ihrer Attribute beschriften
 - Strecken und Flächen in der Karte messen, mit laufender Anzeige beim Zeichnen
 - Hintergrundkarte je Projekt wählen: OpenStreetMap, eine helle oder dunkle Variante
