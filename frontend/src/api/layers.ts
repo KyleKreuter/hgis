@@ -16,6 +16,9 @@ import { projectKeys } from './projects'
  */
 export type GeometryType = 'MULTIPOINT' | 'MULTILINESTRING' | 'MULTIPOLYGON' | 'GEOMETRY'
 
+/** The two directions a clip mask can cut (CONTRACT.md phase 20); `null` means no mask. */
+export type ClipMode = 'inside' | 'outside'
+
 export interface LayerSummary {
   id: string
   name: string
@@ -50,15 +53,18 @@ export interface LayerSummary {
   /** The layer's own background opacity; `null` or missing means it follows the project's. */
   basemapOpacity?: number | null
   /**
-   * Marks this layer as the project's clip mask (CONTRACT.md phase 19). At most one
-   * layer per project carries this flag -- the server clears it from any previous
-   * holder the moment a different layer is marked, which is why the client always
-   * re-derives the current mask from the list instead of caching "the" mask id anywhere.
+   * This layer's role as the project's clip mask, or `null`/missing when it holds none
+   * (CONTRACT.md phase 20). `'inside'` keeps, on every layer with a higher `zIndex`,
+   * only what lies within this layer's geometry; `'outside'` keeps only what lies
+   * outside it. At most one layer per project carries a mode other than `null` -- the
+   * server clears it from any previous holder the moment a different layer is given
+   * one, which is why the client always re-derives the current mask from the list
+   * instead of caching "the" mask id anywhere.
    * Optional for the same reason `style`/`basemap` are: missing reads as "not a mask",
    * which is the right default and keeps every existing fixture that builds a
    * `LayerSummary` without it (outside this phase's ownership) compiling unchanged.
    */
-  clipMask?: boolean
+  clipMode?: ClipMode | null
   /**
    * `0` when no mask affects this layer, otherwise a value that changes whenever the
    * mask, its geometries, or this layer's position relative to it changes. Folded into
@@ -149,13 +155,13 @@ export interface UpdateLayerInput {
   /** `null` resets the layer to the project's background opacity. */
   basemapOpacity?: number | null
   /**
-   * Marks or unmarks this layer as the project's clip mask. Marking a second layer
-   * silently unmarks whichever one held it before (contract "Höchstens eine Maske je
-   * Projekt") -- `useUpdateLayer`'s trailing `invalidateQueries` is what brings that
-   * other layer's `clipMask` back in line, since the response here only describes
-   * the layer actually being patched.
+   * Sets this layer's clip mode, or clears it with `null`. Setting `'inside'` or
+   * `'outside'` on a second layer silently clears whichever one held a mode before
+   * (contract "Höchstens eine Maske je Projekt") -- `useUpdateLayer`'s trailing
+   * `invalidateQueries` is what brings that other layer's `clipMode` back in line,
+   * since the response here only describes the layer actually being patched.
    */
-  clipMask?: boolean
+  clipMode?: ClipMode | null
 }
 
 export type ClassifyMethod = 'quantile' | 'equalInterval' | 'naturalBreaks'
