@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { FillLayerSpecification, SymbolLayerSpecification } from 'maplibre-gl'
+import type { CircleLayerSpecification, FillLayerSpecification, SymbolLayerSpecification } from 'maplibre-gl'
 import type { LayerField, LayerSummary } from '@/api/layers'
 import {
   buildCategories,
@@ -8,8 +8,9 @@ import {
   fieldIdOfColumn,
   sharedSymbolOf,
   withSharedSymbol,
+  withSharedSymbolShape,
 } from './classification'
-import { defaultLabels, defaultSymbolFor, primaryColorOf } from './defaults'
+import { defaultLabels, defaultSymbolFor, primaryColorOf, withPrimaryColor } from './defaults'
 import { DEFAULT_CATEGORY_PALETTE, DEFAULT_RAMP } from './palettes'
 import { styleToMapLibre } from './styleToMapLibre'
 import type { LayerStyle, MarkerSymbol } from './types'
@@ -176,12 +177,27 @@ describe('sharedSymbolOf', () => {
     const template: MarkerSymbol = { ...(classes[0].symbol as MarkerSymbol), size: 12 }
     const resized = withSharedSymbol(classes, template)
 
-    expect(sharedSymbolOf(resized, 'MULTIPOINT')).toMatchObject({ size: 12 })
+    expect(sharedSymbolOf(resized, defaultSymbolFor('MULTIPOINT'))).toMatchObject({ size: 12 })
   })
 
-  /** The case before any class exists yet -- e.g. no field chosen so far. */
-  it('fällt auf das Standardsymbol des Layers zurück, wenn noch keine Klasse existiert', () => {
-    expect(sharedSymbolOf([], 'MULTIPOINT')).toEqual(defaultSymbolFor('MULTIPOINT'))
+  /**
+   * The case right after a field change: `selectField` empties the class list but
+   * leaves `fallbackSymbol` untouched, so this is what keeps a size the user picked
+   * earlier from being lost -- see the "übersteht einen Feldwechsel" test below for the
+   * effect this has once the rebuild runs.
+   */
+  it('fällt auf das Fallback-Symbol zurück, wenn noch keine Klasse existiert', () => {
+    const fallbackSymbol: MarkerSymbol = { ...(defaultSymbolFor('MULTIPOINT') as MarkerSymbol), size: 15 }
+    expect(sharedSymbolOf([], fallbackSymbol)).toEqual(fallbackSymbol)
+  })
+})
+
+describe('withSharedSymbolShape', () => {
+  it('übernimmt die Form von template, behält aber die Farbe von symbol', () => {
+    const symbol: MarkerSymbol = { ...(defaultSymbolFor('MULTIPOINT') as MarkerSymbol), fillColor: '#111111' }
+    const template: MarkerSymbol = { ...(defaultSymbolFor('MULTIPOINT') as MarkerSymbol), size: 18, fillColor: '#eeeeee' }
+
+    expect(withSharedSymbolShape(symbol, template)).toEqual({ ...template, fillColor: '#111111' })
   })
 })
 
@@ -198,10 +214,11 @@ describe('withSharedSymbol', () => {
   })
 
   /**
-   * What `GraduatedEditor`'s rebuild effect relies on: `buildClasses` resets every
-   * symbol to the layer's default shape, so a size the user picked earlier has to be
-   * reapplied afterwards or it would silently jump back to the default the moment the
-   * class count, method or ramp changes.
+   * What `GraduatedEditor`'s and `CategorizedEditor`'s rebuild effects rely on:
+   * `buildClasses`/`buildCategories` reset every symbol to the layer's default shape,
+   * so a size the user picked earlier has to be reapplied afterwards or it would
+   * silently jump back to the default the moment the class count, method or ramp
+   * changes.
    */
   it('überlebt den Neuaufbau der Klassen, der sonst auf das Standardsymbol zurückfiele', () => {
     const before = buildClasses([0, 10, 20], 'MULTIPOINT', DEFAULT_RAMP)
@@ -209,14 +226,60 @@ describe('withSharedSymbol', () => {
     const resized = withSharedSymbol(before, template)
 
     const rebuilt = buildClasses([0, 5, 15, 25], 'MULTIPOINT', DEFAULT_RAMP)
-    const carriedOver = withSharedSymbol(rebuilt, sharedSymbolOf(resized, 'MULTIPOINT'))
+    const carriedOver = withSharedSymbol(rebuilt, sharedSymbolOf(resized, defaultSymbolFor('MULTIPOINT')))
 
     expect(carriedOver).toHaveLength(3)
+    expect(carriedOver.every((styleClass) => (styleClass.symbol as MarkerSymbol).size === 15)).toBe(true)
+  })
+
+  /**
+   * A field change empties the class list (`selectField` sets `classes: []`) before the
+   * rebuild effect runs, so the only place a previously-set size can still come from is
+   * `fallbackSymbol` -- which is exactly why `setSharedSymbol` keeps it in step with the
+   * classes (see `withSharedSymbolShape`). Without that, `sharedSymbolOf` would fall
+   * back to the layer's plain default and the size would reset on every field change.
+   */
+  it('übersteht einen Feldwechsel, weil die Grösse dann aus dem Fallback-Symbol kommt', () => {
+    const fallbackSymbol: MarkerSymbol = { ...(defaultSymbolFor('MULTIPOINT') as MarkerSymbol), size: 15 }
+
+    const rebuiltAfterFieldChange = buildClasses([0, 10, 20], 'MULTIPOINT', DEFAULT_RAMP)
+    const carriedOver = withSharedSymbol(rebuiltAfterFieldChange, sharedSymbolOf([], fallbackSymbol))
+
     expect(carriedOver.every((styleClass) => (styleClass.symbol as MarkerSymbol).size === 15)).toBe(true)
   })
 
   /** The case before any class exists yet -- nothing to apply the symbol to. */
   it('lässt eine leere Liste unverändert', () => {
     expect(withSharedSymbol([], defaultSymbolFor('MULTIPOINT'))).toEqual([])
+  })
+})
+
+describe('gemeinsame Grösse bis in den MapLibre-Ausdruck', () => {
+  /**
+   * What `setSharedSymbol` does in both editors: apply one symbol's size to every class
+   * and to the fallback, keeping each one's own colour. `circlePaint` collapses
+   * `circle-radius` to a plain number whenever every branch -- fallback included --
+   * would produce the same value (`dataDriven` in `styleToMapLibre.ts`); that collapse
+   * is what proves the fallback actually carries the same size as the classes here. If
+   * `setSharedSymbol` only touched the classes, as it did before, the fallback would
+   * still hold the layer's default size and this would stay a `case`/`step` expression
+   * with the *old* size baked into its last branch instead.
+   */
+  it('lässt circle-radius zu einer Konstante zusammenfallen, wenn Klassen und Fallback dieselbe Grösse tragen', () => {
+    const template: MarkerSymbol = { ...(defaultSymbolFor('MULTIPOINT') as MarkerSymbol), size: 15 }
+    const classes = withSharedSymbol(buildClasses([0, 10, 20], 'MULTIPOINT', DEFAULT_RAMP), template)
+    const fallbackSymbol = withSharedSymbolShape(
+      withPrimaryColor(defaultSymbolFor('MULTIPOINT'), '#a3a3a3'),
+      template,
+    )
+
+    const style: LayerStyle = {
+      version: 1,
+      renderer: { type: 'graduated', field: 'hoehe', classes, fallbackSymbol },
+      opacity: 1,
+    }
+
+    const [spec] = styleToMapLibre(style, makeLayer({ geometryType: 'MULTIPOINT' }), 'hgis-layer-layer-1')
+    expect((spec as CircleLayerSpecification).paint?.['circle-radius']).toBe(15)
   })
 })

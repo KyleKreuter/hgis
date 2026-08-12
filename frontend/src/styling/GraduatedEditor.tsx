@@ -6,7 +6,15 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCount } from '@/lib/format'
-import { buildClasses, columnNameOfField, fieldIdOfColumn, sharedSymbolOf, sourceNameOfField, withSharedSymbol } from './classification'
+import {
+  buildClasses,
+  columnNameOfField,
+  fieldIdOfColumn,
+  sharedSymbolOf,
+  sourceNameOfField,
+  withSharedSymbol,
+  withSharedSymbolShape,
+} from './classification'
 import { ColorInput, NumberInput, Row } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
 import { isNumericField } from './fields'
@@ -51,8 +59,10 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
     const fresh = buildClasses(data.breaks, geometryType, ramp)
     // `buildClasses` gives every fresh class the layer's default symbol -- carrying the
     // previous shared size/width across is what keeps it from jumping back to the
-    // default the moment the class count, method or ramp changes.
-    const shared = sharedSymbolOf(renderer.classes ?? [], geometryType)
+    // default the moment the class count, method, ramp or field changes. The fallback
+    // is what makes a field change survive too: `selectField` empties `renderer.classes`
+    // before this runs, so at that point only `fallbackSymbol` still carries the shape.
+    const shared = sharedSymbolOf(renderer.classes ?? [], renderer.fallbackSymbol)
     onChange({ ...renderer, classes: withSharedSymbol(fresh, shared) })
   }, [classCount, data, geometryType, layerId, method, onChange, ramp, renderer])
 
@@ -75,9 +85,22 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
     )
   }
 
-  /** Applies one symbol's size/width to every class at once, colours untouched. */
+  /**
+   * Applies one symbol's size/width to every class and to the fallback, colours
+   * untouched. The fallback has to move with the classes: it renders every object the
+   * classification does not cover, and without this it would keep the layer's default
+   * size while the classes took on the new one, with no control anywhere to fix it --
+   * the "Ohne Wert" row below only ever offered a colour.
+   */
   function setSharedSymbol(symbol: LayerSymbol, options?: { defer?: boolean }) {
-    onChange({ ...renderer, classes: withSharedSymbol(classes, symbol) }, options)
+    onChange(
+      {
+        ...renderer,
+        classes: withSharedSymbol(classes, symbol),
+        fallbackSymbol: withSharedSymbolShape(renderer.fallbackSymbol, symbol),
+      },
+      options,
+    )
   }
 
   return (
@@ -152,8 +175,9 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
 
       {classes.length > 0 && (
         // Colour comes from the ramp, per class below -- everything else (size, width,
-        // ...) is one shared symbol, edited here for every class at once.
-        <SymbolEditor symbol={sharedSymbolOf(classes, geometryType)} onChange={setSharedSymbol} hideColor />
+        // ...) is one shared symbol, edited here for every class (and the fallback) at
+        // once.
+        <SymbolEditor symbol={sharedSymbolOf(classes, renderer.fallbackSymbol)} onChange={setSharedSymbol} hideColor />
       )}
 
       {classes.length > 0 && (

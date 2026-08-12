@@ -8,7 +8,15 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCount } from '@/lib/format'
-import { buildCategories, columnNameOfField, fieldIdOfColumn, sharedSymbolOf, sourceNameOfField, withSharedSymbol } from './classification'
+import {
+  buildCategories,
+  columnNameOfField,
+  fieldIdOfColumn,
+  sharedSymbolOf,
+  sourceNameOfField,
+  withSharedSymbol,
+  withSharedSymbolShape,
+} from './classification'
 import { ColorInput, Row } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
 import { formatCategoryValue } from './fields'
@@ -52,7 +60,13 @@ export function CategorizedEditor({
     if (generatedFor.current === key) return
     generatedFor.current = key
     if (categories.length > 0) return
-    onChange({ ...renderer, categories: buildCategories(data.values, geometryType, palette) })
+    const fresh = buildCategories(data.values, geometryType, palette)
+    // `buildCategories` gives every fresh category the layer's default symbol. This path
+    // only runs with an empty list (the guard above), which after a field change is
+    // exactly the moment `selectField` cleared `categories` but left `fallbackSymbol`
+    // alone -- so a size the user picked earlier is still there to carry over.
+    const shared = sharedSymbolOf(renderer.categories ?? [], renderer.fallbackSymbol)
+    onChange({ ...renderer, categories: withSharedSymbol(fresh, shared) })
     // `categories.length`, not `categories` itself: the fallback to `[]` makes a fresh
     // array on every render, which would re-run this effect forever.
   }, [categories.length, data, geometryType, layerId, onChange, palette, renderer])
@@ -86,9 +100,22 @@ export function CategorizedEditor({
     )
   }
 
-  /** Applies one symbol's size/width to every category at once, colours untouched. */
+  /**
+   * Applies one symbol's size/width to every category and to the fallback, colours
+   * untouched. The fallback has to move with the categories: it renders every object the
+   * classification does not cover, and without this it would keep the layer's default
+   * size while the categories took on the new one, with no control anywhere to fix it --
+   * the "Sonstige" row below only ever offered a colour.
+   */
   function setSharedSymbol(symbol: LayerSymbol, options?: { defer?: boolean }) {
-    onChange({ ...renderer, categories: withSharedSymbol(categories, symbol) }, options)
+    onChange(
+      {
+        ...renderer,
+        categories: withSharedSymbol(categories, symbol),
+        fallbackSymbol: withSharedSymbolShape(renderer.fallbackSymbol, symbol),
+      },
+      options,
+    )
   }
 
   const withoutValue = data?.values.find((entry) => entry.value === null)
@@ -151,8 +178,9 @@ export function CategorizedEditor({
 
       {categories.length > 0 && (
         // Colour comes from the palette, per category below -- everything else (size,
-        // width, ...) is one shared symbol, edited here for every category at once.
-        <SymbolEditor symbol={sharedSymbolOf(categories, geometryType)} onChange={setSharedSymbol} hideColor />
+        // width, ...) is one shared symbol, edited here for every category (and the
+        // fallback) at once.
+        <SymbolEditor symbol={sharedSymbolOf(categories, renderer.fallbackSymbol)} onChange={setSharedSymbol} hideColor />
       )}
 
       {categories.length > 0 && (

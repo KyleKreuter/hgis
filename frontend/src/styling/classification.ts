@@ -74,11 +74,29 @@ export function buildClasses(breaks: number[], geometryType: GeometryType, ramp:
 /**
  * The symbol whose non-colour properties a classified renderer's "shared" symbol editor
  * shows -- the first entry's, since every entry `buildClasses`/`buildCategories` produces
- * carries exactly the same shape and differs only in colour. Falls back to the layer's
- * default symbol so the editor has something to show before any class exists yet.
+ * carries exactly the same shape and differs only in colour.
+ *
+ * Falls back to `fallbackSymbol`, not to the layer's plain default, and that is what
+ * makes a picked size survive a field change: `selectField` empties the class/category
+ * list before the rebuild runs, but leaves `fallbackSymbol` alone, and `setSharedSymbol`
+ * (see `GraduatedEditor`/`CategorizedEditor`) keeps that fallback's shape in step with
+ * the classes' shape whenever the user edits it. So by the time the list is rebuilt from
+ * scratch, the fallback is still carrying whatever shape the classes had before.
  */
-export function sharedSymbolOf(entries: { symbol: LayerSymbol }[], geometryType: GeometryType): LayerSymbol {
-  return entries[0]?.symbol ?? defaultSymbolFor(geometryType)
+export function sharedSymbolOf(entries: { symbol: LayerSymbol }[], fallbackSymbol: LayerSymbol): LayerSymbol {
+  return entries[0]?.symbol ?? fallbackSymbol
+}
+
+/**
+ * `template`'s properties, except colour -- colour is kept from `symbol` itself. The
+ * single-symbol building block behind `withSharedSymbol`, used directly wherever a
+ * symbol sits outside the classified list but still needs the exact same treatment: a
+ * renderer's `fallbackSymbol` is exactly such a case (see `setSharedSymbol` in both
+ * editors, which applies this to the fallback right alongside `withSharedSymbol` on the
+ * list, so the two never drift apart).
+ */
+export function withSharedSymbolShape(symbol: LayerSymbol, template: LayerSymbol): LayerSymbol {
+  return withPrimaryColor(template, primaryColorOf(symbol))
 }
 
 /**
@@ -88,10 +106,10 @@ export function sharedSymbolOf(entries: { symbol: LayerSymbol }[], geometryType:
  *
  * The one function both directions need: reapplying a size the user has set across a
  * rebuild that would otherwise reset every symbol back to `defaultSymbolFor` (as
- * `GraduatedEditor`'s effect does whenever method, class count or ramp change), and
- * applying a freshly picked size to every class at once when the user edits the shared
- * symbol directly.
+ * `GraduatedEditor`'s and `CategorizedEditor`'s effects do whenever method, class count,
+ * ramp or field change), and applying a freshly picked size to every class at once when
+ * the user edits the shared symbol directly.
  */
 export function withSharedSymbol<T extends { symbol: LayerSymbol }>(entries: T[], template: LayerSymbol): T[] {
-  return entries.map((entry) => ({ ...entry, symbol: withPrimaryColor(template, primaryColorOf(entry.symbol)) }))
+  return entries.map((entry) => ({ ...entry, symbol: withSharedSymbolShape(entry.symbol, template) }))
 }
