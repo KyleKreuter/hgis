@@ -324,12 +324,17 @@ function CatalogToolbar({
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           {/* Focus lands here on open (plan 6.5, Schritt 2) -- the search is the fastest
-              way into a catalog of several hundred entries. */}
+              way into a catalog of several hundred entries. The placeholder promises
+              only name and agency: the service directory carries no description for
+              any of the 509 datasets, so naming a field that is always empty would be
+              misleading. `matchesQuery` (search.ts) still checks description too --
+              harmless while it stays empty, and free the moment the backend can fill
+              it in for the detail view. */}
           <Input
             autoFocus
             value={filters.query}
             onChange={(event) => onFiltersChange({ ...filters, query: event.target.value })}
-            placeholder="Name, Beschreibung oder Behörde durchsuchen"
+            placeholder="Name oder Behörde durchsuchen"
             aria-label="Geoportal-Katalog durchsuchen"
             className="pl-8"
           />
@@ -454,21 +459,27 @@ function DatasetRow({
   const Icon = KIND_ICONS[dataset.kind]
   return (
     <li>
+      {/* Two lines, not one row of columns: the name is what the user searches by and
+          has to win the space, and an agency like "Landesbetrieb Geoinformation und
+          Vermessung" claims a whole row's width on its own -- sharing a line with it
+          left names like "ALK…" unreadable. The object count moved to the detail pane;
+          the catalog itself carries no count for most of the 509 entries (the service
+          directory does not report one), so a column that reads "—" almost everywhere
+          told the user nothing. */}
       <button
         type="button"
         onClick={onSelect}
         className={cn(
-          'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs',
+          'flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-xs',
           selected ? 'bg-accent' : 'hover:bg-accent/50',
         )}
       >
-        <span title={KIND_TITLES[dataset.kind]} className="shrink-0">
+        <span title={KIND_TITLES[dataset.kind]} className="mt-0.5 shrink-0">
           <Icon className="size-3.5 text-muted-foreground" />
         </span>
-        <span className="min-w-0 flex-1 truncate font-medium">{dataset.title}</span>
-        <span className="shrink-0 truncate text-muted-foreground">{dataset.agency ?? '—'}</span>
-        <span className="w-16 shrink-0 text-right tabular-nums text-muted-foreground">
-          {dataset.featureCount === null ? '—' : formatCount(dataset.featureCount)}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium">{dataset.title}</span>
+          {dataset.agency && <span className="block truncate text-muted-foreground">{dataset.agency}</span>}
         </span>
       </button>
     </li>
@@ -552,7 +563,7 @@ function DatasetDetailPane({
             <AlertTitle>Nur als Kartenbild verfügbar</AlertTitle>
             <AlertDescription>
               Dieser Datensatz liefert keine Objekte, nur ein fertiges Kartenbild. Er lässt
-              sich erst mit dem Bildweg (Stufe 2) als Hintergrundkarte nutzen -- ein Import
+              sich erst mit dem Bildweg (Stufe 2) als Hintergrundkarte nutzen – ein Import
               ist hier noch nicht möglich.
             </AlertDescription>
           </Alert>
@@ -669,7 +680,7 @@ function DatasetDetailPane({
                   {!useMapExtent &&
                     ' Der aktuelle Kartenausschnitt würde das verkürzen.'}
                   {' '}
-                  Es gibt keine feste Obergrenze -- Sie entscheiden, ob Sie fortfahren.
+                  Es gibt keine feste Obergrenze – Sie entscheiden, ob Sie fortfahren.
                 </AlertDescription>
               </Alert>
             )}
