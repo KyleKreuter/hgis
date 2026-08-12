@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { LngLat, MapMouseEvent } from 'maplibre-gl'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { formatAttributeNumber } from '@/lib/format'
 import { layerDetailQuery } from '@/api/layers'
 import { featureDetailQuery } from '@/api/features'
@@ -15,6 +16,16 @@ interface Hit {
   fid: number
   lngLat: LngLat
 }
+
+interface ScreenPosition {
+  x: number
+  y: number
+  /** The map's own height -- what decides whether the popup still fits above the click. */
+  mapHeight: number
+}
+
+/** Distance between the click and the popup's near edge, on whichever side it opens. */
+const POPUP_GAP = 12
 
 interface IdentifyControlProps {
   /** Restricts hit-testing to the active layer; without one, every visible layer is queried. */
@@ -32,7 +43,7 @@ interface IdentifyControlProps {
 export function IdentifyControl({ activeLayerId }: IdentifyControlProps) {
   const { mapRef, isLoaded } = useMap()
   const [hit, setHit] = useState<Hit | null>(null)
-  const [screenPosition, setScreenPosition] = useState<{ x: number; y: number } | null>(null)
+  const [screenPosition, setScreenPosition] = useState<ScreenPosition | null>(null)
   const toggle = useSelection((state) => state.toggle)
   const clear = useSelection((state) => state.clear)
 
@@ -97,7 +108,7 @@ export function IdentifyControl({ activeLayerId }: IdentifyControlProps) {
       const target = mapRef.current
       if (!target || !hit) return
       const point = target.project(hit.lngLat)
-      setScreenPosition({ x: point.x, y: point.y })
+      setScreenPosition({ x: point.x, y: point.y, mapHeight: target.getContainer().clientHeight })
     }
 
     reposition()
@@ -136,19 +147,40 @@ function IdentifyPopup({
 }: {
   layerId: string
   fid: number
-  position: { x: number; y: number }
+  position: ScreenPosition
   onClose: () => void
 }) {
   const { data: layer } = useQuery(layerDetailQuery(layerId))
   const { data: feature, isPending, isError } = useQuery(featureDetailQuery(layerId, fid))
 
+  /*
+   * Above the click while there is more room above than below, under it otherwise, and
+   * never taller than the side it opens on. Fixed above the click it ran off the top of
+   * the map on every click in the upper half -- the map clips, so the header line and the
+   * close button with it were simply gone and the popup could not be dismissed at all.
+   *
+   * Decided from the click position alone rather than from the popup's measured height:
+   * the height changes when the attributes arrive a moment after the click, and a popup
+   * that jumps sides once its data loads is worse than one that picks the roomier side
+   * straight away. Capping the height is what makes the choice sufficient.
+   */
+  const spaceAbove = position.y - POPUP_GAP
+  const spaceBelow = position.mapHeight - position.y - POPUP_GAP
+  const above = spaceAbove >= spaceBelow
+
   return (
     <div
-      className="absolute z-20 w-64 -translate-x-1/2 -translate-y-full rounded-md border bg-popover shadow-md"
-      // Offset upwards so the popup sits above the click instead of under the cursor.
-      style={{ left: position.x, top: position.y - 12 }}
+      className={cn(
+        'absolute z-30 flex w-64 -translate-x-1/2 flex-col overflow-hidden rounded-md border bg-popover shadow-md',
+        above && '-translate-y-full',
+      )}
+      style={{
+        left: position.x,
+        top: above ? position.y - POPUP_GAP : position.y + POPUP_GAP,
+        maxHeight: Math.max(above ? spaceAbove : spaceBelow, 0),
+      }}
     >
-      <div className="flex items-center gap-1 border-b px-2 py-1">
+      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1">
         <span className="truncate text-xs font-medium">{layer?.name ?? 'Objekt'}</span>
         <span className="text-xs text-muted-foreground tabular-nums">#{fid}</span>
         <Button
@@ -162,7 +194,9 @@ function IdentifyPopup({
         </Button>
       </div>
 
-      <div className="max-h-56 overflow-auto p-2">
+      {/* min-h-0 so it is this list, not the popup, that gives way when the side it
+          opened on is short -- max-h-56 stays as the cap on a tall map. */}
+      <div className="max-h-56 min-h-0 flex-1 overflow-auto p-2">
         {isPending && <p className="text-xs text-muted-foreground">Wird geladen…</p>}
         {isError && <p className="text-xs text-destructive">Attribute nicht abrufbar.</p>}
         {feature && layer && (

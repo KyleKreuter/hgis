@@ -412,7 +412,9 @@ function LayerRow({
         type="button"
         onClick={onSelect}
         onDoubleClick={onZoom}
-        className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+        // overflow-hidden so what does not fit is cut off here rather than running on
+        // over the buttons to the right of it.
+        className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-left"
         title={`${layer.name} (${GEOMETRY_LABELS[layer.geometryType]}, ${formatCount(layer.featureCount)} Objekte)`}
       >
         {/* Filled, not outlined: an outlined square sitting next to the visibility
@@ -426,10 +428,14 @@ function LayerRow({
           )}
           style={previewColor === null ? undefined : { color: previewColor }}
         />
-        <span className={cn('truncate', !layer.visible && 'text-muted-foreground')}>
+        {/* Keeps a stub of the name at every panel width. Free to shrink it went to zero
+            in a narrow dock and the row named no layer at all -- the object count, which
+            never gives way on its own, had taken the last of the space. A cut-off word
+            says more than none, so the count is the one that yields now. */}
+        <span className={cn('min-w-8 truncate', !layer.visible && 'text-muted-foreground')}>
           {layer.name}
         </span>
-        <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
+        <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground tabular-nums">
           {formatCount(layer.featureCount)}
         </span>
       </button>

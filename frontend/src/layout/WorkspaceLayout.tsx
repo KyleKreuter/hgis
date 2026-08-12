@@ -44,7 +44,15 @@ export function WorkspaceLayout({
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
-      <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-card px-2">
+      {/*
+        Scrolls sideways rather than cutting its end off. The row cannot wrap -- it is one
+        line high, and the page below it owns the rest of the viewport -- and the layout
+        root clips, so whatever did not fit was simply gone: at 900px with the measuring
+        tool switched on that was the last 67px, and the "Daten aus dem Geoportal Hamburg"
+        button with it. Nothing changes while everything fits, which is the usual case;
+        overflow-y-hidden keeps the sideways scrollbar from claiming any of the 40px.
+      */}
+      <header className="flex h-10 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden border-b bg-card px-2">
         {toolbar}
       </header>
 

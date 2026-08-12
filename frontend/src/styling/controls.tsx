@@ -11,8 +11,15 @@ export function Row({ label, children }: { label: string; children: ReactNode })
   // and a fixed 5rem label plus its controls needs more room than it has there -- the row
   // then ran out past the panel's edge instead of giving way. basis-40 keeps the controls
   // on the label's line for as long as they fit.
+  //
+  // min-w-0 on the row itself is what makes that basis a preference instead of a floor.
+  // The row is a grid item, so its automatic minimum size is its own min-content -- and a
+  // 10rem basis inside puts that at 10rem, which the panel undercuts long before its own
+  // minimum width: at 900px the dock goes down to 108px, and the row stood 78px past its
+  // edge, reachable only through a second scrollbar. With the minimum lifted the controls
+  // wrap onto their own line and then shrink into whatever the panel has.
   return (
-    <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
+    <div className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       <span className="w-20 shrink-0 text-xs text-muted-foreground">{label}</span>
       <div className="flex min-w-0 flex-1 basis-40 items-center gap-1.5">{children}</div>
     </div>

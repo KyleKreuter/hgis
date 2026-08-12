@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { toInputValue, type FieldKind } from './fieldKind'
+import { toInputValue, toWireValue, type FieldKind } from './fieldKind'
 
 const NULL_OPTION = '__null__'
 
@@ -81,7 +81,16 @@ export const FieldInput = forwardRef<HTMLInputElement, FieldInputProps>(function
       ref={ref}
       id={id}
       type={inputType}
-      step={kind === 'integer' || kind === 'time' ? 1 : kind === 'decimal' ? 'any' : undefined}
+      // A timestamp column stores seconds, so its input has to offer them -- left at the
+      // default the browser only shows minutes and would zero the seconds of every row
+      // the editor is opened on.
+      step={
+        kind === 'integer' || kind === 'time' || kind === 'timestamp'
+          ? 1
+          : kind === 'decimal'
+            ? 'any'
+            : undefined
+      }
       value={isNull ? '' : toInputValue(value, kind)}
       className={cn('h-7 text-xs', isNull && 'placeholder:italic', className)}
       placeholder={isNull ? 'NULL' : undefined}
@@ -92,7 +101,7 @@ export const FieldInput = forwardRef<HTMLInputElement, FieldInputProps>(function
         // explicit route, this is the one people take by habit -- both have to land on
         // the same value.
         if (raw === '') return onChange(null)
-        onChange(kind === 'integer' || kind === 'decimal' ? Number(raw) : raw)
+        onChange(kind === 'integer' || kind === 'decimal' ? Number(raw) : toWireValue(raw, kind))
       }}
     />
   )

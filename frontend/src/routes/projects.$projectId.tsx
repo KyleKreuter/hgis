@@ -243,8 +243,12 @@ function Workspace() {
             </Link>
             {/* Truncates instead of wrapping: a long name broke onto three lines in a
                 narrow window and pushed itself out of the toolbar's fixed height, over
-                the map below. The title attribute keeps the full name reachable. */}
-            <span className="min-w-0 truncate font-medium" title={project.name}>
+                the map below. The title attribute keeps the full name reachable.
+                Capped rather than free to shrink: min-w-0 let the buttons squeeze it to
+                nothing long before they ran out of room themselves, so a project called
+                "Test" -- 26px of text -- showed as an empty gap. It now keeps its own
+                width up to 20rem and the toolbar scrolls instead. */}
+            <span className="max-w-80 shrink-0 truncate font-medium" title={project.name}>
               {project.name}
             </span>
             {/* The variant must match the primitive's data-vertical:self-stretch --

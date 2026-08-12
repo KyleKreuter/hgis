@@ -39,9 +39,15 @@ export function LayerProperties({ layer, projectId }: LayerPropertiesProps) {
           deliberately not shown -- they exist for a later stage's reconcile only. */}
       {layer.source && (
         <Section title="Herkunft">
-          <Row label="Quelle">
-            <span className="text-xs">{layer.source.attribution}</span>
-          </Row>
+          {/* Only where the service directory names an agency. `source` says the layer
+              came from the Geoportal, `attribution` whether anybody is named in it --
+              two separate questions (CONTRACT.md 11.7). A "Quelle" caption with nothing
+              behind it claims the entry is missing rather than absent. */}
+          {layer.source.attribution && (
+            <Row label="Quelle">
+              <span className="text-xs">{layer.source.attribution}</span>
+            </Row>
+          )}
           <Row label="Lizenz">
             <a
               href={layer.source.licenseUrl}
