@@ -37,9 +37,9 @@ public class ClassificationService {
 	private static final int DEFAULT_VALUE_LIMIT = 100;
 	private static final int MAX_VALUE_LIMIT = 1000;
 
-	private static final String QUANTILE = "quantile";
-	private static final String EQUAL_INTERVAL = "equalInterval";
-	private static final String NATURAL_BREAKS = "naturalBreaks";
+	private static final String QUANTILE = ClassificationMethods.QUANTILE;
+	private static final String EQUAL_INTERVAL = ClassificationMethods.EQUAL_INTERVAL;
+	private static final String NATURAL_BREAKS = ClassificationMethods.NATURAL_BREAKS;
 
 	private final LayerRepository layerRepository;
 	private final LayerFieldRepository fieldRepository;
@@ -222,13 +222,7 @@ public class ClassificationService {
 		if (method == null || method.isBlank()) {
 			return QUANTILE;
 		}
-		for (String known : List.of(QUANTILE, EQUAL_INTERVAL, NATURAL_BREAKS)) {
-			if (known.equalsIgnoreCase(method.trim())) {
-				return known;
-			}
-		}
-		throw new BadRequestException("Unbekannte Methode: " + method + ". Erlaubt sind "
-				+ String.join(", ", QUANTILE, EQUAL_INTERVAL, NATURAL_BREAKS) + ".");
+		return ClassificationMethods.require(method);
 	}
 
 	private LayerField requireNumericField(UUID layerId, String field) {

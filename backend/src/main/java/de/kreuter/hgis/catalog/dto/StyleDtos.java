@@ -67,6 +67,18 @@ public final class StyleDtos {
 	 * @param categories value to symbol, for categorized
 	 * @param classes    numeric ranges to symbol, for graduated
 	 * @param fallbackSymbol used for everything no category or class covers, null included
+	 * @param method     graduated only: which of {@code /classify}'s methods computed
+	 *                   {@code classes} -- quantile, equalInterval or naturalBreaks. Recorded
+	 *                   so the panel can reopen the same classification without rebuilding it
+	 *                   under a different one; the server never recomputes a boundary from it.
+	 * @param classCount graduated only: how many classes {@code method} was asked to produce.
+	 *                   Purely descriptive -- it may differ from {@code classes.size()} once
+	 *                   boundaries collapse, see {@code ClassificationService#strictlyAscending}.
+	 * @param ramp       graduated only: the colour ramp's display name, e.g. {@code "viridis"}.
+	 *                   The client alone interprets it; the server keeps no ramp catalogue and
+	 *                   only checks the length.
+	 * @param palette    categorized only: the colour palette's display name, checked the same
+	 *                   way as {@code ramp}.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record Renderer(
@@ -75,7 +87,11 @@ public final class StyleDtos {
 			String field,
 			List<Category> categories,
 			List<ClassBreak> classes,
-			Symbol fallbackSymbol) {
+			Symbol fallbackSymbol,
+			String method,
+			Integer classCount,
+			String ramp,
+			String palette) {
 	}
 
 	/**
