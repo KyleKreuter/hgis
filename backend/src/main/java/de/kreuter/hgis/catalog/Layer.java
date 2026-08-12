@@ -121,6 +121,39 @@ public class Layer {
 	@Column(columnDefinition = "geometry(Polygon,4326)")
 	private Polygon extent;
 
+	// --- Geoportal provenance (CONTRACT.md phase 23.7) -----------------------------------
+	// All eight null together for a layer not imported from the Geoportal -- see
+	// V7__layer_source.sql. Kept as flat columns like basemap and clipMode above rather
+	// than a JSON blob: every one of them is either shown to the user as plain text or
+	// linked as a URL, none is ever queried or filtered on, so there is nothing a nested
+	// document would buy that a handful of columns does not already give for free.
+
+	@Column(name = "source_attribution")
+	private String sourceAttribution;
+
+	@Column(name = "source_license_name")
+	private String sourceLicenseName;
+
+	@Column(name = "source_license_url")
+	private String sourceLicenseUrl;
+
+	@Column(name = "source_dataset_uri")
+	private String sourceDatasetUri;
+
+	@Column(name = "source_metadata_url")
+	private String sourceMetadataUrl;
+
+	/** The Geoportal catalog id this layer was imported from, e.g. {@code strassenbaumkataster/strassenbaumkataster_hh}. */
+	@Column(name = "source_dataset_id")
+	private String sourceDatasetId;
+
+	/** Technical name of the field carrying the service's own stable feature id (decision E6), or null if it has none. */
+	@Column(name = "source_feature_id_field")
+	private String sourceFeatureIdField;
+
+	@Column(name = "source_fetched_at")
+	private Instant sourceFetchedAt;
+
 	@CreationTimestamp
 	@Column(name = "created_at", updatable = false)
 	private Instant createdAt;
@@ -385,5 +418,58 @@ public class Layer {
 
 	public Instant getUpdatedAt() {
 		return updatedAt;
+	}
+
+	// --- Geoportal provenance (CONTRACT.md phase 23.7) -----------------------------------
+
+	public String getSourceAttribution() {
+		return sourceAttribution;
+	}
+
+	public String getSourceLicenseName() {
+		return sourceLicenseName;
+	}
+
+	public String getSourceLicenseUrl() {
+		return sourceLicenseUrl;
+	}
+
+	public String getSourceDatasetUri() {
+		return sourceDatasetUri;
+	}
+
+	public String getSourceMetadataUrl() {
+		return sourceMetadataUrl;
+	}
+
+	public String getSourceDatasetId() {
+		return sourceDatasetId;
+	}
+
+	public String getSourceFeatureIdField() {
+		return sourceFeatureIdField;
+	}
+
+	public Instant getSourceFetchedAt() {
+		return sourceFetchedAt;
+	}
+
+	/**
+	 * Written once, right after a Geoportal import creates this layer (CONTRACT.md phase
+	 * 23.6); nothing updates it afterwards. {@code datasetId} and {@code featureIdField}
+	 * exist for stage 5's future reconcile and are shown nowhere (CONTRACT.md 11.7); the
+	 * other six are what clause 2 of the licence requires displayed, at the two places
+	 * CONTRACT.md 11.7 names.
+	 */
+	public void setSource(String attribution, String licenseName, String licenseUrl, String datasetUri,
+			String metadataUrl, String datasetId, String featureIdField, Instant fetchedAt) {
+		this.sourceAttribution = attribution;
+		this.sourceLicenseName = licenseName;
+		this.sourceLicenseUrl = licenseUrl;
+		this.sourceDatasetUri = datasetUri;
+		this.sourceMetadataUrl = metadataUrl;
+		this.sourceDatasetId = datasetId;
+		this.sourceFeatureIdField = featureIdField;
+		this.sourceFetchedAt = fetchedAt;
 	}
 }

@@ -98,11 +98,38 @@ public final class LayerDtos {
 			 * in rendering <em>meaning</em> reach clients that hold an immutable tile.
 			 * See {@link de.kreuter.hgis.common.TileRenderVersion} for when it is raised.
 			 */
-			int renderVersion) {
+			int renderVersion,
+
+			/**
+			 * Null for a layer not imported from the Geoportal (CONTRACT.md phase 23.7);
+			 * present here, not only on {@link Detail}, for the same reason as {@link
+			 * #style()} -- the map reads the attribution of every <em>visible</em> layer of
+			 * a project to build its bottom-right notice, which would otherwise cost one
+			 * detail request per layer.
+			 */
+			Source source) {
 	}
 
 	/** One entry of {@code LayerDetail.fields}. */
 	public record Field(UUID id, String sourceName, String columnName, String dataType) {
+	}
+
+	/**
+	 * A layer's Geoportal provenance (CONTRACT.md phase 23.7). {@code datasetId} and
+	 * {@code featureIdField} exist for stage 5's future reconcile and are shown nowhere;
+	 * the other six are what clause 2 of the Datenlizenz Deutschland requires displayed, at
+	 * the map's bottom right (once per distinct attribution among the visible layers) and
+	 * in full, with {@code fetchedAt}, on the layer properties panel.
+	 */
+	public record Source(
+			String attribution,
+			String licenseName,
+			String licenseUrl,
+			String datasetUri,
+			String metadataUrl,
+			String datasetId,
+			String featureIdField,
+			Instant fetchedAt) {
 	}
 
 	/**
@@ -143,6 +170,9 @@ public final class LayerDtos {
 
 			/** @see Summary#renderVersion() */
 			int renderVersion,
+
+			/** @see Summary#source() */
+			Source source,
 
 			List<Field> fields,
 			Instant createdAt,

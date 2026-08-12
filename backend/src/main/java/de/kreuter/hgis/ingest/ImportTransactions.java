@@ -5,6 +5,7 @@ import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
 import de.kreuter.hgis.common.ExtentCalculator;
+import de.kreuter.hgis.common.LayerProvenance;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.common.TableCreator;
 import de.kreuter.hgis.common.TableCreator.CreatedLayer;
@@ -63,6 +64,28 @@ class ImportTransactions {
 	@Transactional
 	CreatedLayer begin(Project project, UUID jobId, SourceSchema schema, String layerName) {
 		CreatedLayer created = tableCreator.createLayerTable(project, schema, layerName);
+		jobService.markRunning(jobId, created.layer().getId(), schema.featureCount());
+		return created;
+	}
+
+	/**
+	 * Same phase A, for the Geoportal import (CONTRACT.md phase 23). {@code columnNameBasis}
+	 * and {@code idFieldIndex} pass straight through to {@link TableCreator}'s wider
+	 * overload -- see {@link TableCreator#createLayerTable(Project, SourceSchema, String,
+	 * java.util.List, int)} for what they mean. {@code provenance}, when not null, is
+	 * written onto the freshly created layer in this same transaction -- the only moment
+	 * that can be atomic with the layer row coming into existence, since nothing before
+	 * this call knows the layer's id yet.
+	 */
+	@Transactional
+	CreatedLayer begin(Project project, UUID jobId, SourceSchema schema, String layerName,
+			List<String> columnNameBasis, int idFieldIndex, LayerProvenance provenance) {
+		CreatedLayer created = tableCreator.createLayerTable(project, schema, layerName, columnNameBasis, idFieldIndex);
+		if (provenance != null) {
+			created.layer().setSource(provenance.attribution(), provenance.licenseName(), provenance.licenseUrl(),
+					provenance.datasetUri(), provenance.metadataUrl(), provenance.datasetId(),
+					provenance.featureIdField(), provenance.fetchedAt());
+		}
 		jobService.markRunning(jobId, created.layer().getId(), schema.featureCount());
 		return created;
 	}
