@@ -1,9 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { projectListQuery } from '@/api/projects'
+import { projectListInfiniteQuery } from '@/api/projects'
 import { ProjectBrowser } from '@/projects/ProjectBrowser'
 
 export const Route = createFileRoute('/')({
-  // Prefetch so the list is there on first paint instead of flashing skeletons.
-  loader: ({ context }) => context.queryClient.ensureQueryData(projectListQuery()),
+  // Prefetch the first page (unfiltered) so it is there on first paint instead of
+  // flashing skeletons. `ensureQueryData` would fetch the plain array shape this
+  // endpoint no longer returns -- the chain needs `ensureInfiniteQueryData` instead.
+  loader: ({ context }) =>
+    context.queryClient.ensureInfiniteQueryData(projectListInfiniteQuery('')),
   component: ProjectBrowser,
 })
