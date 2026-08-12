@@ -9,6 +9,7 @@ import { layerDetailQuery, type LayerField } from '@/api/layers'
 import { featurePagesQuery, type Feature } from '@/api/features'
 import { useSelection } from '@/state/selection'
 import { FilterBar } from './FilterBar'
+import type { FilterMode } from './filterMode'
 import { TableEditToolbar } from './TableEditToolbar'
 import { FieldInput } from './FieldInput'
 import { kindOf } from './fieldKind'
@@ -59,7 +60,15 @@ export function AttributeTable({
   // the currently sorted field can never leave this pointed at a name the server no
   // longer resolves.
   const [sort, setSort] = useState<{ field: string; desc: boolean } | null>(null)
-  const [filter, setFilter] = useState('')
+  // 'search' is the default: CONTRACT.md frames the syntax-free search as the common
+  // case ("für den häufigsten Fall"), so that is what a layer opens into. One shared
+  // text state, not one per mode: switching mode clears the field (see
+  // `handleModeChange`), so `filter` and `search` are never both non-empty at once --
+  // which of the two `text` becomes is decided purely by `mode`.
+  const [mode, setMode] = useState<FilterMode>('search')
+  const [text, setText] = useState('')
+  const filter = mode === 'filter' ? text : ''
+  const search = mode === 'search' ? text : ''
 
   const { data: layer } = useQuery({
     ...layerDetailQuery(layerId ?? ''),
@@ -72,6 +81,7 @@ export function AttributeTable({
       sort: sort?.field,
       desc: sort?.desc,
       filter,
+      search,
     }),
     enabled: Boolean(layerId),
   })
@@ -79,6 +89,11 @@ export function AttributeTable({
   const rows = query.data?.rows ?? []
   const total = query.data?.totalCount ?? 0
   const fields = layer?.fields ?? []
+
+  function handleModeChange(next: FilterMode) {
+    setMode(next)
+    setText('')
+  }
 
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -106,7 +121,7 @@ export function AttributeTable({
       state.cancelEditing()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sort, filter])
+  }, [sort, filter, search])
 
   // A field deleted while it was the active sort (ManageFieldsDialog, CONTRACT.md
   // "Attributfelder löschen") leaves this pointed at a column the server no longer
@@ -266,9 +281,13 @@ export function AttributeTable({
         <>
           <FilterBar
             fields={fields}
-            value={filter}
-            onChange={setFilter}
+            layerId={layerId}
+            mode={mode}
+            onModeChange={handleModeChange}
+            value={text}
+            onChange={setText}
             error={query.error}
+            totalCount={total}
           />
           <TableEditToolbar layerId={layerId} projectId={projectId} onRequestStart={onRequestEdit} />
           <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
@@ -290,7 +309,9 @@ export function AttributeTable({
             onKeyDown={handleKeyDown}
           >
             {rows.length === 0 && !query.isPending ? (
-              <Hint>Keine Objekte{filter ? ' für diesen Filter' : ''}.</Hint>
+              <Hint>
+                Keine Objekte{text ? (mode === 'filter' ? ' für diesen Filter' : ' für diese Suche') : ''}.
+              </Hint>
             ) : (
               <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
                 {virtualRows.map((virtualRow) => (
