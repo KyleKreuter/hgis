@@ -42,7 +42,7 @@ final class LayerFields {
 
 	static LayerField require(String name, List<LayerField> fields) {
 		return find(name, fields).orElseThrow(() -> new BadRequestException(
-				"Unbekanntes Feld: " + name + ". Verfügbar: " + String.join(", ", sourceNames(fields))));
+				"Unbekanntes Feld: " + name + ". Verfügbar: " + String.join(", ", sourceNames(fields)) + "."));
 	}
 
 	static boolean isNumeric(LayerField field) {

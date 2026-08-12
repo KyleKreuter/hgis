@@ -42,7 +42,7 @@ public class GlyphService {
 			return in.readAllBytes();
 		}
 		catch (IOException ex) {
-			throw new IllegalStateException("Glyphen " + stack + "/" + block + " konnten nicht gelesen werden", ex);
+			throw new IllegalStateException("Das Programm kann die Glyphen " + stack + "/" + block + " nicht lesen", ex);
 		}
 	}
 
@@ -63,7 +63,7 @@ public class GlyphService {
 
 	private static String requireValidRange(String range) {
 		if (range == null || !RANGE.matcher(range).matches()) {
-			throw new BadRequestException("range muss die Form <start>-<end> haben, war \"" + range + "\"");
+			throw new BadRequestException("range muss die Form <start>-<end> haben. Erhalten: \"" + range + "\".");
 		}
 		return range;
 	}

@@ -62,7 +62,7 @@ public class InspectionService {
 		}
 		catch (RuntimeException ex) {
 			log.warn("Could not open uploaded file {} ({})", upload.originalFilename(), upload.id(), ex);
-			throw new BadRequestException("Die Datei konnte nicht gelesen werden: "
+			throw new BadRequestException("Der Import kann die Datei nicht lesen: "
 					+ upload.withOriginalName(ex.getMessage()));
 		}
 	}
@@ -151,7 +151,7 @@ public class InspectionService {
 				.single());
 		if (!known) {
 			throw new BadRequestException("EPSG:" + srid
-					+ " ist der Datenbank nicht bekannt und kann nicht umprojiziert werden");
+					+ " ist der Datenbank nicht bekannt. Eine Umprojektion in dieses System ist nicht möglich.");
 		}
 	}
 }

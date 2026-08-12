@@ -78,8 +78,8 @@ public class UploadStorage {
 		}
 		String extension = extensionOf(originalName);
 		if (!ACCEPTED.contains(extension)) {
-			throw new BadRequestException("Dateiformat '" + extension
-					+ "' wird nicht unterstützt. Möglich sind: ZIP mit Shapefile, GeoPackage, GeoJSON, CSV");
+			throw new BadRequestException("Der Import unterstützt das Dateiformat '" + extension
+					+ "' nicht. Möglich sind: ZIP mit Shapefile, GeoPackage, GeoJSON, CSV.");
 		}
 
 		UUID uploadId = UUID.randomUUID();
@@ -93,7 +93,7 @@ public class UploadStorage {
 			return new StoredUpload(uploadId, target, originalName);
 		}
 		catch (IOException ex) {
-			throw new UncheckedIOException("Upload konnte nicht gespeichert werden", ex);
+			throw new UncheckedIOException("Der Import kann den Upload nicht speichern", ex);
 		}
 	}
 

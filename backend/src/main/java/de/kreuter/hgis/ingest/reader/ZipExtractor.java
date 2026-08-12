@@ -83,7 +83,7 @@ final class ZipExtractor {
 		}
 		catch (IOException e) {
 			FileTree.deleteQuietly(targetDir);
-			throw new SourceReadException("ZIP konnte nicht entpackt werden: " + zipFile, e);
+			throw new SourceReadException("Der Import kann das ZIP nicht entpacken: " + zipFile, e);
 		}
 		catch (RuntimeException e) {
 			// The bounds above (MAX_ENTRIES, copyBounded, safeResolve) throw SourceReadException,
@@ -99,7 +99,7 @@ final class ZipExtractor {
 			return Files.createTempDirectory("hgis-shp-");
 		}
 		catch (IOException e) {
-			throw new SourceReadException("ZIP konnte nicht entpackt werden: " + zipFile, e);
+			throw new SourceReadException("Der Import kann das ZIP nicht entpacken: " + zipFile, e);
 		}
 	}
 
@@ -122,7 +122,7 @@ final class ZipExtractor {
 			written += read;
 			if (written > limit) {
 				throw new SourceReadException("Der Eintrag '" + entryName
-						+ "' ist entpackt größer als erlaubt — das ZIP wird nicht ausgepackt");
+						+ "' ist entpackt größer als erlaubt. Der Import packt das ZIP nicht aus.");
 			}
 			out.write(buffer, 0, read);
 		}

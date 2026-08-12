@@ -123,7 +123,7 @@ public final class FilterParser {
 			return column + (negated ? " NOT " : " ") + operator + " " + bind(field, readLiteral(field));
 		}
 		if (negated) {
-			throw error("Nach NOT wird IN, LIKE oder ILIKE erwartet");
+			throw error("Nach NOT erwartet das Programm IN, LIKE oder ILIKE");
 		}
 
 		Token operator = expect(TokenType.OPERATOR, "Vergleichsoperator");
@@ -144,14 +144,14 @@ public final class FilterParser {
 	private LayerField resolveField() {
 		Token token = current();
 		if (token.type() != TokenType.IDENTIFIER) {
-			throw error("Feldname erwartet, gefunden: " + describe(token));
+			throw error("Feldname erwartet. Gefunden: " + describe(token) + ".");
 		}
 		advance();
 		String name = token.text().toLowerCase(Locale.ROOT);
 		LayerField field = fieldsBySourceName.getOrDefault(name, fieldsByColumnName.get(name));
 		if (field == null) {
 			throw new BadRequestException("Unbekanntes Feld: " + token.text()
-					+ ". Verfügbar: " + String.join(", ", availableFieldNames()));
+					+ ". Verfügbar: " + String.join(", ", availableFieldNames()) + ".");
 		}
 		return field;
 	}
@@ -177,7 +177,7 @@ public final class FilterParser {
 			case STRING -> convertString(field, token.text());
 			case NUMBER -> convertNumber(field, token.text());
 			case KEYWORD -> convertKeyword(field, token.text());
-			default -> throw error("Wert erwartet, gefunden: " + describe(token));
+			default -> throw error("Wert erwartet. Gefunden: " + describe(token) + ".");
 		};
 	}
 
@@ -200,26 +200,26 @@ public final class FilterParser {
 			case "text" -> text;
 			default -> throw new BadRequestException(
 					"Feld " + field.getSourceName() + " ist vom Typ " + field.getDataType()
-							+ " und kann nicht mit einer Zahl verglichen werden");
+							+ ". Vergleich mit einer Zahl ist nicht möglich.");
 		};
 	}
 
 	private Object convertKeyword(LayerField field, String text) {
 		String upper = text.toUpperCase(Locale.ROOT);
 		if (!upper.equals("TRUE") && !upper.equals("FALSE")) {
-			throw error("Wert erwartet, gefunden: " + text);
+			throw error("Wert erwartet. Gefunden: " + text + ".");
 		}
 		if (!baseType(field).equals("boolean")) {
 			throw new BadRequestException("Feld " + field.getSourceName()
-					+ " ist vom Typ " + field.getDataType() + " und nicht boolesch");
+					+ " ist vom Typ " + field.getDataType() + ". Es ist nicht boolesch.");
 		}
 		return upper.equals("TRUE");
 	}
 
 	private void requireTextual(LayerField field, String operator) {
 		if (!baseType(field).equals("text")) {
-			throw new BadRequestException(operator + " ist nur für Textfelder möglich, "
-					+ field.getSourceName() + " ist vom Typ " + field.getDataType());
+			throw new BadRequestException(operator + " ist nur für Textfelder möglich. "
+					+ field.getSourceName() + " ist vom Typ " + field.getDataType() + ".");
 		}
 	}
 
@@ -236,7 +236,7 @@ public final class FilterParser {
 		}
 		catch (NumberFormatException ex) {
 			throw new BadRequestException(
-					"Feld " + field.getSourceName() + " erwartet eine ganze Zahl, gefunden: " + text);
+					"Feld " + field.getSourceName() + " erwartet eine ganze Zahl. Gefunden: " + text + ".");
 		}
 	}
 
@@ -246,7 +246,7 @@ public final class FilterParser {
 		}
 		catch (NumberFormatException ex) {
 			throw new BadRequestException(
-					"Feld " + field.getSourceName() + " erwartet eine Zahl, gefunden: " + text);
+					"Feld " + field.getSourceName() + " erwartet eine Zahl. Gefunden: " + text + ".");
 		}
 	}
 
@@ -256,7 +256,7 @@ public final class FilterParser {
 			case "true", "wahr", "ja", "1" -> true;
 			case "false", "falsch", "nein", "0" -> false;
 			default -> throw new BadRequestException(
-					"Feld " + field.getSourceName() + " erwartet wahr oder falsch, gefunden: " + text);
+					"Feld " + field.getSourceName() + " erwartet wahr oder falsch. Gefunden: " + text + ".");
 		};
 	}
 
@@ -442,14 +442,14 @@ public final class FilterParser {
 
 	private void expectKeyword(String keyword) {
 		if (!matchKeyword(keyword)) {
-			throw error(keyword + " erwartet, gefunden: " + describe(current()));
+			throw error(keyword + " erwartet. Gefunden: " + describe(current()) + ".");
 		}
 	}
 
 	private Token expect(TokenType type, String expected) {
 		Token token = current();
 		if (token.type() != type) {
-			throw error(expected + " erwartet, gefunden: " + describe(token));
+			throw error(expected + " erwartet. Gefunden: " + describe(token) + ".");
 		}
 		advance();
 		return token;

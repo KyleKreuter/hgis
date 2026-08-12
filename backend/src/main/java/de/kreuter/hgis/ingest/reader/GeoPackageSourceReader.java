@@ -43,7 +43,7 @@ final class GeoPackageSourceReader extends AbstractSourceReader {
 		try {
 			pkg = new GeoPackage(file.toFile());
 		} catch (IOException e) {
-			throw new SourceReadException("GeoPackage konnte nicht geöffnet werden: " + file, e);
+			throw new SourceReadException("Der Import kann das GeoPackage nicht öffnen: " + file, e);
 		}
 		this.geoPackage = pkg;
 		try {
@@ -57,7 +57,7 @@ final class GeoPackageSourceReader extends AbstractSourceReader {
 			this.schema = build.schema();
 		} catch (IOException e) {
 			geoPackage.close();
-			throw new SourceReadException("GeoPackage-Schema konnte nicht gelesen werden: " + file, e);
+			throw new SourceReadException("Der Import kann das GeoPackage-Schema nicht lesen: " + file, e);
 		} catch (RuntimeException e) {
 			geoPackage.close();
 			throw e;
@@ -144,7 +144,7 @@ final class GeoPackageSourceReader extends AbstractSourceReader {
 		try {
 			reader = geoPackage.reader(entry, Filter.INCLUDE, Transaction.AUTO_COMMIT);
 		} catch (IOException e) {
-			throw new SourceReadException("GeoPackage-Layer konnte nicht gelesen werden", e);
+			throw new SourceReadException("Der Import kann den GeoPackage-Layer nicht lesen", e);
 		}
 		Iterator<SimpleFeature> iterator = new GeoPackageFeatureIterator(reader);
 		return toSourceFeatureStream(iterator, fields).onClose(() -> closeQuietly(reader));
@@ -181,7 +181,7 @@ final class GeoPackageSourceReader extends AbstractSourceReader {
 				try {
 					hasMore = reader.hasNext();
 				} catch (IOException e) {
-					throw new SourceReadException("GeoPackage-Layer konnte nicht vollständig gelesen werden", e);
+					throw new SourceReadException("Der Import kann den GeoPackage-Layer nicht vollständig lesen", e);
 				}
 				if (!hasMore) {
 					exhausted = true;

@@ -219,7 +219,7 @@ public final class LayerDtos {
 	 * layer from another project out.
 	 */
 	public record ReorderRequest(
-			@NotEmpty(message = "Es muss mindestens ein Layer angegeben werden")
+			@NotEmpty(message = "Die Liste muss mindestens einen Layer enthalten")
 			List<UUID> layerIdsBottomToTop) {
 	}
 }

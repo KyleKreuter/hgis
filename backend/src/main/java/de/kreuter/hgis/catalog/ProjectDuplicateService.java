@@ -54,6 +54,6 @@ public class ProjectDuplicateService {
 
 	private static String describe(Exception e) {
 		return e.getMessage() == null || e.getMessage().isBlank()
-				? "Projekt konnte nicht dupliziert werden" : e.getMessage();
+				? "Das Programm konnte das Projekt nicht duplizieren" : e.getMessage();
 	}
 }

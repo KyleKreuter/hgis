@@ -59,7 +59,7 @@ final class GeoJsonSourceReader extends AbstractSourceReader {
 				observeProperties(node, attributeTypes);
 			}
 		} catch (JacksonException e) {
-			throw new SourceReadException("GeoJSON konnte nicht gelesen werden: " + file, e);
+			throw new SourceReadException("Der Import kann das GeoJSON nicht lesen: " + file, e);
 		}
 		this.fields = attributeTypes.fields();
 
@@ -93,7 +93,7 @@ final class GeoJsonSourceReader extends AbstractSourceReader {
 					try {
 						node = nextFeatureNode(parser);
 					} catch (JacksonException e) {
-						throw new SourceReadException("GeoJSON konnte nicht vollständig gelesen werden", e);
+						throw new SourceReadException("Der Import kann das GeoJSON nicht vollständig lesen", e);
 					}
 					if (node == null) {
 						return null;
@@ -160,7 +160,7 @@ final class GeoJsonSourceReader extends AbstractSourceReader {
 				parser.skipChildren();
 			}
 		} catch (IOException | JacksonException e) {
-			throw new SourceReadException("GeoJSON konnte nicht gelesen werden: " + file, e);
+			throw new SourceReadException("Der Import kann das GeoJSON nicht lesen: " + file, e);
 		}
 	}
 
@@ -241,7 +241,7 @@ final class GeoJsonSourceReader extends AbstractSourceReader {
 				parser.skipChildren();
 			}
 		} catch (IOException | JacksonException e) {
-			throw new SourceReadException("GeoJSON konnte nicht gelesen werden: " + file, e);
+			throw new SourceReadException("Der Import kann das GeoJSON nicht lesen: " + file, e);
 		}
 	}
 

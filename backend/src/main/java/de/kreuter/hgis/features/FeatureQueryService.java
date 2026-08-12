@@ -167,7 +167,7 @@ public class FeatureQueryService {
 		long total = count(table, where, parameters);
 		if (total > MAX_FIDS) {
 			throw new BadRequestException("Die Einschränkung trifft " + total
-					+ " Objekte, mehr als die erlaubten " + MAX_FIDS + ".");
+					+ " Objekte. Erlaubt sind höchstens " + MAX_FIDS + ".");
 		}
 
 		var statement = jdbc.sql("SELECT f.fid FROM " + table + " f" + where + " ORDER BY f.fid ASC");

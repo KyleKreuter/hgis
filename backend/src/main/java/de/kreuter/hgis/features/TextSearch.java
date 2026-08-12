@@ -43,7 +43,7 @@ final class TextSearch {
 				.toList();
 		if (textFields.isEmpty()) {
 			throw new BadRequestException(
-					"Dieser Layer hat keine Textfelder, in denen gesucht werden könnte");
+					"Dieser Layer hat keine Textfelder. Suche ist hier nicht möglich.");
 		}
 
 		List<String> conditions = new ArrayList<>();

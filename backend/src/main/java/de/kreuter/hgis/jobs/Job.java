@@ -115,7 +115,7 @@ public class Job {
 	public void markRunning() {
 		if (status != Status.PENDING) {
 			throw new IllegalStateException(
-					"Job " + id + " kann nicht nach RUNNING wechseln, Status ist " + status);
+					"Job " + id + " kann nicht zu RUNNING wechseln. Status ist " + status + ".");
 		}
 		this.status = Status.RUNNING;
 		this.startedAt = Instant.now();

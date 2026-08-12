@@ -50,7 +50,7 @@ class ExportOverloadAdvice {
 		log.warn("Export abgelehnt, Pool ausgelastet: {}", ex.getMessage());
 
 		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
-				"Es laufen bereits zu viele Exporte. Bitte in einem Moment erneut versuchen.");
+				"Es laufen bereits zu viele Exporte. Versuchen Sie es in einem Moment erneut.");
 		problem.setTitle("Server ausgelastet");
 
 		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)

@@ -73,8 +73,8 @@ public class JobJanitor {
 		}
 
 		String reason = job.getType() == Job.Type.DUPLICATE
-				? "Anwendung wurde während der Projektduplizierung neu gestartet, Job wurde abgebrochen"
-				: "Anwendung wurde während des Imports neu gestartet, Job wurde abgebrochen";
+				? "Die Anwendung wurde während der Projektduplizierung neu gestartet. Der Server hat den Job abgebrochen."
+				: "Die Anwendung wurde während des Imports neu gestartet. Der Server hat den Job abgebrochen.";
 		if (job.getType() == Job.Type.DUPLICATE) {
 			UUID outputProjectId = parameters.outputProjectId(job.getParameters());
 			if (outputProjectId != null) {

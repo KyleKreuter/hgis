@@ -31,7 +31,7 @@ public record FidSelection(List<Long> fids) {
 		if (fids != null) {
 			if (fids.size() > MAX_FIDS) {
 				throw new BadRequestException("Eine Auswahl darf höchstens " + MAX_FIDS
-						+ " Objekte enthalten, angefragt waren " + fids.size());
+						+ " Objekte enthalten. Angefragt waren " + fids.size() + ".");
 			}
 			if (fids.stream().anyMatch(Objects::isNull)) {
 				throw new BadRequestException("Die Auswahl enthält einen leeren Eintrag");
@@ -84,7 +84,7 @@ public record FidSelection(List<Long> fids) {
 		}
 		catch (NumberFormatException ex) {
 			throw new BadRequestException(
-					"fids darf nur ganze Zahlen enthalten, war: '" + echo(token) + "'");
+					"'fids' darf nur ganze Zahlen enthalten. Wert war: '" + echo(token) + "'.");
 		}
 	}
 

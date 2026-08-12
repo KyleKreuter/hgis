@@ -105,7 +105,7 @@ public class LayerStyleService {
 			style = objectMapper.treeToValue(node, StyleDtos.Style.class);
 		}
 		catch (JacksonException ex) {
-			throw new BadRequestException("Der Style konnte nicht gelesen werden: " + firstLine(ex));
+			throw new BadRequestException("Das Programm kann den Style nicht lesen: " + firstLine(ex));
 		}
 
 		return objectMapper.writeValueAsString(validate(style, fields));
@@ -262,7 +262,7 @@ public class LayerStyleService {
 	private StyleDtos.Style validate(StyleDtos.Style style, List<LayerField> fields) {
 		if (style.version() != null && style.version() != SUPPORTED_VERSION) {
 			throw new BadRequestException("Unbekannte Style-Version: " + style.version()
-					+ ". Unterstützt wird " + SUPPORTED_VERSION);
+					+ ". Der Server unterstützt nur Version " + SUPPORTED_VERSION + ".");
 		}
 		if (style.renderer() == null) {
 			throw new BadRequestException("Der Style braucht einen renderer");
@@ -283,7 +283,7 @@ public class LayerStyleService {
 		String type = renderer.type();
 		if (type == null || !RENDERER_TYPES.contains(type)) {
 			throw new BadRequestException("Unbekannter Renderer-Typ: " + type
-					+ ". Erlaubt sind " + String.join(", ", RENDERER_TYPES.stream().sorted().toList()));
+					+ ". Erlaubt sind " + String.join(", ", RENDERER_TYPES.stream().sorted().toList()) + ".");
 		}
 
 		if (type.equals(StyleDtos.RENDERER_SINGLE) && renderer.symbol() == null) {
@@ -298,7 +298,7 @@ public class LayerStyleService {
 			LayerField resolved = LayerFields.require(renderer.field(), fields);
 			if (type.equals(StyleDtos.RENDERER_GRADUATED) && !LayerFields.isNumeric(resolved)) {
 				throw new BadRequestException("Feld " + resolved.getSourceName() + " ist vom Typ "
-						+ resolved.getDataType() + " und kann nicht in Klassen abgestuft werden");
+						+ resolved.getDataType() + ". Klasseneinteilung ist für diesen Feldtyp nicht möglich.");
 			}
 			field = resolved.getColumnName();
 		}
@@ -378,7 +378,7 @@ public class LayerStyleService {
 		}
 		if (symbol.kind() == null || !SYMBOL_KINDS.contains(symbol.kind())) {
 			throw new BadRequestException("Unbekannte Symbolart in " + what + ": " + symbol.kind()
-					+ ". Erlaubt sind " + String.join(", ", SYMBOL_KINDS.stream().sorted().toList()));
+					+ ". Erlaubt sind " + String.join(", ", SYMBOL_KINDS.stream().sorted().toList()) + ".");
 		}
 
 		requireColor(symbol.fillColor(), what + ".fillColor");
@@ -424,7 +424,7 @@ public class LayerStyleService {
 		requireFinite(value, what);
 		if (value < min || value > max) {
 			throw new BadRequestException(what + " muss zwischen " + min + " und " + max
-					+ " liegen, war " + value);
+					+ " liegen. Wert war " + value + ".");
 		}
 	}
 
@@ -434,7 +434,7 @@ public class LayerStyleService {
 		}
 		requireFinite(value, what);
 		if (value < 0) {
-			throw new BadRequestException(what + " darf nicht negativ sein, war " + value);
+			throw new BadRequestException(what + " darf nicht negativ sein. Wert war " + value + ".");
 		}
 	}
 
@@ -448,7 +448,7 @@ public class LayerStyleService {
 	private static void requireZoom(Integer value, String what) {
 		if (value != null && (value < 0 || value > MAX_ZOOM)) {
 			throw new BadRequestException(what + " muss zwischen 0 und " + MAX_ZOOM
-					+ " liegen, war " + value);
+					+ " liegen. Wert war " + value + ".");
 		}
 	}
 
@@ -480,7 +480,7 @@ public class LayerStyleService {
 	private static void requireAtMost(int actual, int limit, String what) {
 		if (actual > limit) {
 			throw new BadRequestException("Höchstens " + limit + " " + what
-					+ " sind erlaubt, angegeben waren " + actual);
+					+ " sind erlaubt. Angegeben waren " + actual + ".");
 		}
 	}
 

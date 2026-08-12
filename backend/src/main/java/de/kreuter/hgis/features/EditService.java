@@ -62,11 +62,11 @@ public class EditService {
 
 		int total = request.creates().size() + request.updates().size() + request.deletes().size();
 		if (total == 0) {
-			throw new BadRequestException("Der Editier-Batch ist leer");
+			throw new BadRequestException("Das Änderungspaket ist leer");
 		}
 		if (total > MAX_BATCH) {
 			throw new BadRequestException(
-					"Der Editier-Batch umfasst " + total + " Änderungen, erlaubt sind " + MAX_BATCH);
+					"Das Änderungspaket umfasst " + total + " Änderungen. Erlaubt sind " + MAX_BATCH + ".");
 		}
 
 		String table = SqlIdentifier.quoteLayerTable(layer.getTableName());
@@ -135,7 +135,7 @@ public class EditService {
 		}
 		if (assignments.isEmpty()) {
 			throw new BadRequestException(
-					"Änderung an Objekt " + update.fid() + " enthält weder Geometrie noch Attribute");
+					"Änderung an Objekt " + update.fid() + " enthält weder Geometrie noch Feldwerte");
 		}
 
 		// xmin is the transaction that last wrote the row -- PostgreSQL's own row version,
@@ -181,7 +181,7 @@ public class EditService {
 			return new NotFoundException("Objekt " + fid + " existiert nicht mehr");
 		}
 		return new ConflictException(
-				"Objekt " + fid + " wurde zwischenzeitlich von anderer Stelle geändert",
+				"Eine andere Stelle hat Objekt " + fid + " zwischenzeitlich geändert",
 				rows.get(0));
 	}
 
@@ -227,7 +227,7 @@ public class EditService {
 		catch (RuntimeException ex) {
 			// Malformed GeoJSON never reaches ST_IsValidDetail; PostGIS rejects it while
 			// parsing, and the raw message is more useful than anything generic.
-			throw new BadRequestException("Geometrie konnte nicht gelesen werden: " + rootMessage(ex));
+			throw new BadRequestException("Das Programm kann die Geometrie nicht lesen: " + rootMessage(ex));
 		}
 
 		requireCompatibleType(layer, (String) detail.get("geometry_type"));
@@ -246,7 +246,7 @@ public class EditService {
 				: " bei %.6f, %.6f".formatted(((Number) x).doubleValue(), ((Number) y).doubleValue());
 
 		throw new BadRequestException("Ungültige Geometrie: " + reason + where
-				+ ". Automatisch reparieren lassen oder die Geometrie korrigieren.");
+				+ ". Lassen Sie sie automatisch reparieren oder korrigieren Sie sie von Hand.");
 	}
 
 	/**
@@ -264,7 +264,7 @@ public class EditService {
 			return;
 		}
 		throw new BadRequestException("Der Layer nimmt " + humanType(expected)
-				+ " auf, die Geometrie ist " + humanType(actual));
+				+ " auf. Die Geometrie ist " + humanType(actual) + ".");
 	}
 
 	private static String humanType(String geometryType) {
@@ -311,7 +311,7 @@ public class EditService {
 			LayerField field = fields.get(property.getKey());
 			if (field == null) {
 				throw new BadRequestException("Unbekanntes Feld: " + property.getKey()
-						+ ". Verfügbar: " + String.join(", ", fields.keySet()));
+						+ ". Verfügbar: " + String.join(", ", fields.keySet()) + ".");
 			}
 			columns.add(SqlIdentifier.quoteColumn(field.getColumnName()));
 			values.add(toColumnValue(field, property.getValue()));
@@ -455,7 +455,7 @@ public class EditService {
 	 */
 	private static BadRequestException typeMismatch(LayerField field, Object value) {
 		return new BadRequestException("Feld " + field.getSourceName() + " erwartet den Typ "
-				+ field.getDataType() + ", erhalten: " + value);
+				+ field.getDataType() + ". Erhalten: " + value + ".");
 	}
 
 	// --- bookkeeping ------------------------------------------------------------------
