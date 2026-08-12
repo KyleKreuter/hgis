@@ -18,7 +18,8 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Koordinatenbezug und Zeichenkodierung vor dem Import prüfen
 - Layer ordnen, umbenennen, ein- und ausblenden sowie löschen
 - Sichtbarkeit abhängig vom Kartenmaßstab festlegen
-- Sachdaten in einer Attributtabelle anzeigen, filtern und sortieren
+- Sachdaten in einer Attributtabelle anzeigen, durchsuchen, filtern und sortieren
+- Alle Treffer einer Suche auf einmal auswählen und als Ganzes exportieren
 - Objekte gemeinsam in Karte und Attributtabelle auswählen
 - Attribute einzelner Kartenobjekte abfragen
 - Punkte, Linien und Flächen zeichnen, verschieben und löschen
@@ -78,6 +79,28 @@ Geändert wird zunächst nur im Arbeitsspeicher; ein Zähler zeigt die offenen �
 Speichern und Verwerfen sind getrennte Aktionen. Beim Speichern prüft der Server, ob die
 Zeile inzwischen von jemand anderem geändert wurde, und lehnt in diesem Fall den ganzen
 Vorgang ab, statt fremde Arbeit zu überschreiben.
+
+### Suchen und filtern
+
+Über der Attributtabelle liegt ein Eingabefeld mit zwei Betriebsarten. **Suchen** nimmt
+einen beliebigen Begriff und findet ihn in allen Textspalten des Layers, unabhängig von
+Groß- und Kleinschreibung und auch als Wortteil — dafür muss man nichts weiter wissen.
+**Filtern** erwartet einen Ausdruck und kann dafür genauer fragen:
+
+```
+nutzungsart = 'Wohnen' AND baujahr > 1990
+strasse LIKE 'Alster%' OR strasse IS NULL
+gebaeudetyp IN ('Reihenhaus', 'Doppelhaus') AND NOT denkmal
+```
+
+Umgeschaltet wird über das Symbol links im Feld. Welche Betriebsart gilt, wird bewusst
+nicht aus der Eingabe erraten: Ein Suchbegriff darf wie ein Operator aussehen, ohne dass
+sich das Verhalten ändert.
+
+Was die Einschränkung findet, lässt sich mit einem Klick vollständig auswählen — auch
+tausende Objekte, die von Hand niemand anklicken würde. Die Treffer kommen aus der
+Datenbank und nicht aus der geladenen Tabellenseite, sind also vollständig. Ab tausend
+Objekten wird vorher gefragt.
 
 ### Auswählen und exportieren
 
