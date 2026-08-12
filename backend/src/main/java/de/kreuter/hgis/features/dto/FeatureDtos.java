@@ -54,4 +54,16 @@ public final class FeatureDtos {
 			@JsonInclude(JsonInclude.Include.NON_NULL)
 			Long totalCount) {
 	}
+
+	/**
+	 * The full fid set a filter/search restriction matches -- no geometry, no attributes,
+	 * no paging. What the selection store (and through it the export) needs to turn a
+	 * restriction into a concrete set of rows.
+	 *
+	 * @param fids matching fids, ascending
+	 * @param totalCount always {@code fids.size()}; carried alongside it because that is
+	 *                   the shape {@code Page.totalCount} already trained the client to read
+	 */
+	public record FidsResponse(List<Long> fids, long totalCount) {
+	}
 }

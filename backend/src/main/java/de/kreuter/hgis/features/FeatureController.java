@@ -29,6 +29,9 @@ public class FeatureController {
 	 *
 	 * @param sort field to sort by, by source name; fid when omitted
 	 * @param filter expression over the layer's fields, see {@link FilterParser}
+	 * @param search free-text term matched, case-insensitively, against every text field
+	 *     of the layer; combined with {@code filter} by AND when both are given, see
+	 *     {@link TextSearch}
 	 * @param bbox minLng,minLat,maxLng,maxLat in EPSG:4326
 	 * @param mode exact geometry test against {@code bbox}: {@code intersects} or
 	 *     {@code contains}; omitted keeps today's bounding-box-only comparison
@@ -41,20 +44,40 @@ public class FeatureController {
 			@RequestParam(required = false) String sort,
 			@RequestParam(required = false, defaultValue = "false") boolean desc,
 			@RequestParam(required = false) String filter,
+			@RequestParam(required = false) String search,
 			@RequestParam(required = false) double[] bbox,
 			@RequestParam(required = false) String mode,
 			@RequestParam(required = false, defaultValue = "false") boolean geometry,
 			@RequestParam(required = false) String cursor,
 			@RequestParam(required = false, defaultValue = "" + DEFAULT_PAGE_SIZE) int size) {
 
-		return service.list(layerId,
-				new FeatureQueryService.Query(sort, desc, filter, bbox, mode, geometry, cursor, size));
+		return service.list(layerId, new FeatureQueryService.Query(
+				sort, desc, filter, search, bbox, mode, geometry, cursor, size));
 	}
 
 	/** One feature with all its attributes -- what Identify shows for a clicked geometry. */
 	@GetMapping("/api/layers/{layerId}/features/{fid}")
 	public FeatureDtos.Feature get(@PathVariable UUID layerId, @PathVariable long fid) {
 		return service.get(layerId, fid);
+	}
+
+	/**
+	 * The full fid set a filter/search restriction matches -- no geometry, no paging.
+	 *
+	 * <p>The bridge from a restriction to the selection store, and through it to the
+	 * existing export: both already work with a fid list, but {@code list} above only ever
+	 * exposes one page of it. Omitting both parameters returns every fid in the layer,
+	 * subject to the same upper bound as any other restriction.
+	 *
+	 * @param filter expression over the layer's fields, see {@link FilterParser}
+	 * @param search free-text term, see {@link TextSearch}
+	 */
+	@GetMapping("/api/layers/{layerId}/features/fids")
+	public FeatureDtos.FidsResponse fids(
+			@PathVariable UUID layerId,
+			@RequestParam(required = false) String filter,
+			@RequestParam(required = false) String search) {
+		return service.fids(layerId, filter, search);
 	}
 
 	/**

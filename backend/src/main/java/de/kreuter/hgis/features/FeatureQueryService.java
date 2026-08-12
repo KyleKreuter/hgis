@@ -36,6 +36,15 @@ public class FeatureQueryService {
 	/** Guard against a client asking for an entire layer in one response. */
 	private static final int MAX_PAGE_SIZE = 1000;
 
+	/**
+	 * Upper bound for {@link #fids}. Mirrors {@code FidSelection.MAX_FIDS} in the export
+	 * package -- the fid endpoint and the export exist precisely so a client can turn one
+	 * into the other, so their ceilings must agree. Kept as its own constant rather than a
+	 * dependency on the export package for one number: features has no other reason to
+	 * import from export, and a duplicated, commented constant is cheaper than that coupling.
+	 */
+	private static final int MAX_FIDS = 100_000;
+
 	private final LayerRepository layerRepository;
 	private final LayerFieldRepository fieldRepository;
 	private final JdbcClient jdbc;
@@ -52,6 +61,7 @@ public class FeatureQueryService {
 			String sort,
 			boolean descending,
 			String filter,
+			String search,
 			double[] bbox,
 			String mode,
 			boolean includeGeometry,
@@ -130,6 +140,45 @@ public class FeatureQueryService {
 		return toFeature(rows.get(0), fields);
 	}
 
+	/**
+	 * The full fid set a filter/search restriction matches -- no geometry, no paging.
+	 *
+	 * <p>{@link #list} only ever exposes one page through its cursor; this is what lets a
+	 * client turn a restriction into the complete fid list the selection store -- and
+	 * through it the existing export -- already knows how to work with (CONTRACT.md phase
+	 * 14). Ordered by fid so the response is stable across repeated calls.
+	 *
+	 * @throws BadRequestException when the restriction matches more than {@link #MAX_FIDS}
+	 *     objects, naming the actual count
+	 */
+	@Transactional(readOnly = true)
+	public FeatureDtos.FidsResponse fids(UUID layerId, String filter, String search) {
+		Layer layer = require(layerId);
+		List<LayerField> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
+		String table = SqlIdentifier.quoteLayerTable(layer.getTableName());
+
+		Map<String, Object> parameters = new LinkedHashMap<>();
+		// bbox, mode, cursor and sort play no role here -- only filter and search restrict
+		// the fid set -- so the Query passed into buildWhere carries only those two and
+		// leaves the rest at their default.
+		Query restriction = new Query(null, false, filter, search, null, null, false, null, 0);
+		String where = buildWhere(restriction, layer, fields, parameters);
+
+		long total = count(table, where, parameters);
+		if (total > MAX_FIDS) {
+			throw new BadRequestException("Die Einschränkung trifft " + total
+					+ " Objekte, mehr als die erlaubten " + MAX_FIDS + ".");
+		}
+
+		var statement = jdbc.sql("SELECT f.fid FROM " + table + " f" + where + " ORDER BY f.fid ASC");
+		for (Map.Entry<String, Object> parameter : parameters.entrySet()) {
+			statement = statement.param(parameter.getKey(), parameter.getValue());
+		}
+		List<Long> fids = statement.query(Long.class).list();
+
+		return new FeatureDtos.FidsResponse(fids, fids.size());
+	}
+
 	// --- query building -------------------------------------------------------------
 
 	private String selectList(List<LayerField> fields, boolean includeGeometry) {
@@ -189,6 +238,14 @@ public class FeatureQueryService {
 		if (filter != null) {
 			conditions.add(filter.sql());
 			parameters.putAll(filter.parameters());
+		}
+
+		// Combined with filter by AND (and with everything else in `conditions`), not OR:
+		// the two are separate refinements of the same result set, not alternatives.
+		FilterParser.ParsedFilter search = TextSearch.parse(query.search(), fields);
+		if (search != null) {
+			conditions.add(search.sql());
+			parameters.putAll(search.parameters());
 		}
 
 		if (query.cursor() != null) {

@@ -189,8 +189,190 @@ class FeatureQueryServiceTest {
 		projectRepository.deleteById(modeProject.getId());
 	}
 
+	private Project searchProject;
+	private Layer searchLayer;
+	private String searchTableName;
+
+	/**
+	 * A fixture dedicated to {@code search} and the fid endpoint: two text fields so a
+	 * multi-field OR is actually exercised, a numeric field so an accidental ILIKE against
+	 * it would surface as a database type error rather than passing quietly, and values
+	 * chosen to make {@code %} and {@code _} escaping provable rather than assumed.
+	 */
+	@BeforeAll
+	void createSearchLayer() {
+		searchProject = projectRepository.saveAndFlush(
+				new Project("Suche-Test " + UUID.randomUUID(), null, 4326, "osm"));
+
+		UUID layerId = UUID.randomUUID();
+		searchTableName = SqlIdentifier.tableName(layerId);
+		String table = SqlIdentifier.quoteLayerTable(searchTableName);
+
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom   geometry(MultiPoint, 4326) NOT NULL,
+				    name   text,
+				    ort    text,
+				    nummer integer
+				)
+				""".formatted(table)).update();
+
+		// A literal "%" -- must be found by a search for "50%", and must not turn the
+		// search into a pattern that also swallows unrelated rows.
+		insertSearchRow(table, "50%", null, 1);
+		// Distinct from the row above only by the trailing "%" -- proves the escaping is
+		// exact, not just "somehow narrower".
+		insertSearchRow(table, "50", null, 2);
+		// A literal "_" -- must be found by a search for "5_", and only by that search.
+		insertSearchRow(table, "5_x", null, 3);
+		// Matched through the first text field.
+		insertSearchRow(table, "Schmidt", "Hamburg", 50);
+		// Matched through the second text field, and case-differently, proving both the
+		// multi-field OR and the case-insensitivity.
+		insertSearchRow(table, "Müller", "SCHMIDTplatz", 99);
+		// Same nummer as the "Schmidt" row above, but no text match -- the row that tells
+		// filter+search AND apart from filter+search OR.
+		insertSearchRow(table, null, null, 50);
+		// An apostrophe -- proves the term travels as a bind parameter rather than being
+		// concatenated into the SQL text.
+		insertSearchRow(table, "O'Brien", null, 8);
+		// A literal backslash -- TextSearch doubles it before ESCAPE '\' sees it, so this
+		// must match without PostgreSQL ever seeing a dangling escape character.
+		insertSearchRow(table, "C:\\Windows", null, 9);
+		// "777" appears only in nummer, never in a text field -- a search for "777" that
+		// found this row would mean the numeric column was searched too.
+		insertSearchRow(table, "Kein Treffer", "Andere Stadt", 777);
+
+		Layer newLayer = new Layer(layerId, searchProject, "Suche", searchTableName, "MULTIPOINT", 4326);
+		newLayer.setFeatureCount(9);
+		searchLayer = layerRepository.saveAndFlush(newLayer);
+
+		fieldRepository.saveAndFlush(new LayerField(searchLayer, "Name", "name", "text", 0));
+		fieldRepository.saveAndFlush(new LayerField(searchLayer, "Ort", "ort", "text", 1));
+		fieldRepository.saveAndFlush(new LayerField(searchLayer, "Nummer", "nummer", "integer", 2));
+	}
+
+	@AfterAll
+	void dropSearchLayer() {
+		jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(searchTableName)).update();
+		layerRepository.deleteById(searchLayer.getId());
+		projectRepository.deleteById(searchProject.getId());
+	}
+
+	private void insertSearchRow(String table, String name, String ort, int nummer) {
+		jdbc.sql("INSERT INTO " + table + " (geom, name, ort, nummer) VALUES ("
+						+ "ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), :name, :ort, :nummer)")
+				.param("name", name)
+				.param("ort", ort)
+				.param("nummer", nummer)
+				.update();
+	}
+
+	private FeatureQueryService.Query searchQuery(String filter, String search) {
+		return new FeatureQueryService.Query(null, false, filter, search, null, null, false, null, 100);
+	}
+
+	private List<Object> namesOf(FeatureDtos.Page page) {
+		return page.features().stream().map(feature -> feature.properties().get("name")).toList();
+	}
+
+	private Project noTextProject;
+	private Layer noTextLayer;
+	private String noTextTableName;
+
+	/** A layer with no text field at all -- what {@code search} must refuse outright. */
+	@BeforeAll
+	void createNoTextLayer() {
+		noTextProject = projectRepository.saveAndFlush(
+				new Project("Ohne-Text-Test " + UUID.randomUUID(), null, 4326, "osm"));
+
+		UUID layerId = UUID.randomUUID();
+		noTextTableName = SqlIdentifier.tableName(layerId);
+		String table = SqlIdentifier.quoteLayerTable(noTextTableName);
+
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom geometry(MultiPoint, 4326) NOT NULL,
+				    wert integer
+				)
+				""".formatted(table)).update();
+		jdbc.sql("INSERT INTO " + table + " (geom, wert) VALUES "
+				+ "(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), 1)").update();
+
+		Layer newLayer = new Layer(layerId, noTextProject, "Ohne Text", noTextTableName, "MULTIPOINT", 4326);
+		newLayer.setFeatureCount(1);
+		noTextLayer = layerRepository.saveAndFlush(newLayer);
+
+		fieldRepository.saveAndFlush(new LayerField(noTextLayer, "Wert", "wert", "integer", 0));
+	}
+
+	@AfterAll
+	void dropNoTextLayer() {
+		jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(noTextTableName)).update();
+		layerRepository.deleteById(noTextLayer.getId());
+		projectRepository.deleteById(noTextProject.getId());
+	}
+
+	private Project hugeProject;
+	private Layer hugeLayer;
+	private String hugeTableName;
+
+	/** How many of {@link #hugeLayer}'s rows carry {@code bucket = 1}, the rest carry 2. */
+	private static final int HUGE_BUCKET_SIZE = 1_500;
+
+	/** One more than the fid endpoint's upper bound, so the unrestricted query trips it. */
+	private static final int HUGE_TOTAL_SIZE = 100_001;
+
+	/**
+	 * A layer built with one bulk {@code INSERT ... SELECT generate_series}, not one row
+	 * at a time -- the two things this backs are the fid endpoint's upper bound (needs a
+	 * layer past 100.000 rows) and proof that it is not secretly capped at a page's worth
+	 * of rows (needs a filtered result past 1.000). Real geometries would make either test
+	 * slow for no reason the assertions care about.
+	 */
+	@BeforeAll
+	void createHugeLayer() {
+		hugeProject = projectRepository.saveAndFlush(
+				new Project("Riesig-Test " + UUID.randomUUID(), null, 4326, "osm"));
+
+		UUID layerId = UUID.randomUUID();
+		hugeTableName = SqlIdentifier.tableName(layerId);
+		String table = SqlIdentifier.quoteLayerTable(hugeTableName);
+
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom   geometry(MultiPoint, 4326) NOT NULL,
+				    bucket integer
+				)
+				""".formatted(table)).update();
+		jdbc.sql("INSERT INTO " + table + " (geom, bucket) "
+						+ "SELECT ST_Multi(ST_SetSRID(ST_MakePoint(0, 0), 4326)), "
+						+ "CASE WHEN gs <= :bucketSize THEN 1 ELSE 2 END "
+						+ "FROM generate_series(1, :total) AS gs")
+				.param("bucketSize", HUGE_BUCKET_SIZE)
+				.param("total", HUGE_TOTAL_SIZE)
+				.update();
+
+		Layer newLayer = new Layer(layerId, hugeProject, "Riesig", hugeTableName, "MULTIPOINT", 4326);
+		newLayer.setFeatureCount(HUGE_TOTAL_SIZE);
+		hugeLayer = layerRepository.saveAndFlush(newLayer);
+
+		fieldRepository.saveAndFlush(new LayerField(hugeLayer, "Bucket", "bucket", "integer", 0));
+	}
+
+	@AfterAll
+	void dropHugeLayer() {
+		jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(hugeTableName)).update();
+		layerRepository.deleteById(hugeLayer.getId());
+		projectRepository.deleteById(hugeProject.getId());
+	}
+
 	private FeatureQueryService.Query modeQuery(String mode) {
-		return new FeatureQueryService.Query(null, false, null, SELECTION_RECT, mode, false, null, 100);
+		return new FeatureQueryService.Query(
+				null, false, null, null, SELECTION_RECT, mode, false, null, 100);
 	}
 
 	private List<Object> labelsOf(FeatureDtos.Page page) {
@@ -198,7 +380,7 @@ class FeatureQueryServiceTest {
 	}
 
 	private FeatureQueryService.Query query(String sort, boolean desc, String cursor, int size) {
-		return new FeatureQueryService.Query(sort, desc, null, null, null, false, cursor, size);
+		return new FeatureQueryService.Query(sort, desc, null, null, null, null, false, cursor, size);
 	}
 
 	/** Walks every page and returns the values of one column, in the order delivered. */
@@ -314,7 +496,7 @@ class FeatureQueryServiceTest {
 	@DisplayName("the total counts the filtered set, not the page")
 	void countsTheFilteredSet() {
 		FeatureDtos.Page page = service.list(layer.getId(), new FeatureQueryService.Query(
-				null, false, "Straße = 'Alsterufer'", null, null, false, null, 2));
+				null, false, "Straße = 'Alsterufer'", null, null, null, false, null, 2));
 
 		assertThat(page.features()).hasSize(2);
 		assertThat(page.totalCount()).isEqualTo(4);
@@ -323,7 +505,7 @@ class FeatureQueryServiceTest {
 	@Test
 	void filtersByExpression() {
 		FeatureDtos.Page page = service.list(layer.getId(), new FeatureQueryService.Query(
-				null, false, "\"Höhe\" > 40 AND Straße IS NOT NULL", null, null, false, null, 100));
+				null, false, "\"Höhe\" > 40 AND Straße IS NOT NULL", null, null, null, false, null, 100));
 
 		assertThat(page.features()).hasSize(2);
 		assertThat(page.features()).allSatisfy(feature ->
@@ -337,7 +519,7 @@ class FeatureQueryServiceTest {
 		// 4326, that is roughly 9.98 E / 53.54 N.
 		FeatureDtos.Page all = service.list(layer.getId(), query(null, false, null, 100));
 		FeatureDtos.Page inBox = service.list(layer.getId(), new FeatureQueryService.Query(
-				null, false, null, new double[] { 9.0, 53.0, 11.0, 54.0 }, null, false, null, 100));
+				null, false, null, null, new double[] { 9.0, 53.0, 11.0, 54.0 }, null, false, null, 100));
 
 		assertThat(all.features()).hasSize(ROWS.size());
 		assertThat(inBox.features())
@@ -345,7 +527,7 @@ class FeatureQueryServiceTest {
 				.hasSize(ROWS.size());
 
 		FeatureDtos.Page elsewhere = service.list(layer.getId(), new FeatureQueryService.Query(
-				null, false, null, new double[] { 2.0, 48.0, 3.0, 49.0 }, null, false, null, 100));
+				null, false, null, null, new double[] { 2.0, 48.0, 3.0, 49.0 }, null, false, null, 100));
 		assertThat(elsewhere.features()).as("Paris holds none of it").isEmpty();
 	}
 
@@ -354,7 +536,7 @@ class FeatureQueryServiceTest {
 		FeatureDtos.Feature without = service.list(layer.getId(), query(null, false, null, 1))
 				.features().get(0);
 		FeatureDtos.Feature with = service.list(layer.getId(), new FeatureQueryService.Query(
-				null, false, null, null, null, true, null, 1)).features().get(0);
+				null, false, null, null, null, null, true, null, 1)).features().get(0);
 
 		assertThat(without.geometry()).isNull();
 		assertThat(with.geometry())
@@ -456,5 +638,186 @@ class FeatureQueryServiceTest {
 		FeatureDtos.Page page = service.list(layer.getId(), query(null, false, null, 10_000_000));
 
 		assertThat(page.features()).hasSize(ROWS.size());
+	}
+
+	// --- search ------------------------------------------------------------------------
+
+	@Test
+	@DisplayName("search matches across multiple text fields, case-insensitively, on a partial value")
+	void searchFindsAcrossMultipleTextFields() {
+		FeatureDtos.Page page = service.list(searchLayer.getId(), searchQuery(null, "schmidt"));
+
+		assertThat(namesOf(page))
+				.as("found through name (\"Schmidt\") and through ort (\"SCHMIDTplatz\")")
+				.containsExactlyInAnyOrder("Schmidt", "Müller");
+	}
+
+	@Test
+	@DisplayName("a literal % in the search term matches only that literal value")
+	void searchEscapesPercentAsALiteral() {
+		FeatureDtos.Page page = service.list(searchLayer.getId(), searchQuery(null, "50%"));
+
+		assertThat(namesOf(page))
+				.as("\"50\" alone must not match a pattern search=50% would produce unescaped")
+				.containsExactly("50%");
+	}
+
+	@Test
+	@DisplayName("a literal _ in the search term does not act as a single-character wildcard")
+	void searchEscapesUnderscoreAsALiteral() {
+		FeatureDtos.Page page = service.list(searchLayer.getId(), searchQuery(null, "5_"));
+
+		assertThat(namesOf(page))
+				.as("\"50\" would match an unescaped 5_ pattern; \"5_x\" only matches the escaped one")
+				.containsExactly("5_x");
+	}
+
+	@Test
+	@DisplayName("a value that only appears in a numeric column is not found -- numeric fields are not searched")
+	void searchIgnoresNonTextFields() {
+		FeatureDtos.Page page = service.list(searchLayer.getId(), searchQuery(null, "777"));
+
+		assertThat(page.features())
+				.as("777 sits only in the nummer column of one row, in no text field of any row")
+				.isEmpty();
+	}
+
+	@Test
+	@DisplayName("a search term with an apostrophe matches literally, proving it is a bind parameter")
+	void searchMatchesALiteralApostrophe() {
+		FeatureDtos.Page page = service.list(searchLayer.getId(), searchQuery(null, "O'Brien"));
+
+		assertThat(namesOf(page)).containsExactly("O'Brien");
+	}
+
+	@Test
+	@DisplayName("a literal backslash in the search term matches without a dangling escape character")
+	void searchMatchesALiteralBackslash() {
+		FeatureDtos.Page page = service.list(searchLayer.getId(), searchQuery(null, "C:\\Windows"));
+
+		assertThat(namesOf(page)).containsExactly("C:\\Windows");
+	}
+
+	@Test
+	@DisplayName("quotes, wildcards and SQL-like content in search never reach the database as SQL")
+	void searchTreatsInjectionAttemptsAsPureData() {
+		String payload = "'; DROP TABLE " + searchTableName + "; --";
+
+		FeatureDtos.Page page = service.list(searchLayer.getId(), searchQuery(null, payload));
+
+		assertThat(page.features()).as("no row contains this literal string").isEmpty();
+		Long stillThere = jdbc
+				.sql("SELECT COUNT(*) FROM " + SqlIdentifier.quoteLayerTable(searchTableName))
+				.query(Long.class)
+				.single();
+		assertThat(stillThere).as("the payload never left the bind parameter").isGreaterThan(0);
+	}
+
+	@Test
+	@DisplayName("a blank search behaves as if it were not given")
+	void blankSearchIsTreatedAsAbsent() {
+		FeatureDtos.Page withBlank = service.list(searchLayer.getId(), searchQuery(null, "   "));
+		FeatureDtos.Page withoutSearch = service.list(searchLayer.getId(), searchQuery(null, null));
+
+		assertThat(withBlank.totalCount()).isEqualTo(withoutSearch.totalCount());
+	}
+
+	@Test
+	@DisplayName("search on a layer without a single text field is rejected, not silently empty")
+	void searchOnLayerWithoutTextFieldsIsRejected() {
+		assertThatThrownBy(() -> service.list(noTextLayer.getId(), searchQuery(null, "irgendwas")))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("keine Textfelder");
+	}
+
+	@Test
+	@DisplayName("filter and search combine with AND, not OR")
+	void filterAndSearchCombineWithAnd() {
+		FeatureDtos.Page page = service.list(searchLayer.getId(), searchQuery("Nummer = 50", "Schmidt"));
+
+		assertThat(namesOf(page))
+				.as("the nummer-only match (name/ort both null) and the search-only match "
+						+ "(nummer 99) must both be excluded")
+				.containsExactly("Schmidt");
+	}
+
+	// --- fid endpoint --------------------------------------------------------------------
+
+	@Test
+	@DisplayName("without filter or search, the fid endpoint returns every fid of the layer")
+	void fidsWithoutARestrictionReturnsEveryFid() {
+		FeatureDtos.FidsResponse response = service.fids(layer.getId(), null, null);
+
+		assertThat(response.totalCount()).isEqualTo(ROWS.size());
+		assertThat(response.fids()).hasSize(ROWS.size());
+		assertThat(response.fids()).as("stable, ascending order").isSorted();
+	}
+
+	@Test
+	@DisplayName("the fid endpoint applies filter and search exactly like list does")
+	void fidsAppliesFilterAndSearch() {
+		FeatureDtos.FidsResponse response = service.fids(searchLayer.getId(), "Nummer = 50", "Schmidt");
+
+		assertThat(response.totalCount()).isEqualTo(1);
+		assertThat(response.fids()).hasSize(1);
+	}
+
+	@Test
+	@DisplayName("the fid endpoint returns every match, including far past a single page's worth")
+	void fidsReturnsEveryMatchBeyondAPageBoundary() {
+		FeatureDtos.FidsResponse response = service.fids(hugeLayer.getId(), "Bucket = 1", null);
+
+		assertThat(response.totalCount()).isEqualTo(HUGE_BUCKET_SIZE);
+		assertThat(response.fids())
+				.as("well past the 1.000-row page size list() would have capped this at")
+				.hasSize(HUGE_BUCKET_SIZE);
+	}
+
+	@Test
+	@DisplayName("totalCount always equals the size of fids")
+	void fidsTotalCountMatchesTheListSize() {
+		FeatureDtos.FidsResponse response = service.fids(hugeLayer.getId(), "Bucket = 1", null);
+
+		assertThat(response.totalCount()).isEqualTo(response.fids().size());
+	}
+
+	@Test
+	@DisplayName("a restriction matching more than the upper bound is rejected, naming the actual count")
+	void fidsRejectsARestrictionOverTheUpperBound() {
+		assertThatThrownBy(() -> service.fids(hugeLayer.getId(), null, null))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining(String.valueOf(HUGE_TOTAL_SIZE));
+	}
+
+	@Test
+	@DisplayName("a restriction matching nothing is an empty list with totalCount 0, not a 404")
+	void fidsWithNoMatchesIsAnEmptyListNotAnError() {
+		FeatureDtos.FidsResponse response =
+				service.fids(layer.getId(), "Straße = 'Nichtvorhanden'", null);
+
+		assertThat(response.fids()).isEmpty();
+		assertThat(response.totalCount()).isEqualTo(0);
+	}
+
+	@Test
+	void fidsRejectsAnUnknownLayer() {
+		assertThatThrownBy(() -> service.fids(UUID.randomUUID(), null, null))
+				.isInstanceOf(NotFoundException.class);
+	}
+
+	@Test
+	@DisplayName("a malformed filter on the fid endpoint fails exactly as FilterParser reports it")
+	void fidsPropagatesAMalformedFilterExpression() {
+		assertThatThrownBy(() -> service.fids(layer.getId(), "Straße = ", null))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("Filter ungültig");
+	}
+
+	@Test
+	@DisplayName("search on the fid endpoint rejects a layer without text fields, same as list does")
+	void fidsRejectsSearchOnALayerWithoutTextFields() {
+		assertThatThrownBy(() -> service.fids(noTextLayer.getId(), null, "irgendwas"))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("keine Textfelder");
 	}
 }
