@@ -117,35 +117,42 @@ aus als im hellen.
 Ein Flächenlayer lässt sich als Maske verwenden. Er wirkt auf alle Layer, die im
 Layerbaum über ihm liegen. Layer unter der Maske bleiben unberührt.
 
-Unter „Zuschnitt für alles darüber“ im Aktionsmenü des Layers wählen Sie zwischen drei
+Unter „Zuschnitt für alles darüber“ im Aktionsmenü des Layers wählen Sie zwischen fünf
 Möglichkeiten:
 
 - **Kein Zuschnitt.** Die Vorgabe.
-- **Nur innerhalb zeigen.** Die Karte zeigt die oberen Layer nur innerhalb der Flächen
-  der Maske.
-- **Nur außerhalb zeigen.** Umgekehrt: Der Bereich innerhalb der Maske bleibt frei.
+- **Nur innerhalb.** Die Karte zeigt jedes Objekt, das die Maske berührt. Sie zeigt es
+  ganz, auch wenn es über die Kante ragt.
+- **Nur innerhalb + geschnitten.** Wie oben, aber die Karte schneidet jedes Objekt an der
+  Kante durch. Nichts ragt heraus.
+- **Nur außerhalb.** Die Karte zeigt jedes Objekt, das die Maske nicht berührt. Wieder
+  ganz.
+- **Nur außerhalb + geschnitten.** Der Bereich innerhalb der Maske bleibt frei. Objekte an
+  der Kante behalten ihren äußeren Teil.
 
-Ein Objekt, das über die Kante ragt, wird an der Kante durchgeschnitten. Es verschwindet
-also nicht ganz, und es ragt auch nicht heraus. Beide Richtungen zusammen ergeben wieder
-den vollständigen Bestand.
+Ein Objekt, das genau auf der Kante liegt, zählt als innerhalb. Damit ergänzen sich beide
+Richtungen: Jedes Objekt fällt in genau eine von beiden, nie in beide, nie in keine.
 
 Nur Flächenlayer und gemischte Layer taugen als Maske. Bei anderen Geometriearten ist die
 Auswahl gesperrt und nennt den Grund.
 
-Ein Projekt hat höchstens eine Maske. Markieren Sie eine zweite, verliert die erste ihre
-Markierung. Das Programm meldet das.
+Ein Projekt darf beliebig viele Masken haben. Auf einen Layer wirkt jede Maske, die unter
+ihm liegt. Mehrere Masken grenzen dabei weiter ein: Ein Objekt bleibt sichtbar, wenn es
+jede „innerhalb“-Maske berührt und keine „außerhalb“-Maske. Die Reihenfolge der Masken
+untereinander ändert das Ergebnis nicht.
 
-Ein Maskenlayer ist im Layerbaum an einer Schere erkennbar. Das Zeichen unterscheidet
-beide Richtungen, und der Tooltip nennt sie. Es bleibt sichtbar, auch wenn Sie den Layer
-ausblenden. Die Maske wirkt nämlich weiter: Oft will man die Grenze nicht sehen und
-trotzdem zuschneiden. Ohne dieses Zeichen wäre der Zuschnitt nicht erklärbar.
+Ein Maskenlayer ist im Layerbaum an einem Zeichen erkennbar. Die geschnittenen Modi tragen
+eine Schere, die ungeschnittenen einen Trichter. Der Tooltip nennt die Richtung. Das
+Zeichen bleibt sichtbar, auch wenn Sie den Layer ausblenden. Die Maske wirkt nämlich
+weiter: Oft will man die Grenze nicht sehen und trotzdem zuschneiden. Ohne dieses Zeichen
+wäre der Zuschnitt nicht erklärbar.
 
 Einen Layer nehmen Sie aus dem Zuschnitt, indem Sie ihn unter die Maske ziehen.
 
 Der Zuschnitt betrifft nur die Karte. Attributtabelle, Auswahl und Export sehen weiterhin
 alle Objekte. Das Rechteckwerkzeug fragt die Datenbank ab und wählt deshalb auch Objekte
-außerhalb der Maske aus, die Sie gar nicht sehen. Bei aktivem Zuschnitt weist ein Zeichen
-in der Werkzeugleiste darauf hin.
+aus, die eine Maske ausblendet. Bei aktivem Zuschnitt weist ein Zeichen in der
+Werkzeugleiste darauf hin.
 
 ### Sachdaten bearbeiten
 
