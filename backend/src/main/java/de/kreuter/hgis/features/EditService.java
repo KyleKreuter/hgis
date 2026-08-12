@@ -311,7 +311,7 @@ public class EditService {
 			LayerField field = fields.get(property.getKey());
 			if (field == null) {
 				throw new BadRequestException("Unbekanntes Feld: " + property.getKey()
-						+ ". Verfügbar: " + String.join(", ", fields.keySet()));
+						+ ". Verfügbar: " + String.join(", ", fields.keySet()) + ".");
 			}
 			columns.add(SqlIdentifier.quoteColumn(field.getColumnName()));
 			values.add(toColumnValue(field, property.getValue()));

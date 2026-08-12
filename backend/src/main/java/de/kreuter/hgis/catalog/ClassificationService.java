@@ -228,7 +228,7 @@ public class ClassificationService {
 			}
 		}
 		throw new BadRequestException("Unbekannte Methode: " + method + ". Erlaubt sind "
-				+ String.join(", ", QUANTILE, EQUAL_INTERVAL, NATURAL_BREAKS));
+				+ String.join(", ", QUANTILE, EQUAL_INTERVAL, NATURAL_BREAKS) + ".");
 	}
 
 	private LayerField requireNumericField(UUID layerId, String field) {

@@ -283,7 +283,7 @@ public class LayerStyleService {
 		String type = renderer.type();
 		if (type == null || !RENDERER_TYPES.contains(type)) {
 			throw new BadRequestException("Unbekannter Renderer-Typ: " + type
-					+ ". Erlaubt sind " + String.join(", ", RENDERER_TYPES.stream().sorted().toList()));
+					+ ". Erlaubt sind " + String.join(", ", RENDERER_TYPES.stream().sorted().toList()) + ".");
 		}
 
 		if (type.equals(StyleDtos.RENDERER_SINGLE) && renderer.symbol() == null) {
@@ -378,7 +378,7 @@ public class LayerStyleService {
 		}
 		if (symbol.kind() == null || !SYMBOL_KINDS.contains(symbol.kind())) {
 			throw new BadRequestException("Unbekannte Symbolart in " + what + ": " + symbol.kind()
-					+ ". Erlaubt sind " + String.join(", ", SYMBOL_KINDS.stream().sorted().toList()));
+					+ ". Erlaubt sind " + String.join(", ", SYMBOL_KINDS.stream().sorted().toList()) + ".");
 		}
 
 		requireColor(symbol.fillColor(), what + ".fillColor");

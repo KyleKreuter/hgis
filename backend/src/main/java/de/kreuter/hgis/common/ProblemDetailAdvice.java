@@ -104,7 +104,7 @@ public class ProblemDetailAdvice {
 
 		return problem(HttpStatus.BAD_REQUEST, "Ungültige Anfrage",
 				cause == null || cause.isBlank()
-						? "Das Programm kann den Anfragekörper nicht lesen."
+						? "Das Programm kann den Anfragekörper nicht lesen"
 						: "Das Programm kann den Anfragekörper nicht lesen. Grund: " + firstLine(cause));
 	}
 
@@ -125,7 +125,7 @@ public class ProblemDetailAdvice {
 		// Log with stack trace, but never leak internals to the client.
 		log.error("Unhandled exception", ex);
 		return problem(HttpStatus.INTERNAL_SERVER_ERROR, "Interner Fehler",
-				"Das Programm kann die Anfrage nicht verarbeiten.");
+				"Das Programm kann die Anfrage nicht verarbeiten");
 	}
 
 	private static ProblemDetail problem(HttpStatus status, String title, String detail) {

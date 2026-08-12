@@ -107,7 +107,7 @@ public class LayerFieldService {
 			if (other.getSourceName().toLowerCase(Locale.ROOT).equals(wanted)
 					|| other.getColumnName().toLowerCase(Locale.ROOT).equals(wanted)) {
 				throw new FieldValidationException("name",
-						"Ein anderes Feld dieses Layers hat bereits den Namen '" + name + "'.");
+						"Ein anderes Feld dieses Layers hat bereits den Namen '" + name + "'");
 			}
 		}
 

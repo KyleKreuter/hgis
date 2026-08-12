@@ -62,7 +62,7 @@ public class InspectionService {
 		}
 		catch (RuntimeException ex) {
 			log.warn("Could not open uploaded file {} ({})", upload.originalFilename(), upload.id(), ex);
-			throw new BadRequestException("Das Programm kann die Datei nicht lesen: "
+			throw new BadRequestException("Der Import kann die Datei nicht lesen: "
 					+ upload.withOriginalName(ex.getMessage()));
 		}
 	}

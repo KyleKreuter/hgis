@@ -63,7 +63,7 @@ public class GlyphService {
 
 	private static String requireValidRange(String range) {
 		if (range == null || !RANGE.matcher(range).matches()) {
-			throw new BadRequestException("range muss die Form <start>-<end> haben. Erhalten: \"" + range + "\"");
+			throw new BadRequestException("range muss die Form <start>-<end> haben. Erhalten: \"" + range + "\".");
 		}
 		return range;
 	}

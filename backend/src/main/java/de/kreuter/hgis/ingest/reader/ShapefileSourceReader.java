@@ -68,7 +68,7 @@ final class ShapefileSourceReader extends AbstractSourceReader {
 				ds.dispose();
 			}
 			FileTree.deleteQuietly(extractedDir);
-			throw new SourceReadException("Das Programm kann das Shapefile nicht lesen: " + zipFile, e);
+			throw new SourceReadException("Der Import kann das Shapefile nicht lesen: " + zipFile, e);
 		} catch (RuntimeException e) {
 			if (ds != null) {
 				ds.dispose();
@@ -127,7 +127,7 @@ final class ShapefileSourceReader extends AbstractSourceReader {
 			};
 			return FeatureSampling.sample(geometries, SAMPLE_SIZE).bbox();
 		} catch (IOException e) {
-			throw new SourceReadException("Das Programm kann keine Beispiel-Features lesen", e);
+			throw new SourceReadException("Der Import kann keine Beispiel-Features lesen", e);
 		}
 	}
 
@@ -137,7 +137,7 @@ final class ShapefileSourceReader extends AbstractSourceReader {
 					.findFirst()
 					.orElseThrow(() -> new SourceReadException("ZIP enthält keine .shp-Datei"));
 		} catch (IOException e) {
-			throw new SourceReadException("Das Programm kann das ZIP nicht durchsuchen: " + dir, e);
+			throw new SourceReadException("Der Import kann das ZIP nicht durchsuchen: " + dir, e);
 		}
 	}
 
@@ -164,7 +164,7 @@ final class ShapefileSourceReader extends AbstractSourceReader {
 			};
 			return toSourceFeatureStream(it, fields).onClose(iterator::close);
 		} catch (IOException e) {
-			throw new SourceReadException("Das Programm kann die Shapefile-Features nicht lesen", e);
+			throw new SourceReadException("Der Import kann die Shapefile-Features nicht lesen", e);
 		}
 	}
 

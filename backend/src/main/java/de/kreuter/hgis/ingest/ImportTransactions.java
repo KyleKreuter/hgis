@@ -103,7 +103,7 @@ class ImportTransactions {
 		updateProjectExtent(layer.getProject().getId());
 
 		String message = skippedCount > 0
-				? "Das Programm hat " + skippedCount + " von " + (featureCount + skippedCount)
+				? "Der Import hat " + skippedCount + " von " + (featureCount + skippedCount)
 						+ " Objekten übersprungen. Grund: fehlende oder unlesbare Geometrie."
 				: null;
 		jobService.markSucceeded(jobId, message);

@@ -84,7 +84,7 @@ class ProblemDetailAdviceTest {
 
 		mvc.perform(get("/api/projects/019fec35-6373-76e1-b5a4-26943cb0a780"))
 				.andExpect(status().isInternalServerError())
-				.andExpect(jsonPath("$.detail").value("Das Programm kann die Anfrage nicht verarbeiten."))
+				.andExpect(jsonPath("$.detail").value("Das Programm kann die Anfrage nicht verarbeiten"))
 				// The internal message must not reach the client.
 				.andExpect(jsonPath("$.detail").value(
 						org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("db-host-7"))));

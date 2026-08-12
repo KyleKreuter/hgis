@@ -87,7 +87,7 @@ public class ImportService {
 			schema = reader.schema();
 		} catch (Exception e) {
 			log.error("Import {} failed while inspecting the source schema", jobId, e);
-			transactions.failBeforeTableExists(jobId, "Das Programm kann die Quelldatei nicht lesen: " + describe(e));
+			transactions.failBeforeTableExists(jobId, "Der Import kann die Quelldatei nicht lesen: " + describe(e));
 			closeQuietly(reader, jobId);
 			return;
 		}
@@ -100,7 +100,7 @@ public class ImportService {
 			created = transactions.begin(project, jobId, schema, layerName);
 		} catch (Exception e) {
 			log.error("Import {} failed before its table existed", jobId, e);
-			transactions.failBeforeTableExists(jobId, "Das Programm kann den Layer nicht anlegen: " + describe(e));
+			transactions.failBeforeTableExists(jobId, "Der Import kann den Layer nicht anlegen: " + describe(e));
 			closeQuietly(reader, jobId);
 			return;
 		}
@@ -157,7 +157,7 @@ public class ImportService {
 		double skipRatio = total == 0 ? 0.0 : (double) skipped / total;
 		if (skipRatio > MAX_SKIP_RATIO) {
 			throw new ImportFailedException(
-					"Das Programm hat %.1f%% der Objekte übersprungen (Grenzwert 5%%). Der Import ist abgebrochen."
+					"Der Import hat %.1f%% der Objekte übersprungen (Grenzwert 5%%). Er ist abgebrochen."
 							.formatted(skipRatio * 100));
 		}
 	}
