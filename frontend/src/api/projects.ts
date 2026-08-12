@@ -91,8 +91,12 @@ export const projectKeys = {
  * burst of patches is exactly what makes the map jump back to an older answer.
  * `exact: false` on purpose here: there is one list chain per search term, and every
  * one of them (not just the currently active search) needs to be marked stale.
+ *
+ * Exported because the same reasoning holds outside this file: `useApplyEdits`
+ * (`api/edits.ts`) changes a project's feature count and extent, which the browser shows,
+ * and nothing else about the project.
  */
-const LIST_ONLY = { queryKey: [...projectKeys.all, 'list'], exact: false } as const
+export const LIST_ONLY = { queryKey: [...projectKeys.all, 'list'], exact: false } as const
 
 /** Builds `GET /api/projects`, adding only the parameters that have a value. */
 function projectsUrl(cursor: string | undefined, q: string): string {

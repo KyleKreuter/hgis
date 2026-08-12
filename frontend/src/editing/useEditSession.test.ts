@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { resolveSelectedFeature } from './useEditSession'
+import { isStaleEditSession, resolveSelectedFeature } from './useEditSession'
 import { countChanges, dirtyFids, useEditing, type DraftFeature } from '@/state/editing'
 
 const POINT: GeoJSON.Geometry = { type: 'Point', coordinates: [9.98, 53.54] }
@@ -65,5 +65,27 @@ describe('resolveSelectedFeature', () => {
     const feature = resolveSelectedFeature(useEditing.getState().buffer, null, loaded(7))
 
     expect(feature).toBeNull()
+  })
+})
+
+describe('isStaleEditSession', () => {
+  it('erkennt eine Sitzung, die auf dem vorigen Layer stehen geblieben ist', () => {
+    // Der belegte Fehler: bei leerem Puffer greift `leaveGuard` nicht, der Layerwechsel
+    // geht durch, und `useEditing.layerId` zeigt weiter auf den alten Layer. Genau darauf
+    // sperren `DeleteLayerDialog` und `ManageFieldsDialog`.
+    expect(isStaleEditSession('a', 'b')).toBe(true)
+  })
+
+  it('erkennt eine Sitzung, deren Layer gar nicht mehr geöffnet ist', () => {
+    expect(isStaleEditSession('a', null)).toBe(true)
+  })
+
+  it('lässt eine Sitzung auf dem aktiven Layer in Ruhe', () => {
+    expect(isStaleEditSession('a', 'a')).toBe(false)
+  })
+
+  it('meldet ohne laufende Sitzung nichts -- auch nicht beim Layerwechsel', () => {
+    expect(isStaleEditSession(null, 'b')).toBe(false)
+    expect(isStaleEditSession(null, null)).toBe(false)
   })
 })

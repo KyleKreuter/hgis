@@ -141,6 +141,26 @@ export function DrawController({
     if (!map || !isLoaded) return
 
     /**
+     * Set by the cleanup below. `loadEditableFeatures` is the one thing in this effect
+     * that outlives its own run: without this its answer arrived after the session it was
+     * started for had already ended, and filled the refs that were just emptied -- now
+     * for the *next* session. Because fids start at 1 they collide as a matter of course,
+     * so `originals.current.get(fid)` then handed back the previous layer's feature and
+     * `updateGeometry` wrote its rowVersion and properties into the new layer's buffer:
+     * attributes on the wrong row when saving, or a 409. `loadSources` below has carried
+     * the same flag from the start.
+     */
+    let cancelled = false
+
+    // The three maps this effect fills, held as plain values for the cleanup below.
+    // Refs are created once and never reassigned, so these are the very same maps -- but
+    // reading `.current` from inside a cleanup is what makes the ref's identity a
+    // question at all, and here there is nothing to ask.
+    const loadedOriginals = originals.current
+    const seenGeometry = lastGeometry.current
+    const loadedSnapCandidates = snapCandidates.current
+
+    /**
      * terra-draw asks this on every pointer move while drawing or dragging a vertex.
      * Returning undefined means "no snap", which is what leaves the pointer free.
      */
@@ -419,6 +439,10 @@ export function DrawController({
           staleTime: 0,
         })
 
+        // Everything below writes into this effect's refs or onto the drawing surface.
+        // Once the effect is torn down, none of that belongs to this layer any more.
+        if (cancelled) return
+
         if ((page.totalCount ?? 0) > MAX_EDITABLE) {
           // Snapping to a partial set is worse than not snapping: it would attach to
           // whichever features happened to load and quietly miss the ones that did not
@@ -477,19 +501,21 @@ export function DrawController({
           toast.warning(`Das Programm konnte ${rejected} Objekte nicht zum Bearbeiten laden`)
         }
       } catch {
+        if (cancelled) return
         toast.error('Das Programm konnte die Objekte nicht zum Bearbeiten laden')
       }
     }
 
     return () => {
+      cancelled = true
       map.off('mousemove', previewSnap)
       // stop() removes terra-draw's own layers from the map. Without it a second
       // activation would add them again on top of the first set.
       draw.stop()
       drawRef.current = null
-      originals.current.clear()
-      lastGeometry.current.clear()
-      snapCandidates.current.clear()
+      loadedOriginals.clear()
+      seenGeometry.clear()
+      loadedSnapCandidates.clear()
       externalCandidates.current = []
       previewTarget.current = null
       onSnapTarget(null)

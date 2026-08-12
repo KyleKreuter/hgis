@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useMap } from '@/map/MapContext'
-import { sourceIdFor } from '@/map/layerSpecs'
 import { dirtyFids, useEditing } from '@/state/editing'
+import { baseTileFilter, editableTileLayerIds, tileFilterWhileEditing } from './tileFilter'
 
 /**
  * Renders nothing. Hides features from the tile layers while they are being edited.
@@ -18,6 +18,10 @@ import { dirtyFids, useEditing } from '@/state/editing'
  * -- a property-only edit leaves the tile correct, so nothing here needs to know about
  * that distinction. It stays in the store because the store is what knows how a change
  * entered the buffer; this component only needs the resulting set of fids to hide.
+ *
+ * Which layers this may touch, and what it has to put back afterwards, is decided in
+ * `tileFilter.ts` -- see there for why neither is simply "everything under the prefix"
+ * and "no filter at all".
  */
 export function EditingTileFilter({ layerId }: { layerId: string }) {
   const { mapRef, isLoaded } = useMap()
@@ -28,26 +32,23 @@ export function EditingTileFilter({ layerId }: { layerId: string }) {
     if (!map || !isLoaded) return
 
     const hidden = dirtyFids(buffer)
-    const managed = map
-      .getStyle()
-      .layers.map((layer) => layer.id)
-      .filter((id) => id.startsWith(sourceIdFor(layerId)))
+    const managed = editableTileLayerIds(
+      map.getStyle().layers.map((layer) => layer.id),
+      layerId,
+    )
 
     for (const id of managed) {
       if (!map.getLayer(id)) continue
-      // `['id']`, not `['get','fid']`: fid is the MVT feature id and never appears among
-      // the properties. Null puts the layer back to unfiltered.
-      map.setFilter(
-        id,
-        hidden.length === 0 ? null : ['!', ['in', ['id'], ['literal', hidden]]],
-      )
+      map.setFilter(id, tileFilterWhileEditing(id, hidden))
     }
 
     return () => {
-      const target = mapRef.current
-      if (!target) return
+      // The instance captured when the effect ran, not a fresh `mapRef.current` read:
+      // these are the layers whose filters *this* run changed. A map that has been
+      // removed meanwhile answers `getLayer` with undefined, so the loop simply finds
+      // nothing left to put back.
       for (const id of managed) {
-        if (target.getLayer(id)) target.setFilter(id, null)
+        if (map.getLayer(id)) map.setFilter(id, baseTileFilter(id))
       }
     }
   }, [mapRef, isLoaded, layerId, buffer])

@@ -19,6 +19,7 @@ import {
 } from '@/state/viewState'
 import { FilterBar } from './FilterBar'
 import type { FilterMode } from './filterMode'
+import { layerTableStateOf } from './layerTableState'
 import { TableEditToolbar } from './TableEditToolbar'
 import { FieldInput } from './FieldInput'
 import { initialDraftFromChar, kindOf } from './fieldKind'
@@ -207,42 +208,70 @@ export function AttributeTable({
     }
   }, [text, query.error])
 
-  // Seeds this layer's sort/query/selection from the saved working state, once per layer
-  // per session (CONTRACT.md phase 17, schema B). Runs as a one-shot restore rather than
-  // an effect that keeps `sort`/`mode`/`text` in sync with `viewState.document`: the
-  // latter would also fire every time this layer's own write lands back in the document a
-  // moment later, undoing whatever the user just did in between.
+  // Seeds this layer's sort/query/selection from the saved working state (CONTRACT.md
+  // phase 17, schema B). Runs as a one-shot restore rather than an effect that keeps
+  // `sort`/`mode`/`text` in sync with `viewState.document`: the latter would also fire
+  // every time this layer's own write lands back in the document a moment later, undoing
+  // whatever the user just did in between.
+  //
+  // Reset *and* restore, never restore-only: this component stays mounted across a layer
+  // switch, so whatever is not written here is simply inherited from the layer before --
+  // see `layerTableStateOf`, which is where the whole decision lives. The selection is
+  // the one part that stays once per layer per session; it costs a request, and the
+  // switch itself already cleared it (`selectLayer` in the workspace route).
   useEffect(() => {
-    if (!layerId || !viewState.ready || restoredLayers.current.has(layerId)) return
+    if (!layerId || !viewState.ready) return
+    const firstVisit = !restoredLayers.current.has(layerId)
     restoredLayers.current.add(layerId)
-    setRestoredQuery(false)
 
     const saved = layerStateOf(viewState.document, layerId)
-    if (saved.sort) setSort(saved.sort)
-    if (saved.query) {
-      setMode(saved.query.mode)
-      setText(saved.query.text)
-      setRestoredQuery(true)
-    }
-    if (saved.selection.length > 0) {
-      suppressSelectionEcho.current = true
+    const table = layerTableStateOf(saved, firstVisit)
+    setSort(table.sort)
+    setMode(table.mode)
+    setText(table.text)
+    setRestoredQuery(table.restoredQuery)
+
+    let cancelled = false
+    if (firstVisit && saved.selection.length > 0) {
+      // The selection as it stands before the request goes out. Every action that changes
+      // it puts a new Set in the store, so a different identity on arrival means the user
+      // selected something themselves in the meantime -- that is the newer intent, and a
+      // seed from a saved state must not overtake it.
+      const before = useSelection.getState().selected
       // No endpoint answers "do these fids still exist" directly, so this reuses the
       // fids endpoint "select all matches" already relies on, unfiltered -- the layer's
       // complete current fid set, fids only, no attributes or geometry (CONTRACT.md
       // rule 3, "Die Auswahl zeigt auf gelöschte Objekte").
       fetchFeatureFids({ layerId })
         .then(({ fids }) => {
+          if (cancelled || useSelection.getState().selected !== before) return
           const surviving = survivingSelection(saved.selection, new Set(fids))
-          if (surviving.length > 0) {
-            useSelection.getState().select(layerId, surviving, 'replace')
-          } else {
-            suppressSelectionEcho.current = false
+          if (surviving.length === 0) {
             toast.error('Das Programm konnte die gespeicherte Auswahl nicht wiederherstellen')
+            return
+          }
+          // Raised for exactly the store write it belongs to, and lowered again the
+          // moment it returns: the subscription below runs synchronously inside `select`,
+          // so a flag held for the whole request would swallow every selection the user
+          // makes while it is in flight -- and their selections are worth saving.
+          suppressSelectionEcho.current = true
+          try {
+            useSelection.getState().select(layerId, surviving, 'replace')
+          } finally {
+            suppressSelectionEcho.current = false
           }
         })
         .catch(() => {
-          suppressSelectionEcho.current = false
+          if (cancelled) return
+          toast.error('Das Programm konnte die gespeicherte Auswahl nicht wiederherstellen')
         })
+    }
+
+    return () => {
+      // Switching layers while the fids are still in flight: the answer describes the
+      // layer that was left. Applying it would put that layer's highlight on the map
+      // while a different one is open, and the fids mean nothing there anyway.
+      cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layerId, viewState.ready])
@@ -258,10 +287,10 @@ export function AttributeTable({
     if (!layerId) return
     return useSelection.subscribe((state, previous) => {
       if (state.selected === previous.selected || state.layerId !== layerId) return
-      if (suppressSelectionEcho.current) {
-        suppressSelectionEcho.current = false
-        return
-      }
+      // Raised and lowered by the restore above, around its own `select` call and nothing
+      // more -- so a selection that reaches this point is always one the user made, never
+      // the value that was just read back off the server.
+      if (suppressSelectionEcho.current) return
       const written = viewStateRef.current.writeSelection(layerId, [...state.selected])
       if (!written) {
         toast.error('Das Programm konnte die Auswahl nicht speichern', {

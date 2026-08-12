@@ -121,7 +121,7 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
     void request(renderer.field, method, classCount, next, classes)
   }
 
-  function setClassColor(index: number, color: string) {
+  function setClassColor(index: number, color: string, options?: { defer?: boolean }) {
     onChange(
       {
         ...renderer,
@@ -131,7 +131,7 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
             : styleClass,
         ),
       },
-      { defer: true },
+      options,
     )
   }
 
@@ -230,7 +230,7 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
               <li key={index} className="flex items-center gap-1.5">
                 <ColorInput
                   value={primaryColorOf(styleClass.symbol)}
-                  onChange={(color) => setClassColor(index, color)}
+                  onChange={(color, options) => setClassColor(index, color, options)}
                   ariaLabel={`Farbe für Klasse ${styleClass.label}`}
                 />
                 <span className="truncate text-xs tabular-nums">{styleClass.label}</span>
@@ -243,10 +243,10 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
       <Row label="Ohne Wert">
         <ColorInput
           value={primaryColorOf(renderer.fallbackSymbol)}
-          onChange={(color) =>
+          onChange={(color, options) =>
             onChange(
               { ...renderer, fallbackSymbol: withPrimaryColor(renderer.fallbackSymbol, color) },
-              { defer: true },
+              options,
             )
           }
           ariaLabel="Farbe für Objekte ohne Wert"

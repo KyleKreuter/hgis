@@ -119,7 +119,7 @@ export function CategorizedEditor({
     })
   }
 
-  function setCategoryColor(index: number, color: string) {
+  function setCategoryColor(index: number, color: string, options?: { defer?: boolean }) {
     onChange(
       {
         ...renderer,
@@ -127,7 +127,7 @@ export function CategorizedEditor({
           position === index ? { ...category, symbol: withPrimaryColor(category.symbol, color) } : category,
         ),
       },
-      { defer: true },
+      options,
     )
   }
 
@@ -225,7 +225,7 @@ export function CategorizedEditor({
               <li key={`${index}-${String(category.value)}`} className="flex items-center gap-1.5">
                 <ColorInput
                   value={primaryColorOf(category.symbol)}
-                  onChange={(color) => setCategoryColor(index, color)}
+                  onChange={(color, options) => setCategoryColor(index, color, options)}
                   ariaLabel={`Farbe für ${label}`}
                 />
                 <span className="truncate text-xs" title={label}>
@@ -244,10 +244,10 @@ export function CategorizedEditor({
       <Row label="Sonstige">
         <ColorInput
           value={primaryColorOf(renderer.fallbackSymbol)}
-          onChange={(color) =>
+          onChange={(color, options) =>
             onChange(
               { ...renderer, fallbackSymbol: withPrimaryColor(renderer.fallbackSymbol, color) },
-              { defer: true },
+              options,
             )
           }
           ariaLabel="Farbe für alle übrigen Werte"

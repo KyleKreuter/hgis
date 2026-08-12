@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { useApplyEdits, type EditRequest } from '@/api/edits'
@@ -177,6 +177,18 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
   // `routes/projects.$projectId.tsx`, built on `useBlocker` -- rather than a beforeunload
   // listener owned by this hook alone. That guard watches the table's buffer too, so a
   // single mechanism asks regardless of which mode is dirty (plan section D.8).
+  //
+  // What that guard does *not* cover is the clean case: with an empty buffer the switch
+  // goes through unasked, and the session was left pointed at the layer before it. That
+  // stale `useEditing.layerId` is what `DeleteLayerDialog` and `ManageFieldsDialog` lock
+  // on, so it locked the wrong layer and let a field be deleted out from under the one
+  // actually being edited -- the exact thing the lock exists to prevent, since the buffer
+  // is column_name-keyed. Ended here rather than in the route, which owns the same guard
+  // for the table session (`useTableEditing`) and would otherwise need a second copy of
+  // it: this hook already sees every change of the active layer through its own argument.
+  useEffect(() => {
+    if (isStaleEditSession(useEditing.getState().layerId, layerId)) stop()
+  }, [layerId, stop])
 
   const selectedFeature = resolveSelectedFeature(buffer, selectedFid, selectedOriginal)
 
@@ -209,6 +221,24 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
     discard,
     isSaving: applyEdits.isPending,
   }
+}
+
+/**
+ * Whether a running drawing session belongs to a layer that is no longer the active one.
+ *
+ * `sessionLayerId` is `useEditing.getState().layerId`, which is non-null exactly while a
+ * drawing session is open -- the same fact `DeleteLayerDialog` and `ManageFieldsDialog`
+ * lock on. `activeLayerId` is `null` when the user closed the layer altogether, which
+ * leaves a session just as stranded as a switch to another one does.
+ *
+ * Exported as a plain function so the decision can be checked without rendering, the same
+ * reasoning as `resolveSelectedFeature` below.
+ */
+export function isStaleEditSession(
+  sessionLayerId: string | null,
+  activeLayerId: string | null,
+): boolean {
+  return sessionLayerId !== null && sessionLayerId !== activeLayerId
 }
 
 /** The buffer shape, read off the store itself so this file need not export its own copy. */
