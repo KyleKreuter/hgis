@@ -16,8 +16,8 @@ import { projectKeys } from './projects'
  */
 export type GeometryType = 'MULTIPOINT' | 'MULTILINESTRING' | 'MULTIPOLYGON' | 'GEOMETRY'
 
-/** The two directions a clip mask can cut (CONTRACT.md phase 20); `null` means no mask. */
-export type ClipMode = 'inside' | 'outside'
+/** The four clip modes a mask layer can take (CONTRACT.md phase 21); `null` means no mask. */
+export type ClipMode = 'insideWhole' | 'insideClipped' | 'outsideWhole' | 'outsideClipped'
 
 export interface LayerSummary {
   id: string
@@ -53,26 +53,28 @@ export interface LayerSummary {
   /** The layer's own background opacity; `null` or missing means it follows the project's. */
   basemapOpacity?: number | null
   /**
-   * This layer's role as the project's clip mask, or `null`/missing when it holds none
-   * (CONTRACT.md phase 20). `'inside'` keeps, on every layer with a higher `zIndex`,
-   * only what lies within this layer's geometry; `'outside'` keeps only what lies
-   * outside it. At most one layer per project carries a mode other than `null` -- the
-   * server clears it from any previous holder the moment a different layer is given
-   * one, which is why the client always re-derives the current mask from the list
-   * instead of caching "the" mask id anywhere.
+   * This layer's role as a clip mask, or `null`/missing when it holds none (CONTRACT.md
+   * phase 21). One of four modes: `'insideWhole'`/`'outsideWhole'` keep an object whole
+   * when it does/does not touch this layer's geometry (`ST_Intersects`); `'insideClipped'`/
+   * `'outsideClipped'` cut the object down to the part inside/outside it instead. Any
+   * number of layers in a project can be a mask at once; each one affects every layer
+   * with a higher `zIndex`, and their effects combine with AND -- so a second layer
+   * becoming a mask leaves every other mask's `clipMode` untouched, unlike the old "at
+   * most one mask per project" rule.
    * Optional for the same reason `style`/`basemap` are: missing reads as "not a mask",
    * which is the right default and keeps every existing fixture that builds a
    * `LayerSummary` without it (outside this phase's ownership) compiling unchanged.
    */
   clipMode?: ClipMode | null
   /**
-   * `0` when no mask affects this layer, otherwise a value that changes whenever the
-   * mask, its geometries, or this layer's position relative to it changes. Folded into
-   * `buildTileUrl` (`map/layerSpecs.ts`) exactly like `dataVersion` and `styleVersion`,
-   * because the tile content now depends on it too -- without it in the URL, an edited
-   * mask would leave every clipped layer showing the old cut for as long as the tiles
-   * stay cached (they are served `immutable`). Optional for the same reason
-   * `clipMask` is; missing reads as `0`, "no clip in effect".
+   * `0` when no mask affects this layer, otherwise a value that changes whenever any
+   * mask that affects it, that mask's geometries, or this layer's position relative to
+   * one changes -- with several masks in play, all of them fold into this one number.
+   * Folded into `buildTileUrl` (`map/layerSpecs.ts`) exactly like `dataVersion` and
+   * `styleVersion`, because the tile content now depends on it too -- without it in the
+   * URL, an edited mask would leave every clipped layer showing the old cut for as long
+   * as the tiles stay cached (they are served `immutable`). Optional for the same
+   * reason `clipMode` is; missing reads as `0`, "no clip in effect".
    */
   clipVersion?: number
 }
@@ -155,11 +157,10 @@ export interface UpdateLayerInput {
   /** `null` resets the layer to the project's background opacity. */
   basemapOpacity?: number | null
   /**
-   * Sets this layer's clip mode, or clears it with `null`. Setting `'inside'` or
-   * `'outside'` on a second layer silently clears whichever one held a mode before
-   * (contract "Höchstens eine Maske je Projekt") -- `useUpdateLayer`'s trailing
-   * `invalidateQueries` is what brings that other layer's `clipMode` back in line,
-   * since the response here only describes the layer actually being patched.
+   * Sets this layer's clip mode, or clears it with `null`. Every other layer's
+   * `clipMode` is left exactly as it was -- a project can hold any number of masks at
+   * once (CONTRACT.md phase 21), so marking one layer as a mask no longer demotes
+   * another.
    */
   clipMode?: ClipMode | null
 }
