@@ -46,7 +46,7 @@ export function useStyleEditor(layer: LayerSummary, projectId: string): StyleEdi
     }
     if (pending.current) {
       saveRef.current.mutate(pending.current.style, {
-        onError: () => toast.error('Symbologie konnte nicht gespeichert werden'),
+        onError: () => toast.error('Das Programm konnte die Symbologie nicht speichern'),
       })
       pending.current = null
     }

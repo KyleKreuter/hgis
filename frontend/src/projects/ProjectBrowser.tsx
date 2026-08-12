@@ -60,7 +60,7 @@ export function ProjectBrowser() {
       <div className="mx-auto w-full max-w-4xl flex-1 overflow-y-auto p-6">
         {isError ? (
           <EmptyState
-            title="Projekte konnten nicht geladen werden"
+            title="Das Programm konnte die Projekte nicht laden"
             hint={error instanceof Error ? error.message : 'Läuft das Backend?'}
           />
         ) : isLoading ? (
@@ -174,7 +174,7 @@ function ProjectRow({
           across rows -- otherwise proportional numerals make columns ragged. */}
       <TableCell className="text-right tabular-nums">
         {project.layerCount === 0 ? (
-          <span className="text-muted-foreground">—</span>
+          <span className="text-muted-foreground">-</span>
         ) : (
           formatCount(project.layerCount)
         )}
@@ -182,7 +182,7 @@ function ProjectRow({
 
       <TableCell className="text-right tabular-nums">
         {project.featureCount === 0 ? (
-          <span className="text-muted-foreground">—</span>
+          <span className="text-muted-foreground">-</span>
         ) : (
           formatCount(project.featureCount)
         )}
@@ -238,7 +238,7 @@ function FirstRun({ onCreate }: { onCreate: () => void }) {
         <h2 className="font-medium">Noch kein Projekt</h2>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
           Ein Projekt bündelt Layer, deren Darstellung und den zuletzt betrachteten
-          Kartenausschnitt — vergleichbar mit einer Projektdatei in QGIS.
+          Kartenausschnitt. Das ist vergleichbar mit einer Projektdatei in QGIS.
         </p>
       </div>
       <Button onClick={onCreate}>

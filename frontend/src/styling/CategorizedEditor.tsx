@@ -165,13 +165,13 @@ export function CategorizedEditor({
       )}
 
       {isError && (
-        <p className="py-1 text-xs text-destructive">Werte konnten nicht geladen werden.</p>
+        <p className="py-1 text-xs text-destructive">Das Programm konnte die Werte nicht laden</p>
       )}
 
       {data?.truncated && (
         <p className="flex items-start gap-1.5 py-1 text-xs text-muted-foreground">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-          Das Feld hat mehr verschiedene Werte, als hier gezeigt werden. Eine kategorisierte
+          Das Feld hat mehr verschiedene Werte, als die Liste zeigt. Eine kategorisierte
           Darstellung ist dafür meist die falsche Wahl.
         </p>
       )}

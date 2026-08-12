@@ -67,7 +67,7 @@ export function LabelEditor({ labels, fields, onChange }: LabelEditorProps) {
               ariaLabel="Schriftfarbe"
             />
             <NumberInput
-              label="Grösse"
+              label="Größe"
               value={current.size}
               min={6}
               max={48}

@@ -89,21 +89,21 @@ export function FilterBar({
             <>
               <p className="font-medium">Filterausdruck</p>
               <p className="mt-1">
-                Vergleiche mit <code>= &lt;&gt; &lt; &lt;= &gt; &gt;=</code>, dazu{' '}
-                <code>LIKE</code>, <code>IN</code>, <code>IS NULL</code> sowie{' '}
+                Verwenden Sie Vergleiche mit <code>= &lt;&gt; &lt; &lt;= &gt; &gt;=</code>. Nutzen
+                Sie außerdem <code>LIKE</code>, <code>IN</code>, <code>IS NULL</code> sowie{' '}
                 <code>AND</code>, <code>OR</code>, <code>NOT</code> und Klammern.
               </p>
               <p className="mt-1">
-                Feldnamen mit Leerzeichen in doppelte, Werte in einfache Anführungszeichen:{' '}
-                <code>{example}</code>
+                Setzen Sie Feldnamen mit Leerzeichen in doppelte, Werte in einfache
+                Anführungszeichen: <code>{example}</code>
               </p>
-              <p className="mt-1 text-muted-foreground">Klicken für die Volltextsuche.</p>
+              <p className="mt-1 text-muted-foreground">Klicken Sie für die Volltextsuche.</p>
             </>
           ) : (
             <>
               <p className="font-medium">Volltextsuche</p>
-              <p className="mt-1">Findet Teiltreffer in allen Textfeldern, ganz ohne Syntax.</p>
-              <p className="mt-1 text-muted-foreground">Klicken für den Filterausdruck.</p>
+              <p className="mt-1">Die Suche findet Teiltreffer in allen Textfeldern, ganz ohne Syntax.</p>
+              <p className="mt-1 text-muted-foreground">Klicken Sie für den Filterausdruck.</p>
             </>
           )}
         </TooltipContent>

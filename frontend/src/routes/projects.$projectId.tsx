@@ -120,7 +120,7 @@ function Workspace() {
       const bounds = boundsOfGeometry(feature.geometry)
       if (bounds) requestZoom(bounds)
     } catch {
-      toast.error('Objekt konnte nicht geladen werden')
+      toast.error('Das Programm konnte das Objekt nicht laden')
     }
   }
 
@@ -345,8 +345,8 @@ function Workspace() {
 
       <DiscardEditsDialog
         open={pendingSwitch === 'toTable'}
-        title="Karten-Editiermodus verlassen?"
-        description={`Es gibt ${describeUnsavedChanges(editing.pending)} im Karten-Editiermodus. Sie ${unsavedChangesVerb(editing.pending)} verloren, wenn jetzt die Tabelle bearbeitet wird.`}
+        title="Zeichenmodus verlassen?"
+        description={`Sie haben ${describeUnsavedChanges(editing.pending)} im Zeichenmodus. Diese ${unsavedChangesVerb(editing.pending)} verloren, wenn Sie jetzt die Tabelle bearbeiten.`}
         confirmLabel="Änderungen verwerfen"
         onConfirm={() => {
           editing.stop()
@@ -357,8 +357,8 @@ function Workspace() {
       />
       <DiscardEditsDialog
         open={pendingSwitch === 'toMap'}
-        title="Tabellenbearbeitung verlassen?"
-        description={`Es gibt ${describeUnsavedChanges(tableChanges)} in der Tabelle. Sie ${unsavedChangesVerb(tableChanges)} verloren, wenn jetzt der Karten-Editiermodus gestartet wird.`}
+        title="Bearbeitungsmodus verlassen?"
+        description={`Sie haben ${describeUnsavedChanges(tableChanges)} in der Tabelle. Diese ${unsavedChangesVerb(tableChanges)} verloren, wenn Sie jetzt den Zeichenmodus starten.`}
         confirmLabel="Änderungen verwerfen"
         onConfirm={() => {
           useTableEditing.getState().end()
@@ -394,7 +394,7 @@ function ProjectLoadError({ error }: { error: Error }) {
     <div className="flex h-dvh flex-col items-center justify-center gap-4 p-8 text-center">
       <div>
         <h1 className="font-medium">
-          {notFound ? 'Projekt nicht gefunden' : 'Projekt konnte nicht geladen werden'}
+          {notFound ? 'Projekt nicht gefunden' : 'Das Programm konnte das Projekt nicht laden'}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {notFound

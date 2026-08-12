@@ -51,7 +51,7 @@ export function DuplicateProjectDialog({ project, onOpenChange }: Props) {
       onOpenChange(false)
       navigate({ to: '/projects/$projectId', params: { projectId: job.outputProjectId } })
     } else {
-      setError('Die Kopie wurde erstellt, aber ihre Projekt-ID fehlt. Die Projektliste wurde aktualisiert.')
+      setError('Das Programm hat die Kopie erstellt, aber die Projekt-ID fehlt. Die Projektliste ist aktuell.')
     }
   }, [job?.status, job?.outputProjectId, navigate, onOpenChange, queryClient])
 
@@ -69,7 +69,7 @@ export function DuplicateProjectDialog({ project, onOpenChange }: Props) {
     try {
       setJobId((await duplicate.mutateAsync(duplicateNameInput(project.name, name))).id)
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Projekt konnte nicht dupliziert werden.')
+      setError(cause instanceof ApiError ? cause.message : 'Das Programm konnte das Projekt nicht duplizieren')
     }
   }
 
@@ -85,7 +85,8 @@ export function DuplicateProjectDialog({ project, onOpenChange }: Props) {
           <DialogHeader>
             <DialogTitle>Projekt duplizieren</DialogTitle>
             <DialogDescription>
-              Layer, Daten und Darstellung von „{project?.name}" werden als neues Projekt kopiert.
+              Das Programm kopiert Layer, Daten und Darstellung von „{project?.name}" in ein neues
+              Projekt.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -93,7 +94,7 @@ export function DuplicateProjectDialog({ project, onOpenChange }: Props) {
               job?.status === 'FAILED' ? (
                 <Alert variant="destructive">
                   <AlertTitle>Duplizierung fehlgeschlagen</AlertTitle>
-                  <AlertDescription>{job.message ?? 'Die Kopie wurde vollständig aufgeräumt.'}</AlertDescription>
+                  <AlertDescription>{job.message ?? 'Das Programm hat die Kopie vollständig aufgeräumt'}</AlertDescription>
                 </Alert>
               ) : job?.status === 'SUCCEEDED' ? (
                 <Alert><AlertTitle>Duplizierung abgeschlossen</AlertTitle></Alert>

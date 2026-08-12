@@ -20,7 +20,7 @@ interface SelectAllMatchesButtonProps {
 
 type Phase = { type: 'idle' } | { type: 'loading' } | { type: 'confirm' }
 
-const GENERIC_ERROR = 'Auswahl konnte nicht geladen werden'
+const GENERIC_ERROR = 'Das Programm konnte die Auswahl nicht laden'
 
 /**
  * Bridges a filter/search restriction to the selection store -- what makes the
