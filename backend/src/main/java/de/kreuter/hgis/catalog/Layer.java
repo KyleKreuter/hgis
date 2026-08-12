@@ -277,14 +277,14 @@ public class Layer {
 	}
 
 	/**
-	 * The masks from {@code projectMasks} that act on this layer, unterste zuerst
+	 * The masks from {@code projectMasks} that act on this layer, bottom-most first
 	 * (CONTRACT.md phase 21): every one this layer sits above, in the same order
 	 * {@code projectMasks} gave them in. Filters with {@link #isClippedBy}, so a mask
 	 * never appears here for itself, and {@code projectMasks} may safely include this
 	 * layer along with every other mask of the project.
 	 *
 	 * @param projectMasks every mask of the project, as {@link LayerRepository#findClipMasks}
-	 *                     returns them -- unterste zuerst
+	 *                     returns them -- bottom-most first
 	 */
 	public List<Layer> effectiveMasks(List<Layer> projectMasks) {
 		return projectMasks.stream()
@@ -310,7 +310,7 @@ public class Layer {
 	 * out, so adding a second mask identical in effect to one already in the stack would
 	 * leave the version -- and so the cached tile address -- unchanged.
 	 *
-	 * @param projectMasks every mask of the project, unterste zuerst -- see {@link
+	 * @param projectMasks every mask of the project, bottom-most first -- see {@link
 	 *                     #effectiveMasks}
 	 */
 	public long clipVersion(List<Layer> projectMasks) {

@@ -71,7 +71,7 @@ public class MvtService {
 	 * @param attributeColumns column names to carry as tile properties, resolved from the
 	 *                         layer's style through {@code layer_field}; never a name that
 	 *                         came out of the style document itself
-	 * @param masks            the masks acting on this layer, unterste zuerst, or empty
+	 * @param masks            the masks acting on this layer, bottom-most first, or empty
 	 *                         to render unclipped -- never {@code null}. An empty list
 	 *                         produces exactly the query this method ran before
 	 *                         CONTRACT.md phase 19 introduced clip masks at all. The

@@ -368,7 +368,7 @@ public class LayerService {
 		layer.setClipMode(mode);
 	}
 
-	/** Every layer of {@code layers} marked as one of the project's clip masks, unterste zuerst. */
+	/** Every layer of {@code layers} marked as one of the project's clip masks, bottom-most first. */
 	private static List<Layer> findMasks(List<Layer> layers) {
 		return layers.stream().filter(Layer::isMask).toList();
 	}

@@ -44,7 +44,7 @@ public interface LayerRepository extends JpaRepository<Layer, UUID> {
 	List<UUID> findIdsByProjectId(@Param("projectId") UUID projectId);
 
 	/**
-	 * All masks of the project, unterste zuerst -- any number of layers may carry a
+	 * All masks of the project, bottom-most first -- any number of layers may carry a
 	 * {@code clipMode} at once (CONTRACT.md phase 21). Read fresh wherever a tile or a
 	 * layer DTO is built rather than cached, so a newly marked, unmarked, edited or
 	 * mode-switched mask takes effect immediately.
