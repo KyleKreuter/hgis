@@ -89,6 +89,15 @@ export interface LayerSummary {
    * raises this by hand when that happens. Optional; missing reads as `1`.
    */
   renderVersion?: number
+  /**
+   * Where this layer's data came from, or `null`/missing for a layer imported from a
+   * file or drawn by hand (CONTRACT.md phase 23, section 11.7). Part of the summary, not
+   * just the detail, for the same reason `style`/`basemap` are: the map's attribution
+   * line (`MapCanvas`) is built from the layer *list*, and a licence notice that only
+   * came with the detail would cost one request per visible layer before it could show
+   * anything.
+   */
+  source?: LayerSource | null
 }
 
 export interface LayerField {
@@ -96,6 +105,25 @@ export interface LayerField {
   sourceName: string
   columnName: string
   dataType: string
+}
+
+/**
+ * Provenance of a layer imported from the Geoportal Hamburg (CONTRACT.md phase 23,
+ * section 11.7), `null` for every layer that was not. `datasetId` and `featureIdField`
+ * exist for a later stage's reconcile (decision E6) and are deliberately shown nowhere
+ * in the UI yet.
+ */
+export interface LayerSource {
+  /** The licence's "Bezeichnung des Bereitstellers", set by the agency itself -- differs
+   *  between agencies, so it is stored and shown per layer, never as one fixed text. */
+  attribution: string
+  licenseName: string
+  licenseUrl: string
+  datasetUri: string | null
+  metadataUrl: string | null
+  datasetId: string
+  featureIdField: string | null
+  fetchedAt: string
 }
 
 export interface LayerDetail extends LayerSummary {
