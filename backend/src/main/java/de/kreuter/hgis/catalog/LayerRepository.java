@@ -34,4 +34,12 @@ public interface LayerRepository extends JpaRepository<Layer, UUID> {
 
 	@Query("SELECT COALESCE(MAX(l.zIndex), -1) FROM Layer l WHERE l.project.id = :projectId")
 	int maxZIndex(@Param("projectId") UUID projectId);
+
+	/**
+	 * Bare ids of a project's layers -- enough to tell which references in a stored view
+	 * state are still valid, without hydrating full entities for a check that only ever
+	 * looks at the id.
+	 */
+	@Query("SELECT l.id FROM Layer l WHERE l.project.id = :projectId")
+	List<UUID> findIdsByProjectId(@Param("projectId") UUID projectId);
 }

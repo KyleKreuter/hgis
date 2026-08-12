@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -73,6 +74,20 @@ public class ProjectController {
 	@DeleteMapping("/{id}")
 	public ResponseEntity<Void> delete(@PathVariable UUID id) {
 		service.delete(id);
+		return ResponseEntity.noContent().build();
+	}
+
+	/** The client's saved view state: active layer, and per-layer sort, query and selection. */
+	@GetMapping("/{id}/view-state")
+	public ProjectDtos.ViewState viewState(@PathVariable UUID id) {
+		return service.viewState(id);
+	}
+
+	/** Replaces the saved view state wholesale; there is no partial update. */
+	@PutMapping("/{id}/view-state")
+	public ResponseEntity<Void> updateViewState(@PathVariable UUID id,
+			@RequestBody ProjectDtos.ViewState request) {
+		service.updateViewState(id, request);
 		return ResponseEntity.noContent().build();
 	}
 }

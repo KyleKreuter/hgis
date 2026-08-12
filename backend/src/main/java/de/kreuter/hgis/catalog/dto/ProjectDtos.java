@@ -5,6 +5,8 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -91,5 +93,53 @@ public final class ProjectDtos {
 
 	/** Answer to a delete preflight: what exactly would be destroyed. */
 	public record DeletionImpact(long layerCount, long featureCount) {
+	}
+
+	public static final String QUERY_MODE_SEARCH = "search";
+	public static final String QUERY_MODE_FILTER = "filter";
+
+	/**
+	 * What the client left open when it last left a project: which layer was active, and
+	 * per layer what the attribute table was sorted, searched or filtered by, and which
+	 * rows were selected.
+	 *
+	 * <p>{@code version} stays 1 regardless of what a client sends -- the server always
+	 * writes its own canonical value, the same way {@code LayerStyleService} treats a
+	 * style's version. A project that was never saved answers with {@link #empty()},
+	 * never a 404.
+	 */
+	public record ViewState(Integer version, UUID activeLayerId, Map<UUID, LayerViewState> layers) {
+
+		public ViewState {
+			layers = layers == null ? Map.of() : Map.copyOf(layers);
+		}
+
+		public static ViewState empty() {
+			return new ViewState(1, null, Map.of());
+		}
+	}
+
+	/**
+	 * @param sort      column and direction the attribute table was sorted by, or null
+	 *                   for the default order. {@code field} is stored and returned
+	 *                   as-is -- never checked against {@code layer_field}, since a
+	 *                   field can be dropped after this was saved. The attribute
+	 *                   table's own query already reports "Unbekanntes Sortierfeld"
+	 *                   when that happens.
+	 * @param query     search or filter text that was applied, or null
+	 * @param selection fids that were selected; never null, an empty list by default
+	 */
+	public record LayerViewState(Sort sort, Query query, List<Long> selection) {
+
+		public LayerViewState {
+			selection = selection == null ? List.of() : List.copyOf(selection);
+		}
+	}
+
+	public record Sort(String field, Boolean desc) {
+	}
+
+	/** @param mode {@value #QUERY_MODE_SEARCH} or {@value #QUERY_MODE_FILTER}, nothing else. */
+	public record Query(String mode, String text) {
 	}
 }

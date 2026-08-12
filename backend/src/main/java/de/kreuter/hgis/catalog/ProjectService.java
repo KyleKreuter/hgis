@@ -8,22 +8,35 @@ import de.kreuter.hgis.jobs.Job;
 import de.kreuter.hgis.jobs.JobService;
 import de.kreuter.hgis.jobs.dto.JobDtos;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.Polygon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class ProjectService {
 
+	private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
+
 	/** Fallback storage CRS: UTM zone 32N, metric and standard for Germany. */
 	public static final int DEFAULT_SRID = 25832;
+
+	/** Far above any plausible on-screen selection; see CONTRACT.md phase 17. */
+	private static final int MAX_SELECTION_PER_LAYER = 10_000;
+	private static final int MAX_QUERY_TEXT_LENGTH = 2000;
 
 	private final ProjectRepository repository;
 	private final ProjectDeletionService deletionService;
@@ -31,16 +44,21 @@ public class ProjectService {
 	private final JdbcClient jdbc;
 	private final JobService jobService;
 	private final ProjectDuplicateService duplicateService;
+	private final LayerRepository layerRepository;
+	private final ObjectMapper objectMapper;
 
 	ProjectService(ProjectRepository repository, ProjectDeletionService deletionService,
 			GeometryFactory geometryFactory, JdbcClient jdbc, JobService jobService,
-			ProjectDuplicateService duplicateService) {
+			ProjectDuplicateService duplicateService, LayerRepository layerRepository,
+			ObjectMapper objectMapper) {
 		this.repository = repository;
 		this.deletionService = deletionService;
 		this.geometryFactory = geometryFactory;
 		this.jdbc = jdbc;
 		this.jobService = jobService;
 		this.duplicateService = duplicateService;
+		this.layerRepository = layerRepository;
+		this.objectMapper = objectMapper;
 	}
 
 	@Transactional(readOnly = true)
@@ -136,6 +154,45 @@ public class ProjectService {
 		return jobService.get(job.getId());
 	}
 
+	/**
+	 * The client's saved view state for this project, cleaned up against the layers that
+	 * still exist. A layer that was deleted since the state was saved simply falls out of
+	 * {@code layers}; if it was the active one, {@code activeLayerId} comes back null. This
+	 * is the only place that cleanup happens -- deleting a layer needs no cleanup step of
+	 * its own, see CONTRACT.md phase 17.
+	 */
+	@Transactional(readOnly = true)
+	public ProjectDtos.ViewState viewState(UUID id) {
+		Project project = require(id);
+		ProjectDtos.ViewState stored = readViewState(project.getViewState());
+
+		Set<UUID> existingLayerIds = Set.copyOf(layerRepository.findIdsByProjectId(id));
+		Map<UUID, ProjectDtos.LayerViewState> layers = new LinkedHashMap<>();
+		stored.layers().forEach((layerId, layerState) -> {
+			if (existingLayerIds.contains(layerId)) {
+				layers.put(layerId, layerState);
+			}
+		});
+
+		UUID activeLayerId = stored.activeLayerId() != null && existingLayerIds.contains(stored.activeLayerId())
+				? stored.activeLayerId()
+				: null;
+		return new ProjectDtos.ViewState(1, activeLayerId, layers);
+	}
+
+	/**
+	 * Replaces the client's saved view state wholesale. What a layer's {@code sort.field}
+	 * refers to is deliberately not checked here against {@code layer_field} -- a field can
+	 * be dropped after this is saved, so a check at write time would give no guarantee. The
+	 * attribute table's own query already reports "Unbekanntes Sortierfeld" when that
+	 * happens; this method must not build a second check for the same thing.
+	 */
+	@Transactional
+	public void updateViewState(UUID id, ProjectDtos.ViewState request) {
+		Project project = require(id);
+		project.setViewState(objectMapper.writeValueAsString(validateViewState(request)));
+	}
+
 	// --- helpers ---------------------------------------------------------------
 
 	private Project require(UUID id) {
@@ -175,6 +232,59 @@ public class ProjectService {
 				toLngLat(p.getCenter()), p.getZoom(), toBbox(p.getExtent()),
 				layerCount, featureCount,
 				p.getLastOpenedAt(), p.getCreatedAt(), p.getUpdatedAt());
+	}
+
+	/**
+	 * Only ever sees documents {@link #updateViewState} wrote, so a failure means the
+	 * column was written past it -- worth a log line, not worth failing the request that
+	 * happened to read it.
+	 */
+	private ProjectDtos.ViewState readViewState(String viewStateJson) {
+		if (viewStateJson == null || viewStateJson.isBlank()) {
+			return ProjectDtos.ViewState.empty();
+		}
+		try {
+			return objectMapper.readValue(viewStateJson, ProjectDtos.ViewState.class);
+		}
+		catch (JacksonException ex) {
+			log.warn("Stored view state could not be read, treating it as never saved", ex);
+			return ProjectDtos.ViewState.empty();
+		}
+	}
+
+	private ProjectDtos.ViewState validateViewState(ProjectDtos.ViewState request) {
+		if (request == null) {
+			return ProjectDtos.ViewState.empty();
+		}
+		Map<UUID, ProjectDtos.LayerViewState> layers = new LinkedHashMap<>();
+		request.layers().forEach((layerId, layerState) -> layers.put(layerId, validateLayerViewState(layerState)));
+		return new ProjectDtos.ViewState(1, request.activeLayerId(), layers);
+	}
+
+	private ProjectDtos.LayerViewState validateLayerViewState(ProjectDtos.LayerViewState state) {
+		if (state == null) {
+			return new ProjectDtos.LayerViewState(null, null, List.of());
+		}
+		validateQuery(state.query());
+		if (state.selection().size() > MAX_SELECTION_PER_LAYER) {
+			throw new BadRequestException("Die Auswahl darf höchstens " + MAX_SELECTION_PER_LAYER
+					+ " Objekte je Layer enthalten. Angegeben waren " + state.selection().size() + ".");
+		}
+		return state;
+	}
+
+	private void validateQuery(ProjectDtos.Query query) {
+		if (query == null) {
+			return;
+		}
+		if (!ProjectDtos.QUERY_MODE_SEARCH.equals(query.mode()) && !ProjectDtos.QUERY_MODE_FILTER.equals(query.mode())) {
+			throw new BadRequestException("Unbekannter Wert für query.mode: " + query.mode()
+					+ ". Erlaubt sind " + ProjectDtos.QUERY_MODE_FILTER + ", " + ProjectDtos.QUERY_MODE_SEARCH + ".");
+		}
+		if (query.text() != null && query.text().length() > MAX_QUERY_TEXT_LENGTH) {
+			throw new BadRequestException(
+					"query.text darf höchstens " + MAX_QUERY_TEXT_LENGTH + " Zeichen lang sein");
+		}
 	}
 
 	private Point toPoint(double[] lngLat) {
