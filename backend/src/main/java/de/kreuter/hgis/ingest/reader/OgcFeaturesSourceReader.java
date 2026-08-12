@@ -62,7 +62,7 @@ import tools.jackson.databind.ObjectMapper;
 public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 
 	/** The server accepts a higher {@code limit} but silently caps the page at this (plan section 3.2). */
-	static final int PAGE_SIZE = 10_000;
+	static final int DEFAULT_PAGE_SIZE = 10_000;
 
 	/** Same sampling budget {@link GeoJsonSourceReader} uses to type a format that declares no schema of its own. */
 	private static final int SAMPLE_SIZE = 1000;
@@ -74,6 +74,7 @@ public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 	private final String apiUrl;
 	private final String collection;
 	private final double[] bbox4326;
+	private final int pageSize;
 	private final ObjectMapper mapper = new ObjectMapper();
 	private final GeometryJSON geometryJson = new GeometryJSON();
 
@@ -115,10 +116,24 @@ public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 	 */
 	public OgcFeaturesSourceReader(RestClient restClient, String apiUrl, String collection, double[] bbox4326,
 			List<String> fieldSelection, Map<String, String> germanLabels) {
+		this(restClient, apiUrl, collection, bbox4326, fieldSelection, germanLabels, DEFAULT_PAGE_SIZE);
+	}
+
+	/**
+	 * Same as the public constructor, with the page size exposed -- production code never
+	 * calls this one directly (it always gets {@link #DEFAULT_PAGE_SIZE}, the server's own
+	 * hard cap). Tests use it to prove the paging logic itself -- offset advances
+	 * correctly, every object arrives, none twice -- against a handful of features instead
+	 * of the 10,000 a real page holds, which OgcFeaturesSourceReaderTest's other cases
+	 * would make unworkable as a literal fixture.
+	 */
+	OgcFeaturesSourceReader(RestClient restClient, String apiUrl, String collection, double[] bbox4326,
+			List<String> fieldSelection, Map<String, String> germanLabels, int pageSize) {
 		this.restClient = restClient;
 		this.apiUrl = apiUrl.endsWith("/") ? apiUrl.substring(0, apiUrl.length() - 1) : apiUrl;
 		this.collection = collection;
 		this.bbox4326 = bbox4326;
+		this.pageSize = pageSize;
 
 		this.requestCrs25832 = fetchCollectionCrsUris().contains(CRS_25832_URI);
 		JsonNode queryables = fetchQueryables();
@@ -150,7 +165,7 @@ public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 		Iterator<SourceFeature> iterator = new Iterator<>() {
 			private Iterator<SourceFeature> currentPage = firstPage.iterator();
 			private int nextOffset = firstPage.size();
-			private boolean morePagesMayExist = firstPage.size() >= PAGE_SIZE;
+			private boolean morePagesMayExist = firstPage.size() >= pageSize;
 			private SourceFeature pending = advance();
 
 			private SourceFeature advance() {
@@ -163,7 +178,7 @@ public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 					}
 					ItemsPage page = fetchItemsPage(nextOffset);
 					nextOffset += page.rawCount();
-					morePagesMayExist = page.rawCount() >= PAGE_SIZE;
+					morePagesMayExist = page.rawCount() >= pageSize;
 					currentPage = page.features().iterator();
 				}
 			}
@@ -304,7 +319,7 @@ public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 		UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(apiUrl)
 				.pathSegment("collections", collection, "items")
 				.queryParam("f", "json")
-				.queryParam("limit", PAGE_SIZE)
+				.queryParam("limit", pageSize)
 				.queryParam("offset", offset);
 		if (requestCrs25832) {
 			builder.queryParam("crs", CRS_25832_URI);

@@ -7,6 +7,7 @@ import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.jobs.Job;
 import de.kreuter.hgis.jobs.JobService;
 import de.kreuter.hgis.jobs.dto.JobDtos;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -55,7 +56,7 @@ class ProjectDuplicateServiceTest {
 				+ "(ST_Multi(ST_MakeEnvelope(1, 2, 3, 4, 25832)), 'Haus', 12),"
 				+ "(ST_Multi(ST_MakeEnvelope(5, 6, 7, 8, 25832)), 'Halle', 25)").update();
 		Layer layer = new Layer(layerId, source, "Gebäude", sourceTable, "MULTIPOLYGON", 25832);
-		layer.setCopyMetadata(2, false, 4, 3, 18, "{\"kind\":\"fill\"}", "opentopo", 0.6, null, null);
+		layer.setCopyMetadata(2, false, 4, 3, 18, "{\"kind\":\"fill\"}", "opentopo", 0.6, null, null, null);
 		layer = layers.saveAndFlush(layer);
 		fields.saveAndFlush(new LayerField(layer, "Titel", "titel", "text", 0));
 		fields.saveAndFlush(new LayerField(layer, "Höhe", "hoehe", "integer", 1));
@@ -116,6 +117,55 @@ class ProjectDuplicateServiceTest {
 		assertThat(newFid).isGreaterThan(2);
 		assertThat(jdbc.sql("SELECT COUNT(*) FROM " + SqlIdentifier.quoteLayerTable(sourceTable))
 				.query(Long.class).single()).isEqualTo(2);
+	}
+
+	/**
+	 * CONTRACT.md phase 23.7: a duplicate must carry a layer's Geoportal provenance
+	 * forward. Without this, a duplicated layer would show no attribution at all even
+	 * though its data still originates from the Geoportal -- exactly the licence
+	 * obligation (clause 2) that provenance exists to satisfy, silently unmet.
+	 */
+	@Test
+	void duplicatingAProjectCarriesGeoportalProvenanceForward() {
+		Layer gebaeude = layers.findByProjectOrdered(source.getId()).getFirst();
+		gebaeude.setSource(
+				"Freie und Hansestadt Hamburg, Behörde für Umwelt, Klima, Energie und Agrarwirtschaft",
+				"Datenlizenz Deutschland – Namensnennung – Version 2.0",
+				"https://www.govdata.de/dl-de/by-2-0",
+				"https://registry.gdi-de.org/id/de.hh/x",
+				"https://metaver.de/trefferanzeige?docuuid=x",
+				"strassenbaumkataster/strassenbaumkataster_hh",
+				"gid",
+				Instant.parse("2026-08-12T09:14:00Z"));
+		layers.saveAndFlush(gebaeude);
+
+		Job job = jobs.create(source.getId(), Job.Type.DUPLICATE, null);
+		duplicateService.runDuplicate(job.getId(), source.getId(), null);
+		JobDtos.Response result = jobs.get(job.getId());
+		assertThat(result.status()).isEqualTo("SUCCEEDED");
+
+		Layer copy = layers.findByProjectOrdered(result.outputProjectId()).getFirst();
+		assertThat(copy.getSourceAttribution())
+				.isEqualTo("Freie und Hansestadt Hamburg, Behörde für Umwelt, Klima, Energie und Agrarwirtschaft");
+		assertThat(copy.getSourceLicenseName()).isEqualTo("Datenlizenz Deutschland – Namensnennung – Version 2.0");
+		assertThat(copy.getSourceLicenseUrl()).isEqualTo("https://www.govdata.de/dl-de/by-2-0");
+		assertThat(copy.getSourceDatasetUri()).isEqualTo("https://registry.gdi-de.org/id/de.hh/x");
+		assertThat(copy.getSourceMetadataUrl()).isEqualTo("https://metaver.de/trefferanzeige?docuuid=x");
+		assertThat(copy.getSourceDatasetId()).isEqualTo("strassenbaumkataster/strassenbaumkataster_hh");
+		assertThat(copy.getSourceFeatureIdField()).isEqualTo("gid");
+		assertThat(copy.getSourceFetchedAt()).isEqualTo(Instant.parse("2026-08-12T09:14:00Z"));
+	}
+
+	/** A layer never touched by {@code setSource} must copy as having no provenance -- null,
+	 *  not some accidental default, matching {@code copiesCatalogRowsPayloadIndexesAndIdentityWithoutTouchingSource}. */
+	@Test
+	void duplicatingALayerWithoutProvenanceLeavesTheCopyWithoutItToo() {
+		Job job = jobs.create(source.getId(), Job.Type.DUPLICATE, null);
+		duplicateService.runDuplicate(job.getId(), source.getId(), null);
+		JobDtos.Response result = jobs.get(job.getId());
+
+		Layer copy = layers.findByProjectOrdered(result.outputProjectId()).getFirst();
+		assertThat(copy.getProvenance()).isNull();
 	}
 
 	/**

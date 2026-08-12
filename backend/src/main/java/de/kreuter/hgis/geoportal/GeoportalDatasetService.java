@@ -51,6 +51,7 @@ class GeoportalDatasetService {
 		}
 
 		OgcFeaturesClient.CollectionInfo collectionInfo = ogcFeaturesClient.fetchCollection(entry.apiUrl(), entry.collection());
+		String description = ogcFeaturesClient.fetchApiDescription(entry.apiUrl());
 		List<QueryablesSchema.Field> queryableFields =
 				ogcFeaturesClient.fetchQueryables(entry.apiUrl(), entry.collection(), entry.gfiAttributes());
 
@@ -65,7 +66,7 @@ class GeoportalDatasetService {
 				.orElse(null);
 
 		return new GeoportalDtos.DatasetDetail(
-				entry.id(), entry.title(), null, entry.kind(), entry.agency(), entry.topic(),
+				entry.id(), entry.title(), description, entry.kind(), entry.agency(), entry.topic(),
 				collectionInfo.itemCount(), collectionInfo.bboxWgs84(),
 				entry.attribution(), GeoportalLicense.NAME, GeoportalLicense.URL,
 				entry.datasetUri(), entry.metadataUrl(), collectionInfo.storageSrid(), sourceFeatureIdField, fields);
