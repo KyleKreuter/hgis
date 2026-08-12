@@ -220,7 +220,7 @@ class LayerCreateTest {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON" })
+	@ValueSource(strings = { "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRY" })
 	@DisplayName("each allowed geometry type produces a matching PostGIS geometry column")
 	void createsTheRequestedGeometryType(String geometryType) throws Exception {
 		JsonNode created = createLayer(createBody("Geometrietest " + geometryType, geometryType, null));
@@ -292,6 +292,41 @@ class LayerCreateTest {
 		assertThat(reloaded.getFeatureCount()).isEqualTo(1);
 	}
 
+	@Test
+	@DisplayName("a GEOMETRY layer takes a point, a line and a polygon side by side")
+	void aGeometryLayerAcceptsAPointALineAndAPolygonTogether() throws Exception {
+		JsonNode created = createLayer(createBody("Gemischt", "GEOMETRY", null));
+		UUID layerId = UUID.fromString(created.get("id").asText());
+
+		JsonNode point = MAPPER.readTree("""
+				{"type":"Point","coordinates":[9.98,53.54]}
+				""");
+		JsonNode line = MAPPER.readTree("""
+				{"type":"LineString","coordinates":[[9.98,53.54],[9.99,53.55]]}
+				""");
+		JsonNode polygon = MAPPER.readTree("""
+				{"type":"Polygon","coordinates":[[[9.98,53.54],[9.99,53.54],[9.99,53.55],[9.98,53.54]]]}
+				""");
+
+		EditDtos.Request request = new EditDtos.Request(
+				List.of(new EditDtos.Create(-1, point, Map.of()),
+						new EditDtos.Create(-2, line, Map.of()),
+						new EditDtos.Create(-3, polygon, Map.of())),
+				null, null, false);
+
+		EditDtos.Response response = editService.apply(layerId, request);
+
+		assertThat(response.createdFids()).containsOnlyKeys(-1L, -2L, -3L);
+		assertThat(response.featureCount()).isEqualTo(3);
+
+		List<String> storedTypes = jdbc.sql("SELECT GeometryType(geom) AS type FROM "
+						+ SqlIdentifier.quoteLayerTable(SqlIdentifier.tableName(layerId))
+						+ " ORDER BY fid")
+				.query(String.class)
+				.list();
+		assertThat(storedTypes).containsExactly("MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON");
+	}
+
 	// --- errors -----------------------------------------------------------------
 
 	@Test
@@ -336,18 +371,6 @@ class LayerCreateTest {
 						.content(createBody("Layer", "POINT", null)))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.errors.geometryType").exists());
-	}
-
-	@Test
-	@DisplayName("GEOMETRY is rejected -- only the three drawable types may be created directly")
-	void rejectsGeometryTypeGeometry() throws Exception {
-		mockMvc.perform(post("/api/projects/{projectId}/layers", project.getId())
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(createBody("Gemischt", "GEOMETRY", null)))
-				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.errors.geometryType").exists());
-
-		assertThat(layerRepository.findByProjectOrdered(project.getId())).isEmpty();
 	}
 
 	@Test
