@@ -4,7 +4,6 @@ import de.kreuter.hgis.catalog.dto.ProjectDtos;
 import de.kreuter.hgis.jobs.dto.JobDtos;
 import jakarta.validation.Valid;
 import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -28,9 +27,20 @@ public class ProjectController {
 		this.service = service;
 	}
 
+	/**
+	 * One page of the project browser, most recently opened first.
+	 *
+	 * @param cursor opaque position from the previous page's {@code nextCursor}
+	 * @param limit  page size, between 1 and 100; defaults to 24
+	 * @param q      matched against name and description, case-insensitively and in
+	 *               word parts
+	 */
 	@GetMapping
-	public List<ProjectDtos.Summary> list() {
-		return service.list();
+	public ProjectDtos.Page list(
+			@RequestParam(required = false) String cursor,
+			@RequestParam(required = false, defaultValue = "24") int limit,
+			@RequestParam(required = false) String q) {
+		return service.list(q, cursor, limit);
 	}
 
 	@PostMapping

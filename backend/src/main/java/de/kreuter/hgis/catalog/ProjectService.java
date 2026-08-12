@@ -38,6 +38,10 @@ public class ProjectService {
 	private static final int MAX_SELECTION_PER_LAYER = 10_000;
 	private static final int MAX_QUERY_TEXT_LENGTH = 2000;
 
+	/** Bounds for {@code limit} on the project browser; see CONTRACT.md phase 22. */
+	private static final int MIN_PAGE_SIZE = 1;
+	private static final int MAX_PAGE_SIZE = 100;
+
 	private final ProjectRepository repository;
 	private final ProjectDeletionService deletionService;
 	private final GeometryFactory geometryFactory;
@@ -61,14 +65,42 @@ public class ProjectService {
 		this.objectMapper = objectMapper;
 	}
 
+	/**
+	 * One page of the project browser, most recently opened first.
+	 *
+	 * @param q      matched against name and description, case-insensitively and in
+	 *               word parts; null or blank means no restriction
+	 * @param cursor opaque position from the previous page's {@code nextCursor}; null
+	 *               for the first page
+	 * @param limit  page size, between {@value #MIN_PAGE_SIZE} and {@value #MAX_PAGE_SIZE}
+	 */
 	@Transactional(readOnly = true)
-	public List<ProjectDtos.Summary> list() {
-		return repository.findAllSummaries().stream()
-				.map(row -> new ProjectDtos.Summary(
-						row.getId(), row.getName(), row.getDescription(), row.getSrid(),
-						row.getLayerCount(), row.getFeatureCount(),
-						row.getLastOpenedAt(), row.getCreatedAt()))
-				.toList();
+	public ProjectDtos.Page list(String q, String cursor, int limit) {
+		if (limit < MIN_PAGE_SIZE || limit > MAX_PAGE_SIZE) {
+			throw new BadRequestException("limit muss zwischen " + MIN_PAGE_SIZE + " und " + MAX_PAGE_SIZE
+					+ " liegen. Angegeben war " + limit + ".");
+		}
+		ProjectCursor decoded = cursor == null ? null : ProjectCursor.decode(cursor);
+
+		// One extra row is what answers "is there a next page" without a second,
+		// separate count query -- the same trick FeatureQueryService.list uses.
+		List<ProjectSummaryRow> rows = repository.findPage(
+				searchPattern(q),
+				decoded == null ? null : decoded.lastOpenedAt(),
+				decoded == null ? null : decoded.createdAt(),
+				decoded == null ? null : decoded.id(),
+				limit + 1);
+
+		boolean hasMore = rows.size() > limit;
+		List<ProjectSummaryRow> page = hasMore ? rows.subList(0, limit) : rows;
+
+		String nextCursor = null;
+		if (hasMore) {
+			ProjectSummaryRow last = page.get(page.size() - 1);
+			nextCursor = new ProjectCursor(last.getLastOpenedAt(), last.getCreatedAt(), last.getId()).encode();
+		}
+
+		return new ProjectDtos.Page(page.stream().map(ProjectService::toSummary).toList(), nextCursor);
 	}
 
 	@Transactional
@@ -316,6 +348,41 @@ public class ProjectService {
 		}
 		Envelope e = polygon.getEnvelopeInternal();
 		return new double[] { e.getMinX(), e.getMinY(), e.getMaxX(), e.getMaxY() };
+	}
+
+	private static ProjectDtos.Summary toSummary(ProjectSummaryRow row) {
+		return new ProjectDtos.Summary(
+				row.getId(), row.getName(), row.getDescription(), row.getSrid(),
+				row.getLayerCount(), row.getFeatureCount(),
+				row.getLastOpenedAt(), row.getCreatedAt(),
+				toLngLat(row.getCenterLng(), row.getCenterLat()),
+				row.getZoom(),
+				toBbox(row.getExtentMinLng(), row.getExtentMinLat(), row.getExtentMaxLng(), row.getExtentMaxLat()),
+				row.getBasemap());
+	}
+
+	private static double[] toLngLat(Double lng, Double lat) {
+		return lng == null || lat == null ? null : new double[] { lng, lat };
+	}
+
+	private static double[] toBbox(Double minLng, Double minLat, Double maxLng, Double maxLat) {
+		return minLng == null || minLat == null || maxLng == null || maxLat == null
+				? null
+				: new double[] { minLng, minLat, maxLng, maxLat };
+	}
+
+	/**
+	 * @return an ILIKE pattern with {@code %} and {@code _} escaped so a search term is
+	 *     matched literally rather than as a wildcard pattern -- the same rule
+	 *     {@code TextSearch} in the features package already applies to a layer's rows --
+	 *     or null when there is nothing to search for
+	 */
+	private static String searchPattern(String q) {
+		if (q == null || q.isBlank()) {
+			return null;
+		}
+		String escaped = q.trim().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+		return "%" + escaped + "%";
 	}
 
 	private static String trimToNull(String value) {

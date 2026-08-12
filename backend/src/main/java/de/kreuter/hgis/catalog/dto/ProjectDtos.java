@@ -27,7 +27,29 @@ public final class ProjectDtos {
 			long layerCount,
 			long featureCount,
 			Instant lastOpenedAt,
-			Instant createdAt) {
+			Instant createdAt,
+
+			/** Saved map center as [lng, lat] in EPSG:4326, or null. */
+			double[] center,
+
+			/** Saved zoom, or null. */
+			Double zoom,
+
+			/** Extent of every layer as [minLng, minLat, maxLng, maxLat] in EPSG:4326, or null. */
+			double[] extent,
+
+			/** This project's basemap, always set. */
+			String basemap) {
+	}
+
+	/**
+	 * One page of the project browser, cursor-paged and optionally restricted by
+	 * {@code q}. See {@link de.kreuter.hgis.catalog.ProjectCursor} for what the cursor
+	 * carries.
+	 *
+	 * @param nextCursor pass back as {@code cursor} for the next page; null at the end
+	 */
+	public record Page(List<Summary> items, String nextCursor) {
 	}
 
 	/** Full project, returned when a project is opened. */
