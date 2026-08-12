@@ -16,6 +16,8 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Leere Layer anlegen und direkt hineinzeichnen, ohne den Umweg über eine Datei
 - Shapefiles, GeoPackages, GeoJSON- und CSV-Dateien importieren
 - Koordinatenbezug und Zeichenkodierung vor dem Import prüfen
+- Über 500 amtliche Datensätze aus dem Geoportal Hamburg direkt laden, ohne den Umweg über
+  eine Datei, wahlweise nur den aktuellen Kartenausschnitt und nur ausgewählte Felder
 - Layer ordnen, umbenennen, ein- und ausblenden sowie löschen
 - Sichtbarkeit abhängig vom Kartenmaßstab festlegen
 - Sachdaten in einer Attributtabelle anzeigen, durchsuchen, filtern und sortieren
@@ -91,6 +93,59 @@ gesperrt.
 Der Feldtyp bleibt unveränderlich. Das Programm zeigt ihn an, bietet ihn aber nicht zur
 Bearbeitung an. Eine Umwandlung würde an jedem Wert scheitern, der sich nicht überführen
 lässt, und eine halb umgestellte Spalte hinterlassen.
+
+### Daten aus dem Geoportal Hamburg
+
+Hamburg stellt seine amtlichen Geodaten offen bereit. hGIS holt sie direkt vom Dienst, ohne
+dass Sie vorher eine Datei herunterladen. „Daten aus dem Geoportal Hamburg“ öffnet einen
+Dialog mit über 500 Datensätzen, von denen sich rund 460 als Objekte laden lassen:
+Straßenbaumkataster, Spielplätze, Baudenkmale, Schutzgebiete, Verwaltungsgrenzen,
+Elektro-Ladestandorte, Bevölkerungsdaten zu Stadtteilen und vieles mehr.
+
+Die Suche greift auf Namen und Behörde zu und findet auch Wortteile. Drei Filter engen die
+Liste weiter ein: die Art des Datensatzes, das Thema und die herausgebende Behörde. Sie
+tippen „baum“ und sehen sofort das Straßenbaumkataster.
+
+Zu jedem Datensatz zeigt der Dialog vor dem Laden, was Sie bekommen: die Beschreibung der
+Behörde, die Zahl der Objekte, alle Felder mit ihrem Typ und, wo der Dienst sie nennt, die
+möglichen Werte eines Feldes. Dazu den Quellenvermerk mit Lizenz und Links auf den
+Metadatensatz und auf den Datensatz im Geoportal.
+
+Zwei Schalter begrenzen, was geladen wird. Sie sind zu Anfang aus:
+
+- **Nur den aktuellen Kartenausschnitt.** Das Programm setzt den sichtbaren Bereich der
+  Karte als Grenze und nennt sofort die neue Objektzahl. Aus 229.876 Bäumen werden so
+  wenige hundert.
+- **Felder auswählen.** Zunächst sind alle angehakt. Wer nur einzelne Felder braucht, hält
+  die Attributtabelle damit schmal.
+
+Ab 100.000 Objekten weist der Dialog auf die Menge hin und schätzt die Dauer. Eine feste
+Obergrenze gibt es nicht: Sie entscheiden, ob Sie fortfahren. Der Fortschritt läuft danach
+über dieselbe Anzeige wie beim Dateiimport.
+
+Die Feldnamen erscheinen so, wie die Behörde sie benennt. Aus `kronendurchmesser_z` wird
+„Kronendurchmesser“. Filtern können Sie weiterhin mit beiden Schreibweisen.
+
+#### Woher die Daten stammen, steht dabei
+
+Die Daten stehen unter der Datenlizenz Deutschland – Namensnennung 2.0. Die Lizenz erlaubt
+das Verändern, Zusammenführen und Weitergeben, verlangt dafür aber die Nennung der Quelle.
+hGIS erledigt das für Sie: Der Quellenvermerk steht unten rechts in der Karte, neben der
+Nennung der Hintergrundkarte, und zwar für jeden sichtbaren Layer aus dem Geoportal. Die
+Layer-Eigenschaften zeigen ihn vollständig, mit Lizenz, Metadatensatz und dem Zeitpunkt des
+Abrufs.
+
+Der Vermerk gehört zum einzelnen Layer, nicht zum Projekt. Ein Projekt kann Layer
+verschiedener Behörden enthalten, und jede Behörde gibt vor, wie sie genannt werden möchte.
+
+#### Was heute noch nicht geht
+
+- Datensätze, die nur als Kartenbild vorliegen, erscheinen in der Liste, lassen sich aber
+  noch nicht verwenden. Sie werden später als Hintergrundkarte einbindbar.
+- Führt ein Dienst mehrere Sammlungen, erreicht hGIS bisher nur die erste.
+- Die Objektzahl steht erst in den Einzelheiten, nicht schon in der Liste. Das
+  Dienstverzeichnis nennt sie nicht, und über 500 Einzelabfragen beim Öffnen wären zu teuer.
+- Der Katalog wird auf Knopfdruck aktualisiert, nicht selbsttätig.
 
 ### Hintergrundkarte wählen
 
@@ -238,6 +293,11 @@ eigene Hintergrundkarte verwenden.
 Jeder Layer verbindet Geometrien mit ihren Sachdaten. Die Karte zeigt die räumliche
 Verteilung, während die Attributtabelle denselben Bestand tabellarisch zeigt. Auswahl und
 Filter gelten deshalb über beide Ansichten hinweg.
+
+Ein Layer kann zusätzlich eine Herkunft tragen: die Stelle, von der seine Daten stammen,
+mit Lizenz und Abrufzeitpunkt. Layer aus dem Geoportal Hamburg bringen sie mit. Die
+Herkunft hängt am einzelnen Layer, weil ein Projekt Daten aus mehreren Quellen verbinden
+kann und jede Quelle ihre eigene Nennung verlangt.
 
 Eine Bearbeitungssitzung sammelt Änderungen an Geometrien. Sie speichern die Änderungen
 erst danach, und Sie können sie vorher prüfen, zurücknehmen oder vollständig verwerfen.
