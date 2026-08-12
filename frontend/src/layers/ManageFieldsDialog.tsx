@@ -147,7 +147,7 @@ export function ManageFieldsDialog({ layer, projectId, onOpenChange }: ManageFie
 
           <div className="grid gap-4 py-4">
             {detailPending ? (
-              <p className="text-xs text-muted-foreground">Lädt Felder…</p>
+              <p className="text-xs text-muted-foreground">Felder werden geladen…</p>
             ) : fields.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 Dieser Layer hat noch keine Attributfelder.
@@ -217,7 +217,7 @@ export function ManageFieldsDialog({ layer, projectId, onOpenChange }: ManageFie
                 </Select>
                 <Button type="submit" size="sm" disabled={!newName.trim() || atLimit || addField.isPending}>
                   <Plus className="size-3.5" />
-                  {addField.isPending ? 'Legt an…' : 'Hinzufügen'}
+                  {addField.isPending ? 'Wird angelegt…' : 'Hinzufügen'}
                 </Button>
               </div>
               {atLimit && (

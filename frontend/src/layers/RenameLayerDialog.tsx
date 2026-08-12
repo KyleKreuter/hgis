@@ -78,7 +78,7 @@ export function RenameLayerDialog({ layer, projectId, onOpenChange }: RenameLaye
               Abbrechen
             </Button>
             <Button type="submit" disabled={!name.trim() || updateLayer.isPending}>
-              {updateLayer.isPending ? 'Speichert…' : 'Speichern'}
+              {updateLayer.isPending ? 'Wird gespeichert…' : 'Speichern'}
             </Button>
           </DialogFooter>
         </form>

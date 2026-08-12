@@ -416,7 +416,7 @@ function LayerRow({
             ) : (
               <Download className="size-3.5" />
             )}
-            {exportLayerMutation.isPending ? 'Exportiert…' : 'Layer exportieren'}
+            {exportLayerMutation.isPending ? 'Wird exportiert…' : 'Layer exportieren'}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handleExportSelection}
@@ -427,7 +427,7 @@ function LayerRow({
             ) : (
               <FileDown className="size-3.5" />
             )}
-            {exportSelectionMutation.isPending ? 'Exportiert…' : 'Auswahl exportieren'}
+            {exportSelectionMutation.isPending ? 'Wird exportiert…' : 'Auswahl exportieren'}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={onMoveUp} disabled={!canMoveUp}>

@@ -330,7 +330,7 @@ export function ImportDialog({ projectId, open, onOpenChange }: ImportDialogProp
                     !file || tooLarge || startImport.isPending || running || inspection.isFetching
                   }
                 >
-                  {startImport.isPending ? 'Überträgt…' : 'Importieren'}
+                  {startImport.isPending ? 'Wird übertragen…' : 'Importieren'}
                 </Button>
               </>
             )}
@@ -356,7 +356,7 @@ function ImportPreview({ inspection }: { inspection: ReturnType<typeof useInspec
           Vorschau
         </span>
         {inspection.isFetching && (
-          <span className="text-xs text-muted-foreground">Prüft…</span>
+          <span className="text-xs text-muted-foreground">wird geprüft…</span>
         )}
       </div>
       <PreviewBody inspection={inspection} />
@@ -383,7 +383,7 @@ function PreviewBody({ inspection }: { inspection: ReturnType<typeof useInspecti
   }
 
   if (!inspection.data) {
-    return <p className="text-xs text-muted-foreground">Überträgt und prüft die Datei…</p>
+    return <p className="text-xs text-muted-foreground">Datei wird übertragen und geprüft…</p>
   }
 
   return (
@@ -496,7 +496,7 @@ function FieldRow({ field }: { field: InspectedField }) {
 
 function JobProgress({ job }: { job: ReturnType<typeof useImportJob>['data'] }) {
   if (!job) {
-    return <p className="text-sm text-muted-foreground">Bereitet Import vor…</p>
+    return <p className="text-sm text-muted-foreground">Import wird vorbereitet…</p>
   }
 
   if (job.status === 'FAILED') {
@@ -547,7 +547,7 @@ function JobProgress({ job }: { job: ReturnType<typeof useImportJob>['data'] }) 
         </p>
       ) : (
         <Progress value={percent}>
-          <ProgressLabel className="text-sm font-normal">Schreibt Objekte</ProgressLabel>
+          <ProgressLabel className="text-sm font-normal">Objekte werden geschrieben</ProgressLabel>
           {/* Base UI passes its own formatted percentage in; the raw counts are more
               use here, so the render function ignores the argument. */}
           <ProgressValue>

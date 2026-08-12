@@ -211,7 +211,7 @@ export function CreateLayerDialog({
               <p className="text-xs text-muted-foreground">
                 Ein Layer ohne Felder funktioniert genauso. Sie können ihn benennen und
                 bearbeiten. Die Attributtabelle zeigt dann nur die fortlaufende Nummer. Sie
-                können Felder nach dem Anlegen nicht mehr ergänzen.
+                können Felder später über „Felder verwalten" ergänzen.
               </p>
 
               {fields.length > 0 && (
@@ -274,7 +274,7 @@ export function CreateLayerDialog({
               Abbrechen
             </Button>
             <Button type="submit" disabled={!canSubmitLayer(name, fields) || createLayer.isPending}>
-              {createLayer.isPending ? 'Legt an…' : 'Anlegen'}
+              {createLayer.isPending ? 'Wird angelegt…' : 'Anlegen'}
             </Button>
           </DialogFooter>
         </form>

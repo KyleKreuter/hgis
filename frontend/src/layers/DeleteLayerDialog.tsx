@@ -86,7 +86,7 @@ export function DeleteLayerDialog({
             disabled={deleteLayer.isPending || deleteLocked}
             className="bg-destructive text-white hover:bg-destructive/90"
           >
-            {deleteLayer.isPending ? 'Löscht…' : 'Löschen'}
+            {deleteLayer.isPending ? 'Wird gelöscht…' : 'Löschen'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

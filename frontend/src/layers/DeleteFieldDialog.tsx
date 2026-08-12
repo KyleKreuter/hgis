@@ -65,7 +65,7 @@ export function DeleteFieldDialog({
             {field && (
               <>
                 Das Programm löscht „{field.sourceName}" endgültig aus „{layerName}".{' '}
-                {usage ? buildDeleteFieldWarning(usage) : 'Prüft…'}
+                {usage ? buildDeleteFieldWarning(usage) : 'Wird geprüft…'}
               </>
             )}
           </AlertDialogDescription>
@@ -77,7 +77,7 @@ export function DeleteFieldDialog({
             disabled={!usage || deleteField.isPending}
             className="bg-destructive text-white hover:bg-destructive/90"
           >
-            {deleteField.isPending ? 'Löscht…' : 'Löschen'}
+            {deleteField.isPending ? 'Wird gelöscht…' : 'Löschen'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

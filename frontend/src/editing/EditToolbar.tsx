@@ -84,7 +84,7 @@ export function EditToolbar({
           }
         />
         <TooltipContent>
-          {canEdit ? 'Editiermodus starten' : 'Wählen Sie zuerst einen Layer im Layerbaum aus'}
+          {canEdit ? 'Zeichenmodus starten' : 'Wählen Sie zuerst einen Layer im Layerbaum aus'}
         </TooltipContent>
       </Tooltip>
     )
@@ -210,7 +210,7 @@ export function EditToolbar({
       </Button>
       <Button size="sm" onClick={onSave} disabled={pending === 0 || isSaving}>
         <Check className="size-3.5" />
-        {isSaving ? 'Speichert…' : 'Speichern'}
+        {isSaving ? 'Wird gespeichert…' : 'Speichern'}
       </Button>
     </div>
   )
