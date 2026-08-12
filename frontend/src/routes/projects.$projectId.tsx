@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, Link, useBlocker, useNavigate, useRouter } from '@tanstack/react-router'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -38,6 +38,8 @@ import { MeasurementOverlay, MeasurementToolbar, useIsMeasuring } from '@/measur
 import { layerDetailQuery, layerListQuery } from '@/api/layers'
 import { featureDetailQuery } from '@/api/features'
 import { useSelection } from '@/state/selection'
+import { useViewStateWriter } from '@/state/useViewState'
+import { shouldRestoreActiveLayer } from '@/state/viewState'
 import { boundsOfGeometry } from '@/map/geometryBounds'
 import { RectangleSelectTool } from '@/map/RectangleSelectTool'
 import { RectangleSelectToolbar } from '@/map/RectangleSelectToolbar'
@@ -79,6 +81,7 @@ function Workspace() {
   // request object, and a counter does that without depending on the clock.
   const [zoomTo, setZoomTo] = useState<ZoomRequest | null>(null)
   const clearSelection = useSelection((state) => state.clear)
+  const viewState = useViewStateWriter(projectId)
   const editing = useEditSession({ layerId: activeLayerId ?? null, projectId })
   // Only the on/off fact, not the running measurement -- the sketch changes with every
   // mouse move, and re-rendering the whole workspace for that would be absurd.
@@ -97,6 +100,20 @@ function Workspace() {
 
   const activeLayer = layers?.find((layer) => layer.id === activeLayerId) ?? null
 
+  // Restores the last active layer exactly once per visit -- CONTRACT.md rule 4: the
+  // address always wins, this only fills in when it says nothing (`activeLayerId` is
+  // `undefined`, not merely falsy). Guarded by a ref rather than re-checking `activeLayerId`
+  // in the condition: once this has run, a later `undefined` (the user explicitly closing
+  // the layer via `selectLayer(null)`) must stay closed, not restore again.
+  const restoredActiveLayer = useRef(false)
+  useEffect(() => {
+    if (restoredActiveLayer.current || !viewState.ready) return
+    restoredActiveLayer.current = true
+    const toRestore = shouldRestoreActiveLayer(activeLayerId, viewState.document)
+    if (toRestore) navigate({ search: { layer: toRestore }, replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewState.ready])
+
   function requestZoom(extent: [number, number, number, number]) {
     setZoomTo((previous) => ({ extent, nonce: (previous?.nonce ?? 0) + 1 }))
   }
@@ -104,6 +121,10 @@ function Workspace() {
   function selectLayer(layerId: string | null) {
     // A fid means nothing outside its layer, so a selection cannot survive the switch.
     clearSelection()
+    // The switch itself is the action that makes this worth remembering (CONTRACT.md's
+    // "Die wichtigste Regel") -- not an effect watching `activeLayerId`, which would fire
+    // again, with a stale value, on every unrelated re-render of this route.
+    viewState.writeActiveLayer(layerId)
     // This `navigate` is exactly what `leaveGuard` below intercepts: switching layers
     // with unsaved edits open asks before it goes through, the same as leaving the page.
     navigate({ search: { layer: layerId ?? undefined }, replace: true })
@@ -336,7 +357,9 @@ function Workspace() {
           <AttributeTable
             layerId={activeLayerId ?? null}
             layerName={activeLayer?.name}
+            layerFeatureCount={activeLayer?.featureCount}
             projectId={projectId}
+            viewState={viewState}
             onZoomToFeature={zoomToFeature}
             onRequestEdit={requestStartTableEditing}
           />
