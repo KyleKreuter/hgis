@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Circle,
   Columns3,
+  Crop,
   Crosshair,
   Download,
   FileDown,
@@ -15,6 +16,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Scissors,
   Shapes,
   Spline,
   Square,
@@ -25,6 +27,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -32,6 +35,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { formatCount } from '@/lib/format'
 import { exportErrorMessage, useExportLayer } from '@/api/export'
@@ -44,6 +48,7 @@ import {
 } from '@/api/layers'
 import { useSelection } from '@/state/selection'
 import { previewColorOf } from '@/styling'
+import { clipMaskLockedReason, clipMaskReplacedMessage, findOtherClipMask } from './clipMask'
 import { DeleteLayerDialog } from './DeleteLayerDialog'
 import { GEOMETRY_LABELS } from './geometry'
 import { LayerBasemapDialog } from './LayerBasemapDialog'
@@ -165,6 +170,7 @@ export function LayerTree({
               key={layer.id}
               layer={layer}
               projectId={projectId}
+              otherClipMask={findOtherClipMask(displayed, layer.id)}
               isActive={layer.id === activeLayerId}
               isDragged={layer.id === draggedId}
               dropIndicator={
@@ -238,6 +244,8 @@ function Panel({ children, count }: { children: React.ReactNode; count?: number 
 interface LayerRowProps {
   layer: LayerSummary
   projectId: string
+  /** The project's mask, if it is a *different* layer than this row -- null otherwise. */
+  otherClipMask: LayerSummary | null
   isActive: boolean
   isSnapSource: boolean
   showSnapToggle: boolean
@@ -262,6 +270,7 @@ interface LayerRowProps {
 function LayerRow({
   layer,
   projectId,
+  otherClipMask,
   isActive,
   isSnapSource,
   showSnapToggle,
@@ -285,6 +294,24 @@ function LayerRow({
   const updateLayer = useUpdateLayer(layer.id, projectId)
   const Icon = GEOMETRY_ICONS[layer.geometryType]
   const previewColor = previewColorOf(layer.style)
+  const clipMaskLocked = clipMaskLockedReason(layer.geometryType)
+
+  function handleToggleClipMask(next: boolean) {
+    updateLayer.mutate(
+      { isClipMask: next },
+      {
+        // Derived from the client's own list, not from the response: the server only
+        // describes the layer it just patched, and the invariant "at most one mask per
+        // project" already tells us who lost the role (contract "Höchstens eine Maske
+        // je Projekt"). `useUpdateLayer`'s own invalidation brings that other row's
+        // `isClipMask` back in line right after.
+        onSuccess: () => {
+          if (next && otherClipMask) toast.info(clipMaskReplacedMessage(otherClipMask))
+        },
+        onError: () => toast.error('Das Programm konnte die Maske nicht ändern'),
+      },
+    )
+  }
 
   // Two instances so the spinner lands on the entry the user actually clicked -- not for
   // independent disabling, which is the opposite of what `isExporting` below does.
@@ -373,6 +400,44 @@ function LayerRow({
         </span>
       </button>
 
+      {/* Kept outside the button: `layer.visible` never dims it, because the mask goes
+          on clipping everything above it while switched off (contract "Eine unsichtbar
+          geschaltete Maske wirkt weiter"). A badge that faded with the checkbox would
+          hide the one fact the user needs to explain the cut. */}
+      {layer.isClipMask && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <span tabIndex={0} className="shrink-0 text-foreground" aria-label="Maske für den Zuschnitt">
+                <Scissors className="size-3" />
+              </span>
+            }
+          />
+          <TooltipContent className="max-w-xs">
+            Maske für den Zuschnitt. Wirkt auch, wenn der Layer ausgeblendet ist.
+          </TooltipContent>
+        </Tooltip>
+      )}
+
+      {/* Secondary, so muted rather than full-strength -- unlike the mask badge above,
+          missing this one costs nothing but a bit of context. */}
+      {!layer.isClipMask && (layer.clipVersion ?? 0) > 0 && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <span
+                tabIndex={0}
+                className="shrink-0 text-muted-foreground"
+                aria-label="Wird durch die Maske zugeschnitten"
+              >
+                <Crop className="size-3" />
+              </span>
+            }
+          />
+          <TooltipContent className="max-w-xs">Wird durch die Maske zugeschnitten</TooltipContent>
+        </Tooltip>
+      )}
+
       {/* Only while editing, and never on the layer being edited -- that one is always a
           snap source, and offering to switch it off would suggest otherwise. */}
       {showSnapToggle && (
@@ -424,6 +489,25 @@ function LayerRow({
             <MapIcon className="size-3.5" />
             Hintergrundkarte
           </DropdownMenuItem>
+          {/* Shown for every geometry type, disabled with a reason for the two that
+              cannot hold a mask -- contract "erscheint gesperrt mit dem Grund, nicht
+              wortlos". A checkbox item, not a plain one: unlike every other entry here
+              this one reflects a state (is this layer the mask right now?) and toggles
+              it, the same role `Checkbox` plays for `visible` above. */}
+          <DropdownMenuCheckboxItem
+            checked={layer.isClipMask}
+            disabled={clipMaskLocked !== null}
+            onCheckedChange={handleToggleClipMask}
+          >
+            {clipMaskLocked ? (
+              <span className="flex flex-col">
+                <span>Als Zuschnitt für alles darüber</span>
+                <span className="text-xs text-muted-foreground">{clipMaskLocked}</span>
+              </span>
+            ) : (
+              'Als Zuschnitt für alles darüber'
+            )}
+          </DropdownMenuCheckboxItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleExportLayer} disabled={isExporting}>
             {exportLayerMutation.isPending ? (

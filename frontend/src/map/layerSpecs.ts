@@ -16,15 +16,24 @@ export function sourceIdFor(layerId: string): string {
 
 /**
  * Tile URL template MapLibre substitutes {z}/{x}/{y} into. The version query param
- * makes the URL change whenever data or style changes, which is what makes a plain
- * cache-immutable response (contract section 1) safe.
+ * makes the URL change whenever data, style or clip changes, which is what makes a
+ * plain cache-immutable response (contract section 1) safe.
+ *
+ * `clipVersion` rides along for the same reason `styleVersion` does: the tile content
+ * now depends on whether a mask applies to this layer, on the mask's own geometries,
+ * and on this layer's position relative to it (CONTRACT.md phase 19) -- none of which
+ * `dataVersion`/`styleVersion` alone would catch. It is always appended, even at its
+ * baseline `0`, so a layer gaining or losing a mask still changes the URL.
  */
-export function buildTileUrl(layer: Pick<LayerSummary, 'id' | 'dataVersion' | 'styleVersion'>): string {
+export function buildTileUrl(
+  layer: Pick<LayerSummary, 'id' | 'dataVersion' | 'styleVersion' | 'clipVersion'>,
+): string {
   // Absolute on purpose. MapLibre resolves tile templates in a worker, where there is
   // no document base URL to resolve a leading-slash path against -- a relative template
   // is dropped without any error event, and the layer simply stays empty.
   const origin = typeof window === 'undefined' ? '' : window.location.origin
-  return `${origin}/api/layers/${layer.id}/tiles/{z}/{x}/{y}.mvt?v=${layer.dataVersion}.${layer.styleVersion}`
+  const clipVersion = layer.clipVersion ?? 0
+  return `${origin}/api/layers/${layer.id}/tiles/{z}/{x}/{y}.mvt?v=${layer.dataVersion}.${layer.styleVersion}.${clipVersion}`
 }
 
 /**

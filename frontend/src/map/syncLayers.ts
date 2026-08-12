@@ -172,8 +172,10 @@ function isSameValue(a: unknown, b: unknown): boolean {
  * Handles, per layer:
  *  - new layer -> addSource + addLayer(s)
  *  - removed layer (deleted, or dropped from this project) -> removeLayer(s) + removeSource
- *  - changed tile URL (data or style version bumped) -> `source.setTiles()` in place
- *    when the installed MapLibre version supports it, otherwise remove+re-add
+ *  - changed tile URL (data, style, or clip version bumped -- the latter whenever the
+ *    clip mask, its geometries, or this layer's position relative to it changes,
+ *    CONTRACT.md phase 19) -> `source.setTiles()` in place when the installed
+ *    MapLibre version supports it, otherwise remove+re-add
  *  - changed min/max zoom -> source zoom bounds are immutable after creation, so
  *    remove+re-add
  *  - changed geometryType -> remove+re-add (defensive; the catalog does not allow
