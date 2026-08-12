@@ -54,6 +54,18 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
   const [ramp, setRamp] = useState(initial.ramp)
   const [classify, setClassify] = useState<ClassifyState>({ isFetching: false, isError: false })
 
+  // No `useEffect` here on purpose (CONTRACT.md, package B1). This used to be exactly
+  // that: an effect watching `renderer`, `method`, `classCount` and `ramp`, rebuilding
+  // the classes whenever any of them "changed". The trouble is that mounting looks like
+  // a change too -- the effect's guard ref starts out empty, and an empty ref is
+  // indistinguishable from a real edit, so it ran the moment the panel opened and
+  // rebuilt with `method: 'quantile'` and `ramp: DEFAULT_RAMP` (both plain local state
+  // back then, with no memory of what had actually produced the saved classes). That is
+  // how a hand-picked class colour, or the whole set of bounds if the classes had been
+  // computed with a different method, got silently overwritten just by opening the
+  // panel. Do not reintroduce an effect that watches these values -- if the classes ever
+  // need to track something automatically again, it has to be a `useState` initial value
+  // (see `initial` above) or a user action (see `request` below), never a reactive watch.
   const numericFields = fields.filter(isNumericField)
 
   /**

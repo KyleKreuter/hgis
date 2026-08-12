@@ -58,6 +58,18 @@ export function CategorizedEditor({
   const categories = renderer.categories ?? []
   const [values, setValues] = useState<ValuesState>({ isFetching: false, isError: false })
 
+  // No `useEffect` here on purpose (CONTRACT.md, package B1), same as `GraduatedEditor`.
+  // This editor used to have one too, watching `renderer`/`categories` and rebuilding
+  // whenever `data` arrived with an empty category list. Its own `if (categories.length
+  // > 0) return` guard happened to keep it from the graduated renderer's exact failure
+  // -- a *populated* list was never touched -- but the shape was still wrong: an effect
+  // cannot tell "the panel just mounted" from "the user changed something", because its
+  // guard ref starts out empty either way, and an empty ref reads as a change. Kept
+  // consistent with `GraduatedEditor` here rather than left as a narrower exception. Do
+  // not reintroduce an effect that watches `categories`/`renderer` -- initial values
+  // belong in `useState` (see `palette` above), rebuilds in a user action (see `request`
+  // below).
+
   /**
    * The only place `/values` is asked for and the result written back. Called from
    * every control that can produce a new set of categories -- never from an effect
