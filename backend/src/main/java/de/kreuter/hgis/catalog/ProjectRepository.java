@@ -39,10 +39,16 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
 			       ST_X(page.center)                     AS centerLng,
 			       ST_Y(page.center)                     AS centerLat,
 			       page.zoom                             AS zoom,
-			       ST_XMin(page.extent)                  AS extentMinLng,
-			       ST_YMin(page.extent)                  AS extentMinLat,
-			       ST_XMax(page.extent)                  AS extentMaxLng,
-			       ST_YMax(page.extent)                  AS extentMaxLat,
+			       -- The layers' own extents, not project.extent: that column is only
+			       -- ever written on import, while a layer's extent is recomputed on
+			       -- every edit. A project drawn by hand has a stale or absent one, and
+			       -- the browser would show it no preview at all despite holding data.
+			       -- project.extent stays as the fallback for a project whose layers
+			       -- carry none.
+			       ST_XMin(COALESCE(ST_Extent(l.extent)::geometry, page.extent)) AS extentMinLng,
+			       ST_YMin(COALESCE(ST_Extent(l.extent)::geometry, page.extent)) AS extentMinLat,
+			       ST_XMax(COALESCE(ST_Extent(l.extent)::geometry, page.extent)) AS extentMaxLng,
+			       ST_YMax(COALESCE(ST_Extent(l.extent)::geometry, page.extent)) AS extentMaxLat,
 			       page.basemap                          AS basemap,
 			       COUNT(l.id)                           AS layerCount,
 			       COALESCE(SUM(l.feature_count), 0)     AS featureCount

@@ -70,7 +70,7 @@ export function ProjectBrowser() {
 
   useEffect(() => {
     const sentinel = sentinelRef.current
-    if (!sentinel || !hasNextPage) return
+    if (!sentinel || !hasNextPage || isFetchingNextPage) return
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -82,7 +82,20 @@ export function ProjectBrowser() {
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [hasNextPage, fetchNextPage])
+    // `isFetchingNextPage` belongs in here, and leaving it out is the bug this comment
+    // exists to prevent coming back. An IntersectionObserver reports a *crossing*, not a
+    // state: once the sentinel is on screen it never fires again on its own. Whenever a
+    // freshly loaded page does not push the sentinel out of view -- a short list, a tall
+    // window, a wide screen fitting a whole page at once -- loading would stop dead with
+    // pages still to come, and no amount of scrolling would restart it, because there is
+    // nothing to scroll. Re-running the effect after each fetch builds a new observer,
+    // and a new observer reports the sentinel's current position immediately, so the
+    // chain keeps going until the viewport is genuinely full.
+    //
+    // Not covered by a test: this project runs Vitest without jsdom (`.ts` only), so
+    // there is no DOM to observe and no component to render. It was found in the browser
+    // and has to be re-checked there.
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   // One notice per background map actually in use among the loaded tiles, not one per
   // tile -- CONTRACT.md phase 22 asks for the credit once on the page.

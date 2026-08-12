@@ -1,6 +1,7 @@
 package de.kreuter.hgis.catalog;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -349,6 +350,60 @@ class ProjectListPagingTest {
 				collectPlanNodes(child, out);
 			}
 		}
+	}
+
+	/**
+	 * The extent a project reports is aggregated from its layers, not read from
+	 * {@code project.extent}. That column is only written on import; a project drawn by
+	 * hand never gets one, and one imported and then edited keeps a stale one. Layer
+	 * extents, by contrast, are recomputed on every edit.
+	 *
+	 * <p>What this protects: the browser draws its map preview from this field. Reading
+	 * the project column alone leaves every hand-drawn project without a preview, even
+	 * though its data is right there -- visible to a user immediately, invisible to every
+	 * other test in this class.
+	 */
+	@Test
+	@DisplayName("the extent comes from the layers, even when the project column is empty")
+	void extentIsAggregatedFromTheLayers() throws Exception {
+		String marker = marker();
+		UUID projectId = createProject(marker + "-mit-layern", null);
+
+		// Two layers with known, disjoint extents. The project column stays null, exactly
+		// as it does for a project that was drawn rather than imported.
+		createLayerWithExtent(projectId, 9.9, 53.5, 10.0, 53.6);
+		createLayerWithExtent(projectId, 10.2, 53.7, 10.3, 53.8);
+
+		JsonNode project = list(marker, null, null).get("items").get(0);
+		JsonNode extent = project.get("extent");
+
+		assertThat(extent.isNull())
+				.as("Projekt mit Layern muss eine Ausdehnung melden, auch ohne project.extent")
+				.isFalse();
+		assertThat(extent.get(0).asDouble()).isCloseTo(9.9, within(0.0001));
+		assertThat(extent.get(1).asDouble()).isCloseTo(53.5, within(0.0001));
+		assertThat(extent.get(2).asDouble()).isCloseTo(10.3, within(0.0001));
+		assertThat(extent.get(3).asDouble()).isCloseTo(53.8, within(0.0001));
+	}
+
+	/** A layer row with nothing but an extent -- enough for the aggregation under test. */
+	private void createLayerWithExtent(UUID projectId, double minLng, double minLat,
+			double maxLng, double maxLat) {
+		UUID layerId = UUID.randomUUID();
+		jdbc.sql("""
+				INSERT INTO gis_meta.layer (id, project_id, name, table_name, geometry_type, srid, extent)
+				VALUES (:id, :projectId, :name, :tableName, 'MULTIPOLYGON', 25832,
+				        ST_MakeEnvelope(:minLng, :minLat, :maxLng, :maxLat, 4326))
+				""")
+				.param("id", layerId)
+				.param("projectId", projectId)
+				.param("name", "Layer " + layerId)
+				.param("tableName", "layer_" + layerId.toString().replace("-", ""))
+				.param("minLng", minLng)
+				.param("minLat", minLat)
+				.param("maxLng", maxLng)
+				.param("maxLat", maxLat)
+				.update();
 	}
 
 	private UUID createProject(String name, String description) {
