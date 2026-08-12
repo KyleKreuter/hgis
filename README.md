@@ -121,17 +121,21 @@ Unter „Zuschnitt für alles darüber“ im Aktionsmenü des Layers wählen Sie
 Möglichkeiten:
 
 - **Kein Zuschnitt.** Die Vorgabe.
-- **Nur innerhalb.** Die Karte zeigt jedes Objekt, das die Maske berührt. Sie zeigt es
-  ganz, auch wenn es über die Kante ragt.
-- **Nur innerhalb + geschnitten.** Wie oben, aber die Karte schneidet jedes Objekt an der
-  Kante durch. Nichts ragt heraus.
-- **Nur außerhalb.** Die Karte zeigt jedes Objekt, das die Maske nicht berührt. Wieder
-  ganz.
+- **Nur innerhalb.** Die Karte zeigt jedes Objekt, das ganz innerhalb der Maske liegt. Sie
+  zeigt es vollständig und schneidet nichts ab.
+- **Nur innerhalb + geschnitten.** Die Karte zeigt von jedem Objekt den Teil, der
+  innerhalb liegt. Sie schneidet an der Kante durch.
+- **Nur außerhalb.** Die Karte zeigt jedes Objekt, das die Maske nirgends berührt. Wieder
+  vollständig.
 - **Nur außerhalb + geschnitten.** Der Bereich innerhalb der Maske bleibt frei. Objekte an
   der Kante behalten ihren äußeren Teil.
 
-Ein Objekt, das genau auf der Kante liegt, zählt als innerhalb. Damit ergänzen sich beide
-Richtungen: Jedes Objekt fällt in genau eine von beiden, nie in beide, nie in keine.
+Die beiden ungeschnittenen Modi zeigen nur eindeutige Fälle. Ein Objekt, das über die
+Kante ragt, erscheint in keinem von beiden. Für diese Objekte sind die geschnittenen Modi
+da: Sie zeigen genau den Teil, der auf der gewählten Seite liegt.
+
+Eine Maske aus mehreren Flächen wirkt dabei als eine einzige Fläche. Ein Objekt, das über
+die Naht zwischen zwei aneinandergrenzenden Maskenflächen reicht, liegt innerhalb.
 
 Nur Flächenlayer und gemischte Layer taugen als Maske. Bei anderen Geometriearten ist die
 Auswahl gesperrt und nennt den Grund.

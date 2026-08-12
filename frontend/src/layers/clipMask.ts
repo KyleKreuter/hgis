@@ -60,13 +60,14 @@ export function clipMaskBadgeAriaLabel(mode: ClipMode): string {
 /**
  * The direction sentence inside the badge tooltip (`clipMaskBadgeTooltip`). The two
  * `*Whole` modes name the boundary rule in the same breath (contract "Grenzregel"):
- * an object touching the mask counts as inside, so it is what keeps `insideWhole` and
- * `outsideWhole` complementary instead of leaving a gap at the boundary.
+ * they show only unambiguous objects, so an object crossing the mask edge appears in
+ * neither of them. Without that sentence the modes look broken -- an object plainly
+ * overlapping the mask simply is not drawn, and nothing on screen says why.
  */
 const CLIP_MODE_DIRECTIONS: Record<ClipMode, string> = {
-  insideWhole: 'Zeigt nur, was innerhalb liegt, ganz. Ein Objekt an der Grenze zählt als innerhalb.',
+  insideWhole: 'Zeigt nur Objekte, die ganz innerhalb liegen. Objekte auf der Grenze bleiben aus.',
   insideClipped: 'Zeigt nur den Teil, der innerhalb liegt.',
-  outsideWhole: 'Zeigt nur, was außerhalb liegt, ganz. Ein Objekt an der Grenze zählt als innerhalb.',
+  outsideWhole: 'Zeigt nur Objekte, die ganz außerhalb liegen. Objekte auf der Grenze bleiben aus.',
   outsideClipped: 'Zeigt nur den Teil, der außerhalb liegt.',
 }
 

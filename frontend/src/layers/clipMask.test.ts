@@ -102,8 +102,10 @@ describe('clipMaskBadgeTooltip', () => {
   })
 
   it('nennt die Grenzregel nur bei den beiden "Whole"-Modi', () => {
-    expect(clipMaskBadgeTooltip('insideWhole')).toMatch(/Grenze zählt als innerhalb/)
-    expect(clipMaskBadgeTooltip('outsideWhole')).toMatch(/Grenze zählt als innerhalb/)
+    expect(clipMaskBadgeTooltip('insideWhole')).toMatch(/ganz innerhalb/)
+    expect(clipMaskBadgeTooltip('outsideWhole')).toMatch(/ganz außerhalb/)
+    expect(clipMaskBadgeTooltip('insideWhole')).toMatch(/Grenze bleiben aus/)
+    expect(clipMaskBadgeTooltip('outsideWhole')).toMatch(/Grenze bleiben aus/)
     expect(clipMaskBadgeTooltip('insideClipped')).not.toMatch(/Grenze/)
     expect(clipMaskBadgeTooltip('outsideClipped')).not.toMatch(/Grenze/)
   })

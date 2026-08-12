@@ -112,10 +112,14 @@ public class MvtService {
 	 * {@link #TILE_QUERY}. Otherwise builds it from parts (CONTRACT.md phase 21):
 	 *
 	 * <ul>
-	 *   <li>The two {@code *Whole} modes filter, they do not cut geometry. Each becomes
-	 *       an {@code EXISTS}/{@code NOT EXISTS} subquery against the mask's whole table
-	 *       -- never a tile-bounded union -- so a feature the mask reaches anywhere is
-	 *       kept or dropped as a whole, not split across tile boundaries.</li>
+	 *   <li>The two {@code *Whole} modes filter, they do not cut geometry, and each keeps
+	 *       only unambiguous features: {@code insideWhole} those lying entirely within the
+	 *       mask ({@link #fullyInsidePredicate}), {@code outsideWhole} those touching it
+	 *       nowhere ({@link #touchesMaskSubquery}, negated). A feature straddling the mask
+	 *       edge appears in neither -- the {@code *Clipped} modes are what handles those.
+	 *       Both run against the mask's whole table, never a tile-bounded union, so a
+	 *       feature is kept or dropped as a whole rather than split across tile
+	 *       boundaries.</li>
 	 *   <li>The two {@code *Clipped} modes cut. Each gets its own CTE that unions its
 	 *       polygons within the tile, and the rendered geometry expression grows from
 	 *       {@code l.geom} outward: an {@code ST_Intersection} per {@code insideClipped}
@@ -162,10 +166,10 @@ public class MvtService {
 		}
 		for (ClipMask mask : masks) {
 			if (MODE_INSIDE_WHOLE.equals(mask.mode())) {
-				where.append(" AND EXISTS (").append(wholeMaskSubquery(mask.tableName())).append(")");
+				where.append(" AND ").append(fullyInsidePredicate(mask.tableName()));
 			}
 			else if (MODE_OUTSIDE_WHOLE.equals(mask.mode())) {
-				where.append(" AND NOT EXISTS (").append(wholeMaskSubquery(mask.tableName())).append(")");
+				where.append(" AND NOT EXISTS (").append(touchesMaskSubquery(mask.tableName())).append(")");
 			}
 		}
 
@@ -207,20 +211,54 @@ public class MvtService {
 	}
 
 	/**
-	 * The correlated {@code EXISTS} subquery an {@code insideWhole}/{@code outsideWhole}
-	 * mask filters with, run against the mask's full table rather than a tile-bounded
-	 * union (CONTRACT.md phase 21).
+	 * The predicate an {@code insideWhole} mask filters with: the feature lies
+	 * <em>entirely</em> within the mask (CONTRACT.md phase 21). A feature crossing the
+	 * mask edge is not shown at all -- the two {@code *Clipped} modes exist for those.
+	 *
+	 * <p>Note what this is not: an {@code EXISTS} over the mask's rows, the shape
+	 * {@link #touchesMaskSubquery} uses. {@code ST_Within} against one polygon at a time
+	 * would drop a feature that lies well inside the masked area but straddles the seam
+	 * between two adjacent mask polygons -- inside the mask as a whole, inside neither
+	 * polygon alone. The union is therefore taken first and the containment tested
+	 * against it.
+	 *
+	 * <p>{@code m.geom && l.geom} narrows that union to the polygons whose bounding box
+	 * meets the feature at all. That is free of charge in correctness -- a polygon too
+	 * far away to share a bounding box cannot help cover the feature -- and it is what
+	 * keeps the union small and the mask table's GiST index in play. A mask that reaches
+	 * nowhere near the feature unions to {@code NULL}, {@code ST_Within(geom, NULL)} is
+	 * {@code NULL}, and the feature drops out. Which is correct: nothing lies inside a
+	 * mask that is not there.
+	 *
+	 * <p>The union deliberately does not stop at the tile envelope, for the same reason
+	 * spelled out in {@link #touchesMaskSubquery}: containment is a property of the whole
+	 * feature, never of the tile it happens to be rendered into.
+	 */
+	private static String fullyInsidePredicate(String maskTableName) {
+		return "ST_Within(l.geom, (SELECT ST_Union(m.geom) FROM %s m WHERE m.geom && l.geom))"
+				.formatted(SqlIdentifier.quoteLayerTable(maskTableName));
+	}
+
+	/**
+	 * The correlated {@code EXISTS} subquery an {@code outsideWhole} mask filters with,
+	 * negated by the caller: the feature must touch no mask polygon at all
+	 * (CONTRACT.md phase 21). A feature crossing the mask edge is not shown -- exactly
+	 * mirroring {@link #fullyInsidePredicate}, so the two {@code *Whole} modes each show
+	 * only unambiguous cases and neither shows a straddler.
+	 *
+	 * <p>No union is needed here, unlike for containment: touching no single polygon and
+	 * touching none of their union are the same statement.
 	 *
 	 * <p>This is the point at which the two {@code *Whole} modes could easily be built
-	 * wrong: whether a feature touches the mask is a property of the whole feature, never
+	 * wrong: whether a feature meets the mask is a property of the whole feature, never
 	 * of the tile it happens to be rendered into. Filtering against a tile-bounded union
 	 * -- the shortcut {@link #clippedMaskCte} takes for the {@code *Clipped} modes --
-	 * would make a feature vanish in exactly the tiles where it does not itself touch the
+	 * would make a feature vanish in exactly the tiles where it does not itself meet the
 	 * mask, so a long feature meant to be kept whole would fall apart across tile
 	 * boundaries. {@code m.geom && l.geom} keeps this affordable anyway: it still hits
 	 * the mask table's GiST index, one lookup per candidate feature.
 	 */
-	private static String wholeMaskSubquery(String maskTableName) {
+	private static String touchesMaskSubquery(String maskTableName) {
 		return "SELECT 1 FROM %s m WHERE m.geom && l.geom AND ST_Intersects(m.geom, l.geom)"
 				.formatted(SqlIdentifier.quoteLayerTable(maskTableName));
 	}

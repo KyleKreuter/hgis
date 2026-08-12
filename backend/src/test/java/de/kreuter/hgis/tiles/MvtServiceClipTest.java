@@ -24,18 +24,19 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * keeping-whole was meant: a feature straddling the {@code insideClipped} mask edge has
  * to come back smaller, one entirely outside has to vanish, and one crossing two mask
  * polygons has to appear exactly once -- the {@code ST_Union} in {@code MvtService}'s
- * clipped query is what makes that last one true. A feature straddling an {@code
- * insideWhole} mask's edge instead has to come back at its full, unclipped area, since
- * that mode never cuts geometry, only decides whether a feature is shown at all. This
- * class also covers what happens when several masks act on the same layer at once,
- * across both {@code *Clipped} modes and across a mask acting on another mask. The
- * {@code outside} modes are covered separately, by {@code MvtServiceOutsideClipTest}.
+ * clipped query is what makes that last one true. {@code insideWhole} instead shows a
+ * feature only when it lies entirely within the mask, and then at its full, unclipped
+ * area: it never cuts geometry, it only decides whether a feature is shown at all, and a
+ * feature straddling the edge is shown by neither {@code *Whole} mode. This class also
+ * covers what happens when several masks act on the same layer at once, across both
+ * {@code *Clipped} modes and across a mask acting on another mask. The {@code outside}
+ * modes are covered separately, by {@code MvtServiceOutsideClipTest}.
  *
  * Every fixture geometry is placed as a fraction of one fixed tile's native bounding
  * box, computed once in {@link #computeTile()}, rather than as raw metre offsets from a
  * point: that keeps every feature safely inside the same tile regardless of where
  * exactly the anchor point happens to sit relative to the tile grid. The one test that
- * needs two adjacent tiles, {@link #insideWholeKeepsAFeatureWholeAcrossATileItDoesNotTouch()},
+ * needs two adjacent tiles, {@link #insideWholeKeepsAContainedFeatureAcrossATileBoundary()},
  * computes a second tile's bounds locally instead.
  *
  * Whether z-index decides which layers get clipped at all, and by which masks, is
@@ -147,8 +148,30 @@ class MvtServiceClipTest {
 
 	/** CONTRACT.md phase 21, requirement 1: insideWhole never cuts geometry, only filters. */
 	@Test
-	@DisplayName("insideWhole: a feature straddling the mask edge keeps its full, unclipped area")
-	void insideWholeKeepsAStraddlingFeatureAtFullArea() {
+	@DisplayName("insideWhole: a feature lying entirely within the mask keeps its full area")
+	void insideWholeKeepsAContainedFeatureAtFullArea() {
+		String layerTable = createTable();
+		String maskTable = createTable();
+
+		insertRectangle(layerTable, fx(0.25), fy(0.25), fx(0.35), fy(0.35));
+		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.40), fy(0.40));
+
+		double unclippedArea = firstFeature(render(layerTable, List.of())).area();
+		double wholeArea = firstFeature(render(layerTable, List.of(mask(maskTable, "insideWhole")))).area();
+
+		assertThat(wholeArea).isEqualTo(unclippedArea);
+	}
+
+	/**
+	 * The rule the user settled on: {@code insideWhole} shows only what lies
+	 * <em>entirely</em> within the mask. A feature straddling the edge is not shown at
+	 * all -- and this is the test that tells the mode apart from {@code insideClipped},
+	 * which keeps exactly that feature, cut down. A containment test written as a mere
+	 * overlap test would pass every other test in this class and fail only here.
+	 */
+	@Test
+	@DisplayName("insideWhole drops a straddling feature that insideClipped keeps, cut")
+	void insideWholeDropsAStraddlingFeatureThatInsideClippedKeeps() {
 		String layerTable = createTable();
 		String maskTable = createTable();
 
@@ -156,9 +179,12 @@ class MvtServiceClipTest {
 		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.30), fy(0.40));
 
 		double unclippedArea = firstFeature(render(layerTable, List.of())).area();
-		double wholeArea = firstFeature(render(layerTable, List.of(mask(maskTable, "insideWhole")))).area();
+		double clippedArea = firstFeature(render(layerTable, List.of(mask(maskTable, "insideClipped")))).area();
 
-		assertThat(wholeArea).isEqualTo(unclippedArea);
+		assertThat(render(layerTable, List.of(mask(maskTable, "insideWhole"))))
+				.as("insideWhole zeigt nur, was ganz innerhalb liegt")
+				.isNull();
+		assertThat(clippedArea).isLessThan(unclippedArea).isGreaterThan(0);
 	}
 
 	@Test
@@ -175,46 +201,82 @@ class MvtServiceClipTest {
 	}
 
 	/**
-	 * CONTRACT.md phase 21, requirement 3: over the same mask, insideWhole and
-	 * outsideWhole together account for exactly every feature, with no feature in both
-	 * and none in neither -- a straddling feature counts as touching (the boundary rule:
-	 * {@code ST_Intersects} includes the edge), so it belongs to insideWhole, and a
-	 * feature with no shared point at all belongs to outsideWhole.
+	 * A feature well inside the masked area, but crossing the seam between two adjacent
+	 * mask polygons, lies within neither polygon on its own -- only within their union.
+	 * It has to be shown.
+	 *
+	 * <p>This is what {@code MvtService.fullyInsidePredicate} unions the mask for. The
+	 * obvious-looking alternative, {@code EXISTS (... ST_Within(l.geom, m.geom))} over
+	 * the mask's rows, mirrors the shape the {@code outsideWhole} filter correctly uses
+	 * and passes every other test here -- and silently hides features wherever a mask
+	 * layer is drawn as several touching polygons rather than one.
 	 */
 	@Test
-	@DisplayName("insideWhole and outsideWhole over the same mask partition every feature, with no overlap")
-	void insideAndOutsideWholeTogetherPartitionAllFeatures() {
+	@DisplayName("insideWhole: a feature crossing the seam between two adjacent mask polygons is shown")
+	void insideWholeKeepsAFeatureCrossingTheSeamBetweenTwoMaskPolygons() {
 		String layerTable = createTable();
 		String maskTable = createTable();
 
-		long straddling = insertRectangle(layerTable, fx(0.20), fy(0.20), fx(0.40), fy(0.40));
+		long fid = insertRectangle(layerTable, fx(0.25), fy(0.25), fx(0.55), fy(0.35));
+		// Two mask polygons meeting exactly at fx(0.40), together covering the feature.
+		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.40), fy(0.40));
+		insertRectangle(maskTable, fx(0.40), fy(0.20), fx(0.60), fy(0.40));
+
+		byte[] tile = render(layerTable, List.of(mask(maskTable, "insideWhole")));
+		assertThat(tile)
+				.as("Objekt liegt in der Vereinigung beider Maskenflaechen, nur in keiner einzelnen")
+				.isNotNull();
+
+		MvtTileDecoder.Layer layer = MvtTileDecoder.decode(tile).get(0);
+
+		assertThat(layer.featureIds()).containsExactly(fid);
+		assertThat(layer.features().get(0).area())
+				.as("ganz enthalten, also ungeschnitten")
+				.isEqualTo(firstFeature(render(layerTable, List.of())).area());
+	}
+
+	/**
+	 * CONTRACT.md phase 21, requirement 3: insideWhole and outsideWhole never show the
+	 * same feature, and a straddling feature appears in neither. Both modes show only
+	 * unambiguous cases; the two {@code *Clipped} modes are what handles the edge.
+	 */
+	@Test
+	@DisplayName("insideWhole and outsideWhole never overlap, and a straddling feature is in neither")
+	void insideAndOutsideWholeShowOnlyUnambiguousFeatures() {
+		String layerTable = createTable();
+		String maskTable = createTable();
+
+		long contained = insertRectangle(layerTable, fx(0.22), fy(0.22), fx(0.28), fy(0.38));
+		insertRectangle(layerTable, fx(0.25), fy(0.50), fx(0.45), fy(0.60));
 		long untouched = insertRectangle(layerTable, fx(0.70), fy(0.70), fx(0.75), fy(0.75));
-		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.30), fy(0.40));
+		insertRectangle(maskTable, fx(0.20), fy(0.20), fx(0.30), fy(0.65));
 
 		List<Long> insideIds =
 				MvtTileDecoder.decode(render(layerTable, List.of(mask(maskTable, "insideWhole")))).get(0).featureIds();
 		List<Long> outsideIds =
 				MvtTileDecoder.decode(render(layerTable, List.of(mask(maskTable, "outsideWhole")))).get(0).featureIds();
 
-		assertThat(insideIds).containsExactly(straddling);
+		assertThat(insideIds).containsExactly(contained);
 		assertThat(outsideIds).containsExactly(untouched);
+		assertThat(insideIds).doesNotContainAnyElementsOf(outsideIds);
 	}
 
 	/**
-	 * CONTRACT.md phase 21, requirement 4: whether a feature touches an {@code
+	 * CONTRACT.md phase 21, requirement 4: whether a feature lies within an {@code
 	 * insideWhole} mask is a property of the whole feature, never of the tile it is
-	 * rendered into. A feature spanning two tiles, touching the mask only within one of
-	 * them, must still appear -- with its own portion -- in both.
+	 * rendered into. A feature contained in the mask but spanning two tiles must appear
+	 * in both.
 	 *
-	 * <p>This is the test the {@code EXISTS} against the mask's full table in {@code
-	 * MvtService} exists for. A wrong implementation that instead filters against a
-	 * tile-bounded union of the mask (the shortcut correctly taken for the {@code
-	 * *Clipped} modes) would find no mask polygon in the second tile at all and drop the
-	 * feature there, even though it is kept whole in the first.
+	 * <p>This is the test that keeps {@code MvtService.fullyInsidePredicate} running
+	 * against the mask's full table. A wrong implementation filtering against a
+	 * tile-bounded union of the mask -- the shortcut correctly taken for the {@code
+	 * *Clipped} modes -- would compare the whole feature against a mask cut off at the
+	 * tile edge, find it reaching past that edge, and drop it in <em>both</em> tiles,
+	 * even though it lies well inside the mask as drawn.
 	 */
 	@Test
-	@DisplayName("insideWhole: a feature spanning two tiles, touching the mask in only one, appears in both")
-	void insideWholeKeepsAFeatureWholeAcrossATileItDoesNotTouch() {
+	@DisplayName("insideWhole: a contained feature spanning two tiles appears in both")
+	void insideWholeKeepsAContainedFeatureAcrossATileBoundary() {
 		String layerTable = createTable();
 		String maskTable = createTable();
 
@@ -229,18 +291,19 @@ class MvtServiceClipTest {
 		double y1 = fy(0.60);
 		insertRectangle(layerTable, x0, y0, x1, y1);
 
-		// The mask sits entirely within the first tile, comfortably clear of the shared
-		// tile boundary (unlike the feature, which has to reach right up to it), while
-		// still overlapping the feature's own portion within the first tile.
-		insertRectangle(maskTable, fx(0.80), fy(0.40), fx(0.90), fy(0.60));
+		// One mask polygon covering the feature completely, reaching well past it on
+		// both sides and therefore across the same tile boundary.
+		double maskX0 = bounds[0] + 0.70 * (bounds[2] - bounds[0]);
+		double maskX1 = eastBounds[0] + 0.30 * (eastBounds[2] - eastBounds[0]);
+		insertRectangle(maskTable, maskX0, fy(0.30), maskX1, fy(0.70));
 
 		List<MvtService.ClipMask> masks = List.of(mask(maskTable, "insideWhole"));
 		byte[] firstTile = mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, tileX, tileY);
 		byte[] secondTile = mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, eastTile[0], eastTile[1]);
 
-		assertThat(firstTile).as("Objekt muss in der ersten Kachel erscheinen, dort berührt es die Maske").isNotNull();
+		assertThat(firstTile).as("Objekt liegt ganz in der Maske, muss in der ersten Kachel erscheinen").isNotNull();
 		assertThat(secondTile)
-				.as("Objekt muss auch in der zweiten Kachel erscheinen, obwohl die Maske dort nicht liegt")
+				.as("Objekt muss auch in der zweiten Kachel erscheinen, die Maskenpruefung ist nicht kachelgebunden")
 				.isNotNull();
 	}
 
