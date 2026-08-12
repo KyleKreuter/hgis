@@ -114,20 +114,31 @@ aus als im hellen.
 
 ### Einen Bereich zuschneiden
 
-Ein Flächenlayer lässt sich als Maske markieren. Alle Layer, die im Layerbaum über ihm
-liegen, zeigt die Karte dann nur noch innerhalb seiner Flächen. Ein Objekt, das über die
-Kante ragt, wird an der Kante durchgeschnitten. Layer unter der Maske bleiben unberührt.
+Ein Flächenlayer lässt sich als Maske verwenden. Er wirkt auf alle Layer, die im
+Layerbaum über ihm liegen. Layer unter der Maske bleiben unberührt.
 
-Sie markieren die Maske über „Als Zuschnitt für alles darüber“ im Aktionsmenü des Layers.
-Nur Flächenlayer und gemischte Layer taugen dafür. Bei anderen Geometriearten ist der
-Eintrag gesperrt und nennt den Grund.
+Unter „Zuschnitt für alles darüber“ im Aktionsmenü des Layers wählen Sie zwischen drei
+Möglichkeiten:
+
+- **Kein Zuschnitt.** Die Vorgabe.
+- **Nur innerhalb zeigen.** Die Karte zeigt die oberen Layer nur innerhalb der Flächen
+  der Maske.
+- **Nur außerhalb zeigen.** Umgekehrt: Der Bereich innerhalb der Maske bleibt frei.
+
+Ein Objekt, das über die Kante ragt, wird an der Kante durchgeschnitten. Es verschwindet
+also nicht ganz, und es ragt auch nicht heraus. Beide Richtungen zusammen ergeben wieder
+den vollständigen Bestand.
+
+Nur Flächenlayer und gemischte Layer taugen als Maske. Bei anderen Geometriearten ist die
+Auswahl gesperrt und nennt den Grund.
 
 Ein Projekt hat höchstens eine Maske. Markieren Sie eine zweite, verliert die erste ihre
 Markierung. Das Programm meldet das.
 
-Ein Maskenlayer ist im Layerbaum an einer Schere erkennbar, auch wenn Sie ihn ausblenden.
-Die Maske wirkt nämlich weiter: Oft will man die Grenze nicht sehen und trotzdem
-zuschneiden. Ohne dieses Zeichen wäre der Zuschnitt nicht erklärbar.
+Ein Maskenlayer ist im Layerbaum an einer Schere erkennbar. Das Zeichen unterscheidet
+beide Richtungen, und der Tooltip nennt sie. Es bleibt sichtbar, auch wenn Sie den Layer
+ausblenden. Die Maske wirkt nämlich weiter: Oft will man die Grenze nicht sehen und
+trotzdem zuschneiden. Ohne dieses Zeichen wäre der Zuschnitt nicht erklärbar.
 
 Einen Layer nehmen Sie aus dem Zuschnitt, indem Sie ihn unter die Maske ziehen.
 
