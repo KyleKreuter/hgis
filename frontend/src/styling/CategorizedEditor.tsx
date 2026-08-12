@@ -8,13 +8,14 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCount } from '@/lib/format'
-import { buildCategories, columnNameOfField, fieldIdOfColumn, sourceNameOfField } from './classification'
+import { buildCategories, columnNameOfField, fieldIdOfColumn, sharedSymbolOf, sourceNameOfField, withSharedSymbol } from './classification'
 import { ColorInput, Row } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
 import { formatCategoryValue } from './fields'
 import { PaletteSelect } from './PaletteSelect'
 import { DEFAULT_CATEGORY_PALETTE, paletteColors } from './palettes'
-import type { Renderer, StyleCategory } from './types'
+import { SymbolEditor } from './SymbolEditor'
+import type { LayerSymbol, Renderer, StyleCategory } from './types'
 
 interface CategorizedEditorProps {
   layerId: string
@@ -85,6 +86,11 @@ export function CategorizedEditor({
     )
   }
 
+  /** Applies one symbol's size/width to every category at once, colours untouched. */
+  function setSharedSymbol(symbol: LayerSymbol, options?: { defer?: boolean }) {
+    onChange({ ...renderer, categories: withSharedSymbol(categories, symbol) }, options)
+  }
+
   const withoutValue = data?.values.find((entry) => entry.value === null)
 
   return (
@@ -141,6 +147,12 @@ export function CategorizedEditor({
           Das Feld hat mehr verschiedene Werte, als hier gezeigt werden. Eine kategorisierte
           Darstellung ist dafür meist die falsche Wahl.
         </p>
+      )}
+
+      {categories.length > 0 && (
+        // Colour comes from the palette, per category below -- everything else (size,
+        // width, ...) is one shared symbol, edited here for every category at once.
+        <SymbolEditor symbol={sharedSymbolOf(categories, geometryType)} onChange={setSharedSymbol} hideColor />
       )}
 
       {categories.length > 0 && (

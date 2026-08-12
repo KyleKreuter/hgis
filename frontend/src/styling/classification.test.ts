@@ -6,11 +6,13 @@ import {
   buildClasses,
   columnNameOfField,
   fieldIdOfColumn,
+  sharedSymbolOf,
+  withSharedSymbol,
 } from './classification'
 import { defaultLabels, defaultSymbolFor, primaryColorOf } from './defaults'
 import { DEFAULT_CATEGORY_PALETTE, DEFAULT_RAMP } from './palettes'
 import { styleToMapLibre } from './styleToMapLibre'
-import type { LayerStyle } from './types'
+import type { LayerStyle, MarkerSymbol } from './types'
 
 /**
  * The source names carry umlauts, the column names are normalised -- exactly the shape
@@ -165,5 +167,56 @@ describe('buildClasses', () => {
 
   it('beschriftet die Klassen deutsch mit Gedankenstrich', () => {
     expect(buildClasses([0, 1200], 'MULTIPOLYGON', DEFAULT_RAMP)[0].label).toBe('0 – 1200')
+  })
+})
+
+describe('sharedSymbolOf', () => {
+  it('liest die Grösse aus dem ersten Klassensymbol, da alle Klassen sie teilen', () => {
+    const classes = buildClasses([0, 10, 20], 'MULTIPOINT', DEFAULT_RAMP)
+    const template: MarkerSymbol = { ...(classes[0].symbol as MarkerSymbol), size: 12 }
+    const resized = withSharedSymbol(classes, template)
+
+    expect(sharedSymbolOf(resized, 'MULTIPOINT')).toMatchObject({ size: 12 })
+  })
+
+  /** The case before any class exists yet -- e.g. no field chosen so far. */
+  it('fällt auf das Standardsymbol des Layers zurück, wenn noch keine Klasse existiert', () => {
+    expect(sharedSymbolOf([], 'MULTIPOINT')).toEqual(defaultSymbolFor('MULTIPOINT'))
+  })
+})
+
+describe('withSharedSymbol', () => {
+  it('übernimmt Grösse/Breite in alle Einträge, ohne deren Farbe zu verändern', () => {
+    const classes = buildClasses([0, 10, 20, 30], 'MULTIPOINT', DEFAULT_RAMP)
+    const colorsBefore = classes.map((styleClass) => primaryColorOf(styleClass.symbol))
+    const template: MarkerSymbol = { ...(classes[0].symbol as MarkerSymbol), size: 20 }
+
+    const resized = withSharedSymbol(classes, template)
+
+    expect(resized.map((styleClass) => (styleClass.symbol as MarkerSymbol).size)).toEqual([20, 20, 20])
+    expect(resized.map((styleClass) => primaryColorOf(styleClass.symbol))).toEqual(colorsBefore)
+  })
+
+  /**
+   * What `GraduatedEditor`'s rebuild effect relies on: `buildClasses` resets every
+   * symbol to the layer's default shape, so a size the user picked earlier has to be
+   * reapplied afterwards or it would silently jump back to the default the moment the
+   * class count, method or ramp changes.
+   */
+  it('überlebt den Neuaufbau der Klassen, der sonst auf das Standardsymbol zurückfiele', () => {
+    const before = buildClasses([0, 10, 20], 'MULTIPOINT', DEFAULT_RAMP)
+    const template: MarkerSymbol = { ...(before[0].symbol as MarkerSymbol), size: 15 }
+    const resized = withSharedSymbol(before, template)
+
+    const rebuilt = buildClasses([0, 5, 15, 25], 'MULTIPOINT', DEFAULT_RAMP)
+    const carriedOver = withSharedSymbol(rebuilt, sharedSymbolOf(resized, 'MULTIPOINT'))
+
+    expect(carriedOver).toHaveLength(3)
+    expect(carriedOver.every((styleClass) => (styleClass.symbol as MarkerSymbol).size === 15)).toBe(true)
+  })
+
+  /** The case before any class exists yet -- nothing to apply the symbol to. */
+  it('lässt eine leere Liste unverändert', () => {
+    expect(withSharedSymbol([], defaultSymbolFor('MULTIPOINT'))).toEqual([])
   })
 })

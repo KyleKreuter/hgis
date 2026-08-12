@@ -1,8 +1,8 @@
 import type { FieldValue, GeometryType, LayerField } from '@/api/layers'
-import { defaultSymbolFor, withPrimaryColor } from './defaults'
+import { defaultSymbolFor, primaryColorOf, withPrimaryColor } from './defaults'
 import { formatCategoryValue, formatClassLabel } from './fields'
 import { paletteColors } from './palettes'
-import type { StyleCategory, StyleClass } from './types'
+import type { LayerSymbol, StyleCategory, StyleClass } from './types'
 
 /**
  * The field pickers carry the field's **id**, not either of its names.
@@ -69,4 +69,29 @@ export function buildClasses(breaks: number[], geometryType: GeometryType, ramp:
     label: formatClassLabel(breaks[index], breaks[index + 1]),
     symbol: withPrimaryColor(defaultSymbolFor(geometryType), colors[index]),
   }))
+}
+
+/**
+ * The symbol whose non-colour properties a classified renderer's "shared" symbol editor
+ * shows -- the first entry's, since every entry `buildClasses`/`buildCategories` produces
+ * carries exactly the same shape and differs only in colour. Falls back to the layer's
+ * default symbol so the editor has something to show before any class exists yet.
+ */
+export function sharedSymbolOf(entries: { symbol: LayerSymbol }[], geometryType: GeometryType): LayerSymbol {
+  return entries[0]?.symbol ?? defaultSymbolFor(geometryType)
+}
+
+/**
+ * Carries one symbol's non-colour properties -- size, width, stroke width, dash pattern,
+ * whichever `kind` provides -- onto every entry of a classified list, leaving each
+ * entry's own colour untouched.
+ *
+ * The one function both directions need: reapplying a size the user has set across a
+ * rebuild that would otherwise reset every symbol back to `defaultSymbolFor` (as
+ * `GraduatedEditor`'s effect does whenever method, class count or ramp change), and
+ * applying a freshly picked size to every class at once when the user edits the shared
+ * symbol directly.
+ */
+export function withSharedSymbol<T extends { symbol: LayerSymbol }>(entries: T[], template: LayerSymbol): T[] {
+  return entries.map((entry) => ({ ...entry, symbol: withPrimaryColor(template, primaryColorOf(entry.symbol)) }))
 }

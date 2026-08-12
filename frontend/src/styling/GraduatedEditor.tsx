@@ -6,14 +6,15 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCount } from '@/lib/format'
-import { buildClasses, columnNameOfField, fieldIdOfColumn, sourceNameOfField } from './classification'
+import { buildClasses, columnNameOfField, fieldIdOfColumn, sharedSymbolOf, sourceNameOfField, withSharedSymbol } from './classification'
 import { ColorInput, NumberInput, Row } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
 import { isNumericField } from './fields'
 import { PaletteSelect } from './PaletteSelect'
 import { METHOD_LABELS, labelOf } from './labels'
 import { DEFAULT_RAMP } from './palettes'
-import type { Renderer } from './types'
+import { SymbolEditor } from './SymbolEditor'
+import type { LayerSymbol, Renderer } from './types'
 
 interface GraduatedEditorProps {
   layerId: string
@@ -47,7 +48,12 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
     const key = `${layerId}:${data.field}:${method}:${classCount}:${ramp}`
     if (generatedFor.current === key) return
     generatedFor.current = key
-    onChange({ ...renderer, classes: buildClasses(data.breaks, geometryType, ramp) })
+    const fresh = buildClasses(data.breaks, geometryType, ramp)
+    // `buildClasses` gives every fresh class the layer's default symbol -- carrying the
+    // previous shared size/width across is what keeps it from jumping back to the
+    // default the moment the class count, method or ramp changes.
+    const shared = sharedSymbolOf(renderer.classes ?? [], geometryType)
+    onChange({ ...renderer, classes: withSharedSymbol(fresh, shared) })
   }, [classCount, data, geometryType, layerId, method, onChange, ramp, renderer])
 
   function selectField(fieldId: string) {
@@ -67,6 +73,11 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
       },
       { defer: true },
     )
+  }
+
+  /** Applies one symbol's size/width to every class at once, colours untouched. */
+  function setSharedSymbol(symbol: LayerSymbol, options?: { defer?: boolean }) {
+    onChange({ ...renderer, classes: withSharedSymbol(classes, symbol) }, options)
   }
 
   return (
@@ -137,6 +148,12 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
           Das Feld hat zu wenige verschiedene Werte für {formatCount(classCount)} Klassen — es sind{' '}
           {formatCount(classes.length)} geworden.
         </p>
+      )}
+
+      {classes.length > 0 && (
+        // Colour comes from the ramp, per class below -- everything else (size, width,
+        // ...) is one shared symbol, edited here for every class at once.
+        <SymbolEditor symbol={sharedSymbolOf(classes, geometryType)} onChange={setSharedSymbol} hideColor />
       )}
 
       {classes.length > 0 && (
