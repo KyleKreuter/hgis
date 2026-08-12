@@ -89,9 +89,11 @@ public class TileController {
 
 		// After the ETag check, not before: a client that already holds this tile gets its
 		// 304 without the style ever being read, let alone its fields looked up.
-		String maskTableName = layer.isClippedBy(maskLayer) ? maskLayer.getTableName() : null;
+		boolean clipped = layer.isClippedBy(maskLayer);
+		String maskTableName = clipped ? maskLayer.getTableName() : null;
+		String clipMode = clipped ? maskLayer.getClipMode() : null;
 		byte[] mvt = mvtService.renderTile(layer.getTableName(), layer.getSrid(),
-				styleService.tileColumns(layer), maskTableName, z, x, y);
+				styleService.tileColumns(layer), maskTableName, clipMode, z, x, y);
 
 		ResponseEntity.BodyBuilder response = ResponseEntity
 				.status(mvt == null ? HttpStatus.NO_CONTENT : HttpStatus.OK)

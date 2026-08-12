@@ -18,11 +18,13 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
- * Proves that {@link MvtService#renderTile} actually clips against a mask table
- * (CONTRACT.md phase 19), not just filters whole features: a feature straddling the
- * mask edge has to come back smaller, one entirely outside the mask has to vanish, and
- * one crossing two mask polygons has to appear exactly once -- the {@code ST_Union} in
- * {@code MvtService}'s clipped query is what makes that last one true.
+ * Proves that {@link MvtService#renderTile} actually clips against a mask table in
+ * {@code inside} mode (CONTRACT.md phase 19), not just filters whole features: a feature
+ * straddling the mask edge has to come back smaller, one entirely outside the mask has to
+ * vanish, and one crossing two mask polygons has to appear exactly once -- the
+ * {@code ST_Union} in {@code MvtService}'s clipped query is what makes that last one true.
+ * The {@code outside} mode introduced in CONTRACT.md phase 20 is covered separately, by
+ * {@code MvtServiceOutsideClipTest}.
  *
  * Every fixture geometry is placed as a fraction of one fixed tile's native bounding
  * box, computed once in {@link #computeTile()}, rather than as raw metre offsets from a
@@ -183,7 +185,8 @@ class MvtServiceClipTest {
 	}
 
 	private byte[] render(String layerTable, String maskTable) {
-		return mvtService.renderTile(layerTable, SRID, List.of(), maskTable, ZOOM, tileX, tileY);
+		String clipMode = maskTable == null ? null : "inside";
+		return mvtService.renderTile(layerTable, SRID, List.of(), maskTable, clipMode, ZOOM, tileX, tileY);
 	}
 
 	private static MvtTileDecoder.Feature firstFeature(byte[] mvt) {

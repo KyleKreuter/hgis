@@ -54,7 +54,7 @@ class MvtServiceTest {
 	@Test
 	@DisplayName("renders a tile containing exactly the known signal features")
 	void rendersExpectedFeatures() {
-		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null,
+		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		assertThat(mvt).isNotNull();
@@ -69,7 +69,7 @@ class MvtServiceTest {
 	@Test
 	@DisplayName("an unstyled layer carries no attributes beyond its feature ids")
 	void tileWithoutStyleCarriesNoAttributes() {
-		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null,
+		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		assertThat(MvtTileDecoder.decode(mvt).get(0).keys()).isEmpty();
@@ -79,7 +79,7 @@ class MvtServiceTest {
 	@DisplayName("a requested attribute reaches the tile, keyed by its column name")
 	void tileCarriesTheRequestedAttribute() {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832,
-				List.of(LayerTableFixture.CATEGORY_COLUMN), null,
+				List.of(LayerTableFixture.CATEGORY_COLUMN), null, null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		MvtTileDecoder.Layer decoded = MvtTileDecoder.decode(mvt).get(0);
@@ -96,7 +96,7 @@ class MvtServiceTest {
 	@DisplayName("only the requested attributes reach the tile, not every column")
 	void tileOmitsAttributesNoStyleAskedFor() {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832,
-				List.of(LayerTableFixture.CATEGORY_COLUMN), null,
+				List.of(LayerTableFixture.CATEGORY_COLUMN), null, null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 
 		assertThat(MvtTileDecoder.decode(mvt).get(0).keys())
@@ -108,14 +108,30 @@ class MvtServiceTest {
 	void emptyTileRendersToNull() {
 		// z=0 with the corner tile (0,0) is a fixed point far from every possible
 		// signal/noise coordinate this fixture ever produces -- no guessing involved.
-		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, 0, 0, 0);
+		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, null, 0, 0, 0);
 		assertThat(mvt).isNull();
+	}
+
+	/**
+	 * CONTRACT.md phase 20: without a mask, a tile has to render exactly as it did
+	 * before this phase -- clipMode is then meaningless, and must not change a byte of
+	 * the output no matter what it is set to.
+	 */
+	@Test
+	@DisplayName("without a mask, clipMode makes no difference to the tile")
+	void unclippedTileIgnoresClipMode() {
+		byte[] withoutMode = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, null,
+				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
+		byte[] withIgnoredMode = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), null, "outside",
+				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
+
+		assertThat(withIgnoredMode).isEqualTo(withoutMode);
 	}
 
 	@Test
 	@DisplayName("the tile query uses the GiST index, not a sequential scan")
 	void queryPlanIsIndexFriendly() throws Exception {
-		assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(), null,
+		assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(), null, null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
 	}
 
@@ -123,16 +139,18 @@ class MvtServiceTest {
 	@DisplayName("selecting style attributes leaves the query plan index-friendly")
 	void queryPlanStaysIndexFriendlyWithAttributes() throws Exception {
 		assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832,
-				List.of(LayerTableFixture.CATEGORY_COLUMN, LayerTableFixture.NUMERIC_COLUMN), null,
+				List.of(LayerTableFixture.CATEGORY_COLUMN, LayerTableFixture.NUMERIC_COLUMN), null, null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
 	}
 
 	@Test
-	@DisplayName("a clip mask leaves the query plan index-friendly too")
+	@DisplayName("a clip mask leaves the query plan index-friendly too, inside or outside")
 	void queryPlanStaysIndexFriendlyWithAMask() throws Exception {
 		String maskTable = LayerTableFixture.create(jdbc, 1).tableName();
 		try {
-			assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(), maskTable,
+			assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(), maskTable, "inside",
+					testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
+			assertIndexFriendly(mvtService.explainTile(testLayer.tableName(), 25832, List.of(), maskTable, "outside",
 					testLayer.zoom(), testLayer.tileX(), testLayer.tileY()));
 		}
 		finally {

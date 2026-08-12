@@ -96,13 +96,19 @@ public class Layer {
 	private Double basemapOpacity;
 
 	/**
-	 * Whether this layer is the project's clip mask (CONTRACT.md phase 19). At most one
-	 * layer per project carries this at a time -- {@code LayerService} enforces that by
-	 * unmarking whichever layer had it before. Independent of {@code visible}: a hidden
-	 * mask still clips everything above it, since the clip is not what draws it.
+	 * Null, or this layer's role as the project's clip mask: {@code "inside"} to clip
+	 * everything above it to what its polygons cover, {@code "outside"} to clip to what
+	 * they do not (CONTRACT.md phase 20). At most one layer per project carries a
+	 * non-null value at a time -- {@code LayerService} enforces that by unmarking
+	 * whichever layer had one before. Independent of {@code visible}: a hidden mask still
+	 * clips everything above it, since the clip is not what draws it.
+	 *
+	 * <p>Not validated against an enum here -- the database CHECK constraint from
+	 * {@code V5__clip_mode.sql} is the single source of truth for which tokens are legal,
+	 * the same way {@link #geometryType} and {@link #basemap} are held as plain strings.
 	 */
-	@Column(name = "is_clip_mask", nullable = false)
-	private boolean clipMask = false;
+	@Column(name = "clip_mode")
+	private String clipMode;
 
 	@Column(columnDefinition = "geometry(Polygon,4326)")
 	private Polygon extent;
@@ -237,18 +243,25 @@ public class Layer {
 		this.basemapOpacity = basemapOpacity;
 	}
 
-	public boolean isClipMask() {
-		return clipMask;
+	/** Whether this layer currently is the project's clip mask, in either mode. */
+	public boolean isMask() {
+		return clipMode != null;
 	}
 
-	public void setClipMask(boolean clipMask) {
-		this.clipMask = clipMask;
+	/** Null, or {@code "inside"}/{@code "outside"} -- see {@link #clipMode}. */
+	public String getClipMode() {
+		return clipMode;
+	}
+
+	public void setClipMode(String clipMode) {
+		this.clipMode = clipMode;
 	}
 
 	/**
-	 * Whether {@code maskLayer} clips this layer's tiles (CONTRACT.md phase 19): it has
-	 * to be marked, be a different layer than this one -- a mask never clips itself --
-	 * and sit below this layer in the stack, since a mask only reaches upward.
+	 * Whether {@code maskLayer} clips this layer's tiles (CONTRACT.md phase 19/20): it
+	 * has to be marked, be a different layer than this one -- a mask never clips itself
+	 * -- and sit below this layer in the stack, since a mask only reaches upward. Its
+	 * mode -- inside or outside -- decides how the clip cuts, not whether it applies.
 	 *
 	 * @param maskLayer the project's current clip mask, or {@code null} if none is marked
 	 */
@@ -260,16 +273,18 @@ public class Layer {
 
 	/**
 	 * The version component the tile URL and its {@code ETag} carry for this layer's
-	 * clip state (CONTRACT.md phase 19). Computed fresh from the live catalog on every
-	 * call rather than stored, so deleting the mask, editing its geometry, or dragging a
-	 * layer across it all take effect on the very next read -- nothing to invalidate on
-	 * the way.
+	 * clip state (CONTRACT.md phase 19/20). Computed fresh from the live catalog on every
+	 * call rather than stored, so deleting the mask, editing its geometry, dragging a
+	 * layer across it, or flipping its mode all take effect on the very next read --
+	 * nothing to invalidate on the way.
 	 *
 	 * <p>Zero exactly when {@link #isClippedBy} is false. Otherwise combines the mask
-	 * layer's identity with its {@code dataVersion}: {@code dataVersion} alone would let
-	 * two different masks that happen to share a data version number collide onto the
-	 * same clipVersion, and a client would then keep the old, wrongly clipped tile after
-	 * the project's mask changed to a different layer.
+	 * layer's identity, its {@code dataVersion} and its {@code clipMode}:
+	 * {@code dataVersion} alone would let two different masks that happen to share a data
+	 * version number collide onto the same clipVersion, and omitting {@code clipMode}
+	 * would leave the tile address unchanged when a mask switches between inside and
+	 * outside -- a client would then keep serving the old, wrongly clipped tile from
+	 * cache.
 	 *
 	 * @param maskLayer the project's current clip mask, or {@code null} if none is marked
 	 */
@@ -278,7 +293,8 @@ public class Layer {
 			return 0;
 		}
 		UUID maskId = maskLayer.id;
-		return maskId.getMostSignificantBits() ^ maskId.getLeastSignificantBits() ^ maskLayer.dataVersion;
+		return maskId.getMostSignificantBits() ^ maskId.getLeastSignificantBits()
+				^ maskLayer.dataVersion ^ maskLayer.clipMode.hashCode();
 	}
 
 	public Polygon getExtent() {
@@ -290,14 +306,15 @@ public class Layer {
 	}
 
 	/**
-	 * @param clipMask whether the source is the project's clip mask (CONTRACT.md phase
-	 *                 19). A duplicate is a project of its own, so copying this is safe
-	 *                 even though at most one layer per project may carry it: the source
-	 *                 project keeps its own mask untouched, and the target starts with at
-	 *                 most one too, since {@code source} could only ever be marked once.
+	 * @param clipMode the source's clip mode -- null, {@code "inside"} or
+	 *                 {@code "outside"} (CONTRACT.md phase 19/20). A duplicate is a
+	 *                 project of its own, so copying this is safe even though at most one
+	 *                 layer per project may carry a non-null value: the source project
+	 *                 keeps its own mask untouched, and the target starts with at most
+	 *                 one too, since {@code source} could only ever carry one mode.
 	 */
 	public void setCopyMetadata(long featureCount, boolean visible, int zIndex, int minZoom,
-			int maxZoom, String style, String basemap, Double basemapOpacity, boolean clipMask, Polygon extent) {
+			int maxZoom, String style, String basemap, Double basemapOpacity, String clipMode, Polygon extent) {
 		this.featureCount = featureCount;
 		this.visible = visible;
 		this.zIndex = zIndex;
@@ -306,7 +323,7 @@ public class Layer {
 		this.style = style;
 		this.basemap = basemap;
 		this.basemapOpacity = basemapOpacity;
-		this.clipMask = clipMask;
+		this.clipMode = clipMode;
 		this.extent = extent;
 	}
 

@@ -146,7 +146,7 @@ class TileControllerTest {
 	@DisplayName("a value from /values has the type the same attribute has in the tile")
 	void offeredValuesMatchTheTypeInTheTile() throws Exception {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832,
-				List.of(LayerTableFixture.CATEGORY_COLUMN, LayerTableFixture.NUMERIC_COLUMN), null,
+				List.of(LayerTableFixture.CATEGORY_COLUMN, LayerTableFixture.NUMERIC_COLUMN), null, null,
 				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
 		Map<String, Object> inTile = MvtTileDecoder.decode(mvt).get(0).features().get(0).properties();
 
