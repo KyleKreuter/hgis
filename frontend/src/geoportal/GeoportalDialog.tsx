@@ -536,8 +536,15 @@ function DatasetDetailPane({
       <div className="grid gap-3 p-3">
         <div>
           <h3 className="text-sm font-medium">{summary.title}</h3>
-          {summary.description && (
-            <p className="mt-0.5 text-xs text-muted-foreground">{summary.description}</p>
+          {/*
+           * Detail first, list entry second: the service directory carries no
+           * description at all, so a list entry's is always null. The detail fetches
+           * one from the API landing page, which is the only place it exists.
+           */}
+          {(detail.data?.description ?? summary.description) && (
+            <p className="mt-0.5 whitespace-pre-line text-xs text-muted-foreground">
+              {detail.data?.description ?? summary.description}
+            </p>
           )}
         </div>
 
