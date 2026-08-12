@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
@@ -205,21 +206,27 @@ export function BasemapControl({ projectId, project, activeLayer }: BasemapContr
       <DropdownMenuContent align="end" className="w-64">
         {activeLayer && (
           <>
-            <DropdownMenuLabel>Geltungsbereich</DropdownMenuLabel>
-            <div className="grid grid-cols-2 gap-1 px-1.5 pb-1.5">
-              <ScopeButton active={!layerScoped} onClick={() => setScope('project')}>
-                Für dieses Projekt
-              </ScopeButton>
-              <ScopeButton active={layerScoped} onClick={() => setScope('layer')}>
-                Nur für Layer „{activeLayer.name}"
-              </ScopeButton>
-            </div>
+            {/* Every label is a group part in Base UI (`MenuPrimitive.GroupLabel`) and
+                throws "MenuGroupContext is missing" outside a group -- which takes the
+                whole workspace down, not just the menu. A label therefore always sits
+                inside a `DropdownMenuGroup` or a `DropdownMenuRadioGroup`. */}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Geltungsbereich</DropdownMenuLabel>
+              <div className="grid grid-cols-2 gap-1 px-1.5 pb-1.5">
+                <ScopeButton active={!layerScoped} onClick={() => setScope('project')}>
+                  Für dieses Projekt
+                </ScopeButton>
+                <ScopeButton active={layerScoped} onClick={() => setScope('layer')}>
+                  Nur für Layer „{activeLayer.name}"
+                </ScopeButton>
+              </div>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
           </>
         )}
 
-        <DropdownMenuLabel>Hintergrundkarte</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={scopedBasemap.id} onValueChange={(value: string) => selectBasemap(value)}>
+          <DropdownMenuLabel>Hintergrundkarte</DropdownMenuLabel>
           {BASEMAPS.map((basemap) => (
             <DropdownMenuRadioItem key={basemap.id} value={basemap.id} className="items-start">
               <span className="flex flex-col">
@@ -242,8 +249,9 @@ export function BasemapControl({ projectId, project, activeLayer }: BasemapContr
         {scopedBasemap.id !== 'none' && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel>Deckkraft</DropdownMenuLabel>
-            <div className="flex items-center gap-1.5 px-1.5 pb-1.5">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Deckkraft</DropdownMenuLabel>
+              <div className="flex items-center gap-1.5 px-1.5 pb-1.5">
               <Slider
                 value={scopedOpacity}
                 min={0}
@@ -268,7 +276,8 @@ export function BasemapControl({ projectId, project, activeLayer }: BasemapContr
                   <RotateCcw className="size-3" />
                 </Button>
               )}
-            </div>
+              </div>
+            </DropdownMenuGroup>
           </>
         )}
       </DropdownMenuContent>
