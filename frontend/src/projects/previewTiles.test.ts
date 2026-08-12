@@ -91,4 +91,50 @@ describe('previewTilesFor', () => {
 
     expect(wide[0].z).toBeLessThan(narrow[0].z)
   })
+
+  /**
+   * Liegen center UND extent vor, gewinnt extent für beides -- Mittelpunkt eingeschlossen.
+   * Ein center aus einer alten Ansicht, kombiniert mit einem aus extent errechneten Zoom,
+   * kann sonst weder den einen noch den anderen Ort richtig zeigen: ein willkürlicher
+   * Ausschnitt, der nichts über die Daten des Projekts sagt.
+   */
+  it('zeigt bei center UND extent den extent, nicht das center', () => {
+    const hamburg: [number, number] = [9.99, 53.55]
+    const munich: [number, number, number, number] = [11.3, 48.0, 11.7, 48.3]
+
+    const withFarCenter = previewTilesFor({
+      center: hamburg,
+      zoom: 10,
+      extent: munich,
+      basemap: 'osm',
+    })
+    const extentOnly = previewTilesFor({
+      center: null,
+      zoom: null,
+      extent: munich,
+      basemap: 'osm',
+    })
+
+    expect(withFarCenter).toEqual(extentOnly)
+  })
+
+  it('nutzt center und zoom weiterhin, wenn kein extent vorliegt', () => {
+    const withoutZoom = previewTilesFor({
+      center: [0, 0],
+      zoom: null,
+      extent: null,
+      basemap: 'osm',
+    })
+    const withDefaultZoom = previewTilesFor({
+      center: [0, 0],
+      zoom: 12,
+      extent: null,
+      basemap: 'osm',
+    })
+
+    // Ohne zoom greift die Vorgabe 12 -- deckungsgleich mit einem Projekt, das genau
+    // diesen Zoom gespeichert hat.
+    expect(withoutZoom).toEqual(withDefaultZoom)
+    expect(withoutZoom[0].z).toBe(12)
+  })
 })

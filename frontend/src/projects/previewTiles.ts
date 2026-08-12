@@ -74,9 +74,14 @@ export function previewTilesFor(project: PreviewSource): PreviewTile[] {
   // Nothing to center the grid on.
   if (!center && !extent) return []
 
+  // `extent` wins outright once it exists, for both zoom and center: mixing its zoom
+  // with a `center` that was last saved somewhere else can satisfy neither -- the
+  // grid would show an arbitrary point at a magnification chosen for a different one.
+  // Taking both from `extent` stays internally consistent and reliably shows the
+  // project's data, even if that means a zoomed-out overview for scattered layers.
   const maxZoom = maxZoomFor(basemap)
   const z = extent ? fitZoom(extent, maxZoom) : clamp(Math.round(zoom ?? 12), 0, maxZoom)
-  const [lng, lat] = center ?? extentCenter(extent!)
+  const [lng, lat] = extent ? extentCenter(extent) : center!
 
   // A project at the edge of the world must not request a tile that does not exist,
   // so each index is clamped on its own to 0..2^z - 1.
