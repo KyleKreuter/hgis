@@ -99,12 +99,12 @@ wechselt die Hintergrundkarte mit. Hat der Layer keine eigene, gilt die Hintergr
 des Projekts. Zusätzlich lässt sich die Deckkraft der Hintergrundkarte einstellen,
 getrennt für Projekt und Layer.
 
-Die Kartenauswahl zeigt sichtbar an, ob sie für das Projekt oder nur für den aktiven
-Layer gilt. Sie rät das nicht aus dem Zustand. Sonst würde dasselbe Bedienelement je nach
-Lage an zwei Orte schreiben, ohne dass Sie sähen, an welchen. Hat der aktive Layer eine
-eigene Karte, zeigt die Kartenauswahl das an und bietet den Weg zurück zur Karte des
-Projekts. Das Aktionsmenü eines Layers enthält denselben Eintrag, für den direkten Weg
-ohne Umweg über die Karte.
+Beim Wählen sehen Sie, wofür Ihre Wahl gilt: für das Projekt oder nur für den aktiven
+Layer. Das Programm errät es nicht aus der Lage. Sonst würde dasselbe Bedienelement mal
+das eine und mal das andere ändern, ohne dass Sie sähen, was gerade gilt. Hat der aktive
+Layer eine eigene Karte, zeigt das Programm das an. Mit einem Klick kehren Sie zur Karte
+des Projekts zurück. Das Aktionsmenü eines Layers führt denselben Eintrag, für den
+direkten Weg ohne Umweg über die Karte.
 
 Die Deckkraft betrifft die Hintergrundkarte selbst, nicht die Objekte darauf. Für die
 Objekte gibt es die Deckkraft in der Symbologie. Bei „Keine Hintergrundkarte“ entfällt der
