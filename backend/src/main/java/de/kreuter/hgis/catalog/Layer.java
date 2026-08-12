@@ -8,6 +8,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -96,15 +97,16 @@ public class Layer {
 	private Double basemapOpacity;
 
 	/**
-	 * Null, or this layer's role as the project's clip mask: {@code "inside"} to clip
-	 * everything above it to what its polygons cover, {@code "outside"} to clip to what
-	 * they do not (CONTRACT.md phase 20). At most one layer per project carries a
-	 * non-null value at a time -- {@code LayerService} enforces that by unmarking
-	 * whichever layer had one before. Independent of {@code visible}: a hidden mask still
-	 * clips everything above it, since the clip is not what draws it.
+	 * Null, or this layer's role as one of the project's clip masks: {@code
+	 * "insideWhole"}, {@code "insideClipped"}, {@code "outsideWhole"} or {@code
+	 * "outsideClipped"} (CONTRACT.md phase 21). Any number of layers in a project may
+	 * carry a non-null value at once; each acts on every layer above it (higher {@code
+	 * zIndex}), and where several act on the same layer their effects combine -- see
+	 * {@link #effectiveMasks}. Independent of {@code visible}: a hidden mask still clips
+	 * everything above it, since the clip is not what draws it.
 	 *
 	 * <p>Not validated against an enum here -- the database CHECK constraint from
-	 * {@code V5__clip_mode.sql} is the single source of truth for which tokens are legal,
+	 * {@code V6__clip_modes.sql} is the single source of truth for which tokens are legal,
 	 * the same way {@link #geometryType} and {@link #basemap} are held as plain strings.
 	 */
 	@Column(name = "clip_mode")
@@ -243,12 +245,15 @@ public class Layer {
 		this.basemapOpacity = basemapOpacity;
 	}
 
-	/** Whether this layer currently is the project's clip mask, in either mode. */
+	/** Whether this layer currently is one of the project's clip masks, in any mode. */
 	public boolean isMask() {
 		return clipMode != null;
 	}
 
-	/** Null, or {@code "inside"}/{@code "outside"} -- see {@link #clipMode}. */
+	/**
+	 * Null, or {@code "insideWhole"}, {@code "insideClipped"}, {@code "outsideWhole"} or
+	 * {@code "outsideClipped"} -- see {@link #clipMode}.
+	 */
 	public String getClipMode() {
 		return clipMode;
 	}
@@ -258,12 +263,12 @@ public class Layer {
 	}
 
 	/**
-	 * Whether {@code maskLayer} clips this layer's tiles (CONTRACT.md phase 19/20): it
-	 * has to be marked, be a different layer than this one -- a mask never clips itself
-	 * -- and sit below this layer in the stack, since a mask only reaches upward. Its
-	 * mode -- inside or outside -- decides how the clip cuts, not whether it applies.
+	 * Whether {@code maskLayer} clips this layer's tiles (CONTRACT.md phase 21): it has
+	 * to be marked, be a different layer than this one -- a mask never clips itself --
+	 * and sit below this layer in the stack, since a mask only reaches upward. Its mode
+	 * decides how the clip cuts, not whether it applies.
 	 *
-	 * @param maskLayer the project's current clip mask, or {@code null} if none is marked
+	 * @param maskLayer a candidate clip mask, or {@code null} if none is given
 	 */
 	public boolean isClippedBy(Layer maskLayer) {
 		return maskLayer != null
@@ -272,29 +277,58 @@ public class Layer {
 	}
 
 	/**
-	 * The version component the tile URL and its {@code ETag} carry for this layer's
-	 * clip state (CONTRACT.md phase 19/20). Computed fresh from the live catalog on every
-	 * call rather than stored, so deleting the mask, editing its geometry, dragging a
-	 * layer across it, or flipping its mode all take effect on the very next read --
-	 * nothing to invalidate on the way.
+	 * The masks from {@code projectMasks} that act on this layer, unterste zuerst
+	 * (CONTRACT.md phase 21): every one this layer sits above, in the same order
+	 * {@code projectMasks} gave them in. Filters with {@link #isClippedBy}, so a mask
+	 * never appears here for itself, and {@code projectMasks} may safely include this
+	 * layer along with every other mask of the project.
 	 *
-	 * <p>Zero exactly when {@link #isClippedBy} is false. Otherwise combines the mask
-	 * layer's identity, its {@code dataVersion} and its {@code clipMode}:
-	 * {@code dataVersion} alone would let two different masks that happen to share a data
-	 * version number collide onto the same clipVersion, and omitting {@code clipMode}
-	 * would leave the tile address unchanged when a mask switches between inside and
-	 * outside -- a client would then keep serving the old, wrongly clipped tile from
-	 * cache.
-	 *
-	 * @param maskLayer the project's current clip mask, or {@code null} if none is marked
+	 * @param projectMasks every mask of the project, as {@link LayerRepository#findClipMasks}
+	 *                     returns them -- unterste zuerst
 	 */
-	public long clipVersion(Layer maskLayer) {
-		if (!isClippedBy(maskLayer)) {
+	public List<Layer> effectiveMasks(List<Layer> projectMasks) {
+		return projectMasks.stream()
+				.filter(this::isClippedBy)
+				.toList();
+	}
+
+	/**
+	 * The version component the tile URL and its {@code ETag} carry for this layer's
+	 * clip state (CONTRACT.md phase 21). Computed fresh from the live catalog on every
+	 * call rather than stored, so marking, unmarking, editing or reordering any mask
+	 * takes effect on the very next read -- nothing to invalidate on the way.
+	 *
+	 * <p>Zero exactly when {@link #effectiveMasks} is empty. That is the rest state, and
+	 * it has to land on exactly 0: the client reads {@code clipVersion > 0} as "a clip
+	 * applies". Otherwise a rolling hash over the effective masks, in their given order,
+	 * folding in each mask's identity, its {@code dataVersion} and its {@code clipMode}:
+	 * {@code dataVersion} alone would let two different masks that happen to share a data
+	 * version number collide, and omitting {@code clipMode} would leave the tile address
+	 * unchanged when a mask switches sides -- a client would then keep serving the old,
+	 * wrongly clipped tile from cache. The hash multiplies and adds rather than XORs
+	 * across masks, on purpose: XOR would let two equal contributions cancel each other
+	 * out, so adding a second mask identical in effect to one already in the stack would
+	 * leave the version -- and so the cached tile address -- unchanged.
+	 *
+	 * @param projectMasks every mask of the project, unterste zuerst -- see {@link
+	 *                     #effectiveMasks}
+	 */
+	public long clipVersion(List<Layer> projectMasks) {
+		List<Layer> masks = effectiveMasks(projectMasks);
+		if (masks.isEmpty()) {
 			return 0;
 		}
-		UUID maskId = maskLayer.id;
-		return maskId.getMostSignificantBits() ^ maskId.getLeastSignificantBits()
-				^ maskLayer.dataVersion ^ maskLayer.clipMode.hashCode();
+		long hash = 1;
+		for (Layer mask : masks) {
+			UUID maskId = mask.id;
+			long contribution = maskId.getMostSignificantBits() ^ maskId.getLeastSignificantBits()
+					^ mask.dataVersion ^ mask.clipMode.hashCode();
+			hash = hash * 31 + contribution;
+		}
+		// A non-empty mask stack must never land on the same value as the empty one --
+		// astronomically unlikely on its own, but a single guard costs nothing and turns
+		// "unlikely" into "impossible".
+		return hash == 0 ? 1 : hash;
 	}
 
 	public Polygon getExtent() {
@@ -306,12 +340,12 @@ public class Layer {
 	}
 
 	/**
-	 * @param clipMode the source's clip mode -- null, {@code "inside"} or
-	 *                 {@code "outside"} (CONTRACT.md phase 19/20). A duplicate is a
-	 *                 project of its own, so copying this is safe even though at most one
-	 *                 layer per project may carry a non-null value: the source project
-	 *                 keeps its own mask untouched, and the target starts with at most
-	 *                 one too, since {@code source} could only ever carry one mode.
+	 * @param clipMode the source's clip mode -- null, or one of the four tokens
+	 *                 {@link #clipMode} documents (CONTRACT.md phase 21). A duplicate is
+	 *                 a project of its own, so copying this is safe: the source project
+	 *                 keeps its own masks untouched, and every layer of the target
+	 *                 -- mask or not -- is copied the same way, one call per layer, so a
+	 *                 project with several masks keeps every one of them.
 	 */
 	public void setCopyMetadata(long featureCount, boolean visible, int zIndex, int minZoom,
 			int maxZoom, String style, String basemap, Double basemapOpacity, String clipMode, Polygon extent) {

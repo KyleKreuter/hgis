@@ -9,6 +9,7 @@ import de.kreuter.hgis.jobs.JobService;
 import de.kreuter.hgis.jobs.dto.JobDtos;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -118,17 +119,34 @@ class ProjectDuplicateServiceTest {
 	}
 
 	/**
-	 * CONTRACT.md phase 19/20: a duplicate must not silently lose its clip mask, or the
-	 * mode it clips in. Checking only the mode string would not be enough -- a mode that
-	 * survived the copy but landed at the wrong z-index would still cut the wrong
-	 * layers, so this also confirms the mask still clips a layer above it once both are
-	 * in the target project.
+	 * CONTRACT.md phase 21: a duplicate must not silently lose any of its clip masks, or
+	 * the mode each clips in -- the one-mask-per-project limit is gone, so a project may
+	 * well hold several. Checking only the mode strings would not be enough -- a mode
+	 * that survived the copy but landed at the wrong z-index would still cut the wrong
+	 * layers, so this also confirms both masks still clip a layer above them once all
+	 * three are in the target project.
 	 */
 	@Test
-	void duplicatingAProjectWithAClipMaskKeepsItAndItsEffect() {
-		Layer maskLayer = layers.findByProjectOrdered(source.getId()).getFirst();
-		maskLayer.setClipMode("outside");
-		layers.saveAndFlush(maskLayer);
+	void duplicatingAProjectWithSeveralClipMasksKeepsThemAndTheirEffect() {
+		Layer gebaeude = layers.findByProjectOrdered(source.getId()).getFirst();
+		gebaeude.setClipMode("outsideClipped");
+		layers.saveAndFlush(gebaeude);
+
+		UUID fundamentId = UUID.randomUUID();
+		String fundamentTable = SqlIdentifier.tableName(fundamentId);
+		String quotedFundamentTable = SqlIdentifier.quoteLayerTable(fundamentTable);
+		jdbc.sql("""
+				CREATE TABLE %s (
+				  fid  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				  geom geometry(MultiPolygon, 25832) NOT NULL
+				)
+				""".formatted(quotedFundamentTable)).update();
+		jdbc.sql("CREATE INDEX " + SqlIdentifier.quoteColumn(fundamentTable + "_geom_idx")
+				+ " ON " + quotedFundamentTable + " USING GIST (geom)").update();
+		Layer fundament = new Layer(fundamentId, source, "Fundament", fundamentTable, "MULTIPOLYGON", 25832);
+		fundament.setZIndex(gebaeude.getZIndex() - 1);
+		fundament.setClipMode("insideWhole");
+		layers.saveAndFlush(fundament);
 
 		UUID aboveId = UUID.randomUUID();
 		String aboveTable = SqlIdentifier.tableName(aboveId);
@@ -142,7 +160,7 @@ class ProjectDuplicateServiceTest {
 		jdbc.sql("CREATE INDEX " + SqlIdentifier.quoteColumn(aboveTable + "_geom_idx")
 				+ " ON " + quotedAboveTable + " USING GIST (geom)").update();
 		Layer above = new Layer(aboveId, source, "Dach", aboveTable, "MULTIPOLYGON", 25832);
-		above.setZIndex(maskLayer.getZIndex() + 1);
+		above.setZIndex(gebaeude.getZIndex() + 1);
 		layers.saveAndFlush(above);
 
 		Job job = jobs.create(source.getId(), Job.Type.DUPLICATE, null);
@@ -151,19 +169,21 @@ class ProjectDuplicateServiceTest {
 		assertThat(result.status()).isEqualTo("SUCCEEDED");
 
 		List<Layer> copiedLayers = layers.findByProjectOrdered(result.outputProjectId());
-		Layer maskCopy = copiedLayers.stream().filter(Layer::isMask).findFirst()
-				.orElseThrow(() -> new AssertionError("Kopie hat keine Maske"));
+		List<Layer> maskCopies = copiedLayers.stream().filter(Layer::isMask).toList();
 		Layer aboveCopy = copiedLayers.stream()
 				.filter(l -> l.getName().equals("Dach")).findFirst().orElseThrow();
 
-		assertThat(maskCopy.getName()).isEqualTo(maskLayer.getName());
-		assertThat(maskCopy.getClipMode()).isEqualTo("outside");
-		assertThat(copiedLayers.stream().filter(Layer::isMask).toList()).hasSize(1);
-		// Preserved z-index is what makes the mask affect the same layer in the copy as
-		// in the source -- without it, the flag alone would be a lie about what clips.
-		assertThat(aboveCopy.getZIndex()).isGreaterThan(maskCopy.getZIndex());
-		assertThat(aboveCopy.clipVersion(maskCopy))
-				.as("Layer über der Maske muss in der Kopie wirklich beschnitten werden")
+		assertThat(maskCopies).hasSize(2);
+		assertThat(maskCopies.stream().collect(Collectors.toMap(Layer::getName, Layer::getClipMode)))
+				.containsEntry("Gebäude", "outsideClipped")
+				.containsEntry("Fundament", "insideWhole");
+		// Preserved z-index is what makes the masks affect the same layer in the copy as
+		// in the source -- without it, the mode alone would be a lie about what clips.
+		for (Layer maskCopy : maskCopies) {
+			assertThat(aboveCopy.getZIndex()).isGreaterThan(maskCopy.getZIndex());
+		}
+		assertThat(aboveCopy.clipVersion(maskCopies))
+				.as("Layer über den Masken muss in der Kopie wirklich beschnitten werden")
 				.isNotZero();
 	}
 

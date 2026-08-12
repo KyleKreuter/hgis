@@ -27,14 +27,14 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * A layer can be marked as the project's clip mask, in either mode (CONTRACT.md phase
- * 19/20): at most one per project, restricted to polygon geometry, reported through the
- * same PATCH endpoint that already carries the rest of a layer's settings. This class
- * covers the catalog side -- marking, unmarking, an unknown mode, the
- * second-mask-demotes-the-first rule, and clipVersion reacting to a mask edit, a reorder
- * or a mode switch. Whether {@code MvtService} actually cuts the geometry is covered
- * separately, by {@code tiles.MvtServiceClipTest}, {@code tiles.MvtServiceOutsideClipTest}
- * and {@code tiles.TileControllerClipTest}.
+ * A layer can be marked as one of the project's clip masks, in any of four modes
+ * (CONTRACT.md phase 21): any number per project, restricted to polygon geometry,
+ * reported through the same PATCH endpoint that already carries the rest of a layer's
+ * settings. This class covers the catalog side -- marking, unmarking, an unknown mode,
+ * several masks coexisting, and clipVersion reacting to a mask edit, a reorder or a
+ * mode switch. Whether {@code MvtService} actually cuts the geometry, in each mode and
+ * for several masks at once, is covered separately, by {@code tiles.MvtServiceClipTest},
+ * {@code tiles.MvtServiceOutsideClipTest} and {@code tiles.TileControllerClipTest}.
  *
  * No physical payload tables here, same as {@link LayerReorderTest}: every test in this
  * class only touches the catalog.
@@ -58,11 +58,11 @@ class LayerClipMaskTest {
 
 	private Project project;
 
-	/** Bottom to top: unten, maske, oben, zweiteMaske, punktlayer. */
+	/** Bottom to top: unten, maskeA, maskeB, oben, punktlayer -- two masks both below "oben". */
 	private Layer unten;
-	private Layer maske;
+	private Layer maskeA;
+	private Layer maskeB;
 	private Layer oben;
-	private Layer zweiteMaske;
 	private Layer punktlayer;
 
 	@BeforeEach
@@ -71,9 +71,9 @@ class LayerClipMaskTest {
 				new Project("Zuschnitt-Testprojekt " + UUID.randomUUID(), null, 25832, "osm"));
 
 		unten = saveLayer("Unten", "MULTIPOLYGON", 0);
-		maske = saveLayer("Maske", "MULTIPOLYGON", 1);
-		oben = saveLayer("Oben", "MULTIPOLYGON", 2);
-		zweiteMaske = saveLayer("Zweite Maske", "MULTIPOLYGON", 3);
+		maskeA = saveLayer("Maske A", "MULTIPOLYGON", 1);
+		maskeB = saveLayer("Maske B", "MULTIPOLYGON", 2);
+		oben = saveLayer("Oben", "MULTIPOLYGON", 3);
 		punktlayer = saveLayer("Punktlayer", "MULTIPOINT", 4);
 	}
 
@@ -93,20 +93,19 @@ class LayerClipMaskTest {
 	@Test
 	@DisplayName("marking a polygon layer as the mask shows up in Detail, Summary and the project list")
 	void marksAPolygonLayerAsTheMask() throws Exception {
-		mockMvc.perform(patch("/api/layers/{layerId}", maske.getId())
+		mockMvc.perform(patch("/api/layers/{layerId}", maskeA.getId())
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{ \"clipMode\": \"inside\" }"))
+						.content("{ \"clipMode\": \"insideClipped\" }"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.clipMode").value("inside"))
-				.andExpect(jsonPath("$.previousClipMaskLayerId").doesNotExist());
+				.andExpect(jsonPath("$.clipMode").value("insideClipped"));
 
-		mockMvc.perform(get("/api/layers/{layerId}", maske.getId()))
+		mockMvc.perform(get("/api/layers/{layerId}", maskeA.getId()))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.clipMode").value("inside"));
+				.andExpect(jsonPath("$.clipMode").value("insideClipped"));
 
 		mockMvc.perform(get("/api/projects/{projectId}/layers", project.getId()))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$[?(@.id=='" + maske.getId() + "')].clipMode").value("inside"))
+				.andExpect(jsonPath("$[?(@.id=='" + maskeA.getId() + "')].clipMode").value("insideClipped"))
 				// A JSONPath filter always evaluates to a list, even for one match, and
 				// Spring does not unwrap a singleton list for a Hamcrest matcher the way
 				// it does for a plain expected value -- hence contains(), not nullValue()
@@ -116,27 +115,29 @@ class LayerClipMaskTest {
 	}
 
 	@Test
-	@DisplayName("marking a polygon layer with outside mode is reported the same way")
-	void marksAPolygonLayerWithOutsideMode() throws Exception {
-		mockMvc.perform(patch("/api/layers/{layerId}", maske.getId())
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("{ \"clipMode\": \"outside\" }"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.clipMode").value("outside"));
+	@DisplayName("each of the four known clip modes round-trips through the PATCH endpoint")
+	void marksAPolygonLayerWithEachKnownMode() throws Exception {
+		for (String mode : new String[] { "insideWhole", "insideClipped", "outsideWhole", "outsideClipped" }) {
+			mockMvc.perform(patch("/api/layers/{layerId}", maskeA.getId())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{ \"clipMode\": \"" + mode + "\" }"))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.clipMode").value(mode));
+		}
 	}
 
 	@Test
 	@DisplayName("an explicit null clears the mode again")
 	void unmarksTheMask() throws Exception {
-		mark(maske);
+		mark(maskeA, "insideClipped");
 
-		mockMvc.perform(patch("/api/layers/{layerId}", maske.getId())
+		mockMvc.perform(patch("/api/layers/{layerId}", maskeA.getId())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{ \"clipMode\": null }"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.clipMode").value(Matchers.nullValue()));
 
-		assertThat(layerRepository.findById(maske.getId()).orElseThrow().isMask()).isFalse();
+		assertThat(layerRepository.findById(maskeA.getId()).orElseThrow().isMask()).isFalse();
 	}
 
 	@Test
@@ -144,7 +145,7 @@ class LayerClipMaskTest {
 	void rejectsAPointLayerAsAMask() throws Exception {
 		mockMvc.perform(patch("/api/layers/{layerId}", punktlayer.getId())
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{ \"clipMode\": \"inside\" }"))
+						.content("{ \"clipMode\": \"insideClipped\" }"))
 				.andExpect(status().isBadRequest());
 
 		assertThat(layerRepository.findById(punktlayer.getId()).orElseThrow().isMask()).isFalse();
@@ -153,99 +154,145 @@ class LayerClipMaskTest {
 	@Test
 	@DisplayName("an unknown clip mode is rejected with 400")
 	void rejectsAnUnknownClipMode() throws Exception {
-		mockMvc.perform(patch("/api/layers/{layerId}", maske.getId())
+		mockMvc.perform(patch("/api/layers/{layerId}", maskeA.getId())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{ \"clipMode\": \"invertiert\" }"))
 				.andExpect(status().isBadRequest());
 
-		assertThat(layerRepository.findById(maske.getId()).orElseThrow().isMask()).isFalse();
+		assertThat(layerRepository.findById(maskeA.getId()).orElseThrow().isMask()).isFalse();
 	}
 
+	/**
+	 * CONTRACT.md phase 21: the two tokens phase 19/20 used, {@code "inside"} and
+	 * {@code "outside"}, are gone without a replacement of the same name -- migration
+	 * V6 rewrites any stored row, but the API must no longer accept the old spelling.
+	 */
 	@Test
-	@DisplayName("marking a second layer demotes the first and reports it")
-	void aSecondMaskDemotesTheFirst() throws Exception {
-		mark(maske);
+	@DisplayName("the retired inside/outside tokens are rejected with 400")
+	void rejectsTheRetiredTokens() throws Exception {
+		for (String retired : new String[] { "inside", "outside" }) {
+			mockMvc.perform(patch("/api/layers/{layerId}", maskeA.getId())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{ \"clipMode\": \"" + retired + "\" }"))
+					.andExpect(status().isBadRequest());
+		}
+	}
 
-		mockMvc.perform(patch("/api/layers/{layerId}", zweiteMaske.getId())
+	/**
+	 * CONTRACT.md phase 21: the rule that a second mask silently demotes the first is
+	 * gone. Any number of layers may be masks in the same project at once.
+	 */
+	@Test
+	@DisplayName("marking a second layer as a mask leaves the first one marked too")
+	void twoMasksCanBeMarkedAtOnce() throws Exception {
+		mark(maskeA, "insideClipped");
+
+		mockMvc.perform(patch("/api/layers/{layerId}", maskeB.getId())
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{ \"clipMode\": \"outside\" }"))
+						.content("{ \"clipMode\": \"outsideClipped\" }"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.clipMode").value("outside"))
-				.andExpect(jsonPath("$.previousClipMaskLayerId").value(maske.getId().toString()));
+				.andExpect(jsonPath("$.clipMode").value("outsideClipped"));
 
-		assertThat(layerRepository.findById(maske.getId()).orElseThrow().isMask()).isFalse();
-		assertThat(layerRepository.findById(zweiteMaske.getId()).orElseThrow().isMask()).isTrue();
+		assertThat(layerRepository.findById(maskeA.getId()).orElseThrow().isMask()).isTrue();
+		assertThat(layerRepository.findById(maskeB.getId()).orElseThrow().isMask()).isTrue();
 	}
 
 	@Test
-	@DisplayName("a layer above the mask gets a non-zero clipVersion, one below and the mask itself stay at zero")
-	void clipVersionReflectsPositionRelativeToTheMask() throws Exception {
-		mark(maske);
+	@DisplayName("a layer above the masks gets a non-zero clipVersion, one below and the masks themselves stay at zero")
+	void clipVersionReflectsPositionRelativeToTheMasks() throws Exception {
+		mark(maskeA, "insideClipped");
+		mark(maskeB, "outsideClipped");
 
 		mockMvc.perform(get("/api/projects/{projectId}/layers", project.getId()))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[?(@.id=='" + unten.getId() + "')].clipVersion").value(0))
-				.andExpect(jsonPath("$[?(@.id=='" + maske.getId() + "')].clipVersion").value(0));
+				.andExpect(jsonPath("$[?(@.id=='" + maskeA.getId() + "')].clipVersion").value(0));
 
 		long clipVersion = clipVersionOf(oben.getId());
 		assertThat(clipVersion).isNotZero();
 	}
 
 	@Test
-	@DisplayName("editing the mask's data changes the clipVersion of layers above it")
-	void editingTheMaskChangesClipVersion() throws Exception {
-		mark(maske);
+	@DisplayName("adding a second mask below a layer changes its clipVersion again")
+	void addingASecondMaskChangesClipVersion() throws Exception {
+		mark(maskeA, "insideClipped");
+		long withOneMask = clipVersionOf(oben.getId());
+
+		mark(maskeB, "outsideClipped");
+		long withTwoMasks = clipVersionOf(oben.getId());
+
+		assertThat(withTwoMasks).isNotEqualTo(withOneMask);
+	}
+
+	@Test
+	@DisplayName("editing a mask's data changes the clipVersion of layers above it")
+	void editingAMaskChangesClipVersion() throws Exception {
+		mark(maskeA, "insideClipped");
 		long before = clipVersionOf(oben.getId());
 
-		bumpDataVersionInItsOwnTransaction(maske.getId());
+		bumpDataVersionInItsOwnTransaction(maskeA.getId());
 
 		long after = clipVersionOf(oben.getId());
 		assertThat(after).isNotEqualTo(before);
 	}
 
 	@Test
-	@DisplayName("dragging a layer above the mask changes its clipVersion, with no edit to the layer itself")
-	void reorderingAcrossTheMaskChangesClipVersion() throws Exception {
-		mark(maske);
+	@DisplayName("dragging a layer above a mask changes its clipVersion, with no edit to the layer itself")
+	void reorderingAcrossAMaskChangesClipVersion() throws Exception {
+		mark(maskeA, "insideClipped");
 		assertThat(clipVersionOf(unten.getId())).isZero();
 
-		// New bottom-to-top order: maske, unten, oben, zweiteMaske, punktlayer -- unten
-		// now sits above the mask.
+		// New bottom-to-top order: maskeA, unten, maskeB, oben, punktlayer -- unten now
+		// sits above maskeA.
 		mockMvc.perform(put("/api/projects/{projectId}/layers/order", project.getId())
 						.contentType(MediaType.APPLICATION_JSON)
-						.content(orderBody(maske.getId(), unten.getId(), oben.getId(),
-								zweiteMaske.getId(), punktlayer.getId())))
+						.content(orderBody(maskeA.getId(), unten.getId(), maskeB.getId(),
+								oben.getId(), punktlayer.getId())))
 				.andExpect(status().isOk());
 
 		assertThat(clipVersionOf(unten.getId())).isNotZero();
 	}
 
 	/**
-	 * CONTRACT.md phase 20: clipVersion has to include the mode, or the tile address
-	 * would stay the same when a mask switches sides, and the cache would keep serving
+	 * CONTRACT.md phase 21: clipVersion has to include the mode, or the tile address
+	 * would stay the same when a mask switches mode, and the cache would keep serving
 	 * the wrongly clipped tile.
 	 */
 	@Test
-	@DisplayName("switching the mask from inside to outside changes the clipVersion of a layer above it")
+	@DisplayName("switching a mask's mode changes the clipVersion of a layer above it")
 	void switchingModeChangesClipVersion() throws Exception {
-		mark(maske);
+		mark(maskeA, "insideClipped");
 		long insideVersion = clipVersionOf(oben.getId());
 
-		mockMvc.perform(patch("/api/layers/{layerId}", maske.getId())
+		mockMvc.perform(patch("/api/layers/{layerId}", maskeA.getId())
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{ \"clipMode\": \"outside\" }"))
+						.content("{ \"clipMode\": \"outsideClipped\" }"))
 				.andExpect(status().isOk());
 
 		assertThat(clipVersionOf(oben.getId())).isNotEqualTo(insideVersion);
 	}
 
 	@Test
-	@DisplayName("deleting the mask layer frees every layer above it again")
-	void deletingTheMaskFreesLayersAboveIt() throws Exception {
-		mark(maske);
+	@DisplayName("deleting one mask layer leaves the other's effect on layers above it intact")
+	void deletingOneMaskLeavesTheOthersEffect() throws Exception {
+		mark(maskeA, "insideClipped");
+		mark(maskeB, "outsideClipped");
 		assertThat(clipVersionOf(oben.getId())).isNotZero();
 
-		mockMvc.perform(delete("/api/layers/{layerId}", maske.getId()))
+		mockMvc.perform(delete("/api/layers/{layerId}", maskeA.getId()))
+				.andExpect(status().isNoContent());
+
+		assertThat(clipVersionOf(oben.getId())).isNotZero();
+		assertThat(layerRepository.findById(maskeB.getId()).orElseThrow().isMask()).isTrue();
+	}
+
+	@Test
+	@DisplayName("deleting the last mask layer frees every layer above it again")
+	void deletingTheLastMaskFreesLayersAboveIt() throws Exception {
+		mark(maskeA, "insideClipped");
+		assertThat(clipVersionOf(oben.getId())).isNotZero();
+
+		mockMvc.perform(delete("/api/layers/{layerId}", maskeA.getId()))
 				.andExpect(status().isNoContent());
 
 		assertThat(clipVersionOf(oben.getId())).isZero();
@@ -262,10 +309,10 @@ class LayerClipMaskTest {
 
 	// --- helpers -----------------------------------------------------------------
 
-	private void mark(Layer layer) throws Exception {
+	private void mark(Layer layer, String mode) throws Exception {
 		mockMvc.perform(patch("/api/layers/{layerId}", layer.getId())
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{ \"clipMode\": \"inside\" }"))
+						.content("{ \"clipMode\": \"" + mode + "\" }"))
 				.andExpect(status().isOk());
 	}
 

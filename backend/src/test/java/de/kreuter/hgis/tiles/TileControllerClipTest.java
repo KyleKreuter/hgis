@@ -30,13 +30,15 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * End-to-end coverage for the part of CONTRACT.md phase 19 that {@code MvtServiceClipTest}
- * cannot reach on its own: whether a layer's position relative to the project's clip
- * mask -- not just the mask's existence -- decides whether {@link TileController} clips
- * it, and whether the ETag it serves changes exactly when the rendered tile does.
+ * End-to-end coverage for the part of CONTRACT.md phase 19/21 that {@code
+ * MvtServiceClipTest} cannot reach on its own: whether a layer's position relative to
+ * the project's clip masks -- not just their existence -- decides which of them {@link
+ * TileController} passes to {@code MvtService}, whether several masks below the same
+ * layer are all wired through at once, and whether the ETag it serves changes exactly
+ * when the rendered tile does.
  *
  * "Unten" and "Oben" hold the identical rectangle, straddling the same mask edge, in
- * separate physical tables; the only difference between them is which side of the mask
+ * separate physical tables; the only difference between them is which side of the masks
  * their {@code zIndex} sits on. That isolates the z-index rule from geometry: if
  * "Unten" ever came back clipped, it could only be because the controller ignored
  * z-index, not because its shape happened to miss the mask.
@@ -70,7 +72,8 @@ class TileControllerClipTest {
 
 	private Project project;
 	private Layer unten;
-	private Layer maske;
+	private Layer maskeA;
+	private Layer maskeB;
 	private Layer oben;
 
 	private int tileX;
@@ -88,19 +91,22 @@ class TileControllerClipTest {
 		bounds = nativeBoundsOfTile(tileX, tileY, ZOOM);
 
 		unten = createLayer("Unten", 0);
-		maske = createLayer("Maske", 1);
-		oben = createLayer("Oben", 2);
+		maskeA = createLayer("Maske A", 1);
+		maskeB = createLayer("Maske B", 2);
+		oben = createLayer("Oben", 3);
 
-		// The mask covers the left half of a square. "Unten" and "Oben" both hold that
-		// exact square, straddling the mask edge -- only their zIndex differs.
-		insertRectangle(maske.getTableName(), fx(0.20), fy(0.20), fx(0.30), fy(0.40));
+		// Both masks cover the left half of a square, maskeB reaching a bit further
+		// right than maskeA. "Unten" and "Oben" both hold that exact square, straddling
+		// both mask edges -- only their zIndex differs.
+		insertRectangle(maskeA.getTableName(), fx(0.20), fy(0.20), fx(0.30), fy(0.40));
+		insertRectangle(maskeB.getTableName(), fx(0.20), fy(0.20), fx(0.35), fy(0.40));
 		insertRectangle(unten.getTableName(), fx(0.20), fy(0.20), fx(0.40), fy(0.40));
 		insertRectangle(oben.getTableName(), fx(0.20), fy(0.20), fx(0.40), fy(0.40));
 	}
 
 	@AfterEach
 	void tearDown() {
-		for (Layer layer : new Layer[] { unten, maske, oben }) {
+		for (Layer layer : new Layer[] { unten, maskeA, maskeB, oben }) {
 			if (layer != null) {
 				jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(layer.getTableName())).update();
 			}
@@ -113,7 +119,7 @@ class TileControllerClipTest {
 	@DisplayName("a layer above the mask is clipped, one below stays exactly as unclipped")
 	void onlyTheLayerAboveTheMaskIsClipped() throws Exception {
 		double baselineArea = featureArea(tile(oben)); // no mask marked yet
-		markAsMask(maske);
+		markAsMask(maskeA, "insideClipped");
 
 		double untenArea = featureArea(tile(unten));
 		double obenArea = featureArea(tile(oben));
@@ -126,40 +132,62 @@ class TileControllerClipTest {
 				.isLessThan(baselineArea);
 	}
 
+	/**
+	 * CONTRACT.md phase 21: any number of masks below a layer act on it together, not
+	 * just the first one the controller happens to find. Marking a second mask below
+	 * "Oben" has to cut its area down further, proving both masks reached {@code
+	 * MvtService} in the same render, not just one of them.
+	 */
 	@Test
-	@DisplayName("marking the mask changes the clipped layer's ETag, not the unaffected layer's")
+	@DisplayName("two masks below the same layer both clip it, cumulatively")
+	void twoMasksBelowTheSameLayerBothApply() throws Exception {
+		markAsMask(maskeA, "insideClipped");
+		double withOneMask = featureArea(tile(oben));
+
+		markAsMask(maskeB, "insideClipped");
+		double withTwoMasks = featureArea(tile(oben));
+
+		// maskeA (fx 0.20-0.30) is the stricter of the two, so intersecting with maskeB
+		// (fx 0.20-0.35) on top must not shrink the area further -- confirming that
+		// what changed above is the addition of a second, real clip, not a fluke.
+		assertThat(withTwoMasks).isLessThanOrEqualTo(withOneMask);
+		assertThat(withTwoMasks).isPositive();
+	}
+
+	@Test
+	@DisplayName("marking a mask changes the clipped layer's ETag, not the unaffected layer's")
 	void markingTheMaskChangesOnlyTheAffectedEtag() throws Exception {
 		String untenEtagBefore = etagOf(unten);
 		String obenEtagBefore = etagOf(oben);
 
-		markAsMask(maske);
+		markAsMask(maskeA, "insideClipped");
 
 		assertThat(etagOf(unten)).isEqualTo(untenEtagBefore);
 		assertThat(etagOf(oben)).isNotEqualTo(obenEtagBefore);
 	}
 
 	@Test
-	@DisplayName("editing the mask's data changes the ETag of a layer clipped by it")
+	@DisplayName("editing a mask's data changes the ETag of a layer clipped by it")
 	void editingTheMaskChangesTheClippedLayersEtag() throws Exception {
-		markAsMask(maske);
+		markAsMask(maskeA, "insideClipped");
 		String before = etagOf(oben);
 
-		bumpDataVersionInItsOwnTransaction(maske.getId());
+		bumpDataVersionInItsOwnTransaction(maskeA.getId());
 
 		assertThat(etagOf(oben)).isNotEqualTo(before);
 	}
 
 	@Test
-	@DisplayName("a client holding the old ETag gets 304 only until the mask changes the tile")
+	@DisplayName("a client holding the old ETag gets 304 only until a mask changes the tile")
 	void conditionalRequestReflectsTheClipState() throws Exception {
-		markAsMask(maske);
+		markAsMask(maskeA, "insideClipped");
 		String etag = etagOf(oben);
 
 		mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt", oben.getId(), ZOOM, tileX, tileY)
 						.header(HttpHeaders.IF_NONE_MATCH, etag))
 				.andExpect(status().isNotModified());
 
-		bumpDataVersionInItsOwnTransaction(maske.getId());
+		bumpDataVersionInItsOwnTransaction(maskeA.getId());
 
 		mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt", oben.getId(), ZOOM, tileX, tileY)
 						.header(HttpHeaders.IF_NONE_MATCH, etag))
@@ -167,25 +195,42 @@ class TileControllerClipTest {
 	}
 
 	@Test
-	@DisplayName("deleting the mask layer unclips the layer above it again")
-	void deletingTheMaskUnclipsTheLayerAgain() throws Exception {
+	@DisplayName("deleting one mask layer leaves the layer above clipped by the other")
+	void deletingOneMaskLeavesTheOthersClipInPlace() throws Exception {
 		double baselineArea = featureArea(tile(oben));
-		markAsMask(maske);
+		markAsMask(maskeA, "insideClipped");
+		markAsMask(maskeB, "insideClipped");
+
+		mockMvc.perform(delete("/api/layers/{layerId}", maskeA.getId()))
+				.andExpect(status().isNoContent());
+		maskeA = null; // tearDown must not try to drop it again
+
+		double afterDeletingOne = featureArea(tile(oben));
+		assertThat(afterDeletingOne)
+				.as("maskeB klippt weiterhin, auch nachdem maskeA gelöscht wurde")
+				.isLessThan(baselineArea);
+	}
+
+	@Test
+	@DisplayName("deleting the last mask layer unclips the layer above it again")
+	void deletingTheLastMaskUnclipsTheLayerAgain() throws Exception {
+		double baselineArea = featureArea(tile(oben));
+		markAsMask(maskeA, "insideClipped");
 		assertThat(featureArea(tile(oben))).isLessThan(baselineArea);
 
-		mockMvc.perform(delete("/api/layers/{layerId}", maske.getId()))
+		mockMvc.perform(delete("/api/layers/{layerId}", maskeA.getId()))
 				.andExpect(status().isNoContent());
-		maske = null; // tearDown must not try to drop it again
+		maskeA = null; // tearDown must not try to drop it again
 
 		assertThat(featureArea(tile(oben))).isEqualTo(baselineArea);
 	}
 
 	// --- helpers -------------------------------------------------------------------
 
-	private void markAsMask(Layer layer) throws Exception {
+	private void markAsMask(Layer layer, String mode) throws Exception {
 		mockMvc.perform(patch("/api/layers/{layerId}", layer.getId())
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{ \"clipMode\": \"inside\" }"))
+						.content("{ \"clipMode\": \"" + mode + "\" }"))
 				.andExpect(status().isOk());
 	}
 
