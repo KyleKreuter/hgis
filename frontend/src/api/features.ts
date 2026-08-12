@@ -38,6 +38,12 @@ export interface FeatureQuery {
   sort?: string
   desc?: boolean
   filter?: string
+  /**
+   * Case-insensitive partial match against every text field of the layer. Combines
+   * with `filter` as AND when both are set -- the UI only ever sends one of the two,
+   * but the backend accepts both together. See CONTRACT.md.
+   */
+  search?: string
   /** [minLng, minLat, maxLng, maxLat] in EPSG:4326. */
   bbox?: [number, number, number, number]
   /** Only meaningful together with `bbox`; see `SpatialMode`. */
@@ -52,22 +58,34 @@ export const featureKeys = {
       'layers',
       query.layerId,
       'features',
-      { sort: query.sort ?? null, desc: query.desc ?? false, filter: query.filter ?? null },
+      {
+        sort: query.sort ?? null,
+        desc: query.desc ?? false,
+        filter: query.filter ?? null,
+        search: query.search ?? null,
+      },
     ] as const,
   detail: (layerId: string, fid: number) => ['layers', layerId, 'features', fid] as const,
 }
 
-function buildSearch(query: FeatureQuery, cursor?: string): string {
-  const search = new URLSearchParams()
-  if (query.sort) search.set('sort', query.sort)
-  if (query.desc) search.set('desc', 'true')
-  if (query.filter?.trim()) search.set('filter', query.filter.trim())
-  if (query.bbox) search.set('bbox', query.bbox.join(','))
-  if (query.mode) search.set('mode', query.mode)
-  if (query.geometry) search.set('geometry', 'true')
-  if (query.size) search.set('size', String(query.size))
-  if (cursor) search.set('cursor', cursor)
-  return search.toString()
+/**
+ * Query string shared by every features request -- pages, the fid endpoint and (via
+ * `cursor`) the next-page fetch. Exported for its own tests: the trimming and the
+ * filter/search combination are exactly the part worth getting right without a network
+ * call.
+ */
+export function buildQueryString(query: FeatureQuery, cursor?: string): string {
+  const params = new URLSearchParams()
+  if (query.sort) params.set('sort', query.sort)
+  if (query.desc) params.set('desc', 'true')
+  if (query.filter?.trim()) params.set('filter', query.filter.trim())
+  if (query.search?.trim()) params.set('search', query.search.trim())
+  if (query.bbox) params.set('bbox', query.bbox.join(','))
+  if (query.mode) params.set('mode', query.mode)
+  if (query.geometry) params.set('geometry', 'true')
+  if (query.size) params.set('size', String(query.size))
+  if (cursor) params.set('cursor', cursor)
+  return params.toString()
 }
 
 /**
@@ -81,7 +99,7 @@ export const featurePagesQuery = (query: FeatureQuery) =>
   infiniteQueryOptions({
     queryKey: featureKeys.page(query),
     queryFn: ({ pageParam }) =>
-      api.get<FeaturePage>(`/api/layers/${query.layerId}/features?${buildSearch(query, pageParam)}`),
+      api.get<FeaturePage>(`/api/layers/${query.layerId}/features?${buildQueryString(query, pageParam)}`),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     // The total arrives with the first page only, so it is lifted out of the page list
@@ -102,7 +120,7 @@ export const featurePagesQuery = (query: FeatureQuery) =>
  * ever drawn, for data nothing else reads.
  */
 export function fetchFeaturePage(query: FeatureQuery, cursor?: string): Promise<FeaturePage> {
-  return api.get<FeaturePage>(`/api/layers/${query.layerId}/features?${buildSearch(query, cursor)}`)
+  return api.get<FeaturePage>(`/api/layers/${query.layerId}/features?${buildQueryString(query, cursor)}`)
 }
 
 /** One feature with all attributes and its geometry -- what Identify displays. */
@@ -112,3 +130,24 @@ export const featureDetailQuery = (layerId: string, fid: number) =>
     queryFn: () => api.get<Feature>(`/api/layers/${layerId}/features/${fid}?`),
     enabled: Boolean(layerId) && Number.isFinite(fid),
   })
+
+/** The full fid set matching a `filter`/`search` restriction, as returned by the fids endpoint. */
+export interface FeatureFids {
+  fids: number[]
+  totalCount: number
+}
+
+/**
+ * The complete, unpaged fid set for a `filter`/`search` restriction -- no geometry, no
+ * attributes, no cursor loop to walk. What "select all matches" needs before handing
+ * the ids to the selection store, which is what makes the existing fid-based export
+ * usable for a filtered or searched set (CONTRACT.md).
+ *
+ * Not cached under `featureKeys`: the result feeds a one-off action (fill the
+ * selection), not something a component re-renders from repeatedly.
+ */
+export function fetchFeatureFids(
+  query: Pick<FeatureQuery, 'layerId' | 'filter' | 'search'>,
+): Promise<FeatureFids> {
+  return api.get<FeatureFids>(`/api/layers/${query.layerId}/features/fids?${buildQueryString(query)}`)
+}
