@@ -132,7 +132,8 @@ class OgcFeaturesClient {
 				throw new BadRequestException("Geoportal-Datensatz nicht erreichbar (" + response.getStatusCode() + ")");
 			}
 			if (!response.getStatusCode().is2xxSuccessful()) {
-				throw new IllegalStateException("Geoportal antwortete mit " + response.getStatusCode() + " auf " + uri);
+				throw new GeoportalUnavailableException(
+						"Geoportal antwortete mit " + response.getStatusCode() + " auf " + uri);
 			}
 			try (InputStream body = response.getBody()) {
 				return mapper.readTree(body);

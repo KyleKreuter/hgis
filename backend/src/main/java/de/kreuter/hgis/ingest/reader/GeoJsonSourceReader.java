@@ -4,6 +4,7 @@ import de.kreuter.hgis.ingest.spi.SourceFeature;
 import de.kreuter.hgis.ingest.spi.SourceField;
 import de.kreuter.hgis.ingest.spi.SourceSchema;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -138,9 +139,23 @@ final class GeoJsonSourceReader extends AbstractSourceReader {
 
 	// --- parsing --------------------------------------------------------------
 
+	/**
+	 * Hands back a parser positioned on the first element of the "features" array. The
+	 * caller owns it from then on and closes it; every way out of here that is not that
+	 * return closes it first.
+	 *
+	 * <p>The three rejections below are {@link SourceReadException}, an unchecked type the
+	 * {@code catch} clause deliberately does not cover -- so before this was explicit they
+	 * left an open parser, and with it an open file handle, that nothing held a reference to
+	 * any more. A single GeoJSON {@code Feature} uploaded instead of a {@code
+	 * FeatureCollection} triggers it, and the upload deliberately stays on disk for a retry:
+	 * every retry leaked one more handle.
+	 */
 	private JsonParser openFeaturesArray() {
+		InputStream in = openStream();
+		JsonParser parser = null;
 		try {
-			JsonParser parser = mapper.createParser(Files.newInputStream(file));
+			parser = mapper.createParser(in);
 			if (parser.nextToken() != JsonToken.START_OBJECT) {
 				throw new SourceReadException("GeoJSON ist kein Objekt: " + file.getFileName());
 			}
@@ -159,8 +174,34 @@ final class GeoJsonSourceReader extends AbstractSourceReader {
 				}
 				parser.skipChildren();
 			}
-		} catch (IOException | JacksonException e) {
+		} catch (RuntimeException e) {
+			// Everything reachable here is unchecked: JacksonException is a RuntimeException
+			// in Jackson 3, and so are the three rejections above.
+			closeQuietly(parser, in);
+			throw e instanceof JacksonException
+					? new SourceReadException("Der Import kann das GeoJSON nicht lesen: " + file, e)
+					: e;
+		}
+	}
+
+	private InputStream openStream() {
+		try {
+			return Files.newInputStream(file);
+		} catch (IOException e) {
 			throw new SourceReadException("Der Import kann das GeoJSON nicht lesen: " + file, e);
+		}
+	}
+
+	/**
+	 * Closes whichever of the two was reached. A parser closes its own source, so the second
+	 * close is normally a no-op -- but {@code createParser} reads the first bytes to detect
+	 * the encoding and can fail there, leaving a stream and no parser at all.
+	 */
+	private static void closeQuietly(JsonParser parser, InputStream in) {
+		try (InputStream ignoredStream = in; JsonParser ignoredParser = parser) {
+			// Nothing more to do: the failure that got us here is the one worth reporting.
+		} catch (IOException | RuntimeException e) {
+			// A close that fails must not replace the real cause.
 		}
 	}
 

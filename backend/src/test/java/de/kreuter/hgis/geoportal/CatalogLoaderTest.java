@@ -37,7 +37,16 @@ class CatalogLoaderTest {
 			]
 			""";
 
-	/** Header BOM-prefixed, a quoted field with an embedded comma -- both measured live. */
+	/**
+	 * Header BOM-prefixed, a quoted field with an embedded comma -- both measured live.
+	 *
+	 * <p>The two rows also differ in the one respect the real data differs in most often:
+	 * only the first {@code Organisation} carries a parenthesised abbreviation. 231 of the
+	 * 511 public datasets carry none at all, and the single most common value among them is
+	 * {@code Landesbetrieb Geoinformation und Vermessung}, 71 times -- so a fixture in which
+	 * every row is abbreviated leaves the branch that handles almost half the catalog
+	 * untested, and its {@code agency} silently wrong for all of them.
+	 */
 	private static final String DATASET_LIST = "﻿"
 			+ "Datensatzname,Organisation,Kategorie,Metadaten,Portal,WMS-Adresse,WFS-Adresse,OAF-Landing Page,Aufrufbar\n"
 			+ "Straßenbaumkataster Hamburg,\"Behörde für Umwelt, Klima, Energie und Agrarwirtschaft (BUKEA)\",Umwelt,"
@@ -46,7 +55,7 @@ class CatalogLoaderTest {
 			+ "https://geodienste.hamburg.de/HH_WMS_Strassenbaumkataster?SERVICE=WMS,"
 			+ "https://geodienste.hamburg.de/HH_WFS_Strassenbaumkataster?SERVICE=WFS,"
 			+ "https://api.hamburg.de/datasets/v1/strassenbaumkataster,FHHNET/Internet\n"
-			+ "ALKIS Flurstücke (gelb),\"Landesbetrieb Geoinformation und Vermessung (LGV)\",Umwelt,"
+			+ "ALKIS Flurstücke (gelb),Landesbetrieb Geoinformation und Vermessung,Umwelt,"
 			+ "https://metaver.de/trefferanzeige?docuuid=F691CFB0-D38F-4308-B12F-1671166FF181,"
 			+ "https://geoportal-hamburg.de/y,"
 			+ "https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?SERVICE=WMS,,,FHHNET/Internet\n"
@@ -123,6 +132,22 @@ class CatalogLoaderTest {
 		assertThat(entry.hasOgcFeatures()).isFalse();
 		assertThat(entry.apiUrl()).isNull();
 		assertThat(entry.id()).isEqualTo("md:f691cfb0-d38f-4308-b12f-1671166ff181");
-		assertThat(entry.agency()).isEqualTo("LGV");
+	}
+
+	/**
+	 * Nearly half the catalog looks like this: an {@code Organisation} Hamburg itself does
+	 * not abbreviate. There is no reliable way to shorten such a name, so the whole string
+	 * has to survive as the {@code agency} the list row and the agency filter show -- and it
+	 * must arrive complete, not empty and not cut at some assumed separator.
+	 */
+	@Test
+	@DisplayName("an organisation without a parenthesised abbreviation keeps its full name as the agency")
+	void agencyKeepsTheFullNameWhenTheOrganisationCarriesNoAbbreviation() {
+		GeoportalCatalogEntry entry = load().stream()
+				.filter(e -> e.title().equals("ALKIS Flurstücke (gelb)"))
+				.findFirst().orElseThrow();
+
+		assertThat(entry.agency()).isEqualTo("Landesbetrieb Geoinformation und Vermessung");
+		assertThat(entry.attribution()).isEqualTo("Landesbetrieb Geoinformation und Vermessung");
 	}
 }

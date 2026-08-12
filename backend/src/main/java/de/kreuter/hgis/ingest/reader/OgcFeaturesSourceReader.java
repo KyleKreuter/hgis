@@ -94,6 +94,20 @@ public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 	 */
 	private final List<SourceFeature> firstPage;
 
+	/**
+	 * How many features page 0 carried on the wire, skipped ones included. Not the same as
+	 * {@link #firstPage}{@code .size()}, which counts only the ones that survived parsing --
+	 * and paging must be driven by the wire count, since that is what the server's own
+	 * {@code offset} counts and what its page cap is measured against.
+	 */
+	private final int firstPageRawCount;
+
+	/**
+	 * The service's own {@code numberMatched} for this query, bbox included, or 0 when it
+	 * did not say. {@link #requireCompletePaging} checks the fetched total against it.
+	 */
+	private final long matchedCount;
+
 	/** Whether the collection offers EPSG:25832, decided once from the collection's own {@code crs} list. */
 	private final boolean requestCrs25832;
 
@@ -144,6 +158,8 @@ public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 
 		ItemsPage page0 = fetchItemsPage(0);
 		this.firstPage = page0.features();
+		this.firstPageRawCount = page0.rawCount();
+		this.matchedCount = page0.numberMatched();
 
 		FeatureSampling.Sample sample = FeatureSampling.sample(
 				firstPage.stream().map(SourceFeature::geometry).iterator(), SAMPLE_SIZE);
@@ -164,8 +180,13 @@ public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 	public Stream<SourceFeature> features() {
 		Iterator<SourceFeature> iterator = new Iterator<>() {
 			private Iterator<SourceFeature> currentPage = firstPage.iterator();
-			private int nextOffset = firstPage.size();
-			private boolean morePagesMayExist = firstPage.size() >= pageSize;
+			// Both start from the raw wire count, never from firstPage.size(): a single
+			// skipped feature on page 0 would otherwise shift every later offset by one
+			// (losing exactly as many features as were skipped) and, worse, make the
+			// short-page test below true on a full page, ending the import after one page
+			// with no error anywhere.
+			private long nextOffset = firstPageRawCount;
+			private boolean morePagesMayExist = firstPageRawCount >= pageSize;
 			private SourceFeature pending = advance();
 
 			private SourceFeature advance() {
@@ -174,6 +195,9 @@ public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 						return currentPage.next();
 					}
 					if (!morePagesMayExist) {
+						// Paging started at offset 0, so nextOffset is also the number of
+						// features the service put on the wire in total.
+						requireCompletePaging(nextOffset);
 						return null;
 					}
 					ItemsPage page = fetchItemsPage(nextOffset);
@@ -199,6 +223,28 @@ public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 			}
 		};
 		return streamOf(iterator);
+	}
+
+	/**
+	 * The last line of defence against a partial import that reports success. The service
+	 * states up front how many features match the query ({@code numberMatched}, bbox
+	 * included); anything short of that means paging stopped early, and the only honest
+	 * answer is to fail the job. {@code ImportService}'s skip-ratio check cannot catch this
+	 * on its own -- it measures skipped features against the ones that <em>did</em> arrive,
+	 * so a run that fetched 9,999 of 229,876 and skipped none stays comfortably under the
+	 * five-percent threshold and the layer is published as complete.
+	 *
+	 * <p>A service that names no {@code numberMatched} leaves {@link #matchedCount} at 0 and
+	 * is not checked -- there is nothing to check against, and refusing such an import would
+	 * reject data that is very probably complete.
+	 *
+	 * @param fetched every feature the service put on the wire, skipped ones included
+	 */
+	private void requireCompletePaging(long fetched) {
+		if (matchedCount > 0 && fetched < matchedCount) {
+			throw new SourceReadException("Das Geoportal hat nur " + fetched + " von " + matchedCount
+					+ " Objekten geliefert. Der Import ist abgebrochen, damit kein unvollständiger Layer entsteht.");
+		}
 	}
 
 	@Override
@@ -315,7 +361,7 @@ public final class OgcFeaturesSourceReader extends AbstractSourceReader {
 	private record ItemsPage(List<SourceFeature> features, int rawCount, int sourceSrid, long numberMatched) {
 	}
 
-	private ItemsPage fetchItemsPage(int offset) {
+	private ItemsPage fetchItemsPage(long offset) {
 		UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(apiUrl)
 				.pathSegment("collections", collection, "items")
 				.queryParam("f", "json")

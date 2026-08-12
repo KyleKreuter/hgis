@@ -159,12 +159,19 @@ final class CsvSourceReader extends AbstractSourceReader {
 
 	@Override
 	public Stream<SourceFeature> features() {
-		CSVReader csvReader;
+		// The reader is only handed to the stream (and with it to the caller's close) once
+		// the header row is behind it. A failure before that point closes it here instead --
+		// otherwise the file handle stays open with nothing left holding a reference to it,
+		// and every retry of the same broken file leaves one more behind.
+		CSVReader csvReader = openCsvReader();
 		try {
-			csvReader = openCsvReader();
 			csvReader.readNextSilently(); // skip the header
 		} catch (IOException e) {
+			closeQuietly(csvReader);
 			throw new SourceReadException("Der Import kann die CSV-Datei nicht lesen: " + file, e);
+		} catch (RuntimeException e) {
+			closeQuietly(csvReader);
+			throw e;
 		}
 		Iterator<SourceFeature> iterator = new Iterator<>() {
 			private SourceFeature pending = advance();

@@ -247,20 +247,125 @@ class OgcFeaturesSourceReaderTest {
 		h.server().verify();
 	}
 
+	/**
+	 * The case the test above cannot see, because every one of its pages parses cleanly: a
+	 * single feature the reader skips on page 0. The offset for page 1 used to be taken from
+	 * the parsed features rather than from the ones on the wire, so a full page read as one
+	 * short by however many were skipped -- {@code 9999 >= 10000} is false, paging stopped
+	 * after page 0, and the import wrote 9,999 of 229,876 objects. Nothing downstream
+	 * noticed: the skip ratio is measured against the objects that did arrive, so it stayed
+	 * far below its five-percent threshold and the job reported SUCCEEDED.
+	 */
+	@Test
+	@DisplayName("ein übersprungenes Objekt auf der ersten Seite beendet das Blättern nicht")
+	void aSkippedFeatureOnTheFirstPageDoesNotStopPaging() {
+		Harness h = harness();
+		expectCollectionInfo(h.server(), COLLECTION_INFO);
+		expectQueryables(h.server());
+
+		int pageSize = 3;
+		// Page 0 is a full page on the wire, but one of its three features has no geometry
+		// and never becomes a SourceFeature.
+		expectItemsPageAt(h.server(), 0, pageSize, page(7, feature(1), featureWithoutGeometry(2), feature(3)));
+		expectItemsPageAt(h.server(), 3, pageSize, page(7, feature(4), feature(5), feature(6)));
+		expectItemsPageAt(h.server(), 6, pageSize, page(7, feature(7))); // short page: paging stops here
+
+		OgcFeaturesSourceReader reader = new OgcFeaturesSourceReader(
+				h.restClient(), API_URL, COLLECTION, null, null, GERMAN_LABELS, pageSize);
+		try (reader) {
+			List<SourceFeature> features;
+			try (Stream<SourceFeature> stream = reader.features()) {
+				features = stream.toList();
+			}
+			assertThat(features).extracting(f -> f.attributes().get("gid"))
+					.as("every id except the skipped one, and every later page still fetched")
+					.containsExactly(1L, 3L, 4L, 5L, 6L, 7L);
+			assertThat(reader.skippedCount()).isEqualTo(1);
+		}
+		// Fails outright if the reader asked for the wrong offset or stopped after page 0.
+		h.server().verify();
+	}
+
+	/**
+	 * The safety net behind the offset arithmetic: whatever the reason, fewer objects on the
+	 * wire than the service's own {@code numberMatched} must fail the import rather than
+	 * quietly publish a partial layer. A visible failure is recoverable; a layer that claims
+	 * to be the whole dataset is not.
+	 */
+	@Test
+	@DisplayName("weniger Objekte als numberMatched ist ein Fehlschlag, kein stiller Teilimport")
+	void fewerObjectsThanNumberMatchedFailsTheImport() {
+		Harness h = harness();
+		expectCollectionInfo(h.server(), COLLECTION_INFO);
+		expectQueryables(h.server());
+
+		int pageSize = 3;
+		expectItemsPageAt(h.server(), 0, pageSize, page(10, feature(1), feature(2), feature(3)));
+		expectItemsPageAt(h.server(), 3, pageSize, page(10, feature(4))); // stops six objects short
+
+		OgcFeaturesSourceReader reader = new OgcFeaturesSourceReader(
+				h.restClient(), API_URL, COLLECTION, null, null, GERMAN_LABELS, pageSize);
+		try (reader; Stream<SourceFeature> stream = reader.features()) {
+			assertThatThrownBy(stream::toList)
+					.isInstanceOf(SourceReadException.class)
+					.hasMessageContaining("nur 4 von 10");
+		}
+		h.server().verify();
+	}
+
+	/** A service that names no {@code numberMatched} has nothing to check against, and an
+	 *  import of its data must still go through rather than be refused on a missing field. */
+	@Test
+	@DisplayName("ohne numberMatched bleibt der Import erlaubt")
+	void aResponseWithoutNumberMatchedIsStillImported() {
+		Harness h = harness();
+		expectCollectionInfo(h.server(), COLLECTION_INFO);
+		expectQueryables(h.server());
+
+		int pageSize = 3;
+		expectItemsPageAt(h.server(), 0, pageSize,
+				"{\"type\":\"FeatureCollection\",\"features\":[" + feature(1) + "," + feature(2) + "]}");
+
+		OgcFeaturesSourceReader reader = new OgcFeaturesSourceReader(
+				h.restClient(), API_URL, COLLECTION, null, null, GERMAN_LABELS, pageSize);
+		try (reader) {
+			List<SourceFeature> features;
+			try (Stream<SourceFeature> stream = reader.features()) {
+				features = stream.toList();
+			}
+			assertThat(features).hasSize(2);
+			assertThat(reader.schema().featureCount()).isZero();
+		}
+	}
+
 	/** One page of {@code count} synthetic MultiPoint features, ids starting at {@code firstId}. */
 	private static String featurePage(int firstId, int count) {
-		StringBuilder features = new StringBuilder();
+		String[] features = new String[count];
 		for (int i = 0; i < count; i++) {
-			int id = firstId + i;
-			if (i > 0) {
-				features.append(',');
-			}
-			features.append("""
-					{"type":"Feature","id":%d,"geometry":{"type":"MultiPoint","coordinates":[[%d,5931000]]},
-					 "properties":{"baumid":%d,"gattung":"Tilia / Linde","kronendurchmesser_z":"5 m"}}
-					""".formatted(id, 565000 + id, 100 + id));
+			features[i] = feature(firstId + i);
 		}
-		return "{\"type\":\"FeatureCollection\",\"numberMatched\":7,\"features\":[" + features + "]}";
+		return page(7, features);
+	}
+
+	/** One items response carrying {@code features} and the service's own matched count. */
+	private static String page(long numberMatched, String... features) {
+		return "{\"type\":\"FeatureCollection\",\"numberMatched\":" + numberMatched + ",\"features\":["
+				+ String.join(",", features) + "]}";
+	}
+
+	private static String feature(int id) {
+		return """
+				{"type":"Feature","id":%d,"geometry":{"type":"MultiPoint","coordinates":[[%d,5931000]]},
+				 "properties":{"baumid":%d,"gattung":"Tilia / Linde","kronendurchmesser_z":"5 m"}}
+				""".formatted(id, 565000 + id, 100 + id);
+	}
+
+	/** Travels over the wire like any other feature, but the reader skips it (no geometry). */
+	private static String featureWithoutGeometry(int id) {
+		return """
+				{"type":"Feature","id":%d,"geometry":null,
+				 "properties":{"baumid":%d,"gattung":"Tilia / Linde","kronendurchmesser_z":"5 m"}}
+				""".formatted(id, 100 + id);
 	}
 
 	private static void expectItemsPageAt(MockRestServiceServer server, int offset, int limit, String body) {

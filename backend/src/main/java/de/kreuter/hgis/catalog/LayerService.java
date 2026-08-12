@@ -412,12 +412,20 @@ public class LayerService {
 	}
 
 	/**
-	 * Null for a layer not imported from the Geoportal (CONTRACT.md phase 23.7) --
-	 * {@code source_attribution} is null exactly then, since all eight provenance columns
-	 * are written together, in one call, or not at all (see {@code ImportTransactions#begin}).
+	 * Null for a layer not imported from the Geoportal, non-null for every layer that was
+	 * (CONTRACT.md 11.7). The marker is {@code source_dataset_id}: the catalog builds that id
+	 * itself and always fills it, so it is set exactly when the layer came from there.
+	 *
+	 * <p>It used to be {@code source_attribution}, on the assumption that the two questions
+	 * are one. They are not, and the live service disproves it: {@code
+	 * grundwassermessstellen/grundwassermessstellen} (191,140 features, importable) carries a
+	 * licence and a metadata record but no attribution at all, because the service directory
+	 * leaves its agency blank. Keyed on attribution, such a layer lost its whole provenance --
+	 * licence notice included -- which is the one part CONTRACT.md 11.7 requires to be
+	 * displayed. {@code attribution} is nullable inside {@code source}; the clients skip it.
 	 */
 	private static LayerDtos.Source toSource(Layer layer) {
-		if (layer.getSourceAttribution() == null) {
+		if (layer.getSourceDatasetId() == null) {
 			return null;
 		}
 		return new LayerDtos.Source(

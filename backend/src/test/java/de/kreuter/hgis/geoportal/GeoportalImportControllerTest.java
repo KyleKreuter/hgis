@@ -221,6 +221,56 @@ class GeoportalImportControllerTest {
 		mockGeoportalServer.verify();
 	}
 
+	/**
+	 * CONTRACT.md 11.7: {@code source} is present for every layer imported from the
+	 * Geoportal, and {@code attribution} may be null within it -- the two are separate
+	 * questions. Measured live against {@code grundwassermessstellen/grundwassermessstellen}
+	 * (191,140 features, {@code kind: FEATURES}, importable): no attribution at all, because
+	 * the service directory leaves its agency blank, but a licence and a metadata record
+	 * both set. While "came from the Geoportal" was keyed on the attribution, a layer like
+	 * this one lost its entire provenance -- including the licence notice clause 2 requires
+	 * to be displayed, and including the {@code datasetId} stage 5 reconciles by.
+	 */
+	@Test
+	@DisplayName("ein Datensatz ohne Quellenvermerk behält Lizenz und Kennung (CONTRACT.md 11.7)")
+	void aDatasetWithoutAttributionKeepsItsProvenance() throws Exception {
+		String datasetId = "grundwassermessstellen/grundwassermessstellen";
+		GeoportalCatalogEntry entry = new GeoportalCatalogEntry(
+				datasetId, "Grundwassermessstellen Hamburg", "FEATURES",
+				null, null, "Umwelt", "https://metaver.de/trefferanzeige?docuuid=y",
+				"https://registry.gdi-de.org/id/de.hh/y", API_URL, COLLECTION, Map.of());
+		given(datasetService.requireImportable(datasetId)).willReturn(entry);
+		expectSuccessfulSchemaAndItemsFetch();
+
+		GeoportalDtos.ImportRequest request = new GeoportalDtos.ImportRequest(datasetId, null, null, null);
+
+		String job = mvc.perform(post("/api/projects/" + project.getId() + "/geoportal-imports")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(mapper.writeValueAsString(request)))
+				.andExpect(status().isAccepted())
+				.andReturn().getResponse().getContentAsString();
+
+		UUID id = UUID.fromString(mapper.readTree(job).get("id").asString());
+		awaitSucceeded(id);
+
+		UUID layerId = jobRepository.findById(id).orElseThrow().getOutputLayerId();
+		Layer layer = layerRepository.findById(layerId).orElseThrow();
+		assertThat(layer.getSourceAttribution()).as("the service directory names no agency for this dataset").isNull();
+		assertThat(layer.getSourceDatasetId()).isEqualTo(datasetId);
+
+		mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+						.get("/api/projects/" + project.getId() + "/layers"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].source").exists())
+				.andExpect(jsonPath("$[0].source.attribution").value(org.hamcrest.Matchers.nullValue()))
+				.andExpect(jsonPath("$[0].source.licenseName").value(GeoportalLicense.NAME))
+				.andExpect(jsonPath("$[0].source.licenseUrl").value(GeoportalLicense.URL))
+				.andExpect(jsonPath("$[0].source.datasetId").value(datasetId))
+				.andExpect(jsonPath("$[0].source.featureIdField").value("gid"));
+
+		mockGeoportalServer.verify();
+	}
+
 	/** The import runs asynchronously, same reasoning as {@code EndToEndTest#awaitJob}. */
 	private void awaitSucceeded(UUID jobId) throws InterruptedException {
 		for (int attempt = 0; attempt < 100; attempt++) {
