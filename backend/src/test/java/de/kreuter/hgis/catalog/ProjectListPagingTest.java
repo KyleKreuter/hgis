@@ -278,6 +278,79 @@ class ProjectListPagingTest {
 		return "PagingTest" + UUID.randomUUID().toString().substring(0, 8);
 	}
 
+	/**
+	 * CONTRACT.md phase 22, section 2.4: the aggregation must only ever touch the page,
+	 * never the whole table. That is a claim about the query plan, so this is the one
+	 * test that reads one -- the same approach {@code MvtServiceTest.assertIndexFriendly}
+	 * takes for the tile query, and it runs {@link ProjectRepository#PAGE_QUERY} itself
+	 * rather than a copy, so the statement under test cannot drift from the one in use.
+	 *
+	 * <p>What would break without it: moving the {@code LIMIT} out of the CTE and onto
+	 * the outer query still returns the right rows, so every other test here stays green
+	 * -- while the {@code GROUP BY} silently starts aggregating every project in the
+	 * database on every keystroke of the search box. At this project's scale nobody would
+	 * notice until it is far too late to notice cheaply.
+	 */
+	@Test
+	@DisplayName("the aggregation only ever sees one page, never the whole table")
+	void aggregationTouchesOnlyThePage() throws Exception {
+		String marker = marker();
+		for (int i = 0; i < 12; i++) {
+			createProject(marker + "-" + i, null);
+		}
+
+		int limit = 2;
+
+		// The plan is read for the *second* page, not the first: PostgreSQL cannot infer
+		// a type for the cursor parameters when they arrive as bare nulls, and a page
+		// with a live cursor exercises the keyset condition as well.
+		ProjectCursor cursor = ProjectCursor.decode(list(marker, null, limit).get("nextCursor").asString());
+
+		String json = jdbc.sql("EXPLAIN (ANALYZE, FORMAT JSON) " + ProjectRepository.PAGE_QUERY)
+				.param("pattern", "%" + marker + "%")
+				.param("cursorOpened", cursor.lastOpenedAt() == null ? null : Timestamp.from(cursor.lastOpenedAt()))
+				.param("cursorCreated", Timestamp.from(cursor.createdAt()))
+				.param("cursorId", cursor.id())
+				.param("fetchLimit", limit + 1)
+				.query(String.class)
+				.single();
+
+		JsonNode plan = MAPPER.readTree(json).get(0).get("Plan");
+		List<JsonNode> nodes = new ArrayList<>();
+		collectPlanNodes(plan, nodes);
+
+		List<JsonNode> aggregates = nodes.stream()
+				.filter(node -> {
+					JsonNode type = node.get("Node Type");
+					return type != null && type.asString().contains("Aggregate");
+				})
+				.toList();
+
+		assertThat(aggregates)
+				.as("Plan muss eine Aggregation enthalten, sonst prueft dieser Test nichts:%n%s", json)
+				.isNotEmpty();
+
+		for (JsonNode aggregate : aggregates) {
+			// One row per project on the page, at most -- not one per project in the table.
+			assertThat(aggregate.get("Actual Rows").asInt())
+					.as("Aggregation darf hoechstens die Seite verarbeiten, Plan war:%n%s", json)
+					.isLessThanOrEqualTo(limit + 1);
+		}
+	}
+
+	private static void collectPlanNodes(JsonNode node, List<JsonNode> out) {
+		if (node == null || node.isMissingNode()) {
+			return;
+		}
+		out.add(node);
+		JsonNode children = node.get("Plans");
+		if (children != null) {
+			for (JsonNode child : children) {
+				collectPlanNodes(child, out);
+			}
+		}
+	}
+
 	private UUID createProject(String name, String description) {
 		Project project = projectRepository.saveAndFlush(new Project(name, description, 25832, "osm"));
 		createdIds.add(project.getId());

@@ -10,31 +10,12 @@ import org.springframework.data.repository.query.Param;
 public interface ProjectRepository extends JpaRepository<Project, UUID> {
 
 	/**
-	 * Feeds the project browser: one page, newest/most-recently-opened first, optionally
-	 * restricted to projects whose name or description matches {@code pattern}.
-	 *
-	 * <p>The {@code page} CTE picks the row set and applies {@code LIMIT} <em>before</em>
-	 * the aggregation below it -- a {@code LIMIT} tacked onto the old single-query,
-	 * {@code GROUP BY}-over-everything shape would still aggregate the whole table and
-	 * only cut the result down afterwards. Layer and feature counts still come from one
-	 * aggregate, so a page needs a single round trip rather than one query per project.
-	 *
-	 * <p>Ordering and the keyset condition both fold a null {@code last_opened_at} to
-	 * {@code -infinity} with the same {@code COALESCE}, in the row and in the cursor
-	 * alike -- {@code NULLS LAST} cannot be written as a row-value comparison, and
-	 * without a real value there is nothing to build a keyset condition from.
-	 * {@code created_at} then {@code id} break every tie, which is what keeps a page
-	 * boundary from ever skipping or repeating a row; see {@link ProjectCursor}.
-	 *
-	 * <p>Caller passes {@code cursorId == null} for the first page; the three cursor
-	 * parameters travel together; see {@link ProjectCursor}.
-	 *
-	 * @param pattern ILIKE pattern (already wildcard-escaped, wrapped in {@code %...%}),
-	 *                or null for no search restriction
-	 * @param fetchLimit the caller's page size plus one, so an extra row surviving the
-	 *                    trip answers "is there a next page" without a second query
+	 * The SQL {@link #findPage} runs, as a constant so a test can put the very same
+	 * statement through {@code EXPLAIN} instead of retyping it. A copy would drift from
+	 * this one silently, and the plan is exactly what the test exists to pin down --
+	 * the same reason {@code MvtService.explainTile} exists for the tile query.
 	 */
-	@Query(value = """
+	String PAGE_QUERY = """
 			WITH page AS (
 			    SELECT p.id, p.name, p.description, p.srid, p.last_opened_at, p.created_at,
 			           p.center, p.zoom, p.extent, p.basemap
@@ -70,7 +51,34 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
 			         page.created_at, page.center, page.zoom, page.extent, page.basemap
 			ORDER BY COALESCE(page.last_opened_at, TIMESTAMPTZ '-infinity') DESC,
 			         page.created_at DESC, page.id DESC
-			""", nativeQuery = true)
+			""";
+
+	/**
+	 * Feeds the project browser: one page, newest/most-recently-opened first, optionally
+	 * restricted to projects whose name or description matches {@code pattern}.
+	 *
+	 * <p>The {@code page} CTE picks the row set and applies {@code LIMIT} <em>before</em>
+	 * the aggregation below it -- a {@code LIMIT} tacked onto the old single-query,
+	 * {@code GROUP BY}-over-everything shape would still aggregate the whole table and
+	 * only cut the result down afterwards. Layer and feature counts still come from one
+	 * aggregate, so a page needs a single round trip rather than one query per project.
+	 *
+	 * <p>Ordering and the keyset condition both fold a null {@code last_opened_at} to
+	 * {@code -infinity} with the same {@code COALESCE}, in the row and in the cursor
+	 * alike -- {@code NULLS LAST} cannot be written as a row-value comparison, and
+	 * without a real value there is nothing to build a keyset condition from.
+	 * {@code created_at} then {@code id} break every tie, which is what keeps a page
+	 * boundary from ever skipping or repeating a row; see {@link ProjectCursor}.
+	 *
+	 * <p>Caller passes {@code cursorId == null} for the first page; the three cursor
+	 * parameters travel together; see {@link ProjectCursor}.
+	 *
+	 * @param pattern ILIKE pattern (already wildcard-escaped, wrapped in {@code %...%}),
+	 *                or null for no search restriction
+	 * @param fetchLimit the caller's page size plus one, so an extra row surviving the
+	 *                    trip answers "is there a next page" without a second query
+	 */
+	@Query(value = PAGE_QUERY, nativeQuery = true)
 	List<ProjectSummaryRow> findPage(@Param("pattern") String pattern,
 			@Param("cursorOpened") Instant cursorOpened,
 			@Param("cursorCreated") Instant cursorCreated,
