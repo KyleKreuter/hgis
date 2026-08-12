@@ -21,7 +21,7 @@ import { FilterBar } from './FilterBar'
 import type { FilterMode } from './filterMode'
 import { TableEditToolbar } from './TableEditToolbar'
 import { FieldInput } from './FieldInput'
-import { kindOf } from './fieldKind'
+import { initialDraftFromChar, kindOf } from './fieldKind'
 import {
   advanceFocus,
   editKeyAction,
@@ -398,8 +398,12 @@ export function AttributeTable({
       // Typing over a focused cell overwrites it, like a spreadsheet -- date, time and
       // boolean fields use their own picker/select and gain nothing from that, so only
       // the freely-typed kinds react to a bare character key.
+      //
+      // The character goes through `initialDraftFromChar`, not into the draft raw: on a
+      // numeric column the raw text is what gets saved if the user presses Enter without
+      // typing anything more, and the server rejects it.
       event.preventDefault()
-      state.startEditing(focus, action.char)
+      state.startEditing(focus, initialDraftFromChar(action.char, kind))
     }
   }
 

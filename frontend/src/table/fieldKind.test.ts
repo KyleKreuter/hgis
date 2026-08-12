@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { kindOf, toInputValue } from './fieldKind'
+import { initialDraftFromChar, kindOf, toInputValue } from './fieldKind'
 
 describe('kindOf', () => {
   it('erkennt Zeitstempel an ihrem Präfix', () => {
@@ -58,5 +58,28 @@ describe('toInputValue', () => {
 
   it('wandelt Zahlen in Text um', () => {
     expect(toInputValue(12.75, 'decimal')).toBe('12.75')
+  })
+})
+
+describe('initialDraftFromChar', () => {
+  /**
+   * The reported bug: a cell of an integer column opened by typing "6" kept the draft as
+   * the text "6", and pressing Enter without typing more saved that text. The server
+   * answered "Feld Zustand erwartet den Typ integer. Erhalten: 6" -- a message that reads
+   * like a contradiction, because the printed value looks like a perfectly good integer.
+   */
+  it('macht aus dem getippten Zeichen in einer Zahlenspalte sofort eine Zahl', () => {
+    expect(initialDraftFromChar('6', 'integer')).toBe(6)
+    expect(initialDraftFromChar('6', 'decimal')).toBe(6)
+  })
+
+  it('lässt das Zeichen in einer Textspalte ein Zeichen', () => {
+    expect(initialDraftFromChar('6', 'text')).toBe('6')
+  })
+
+  /** The start of a number that is still being typed -- NaN would be worse than text. */
+  it('lässt ein Zeichen als Text stehen, das für sich noch keine Zahl ist', () => {
+    expect(initialDraftFromChar('-', 'integer')).toBe('-')
+    expect(initialDraftFromChar('.', 'decimal')).toBe('.')
   })
 })

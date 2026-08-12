@@ -455,7 +455,28 @@ public class EditService {
 	 */
 	private static BadRequestException typeMismatch(LayerField field, Object value) {
 		return new BadRequestException("Feld " + field.getSourceName() + " erwartet den Typ "
-				+ field.getDataType() + ". Erhalten: " + value + ".");
+				+ field.getDataType() + ". Erhalten: " + describe(value) + ".");
+	}
+
+	/**
+	 * The received value with its JSON type, not just its printed form.
+	 *
+	 * Without the type the message contradicts itself for the one mistake clients
+	 * actually make: sending a number as a string produces "erwartet den Typ integer.
+	 * Erhalten: 6", and 6 is a perfectly good integer to anyone reading it. Naming the
+	 * type is what turns that into something a client author can act on.
+	 */
+	private static String describe(Object value) {
+		if (value == null) {
+			return "null";
+		}
+		if (value instanceof String text) {
+			return "\"" + text + "\" (Text)";
+		}
+		if (value instanceof Boolean) {
+			return value + " (Ja/Nein)";
+		}
+		return String.valueOf(value);
 	}
 
 	// --- bookkeeping ------------------------------------------------------------------
