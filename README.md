@@ -112,6 +112,30 @@ Regler, denn es gibt nichts zu regeln. Eine Karte mit verringerter Deckkraft lä
 Anwendungshintergrund durchscheinen. Im dunklen Erscheinungsbild sieht sie deshalb anders
 aus als im hellen.
 
+### Einen Bereich zuschneiden
+
+Ein Flächenlayer lässt sich als Maske markieren. Alle Layer, die im Layerbaum über ihm
+liegen, zeigt die Karte dann nur noch innerhalb seiner Flächen. Ein Objekt, das über die
+Kante ragt, wird an der Kante durchgeschnitten. Layer unter der Maske bleiben unberührt.
+
+Sie markieren die Maske über „Als Zuschnitt für alles darüber“ im Aktionsmenü des Layers.
+Nur Flächenlayer und gemischte Layer taugen dafür. Bei anderen Geometriearten ist der
+Eintrag gesperrt und nennt den Grund.
+
+Ein Projekt hat höchstens eine Maske. Markieren Sie eine zweite, verliert die erste ihre
+Markierung. Das Programm meldet das.
+
+Ein Maskenlayer ist im Layerbaum an einer Schere erkennbar, auch wenn Sie ihn ausblenden.
+Die Maske wirkt nämlich weiter: Oft will man die Grenze nicht sehen und trotzdem
+zuschneiden. Ohne dieses Zeichen wäre der Zuschnitt nicht erklärbar.
+
+Einen Layer nehmen Sie aus dem Zuschnitt, indem Sie ihn unter die Maske ziehen.
+
+Der Zuschnitt betrifft nur die Karte. Attributtabelle, Auswahl und Export sehen weiterhin
+alle Objekte. Das Rechteckwerkzeug fragt die Datenbank ab und wählt deshalb auch Objekte
+außerhalb der Maske aus, die Sie gar nicht sehen. Bei aktivem Zuschnitt weist ein Zeichen
+in der Werkzeugleiste darauf hin.
+
 ### Sachdaten bearbeiten
 
 Die Attributtabelle hat einen eigenen Bearbeitungsmodus. Er ist vom Zeichenmodus an der
