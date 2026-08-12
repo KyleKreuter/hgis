@@ -50,7 +50,7 @@ export function DeleteProjectDialog({ project, onOpenChange }: DeleteProjectDial
       toast.success(`Projekt „${project.name}" gelöscht`)
       close()
     } catch {
-      toast.error('Das Projekt lässt sich nicht löschen.')
+      toast.error('Das Programm konnte das Projekt nicht löschen')
     }
   }
 

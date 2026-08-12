@@ -69,7 +69,7 @@ export function DuplicateProjectDialog({ project, onOpenChange }: Props) {
     try {
       setJobId((await duplicate.mutateAsync(duplicateNameInput(project.name, name))).id)
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Das Projekt lässt sich nicht duplizieren.')
+      setError(cause instanceof ApiError ? cause.message : 'Das Programm konnte das Projekt nicht duplizieren')
     }
   }
 
@@ -94,7 +94,7 @@ export function DuplicateProjectDialog({ project, onOpenChange }: Props) {
               job?.status === 'FAILED' ? (
                 <Alert variant="destructive">
                   <AlertTitle>Duplizierung fehlgeschlagen</AlertTitle>
-                  <AlertDescription>{job.message ?? 'Das Programm hat die Kopie vollständig aufgeräumt.'}</AlertDescription>
+                  <AlertDescription>{job.message ?? 'Das Programm hat die Kopie vollständig aufgeräumt'}</AlertDescription>
                 </Alert>
               ) : job?.status === 'SUCCEEDED' ? (
                 <Alert><AlertTitle>Duplizierung abgeschlossen</AlertTitle></Alert>

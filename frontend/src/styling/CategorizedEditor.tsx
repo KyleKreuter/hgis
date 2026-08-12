@@ -165,7 +165,7 @@ export function CategorizedEditor({
       )}
 
       {isError && (
-        <p className="py-1 text-xs text-destructive">Werte lassen sich nicht laden.</p>
+        <p className="py-1 text-xs text-destructive">Das Programm konnte die Werte nicht laden</p>
       )}
 
       {data?.truncated && (

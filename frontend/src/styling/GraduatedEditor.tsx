@@ -162,7 +162,7 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
 
       {isError && (
         <p className="py-1 text-xs text-destructive">
-          {error instanceof Error ? error.message : 'Klassen lassen sich nicht berechnen.'}
+          {error instanceof Error ? error.message : 'Das Programm konnte die Klassen nicht berechnen'}
         </p>
       )}
 

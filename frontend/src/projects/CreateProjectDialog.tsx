@@ -83,7 +83,7 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
         setNameError(error.fieldError('name'))
         if (!error.fieldError('name')) toast.error(error.message)
       } else {
-        toast.error('Das Projekt lässt sich nicht anlegen.')
+        toast.error('Das Programm konnte das Projekt nicht anlegen')
       }
     }
   }

@@ -60,7 +60,7 @@ export function ProjectBrowser() {
       <div className="mx-auto w-full max-w-4xl flex-1 overflow-y-auto p-6">
         {isError ? (
           <EmptyState
-            title="Projekte lassen sich nicht laden"
+            title="Das Programm konnte die Projekte nicht laden"
             hint={error instanceof Error ? error.message : 'Läuft das Backend?'}
           />
         ) : isLoading ? (

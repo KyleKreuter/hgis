@@ -49,7 +49,7 @@ export function RenameProjectDialog({ project, onOpenChange }: RenameProjectDial
         setNameError(error.fieldError('name'))
         if (!error.fieldError('name')) toast.error(error.message)
       } else {
-        toast.error('Die Änderung lässt sich nicht speichern.')
+        toast.error('Das Programm konnte die Änderung nicht speichern')
       }
     }
   }
