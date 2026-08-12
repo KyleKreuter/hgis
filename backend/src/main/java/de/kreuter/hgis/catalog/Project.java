@@ -7,8 +7,10 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
+import org.hibernate.type.SqlTypes;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.Polygon;
 
@@ -56,6 +58,16 @@ public class Project {
 
 	@Column(columnDefinition = "geometry(Polygon,4326)")
 	private Polygon extent;
+
+	/**
+	 * The client's view state -- active layer, and per layer what is sorted, searched or
+	 * filtered, and selected. Opaque to this entity, like {@code Layer.style}: only
+	 * {@link ProjectService} reads or writes what is actually inside it. Null means no
+	 * state has ever been saved, not an error.
+	 */
+	@JdbcTypeCode(SqlTypes.JSON)
+	@Column(name = "view_state", columnDefinition = "jsonb")
+	private String viewState;
 
 	@Column(name = "last_opened_at")
 	private Instant lastOpenedAt;
@@ -135,6 +147,14 @@ public class Project {
 
 	public void setExtent(Polygon extent) {
 		this.extent = extent;
+	}
+
+	public String getViewState() {
+		return viewState;
+	}
+
+	public void setViewState(String viewState) {
+		this.viewState = viewState;
 	}
 
 	public Instant getLastOpenedAt() {

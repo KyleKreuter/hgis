@@ -66,10 +66,21 @@ class FilterParserTest {
 			assertThatThrownBy(() -> parse(attempt)).isInstanceOf(BadRequestException.class);
 		}
 
+		/**
+		 * The wording is part of the contract with the client, not just a nicety:
+		 * {@code frontend/src/table/filterValidity.ts} matches on "Unbekanntes Feld" to
+		 * tell a filter on a deleted field apart from any other 400, and discards that
+		 * one filter instead of showing the attribute table as a failed request.
+		 *
+		 * <p>So if this assertion ever fails, adjusting it is not enough --
+		 * {@code frontend/src/table/filterValidity.ts} has to move with it, or the table
+		 * stops recovering from a filter that names a field that was deleted.
+		 */
 		@Test
 		void anUnknownFieldIsRejectedAndTheKnownOnesAreNamed() {
 			assertThatThrownBy(() -> parse("passwort = 'x'"))
 					.isInstanceOf(BadRequestException.class)
+					.as("frontend/src/table/filterValidity.ts matches on this wording -- change both or neither")
 					.hasMessageContaining("Unbekanntes Feld: passwort")
 					.hasMessageContaining("Gebäudehöhe");
 		}
