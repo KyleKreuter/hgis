@@ -2,12 +2,21 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowDown, ArrowUp, Crosshair } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatAttributeNumber, formatCount } from '@/lib/format'
 import { layerDetailQuery, type LayerField } from '@/api/layers'
-import { featurePagesQuery, type Feature } from '@/api/features'
+import { featurePagesQuery, fetchFeatureFids, type Feature } from '@/api/features'
 import { useSelection } from '@/state/selection'
+import type { ViewStateWriter } from '@/state/useViewState'
+import {
+  layerStateOf,
+  queryOf,
+  restoredQueryHidesData,
+  survivingSelection,
+  SELECTION_SAVE_LIMIT,
+} from '@/state/viewState'
 import { FilterBar } from './FilterBar'
 import type { FilterMode } from './filterMode'
 import { TableEditToolbar } from './TableEditToolbar'
@@ -20,6 +29,7 @@ import {
   moveFocus,
   type CellPosition,
 } from './cellNavigation'
+import { isUnknownFilterFieldError } from './filterValidity'
 import { isUnknownSortFieldError } from './sortValidity'
 import { cellValue, hasEdit } from './tableEditSession'
 import { useTableEditing } from './useTableEditing'
@@ -33,8 +43,15 @@ const PREFETCH_ROWS = 40
 interface AttributeTableProps {
   layerId: string | null
   layerName?: string
+  /** The layer's unrestricted feature count -- what a restored filter is compared against
+   *  to say how much it hides (CONTRACT.md phase 17, "Ein gespeicherter Filter versteckt
+   *  Daten"). `undefined` while the layer list is still loading. */
+  layerFeatureCount?: number
   /** Needed to save edits: `POST /api/layers/{layerId}/edits` invalidates project queries too. */
   projectId: string
+  /** The project's working-state read/write path (CONTRACT.md phase 17, schema B), held
+   *  by the workspace route so it lives and flushes for the whole session, not per layer. */
+  viewState: ViewStateWriter
   /**
    * Takes only the fid: the table loads rows without geometry, because carrying polygons
    * for 200 rows costs far more than fetching one when somebody actually zooms.
@@ -51,7 +68,9 @@ interface AttributeTableProps {
 export function AttributeTable({
   layerId,
   layerName,
+  layerFeatureCount,
   projectId,
+  viewState,
   onZoomToFeature,
   onRequestEdit,
 }: AttributeTableProps) {
@@ -67,8 +86,27 @@ export function AttributeTable({
   // which of the two `text` becomes is decided purely by `mode`.
   const [mode, setMode] = useState<FilterMode>('search')
   const [text, setText] = useState('')
+  // Whether the current `mode`/`text` came from the saved working state rather than
+  // something just typed -- what tells the restored-filter hint below apart from an
+  // ordinary, freshly-entered one the user already knows is active (CONTRACT.md phase 17
+  // rule 1, "Ein gespeicherter Filter versteckt Daten"). Cleared by any of the user's own
+  // edits: `handleModeChange`, `handleTextChange`, and the hint's own reset control.
+  const [restoredQuery, setRestoredQuery] = useState(false)
   const filter = mode === 'filter' ? text : ''
   const search = mode === 'search' ? text : ''
+
+  // Which layers have already had their saved sort/query/selection applied this session --
+  // restoring is a one-time seed from `viewState.document`, not something that should run
+  // again just because a later write changes that document (see the restore effect below).
+  const restoredLayers = useRef<Set<string>>(new Set())
+  // Set right before a restored selection is written into the store, so the write it
+  // triggers (the subscription below fires on every store change) does not turn straight
+  // around and PUT the exact value it just read back.
+  const suppressSelectionEcho = useRef(false)
+  // The unmount/dependency-light effects below read the latest writer through this
+  // instead of closing over `viewState`, the same reasoning as `useStyleEditor`'s `saveRef`.
+  const viewStateRef = useRef(viewState)
+  viewStateRef.current = viewState
 
   const { data: layer } = useQuery({
     ...layerDetailQuery(layerId ?? ''),
@@ -90,9 +128,34 @@ export function AttributeTable({
   const total = query.data?.totalCount ?? 0
   const fields = layer?.fields ?? []
 
+  // Every one of these three is itself the action CONTRACT.md's "Die wichtigste Regel"
+  // asks for: written right where the user sorts, searches or switches mode, never from
+  // an effect watching `sort`/`mode`/`text` -- those fall back to their initial values
+  // whenever a different layer's local state has not been restored yet, and an effect
+  // reacting to that would overwrite this layer's saved state with those defaults.
+
+  function handleSortChange(next: { field: string; desc: boolean } | null) {
+    setSort(next)
+    if (layerId) viewState.writeSort(layerId, next)
+  }
+
   function handleModeChange(next: FilterMode) {
     setMode(next)
     setText('')
+    setRestoredQuery(false)
+    if (layerId) viewState.writeQuery(layerId, null)
+  }
+
+  function handleTextChange(next: string) {
+    setText(next)
+    setRestoredQuery(false)
+    if (layerId) viewState.writeQuery(layerId, queryOf(mode, next))
+  }
+
+  function resetRestoredQuery() {
+    setText('')
+    setRestoredQuery(false)
+    if (layerId) viewState.writeQuery(layerId, null)
   }
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -127,12 +190,86 @@ export function AttributeTable({
   // "Attributfelder löschen") leaves this pointed at a column the server no longer
   // knows -- the next fetch answers with exactly that 400. Falling back to unsorted here
   // is simpler and more honest than trying to purge the deleted field out of this state
-  // the moment the dialog deletes it, from a wholly different part of the page. The
-  // filter goes through the same kind of error but is deliberately left alone -- see
-  // `isUnknownSortFieldError`.
+  // the moment the dialog deletes it, from a wholly different part of the page.
   useEffect(() => {
     if (sort && isUnknownSortFieldError(query.error)) setSort(null)
   }, [sort, query.error])
+
+  // The filter/search expression goes through the same kind of error -- a field it names
+  // can be deleted after the fact, whether the expression was just typed or restored from
+  // a previous session (CONTRACT.md phase 17 rule 2). Recovered the same way as the sort
+  // above: dropped locally so the table keeps working, not written back out, since a
+  // client-side self-heal is not itself something the user did.
+  useEffect(() => {
+    if (text && isUnknownFilterFieldError(query.error)) {
+      setText('')
+      setRestoredQuery(false)
+    }
+  }, [text, query.error])
+
+  // Seeds this layer's sort/query/selection from the saved working state, once per layer
+  // per session (CONTRACT.md phase 17, schema B). Runs as a one-shot restore rather than
+  // an effect that keeps `sort`/`mode`/`text` in sync with `viewState.document`: the
+  // latter would also fire every time this layer's own write lands back in the document a
+  // moment later, undoing whatever the user just did in between.
+  useEffect(() => {
+    if (!layerId || !viewState.ready || restoredLayers.current.has(layerId)) return
+    restoredLayers.current.add(layerId)
+    setRestoredQuery(false)
+
+    const saved = layerStateOf(viewState.document, layerId)
+    if (saved.sort) setSort(saved.sort)
+    if (saved.query) {
+      setMode(saved.query.mode)
+      setText(saved.query.text)
+      setRestoredQuery(true)
+    }
+    if (saved.selection.length > 0) {
+      suppressSelectionEcho.current = true
+      // No endpoint answers "do these fids still exist" directly, so this reuses the
+      // fids endpoint "select all matches" already relies on, unfiltered -- the layer's
+      // complete current fid set, fids only, no attributes or geometry (CONTRACT.md
+      // rule 3, "Die Auswahl zeigt auf gelöschte Objekte").
+      fetchFeatureFids({ layerId })
+        .then(({ fids }) => {
+          const surviving = survivingSelection(saved.selection, new Set(fids))
+          if (surviving.length > 0) {
+            useSelection.getState().select(layerId, surviving, 'replace')
+          } else {
+            suppressSelectionEcho.current = false
+            toast.error('Das Programm konnte die gespeicherte Auswahl nicht wiederherstellen')
+          }
+        })
+        .catch(() => {
+          suppressSelectionEcho.current = false
+        })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layerId, viewState.ready])
+
+  // Persists every selection change made while this layer is active -- a store
+  // subscription rather than a `useSelection(...)` read plus effect, because the writes
+  // this needs to react to happen in files this package does not own (`map/IdentifyControl`,
+  // `map/RectangleSelectTool`, `SelectAllMatchesButton` below). Subscribing only fires
+  // for an actual `set()`, i.e. an actual selection action -- never merely because this
+  // component re-rendered or `layerId` changed, which is what keeps this from ever
+  // writing a default it did not ask for (CONTRACT.md's "Die wichtigste Regel").
+  useEffect(() => {
+    if (!layerId) return
+    return useSelection.subscribe((state, previous) => {
+      if (state.selected === previous.selected || state.layerId !== layerId) return
+      if (suppressSelectionEcho.current) {
+        suppressSelectionEcho.current = false
+        return
+      }
+      const written = viewStateRef.current.writeSelection(layerId, [...state.selected])
+      if (!written) {
+        toast.error('Das Programm konnte die Auswahl nicht speichern', {
+          description: `Es sind mehr als ${formatCount(SELECTION_SAVE_LIMIT)} Objekte ausgewählt`,
+        })
+      }
+    })
+  }, [layerId])
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -274,6 +411,12 @@ export function AttributeTable({
     )
   }
 
+  // Only while the restored filter/search still has not been touched, and only while it
+  // is actually hiding something -- one that matched everything the layer has is not
+  // worth a hint over (CONTRACT.md phase 17 rule 1).
+  const showRestoredHint =
+    restoredQuery && text !== '' && layerFeatureCount !== undefined && restoredQueryHidesData(total, layerFeatureCount)
+
   return (
     <Panel
       title={`Attribute${layerName ? ` - ${layerName}` : ''}`}
@@ -285,7 +428,7 @@ export function AttributeTable({
             mode={mode}
             onModeChange={handleModeChange}
             value={text}
-            onChange={setText}
+            onChange={handleTextChange}
             error={query.error}
             totalCount={total}
           />
@@ -296,11 +439,14 @@ export function AttributeTable({
         </>
       }
     >
+      {showRestoredHint && (
+        <RestoredQueryHint mode={mode} matchedCount={total} totalCount={layerFeatureCount} onReset={resetRestoredQuery} />
+      )}
       {query.isError && !rows.length ? (
         <Hint variant="error">{(query.error as Error).message}</Hint>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          <HeaderRow fields={fields} sort={sort} onSort={setSort} />
+          <HeaderRow fields={fields} sort={sort} onSort={handleSortChange} />
 
           <div
             ref={scrollRef}
@@ -576,6 +722,38 @@ function EditableCell({
       {/* A dot rather than a colour so the monochrome palette stays monochrome. */}
       {isDirty && <span className="absolute top-1 right-1 size-1 rounded-full bg-foreground/70" aria-hidden />}
     </span>
+  )
+}
+
+/**
+ * Tells the user a restored filter/search is still limiting what they see -- without
+ * this, "342 von 5.108 Objekten" reads as if the layer only ever had 342 (CONTRACT.md
+ * phase 17 rule 1, "Ein gespeicherter Filter versteckt Daten"). Sits between the toolbar
+ * and the header row rather than inside `FilterBar` itself, the same reasoning
+ * `FilterBar`'s own comment gives for keeping its row lean: this needs room a slim
+ * toolbar strip does not have.
+ */
+function RestoredQueryHint({
+  mode,
+  matchedCount,
+  totalCount,
+  onReset,
+}: {
+  mode: FilterMode
+  matchedCount: number
+  totalCount: number
+  onReset: () => void
+}) {
+  return (
+    <div className="flex h-6 shrink-0 items-center gap-2 border-b bg-muted/40 px-2 text-xs text-muted-foreground">
+      <span>
+        Der gespeicherte {mode === 'filter' ? 'Filterausdruck' : 'Suchbegriff'} zeigt{' '}
+        {formatCount(matchedCount)} von {formatCount(totalCount)} Objekten.
+      </span>
+      <Button variant="link" size="xs" className="h-auto p-0 text-xs" onClick={onReset}>
+        {mode === 'filter' ? 'Filter löschen' : 'Suche löschen'}
+      </Button>
+    </div>
   )
 }
 

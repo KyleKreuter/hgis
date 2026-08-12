@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query'
 import { api } from './client'
 import type { Job } from './imports'
+import type { ViewStateDocument } from '@/state/viewState'
 
 export interface ProjectSummary {
   id: string
@@ -59,6 +60,7 @@ export const projectKeys = {
   deletionImpact: (id: string) => ['projects', id, 'deletion-impact'] as const,
   /** Mutation key, not a query key: it is what finds a project's patches in flight. */
   update: (id: string) => ['projects', id, 'update'] as const,
+  viewState: (id: string) => ['projects', id, 'view-state'] as const,
 }
 
 /**
@@ -241,4 +243,33 @@ export function useDuplicateProject(projectId: string) {
 /** Used by the workspace route loader so panels never mount against empty data. */
 export function ensureProjectLoaded(queryClient: QueryClient, id: string) {
   return queryClient.ensureQueryData(projectDetailQuery(id, true))
+}
+
+/**
+ * The project's working state (CONTRACT.md phase 17, schema B): active layer, and per
+ * layer, its sort, its filter/search and its selection. A project that never saved one
+ * gets the server's own empty document back, never a 404 -- so callers can treat "no
+ * saved state" and "an empty saved state" as the same thing.
+ */
+export const viewStateQuery = (id: string) =>
+  queryOptions({
+    queryKey: projectKeys.viewState(id),
+    queryFn: () => api.get<ViewStateDocument>(`/api/projects/${id}/view-state`),
+  })
+
+/**
+ * Writes the working-state document. No optimistic cache update: unlike the project
+ * patch above, nothing in the workspace renders from this query while the session is
+ * open -- `state/useViewState.ts` keeps its own copy for that -- so there is nothing an
+ * optimistic write would make feel faster.
+ */
+export function useSaveViewState(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (document: ViewStateDocument) =>
+      api.put<void>(`/api/projects/${id}/view-state`, document),
+    onSuccess: (_result, document) => {
+      queryClient.setQueryData(projectKeys.viewState(id), document)
+    },
+  })
 }

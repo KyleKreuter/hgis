@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ApiError } from '@/api/client'
 import type { LayerField } from '@/api/layers'
+import { editDraft, initialDraftSync, liftDraft, reconcileDraftValue } from './filterDraft'
 import { toggleFilterMode, type FilterMode } from './filterMode'
 import { SelectAllMatchesButton } from './SelectAllMatchesButton'
 
@@ -40,11 +41,24 @@ export function FilterBar({
   error,
   totalCount,
 }: FilterBarProps) {
-  const [draft, setDraft] = useState(value)
+  const [sync, setSync] = useState(() => initialDraftSync(value))
+  const draft = sync.draft
+
+  // `value` changing for a reason other than this component's own lift below -- a
+  // restored filter/search arriving after the bar has already mounted empty chief among
+  // them (CONTRACT.md phase 17 rule 1). `reconcileDraftValue` returns the same state
+  // when `value` is only catching up to what was already lifted, so this is a no-op
+  // re-render during ordinary typing (see `filterDraft.ts`).
+  useEffect(() => {
+    setSync((current) => reconcileDraftValue(current, value))
+  }, [value])
 
   useEffect(() => {
     if (draft === value) return
-    const timer = setTimeout(() => onChange(draft), DEBOUNCE_MS)
+    const timer = setTimeout(() => {
+      setSync(liftDraft(draft))
+      onChange(draft)
+    }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
   }, [draft, value, onChange])
 
@@ -64,8 +78,10 @@ export function FilterBar({
     // search word is not a valid filter expression either -- keeping it would either
     // search for stray punctuation or hand the parser text it was never meant to see.
     // Starting empty keeps the switch honest: nothing is active in the new mode until
-    // something is typed for it.
-    setDraft('')
+    // something is typed for it. `liftDraft`, not `editDraft`: `onModeChange` below is
+    // what makes `value` become '' too (via `AttributeTable`'s `handleModeChange`), so
+    // this is this component's own doing, not an external change to reconcile against.
+    setSync(liftDraft(''))
     onModeChange(toggleFilterMode(mode))
   }
 
@@ -111,7 +127,7 @@ export function FilterBar({
 
       <Input
         value={draft}
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={(event) => setSync((current) => editDraft(current, event.target.value))}
         placeholder={mode === 'filter' ? example : 'Suchbegriff'}
         aria-label={mode === 'filter' ? 'Filterausdruck' : 'Suchbegriff'}
         aria-invalid={message ? true : undefined}
@@ -125,7 +141,7 @@ export function FilterBar({
           className="size-5 shrink-0"
           aria-label={mode === 'filter' ? 'Filter löschen' : 'Suche löschen'}
           onClick={() => {
-            setDraft('')
+            setSync(liftDraft(''))
             onChange('')
           }}
         >
