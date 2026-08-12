@@ -250,7 +250,11 @@ function Workspace() {
                   stands before the editing tools rather than inside them. */}
               <MeasurementToolbar disabled={editing.active} />
               <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
-              <RectangleSelectToolbar disabled={editing.active} canUse={Boolean(activeLayer)} />
+              <RectangleSelectToolbar
+                disabled={editing.active}
+                canUse={Boolean(activeLayer)}
+                clipVersion={activeLayer?.clipVersion}
+              />
               <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
               <EditToolbar
                 active={editing.active}

@@ -49,6 +49,26 @@ export interface LayerSummary {
   basemap?: string | null
   /** The layer's own background opacity; `null` or missing means it follows the project's. */
   basemapOpacity?: number | null
+  /**
+   * Marks this layer as the project's clip mask (CONTRACT.md phase 19). At most one
+   * layer per project carries this flag -- the server clears it from any previous
+   * holder the moment a different layer is marked, which is why the client always
+   * re-derives the current mask from the list instead of caching "the" mask id anywhere.
+   * Optional for the same reason `style`/`basemap` are: missing reads as "not a mask",
+   * which is the right default and keeps every existing fixture that builds a
+   * `LayerSummary` without it (outside this phase's ownership) compiling unchanged.
+   */
+  isClipMask?: boolean
+  /**
+   * `0` when no mask affects this layer, otherwise a value that changes whenever the
+   * mask, its geometries, or this layer's position relative to it changes. Folded into
+   * `buildTileUrl` (`map/layerSpecs.ts`) exactly like `dataVersion` and `styleVersion`,
+   * because the tile content now depends on it too -- without it in the URL, an edited
+   * mask would leave every clipped layer showing the old cut for as long as the tiles
+   * stay cached (they are served `immutable`). Optional for the same reason
+   * `isClipMask` is; missing reads as `0`, "no clip in effect".
+   */
+  clipVersion?: number
 }
 
 export interface LayerField {
@@ -128,6 +148,14 @@ export interface UpdateLayerInput {
   basemap?: string | null
   /** `null` resets the layer to the project's background opacity. */
   basemapOpacity?: number | null
+  /**
+   * Marks or unmarks this layer as the project's clip mask. Marking a second layer
+   * silently unmarks whichever one held it before (contract "Höchstens eine Maske je
+   * Projekt") -- `useUpdateLayer`'s trailing `invalidateQueries` is what brings that
+   * other layer's `isClipMask` back in line, since the response here only describes
+   * the layer actually being patched.
+   */
+  isClipMask?: boolean
 }
 
 export type ClassifyMethod = 'quantile' | 'equalInterval' | 'naturalBreaks'
