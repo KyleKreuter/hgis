@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import de.kreuter.hgis.TestcontainersConfiguration;
+import de.kreuter.hgis.common.JsonFields;
 import de.kreuter.hgis.common.SqlIdentifier;
 import java.util.UUID;
 import org.hamcrest.Matchers;
@@ -21,7 +22,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.JsonNode;
 
 /**
  * Storing and validating a layer style, and the one rule the whole caching story rests
@@ -325,6 +328,88 @@ class LayerStyleTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.style.renderer.symbol.color").value("#2980b9"))
 				.andExpect(jsonPath("$.style.renderer.symbol.dashArray").doesNotExist());
+	}
+
+	/**
+	 * Every member of {@code StyleDtos.Symbol} written once and read back once.
+	 *
+	 * <p>The tests around this one each pin down a single member, which leaves the rest
+	 * of the record unwatched: {@code outlineColor} and {@code strokeWidth} appeared
+	 * nowhere in this suite at all, so dropping either from the response -- a
+	 * {@code @JsonIgnore}, a rename, a member the validator quietly discards -- changed
+	 * nothing here while every outline on the map fell back to the default.
+	 *
+	 * <p>Asserted twice on purpose: on the PATCH answer, which is what the style editor
+	 * redraws from immediately, and on a fresh GET, which is what the map loads on the
+	 * next visit. A member the writer accepts but the reader loses is invisible in the
+	 * first and fatal in the second.
+	 *
+	 * <p>The kinds are mixed in one symbol deliberately -- which members apply is decided
+	 * by {@code kind} in the renderer, not in storage, and the validator checks each
+	 * member on its own. One symbol carrying all of them is therefore both legal and the
+	 * only way to see the whole record in a single pass.
+	 */
+	@Test
+	@DisplayName("every member of a symbol survives storage and reading back")
+	void aFullSymbolRoundTripsWithAllItsMembers() throws Exception {
+		String fullSymbol = """
+				{ "style": { "renderer": { "type": "single",
+				  "symbol": { "kind": "fill", "shape": "circle", "size": 8,
+				              "fillColor": "#e74c3c", "strokeColor": "#2c3e50", "strokeWidth": 1.5,
+				              "color": "#2980b9", "width": 2, "dashArray": [4, 2],
+				              "fillOpacity": 0.65, "outlineColor": "#8e44ad", "outlineWidth": 3 } } } }
+				""";
+
+		MvcResult patched = patchStyle(fullSymbol).andExpect(status().isOk()).andReturn();
+		assertSymbolIsComplete(JsonFields.tree(patched), "PATCH-Antwort");
+
+		MvcResult reloaded = mockMvc.perform(get("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isOk())
+				.andReturn();
+		assertSymbolIsComplete(JsonFields.tree(reloaded), "GET nach dem Speichern");
+	}
+
+	/** Asserts the symbol under {@code body} carries all twelve members with their values. */
+	private static void assertSymbolIsComplete(JsonNode body, String where) {
+		JsonNode symbol = body.get("style").get("renderer").get("symbol");
+
+		// The name set first: a renamed or dropped member fails here with the whole set in
+		// the message, rather than as a null-pointer somewhere in the value checks below.
+		JsonFields.assertFieldNames(symbol, "StyleDtos.Symbol (" + where + ")",
+				"kind", "shape", "size", "fillColor", "strokeColor", "strokeWidth",
+				"color", "width", "dashArray", "fillOpacity", "outlineColor", "outlineWidth");
+
+		assertThat(symbol.get("kind").asString()).as("%s: kind", where).isEqualTo("fill");
+		assertThat(symbol.get("shape").asString()).as("%s: shape", where).isEqualTo("circle");
+		assertThat(symbol.get("size").asDouble()).as("%s: size", where).isEqualTo(8.0);
+		assertThat(symbol.get("fillColor").asString()).as("%s: fillColor", where).isEqualTo("#e74c3c");
+		assertThat(symbol.get("strokeColor").asString()).as("%s: strokeColor", where).isEqualTo("#2c3e50");
+		assertThat(symbol.get("strokeWidth").asDouble()).as("%s: strokeWidth", where).isEqualTo(1.5);
+		assertThat(symbol.get("color").asString()).as("%s: color", where).isEqualTo("#2980b9");
+		assertThat(symbol.get("width").asDouble()).as("%s: width", where).isEqualTo(2.0);
+		assertThat(symbol.get("fillOpacity").asDouble()).as("%s: fillOpacity", where).isEqualTo(0.65);
+		assertThat(symbol.get("outlineColor").asString()).as("%s: outlineColor", where).isEqualTo("#8e44ad");
+		assertThat(symbol.get("outlineWidth").asDouble()).as("%s: outlineWidth", where).isEqualTo(3.0);
+
+		JsonNode dashArray = symbol.get("dashArray");
+		assertThat(dashArray.isArray()).as("%s: dashArray is an array", where).isTrue();
+		assertThat(dashArray.size()).as("%s: dashArray length", where).isEqualTo(2);
+		assertThat(dashArray.get(0).asDouble()).as("%s: dashArray[0]", where).isEqualTo(4.0);
+		assertThat(dashArray.get(1).asDouble()).as("%s: dashArray[1]", where).isEqualTo(2.0);
+	}
+
+	@Test
+	@DisplayName("outlineColor and strokeWidth are validated like every other colour and width")
+	void theOutlineAndStrokeMembersAreValidated() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "single",
+				  "symbol": { "kind": "fill", "fillColor": "#e74c3c", "outlineColor": "lila" } } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "single",
+				  "symbol": { "kind": "marker", "fillColor": "#e74c3c", "strokeWidth": -1 } } } }
+				""").andExpect(status().isBadRequest());
 	}
 
 	@Test

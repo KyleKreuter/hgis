@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.within;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import de.kreuter.hgis.common.JsonFields;
 import de.kreuter.hgis.TestcontainersConfiguration;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
@@ -178,6 +179,35 @@ class ProjectListPagingTest {
 		while (cursor != null);
 
 		assertThat(walked).containsExactlyInAnyOrder(matchInName, matchInDescription, matchCaseInsensitive);
+	}
+
+	/**
+	 * The whole shape of {@code ProjectDtos.Page} and {@code ProjectDtos.Summary}.
+	 *
+	 * <p>Every project tile in the browser is built from a Summary, so a renamed field
+	 * empties that part of the tile without any request failing. {@code description} is
+	 * the case that showed this suite could not see it: renaming it left all of the
+	 * backend green while every tile lost its text.
+	 *
+	 * <p>Both projects are asserted, the one with values set and the bare one: null
+	 * fields are still serialised, so the two must carry the same names -- a DTO that
+	 * ever starts omitting nulls would leave the frontend reading {@code undefined} for
+	 * exactly the projects that have nothing set.
+	 */
+	@Test
+	@DisplayName("a project summary carries exactly the fields of the contract, set or null")
+	void projectSummaryKeepsItsShape() throws Exception {
+		String marker = marker();
+		UUID bare = createProject(marker + "-bare", null);
+		UUID described = createProject(marker + "-described", "Eine Beschreibung");
+
+		JsonNode page = list(marker, null, 100);
+		JsonFields.assertFieldNames(page, "ProjectDtos.Page", "items", "nextCursor");
+
+		String[] expected = { "id", "name", "description", "srid", "layerCount", "featureCount",
+				"lastOpenedAt", "createdAt", "center", "zoom", "extent", "basemap" };
+		JsonFields.assertFieldNames(itemFor(page, described), "ProjectDtos.Summary", expected);
+		JsonFields.assertFieldNames(itemFor(page, bare), "ProjectDtos.Summary (all-null project)", expected);
 	}
 
 	@Test
