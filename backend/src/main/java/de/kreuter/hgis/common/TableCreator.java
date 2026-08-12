@@ -68,9 +68,10 @@ public class TableCreator {
 
 	/**
 	 * Same table creation, for a layer a user creates empty and draws into by hand
-	 * instead of importing. {@code GEOMETRY} is not accepted here -- the caller is
-	 * expected to have already rejected it, since only the import path may produce a
-	 * genuinely mixed layer.
+	 * instead of importing. {@code GEOMETRY} is accepted here too, for a layer meant to
+	 * hold a genuine mix of points, lines and polygons from the start -- the column ends
+	 * up unconstrained by geometry subtype, exactly as it would for one produced by an
+	 * import.
 	 */
 	public CreatedLayer createLayerTable(Project project, GeometryType geometryType, List<NewField> fields,
 			String layerName) {

@@ -101,12 +101,11 @@ public final class LayerDtos {
 			String name,
 
 			/**
-			 * One of MULTIPOINT, MULTILINESTRING or MULTIPOLYGON. GEOMETRY is deliberately
-			 * not accepted here: a genuinely mixed layer needs three separate MapLibre
-			 * layers (plan section B.6) and is not a sensible starting point for a layer
-			 * nobody has drawn into yet. Kept as a plain string rather than the enum itself
-			 * -- an unknown token would otherwise fail while Jackson reads the body, before
-			 * validation gets a chance to name the field for the client.
+			 * One of MULTIPOINT, MULTILINESTRING, MULTIPOLYGON or GEOMETRY -- the last for
+			 * a layer meant to hold a genuine mix of points, lines and polygons from the
+			 * start, the same as an import produces. Kept as a plain string rather than the
+			 * enum itself -- an unknown token would otherwise fail while Jackson reads the
+			 * body, before validation gets a chance to name the field for the client.
 			 */
 			@NotBlank(message = "Geometrietyp darf nicht leer sein")
 			String geometryType,

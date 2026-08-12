@@ -215,6 +215,77 @@ class EditServiceTest {
 	}
 
 	@Test
+	@DisplayName("a MULTIPOINT layer still refuses a polygon -- the type binding stays for the specific types")
+	void aMultipointLayerStillRefusesAPolygon() {
+		UUID pointLayerId = UUID.randomUUID();
+		String pointTable = SqlIdentifier.tableName(pointLayerId);
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom geometry(MultiPoint, 25832) NOT NULL
+				)
+				""".formatted(SqlIdentifier.quoteLayerTable(pointTable))).update();
+		Layer pointLayer = layerRepository.saveAndFlush(
+				new Layer(pointLayerId, project, "Punkte", pointTable, "MULTIPOINT", 25832));
+
+		try {
+			EditDtos.Request request = new EditDtos.Request(
+					List.of(new EditDtos.Create(-1, json(SQUARE), Map.of())), null, null, false);
+
+			assertThatThrownBy(() -> editService.apply(pointLayer.getId(), request))
+					.isInstanceOf(BadRequestException.class)
+					.hasMessageContaining("Punkte")
+					.hasMessageContaining("Flächen");
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(pointTable)).update();
+			layerRepository.deleteById(pointLayer.getId());
+		}
+	}
+
+	@Test
+	@DisplayName("a GEOMETRY layer accepts a point, a line and a polygon, one after another")
+	void aGeometryLayerAcceptsAPointALineAndAPolygonInSequence() {
+		UUID mixedLayerId = UUID.randomUUID();
+		String mixedTable = SqlIdentifier.tableName(mixedLayerId);
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom geometry(Geometry, 25832) NOT NULL
+				)
+				""".formatted(SqlIdentifier.quoteLayerTable(mixedTable))).update();
+		Layer mixedLayer = layerRepository.saveAndFlush(
+				new Layer(mixedLayerId, project, "Gemischt", mixedTable, "GEOMETRY", 25832));
+
+		try {
+			String point = """
+					{"type":"Point","coordinates":[9.98,53.54]}
+					""";
+
+			// Applied one batch at a time, like a user drawing three different shapes into
+			// the same layer over time -- not a single batch, to prove the layer keeps
+			// accepting whatever comes next rather than only tolerating a mix within one
+			// request.
+			editService.apply(mixedLayer.getId(), new EditDtos.Request(
+					List.of(new EditDtos.Create(-1, json(point), Map.of())), null, null, false));
+			editService.apply(mixedLayer.getId(), new EditDtos.Request(
+					List.of(new EditDtos.Create(-2, json(LINE), Map.of())), null, null, false));
+			editService.apply(mixedLayer.getId(), new EditDtos.Request(
+					List.of(new EditDtos.Create(-3, json(SQUARE), Map.of())), null, null, false));
+
+			List<String> storedTypes = jdbc.sql("SELECT GeometryType(geom) AS type FROM "
+							+ SqlIdentifier.quoteLayerTable(mixedTable) + " ORDER BY fid")
+					.query(String.class)
+					.list();
+			assertThat(storedTypes).containsExactly("MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON");
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(mixedTable)).update();
+			layerRepository.deleteById(mixedLayer.getId());
+		}
+	}
+
+	@Test
 	void updatesAttributesWithoutTouchingTheGeometry() {
 		long fid = apply(creating(SQUARE, Map.of("strasse", "Alt"))).createdFids().get(-1L);
 		String geometryBefore = queryService.get(layer.getId(), fid).geometry();

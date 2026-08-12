@@ -186,24 +186,17 @@ public class LayerService {
 
 	/**
 	 * Missing or blank is already caught by {@code @NotBlank} before this runs; what is
-	 * left is checking the token names one of the three drawable types, and rejecting
-	 * {@code GEOMETRY} explicitly rather than letting an unmatched enum value fall
-	 * through with the same generic message an unknown token gets.
+	 * left is checking the token names one of {@link GeometryType}'s four values --
+	 * including {@code GEOMETRY} itself, for a layer meant to hold a genuine mix of
+	 * points, lines and polygons from the start, the same as an import produces.
 	 */
 	private GeometryType parseGeometryType(String raw) {
-		GeometryType parsed;
 		try {
-			parsed = GeometryType.valueOf(raw);
+			return GeometryType.valueOf(raw);
 		}
 		catch (IllegalArgumentException e) {
 			throw new FieldValidationException("geometryType", "Unbekannter Geometrietyp: " + raw);
 		}
-		if (parsed == GeometryType.GEOMETRY) {
-			throw new FieldValidationException("geometryType",
-					"GEOMETRY ist beim Anlegen eines Layers nicht zulässig, es muss MULTIPOINT, "
-							+ "MULTILINESTRING oder MULTIPOLYGON gewählt werden");
-		}
-		return parsed;
 	}
 
 	/**
