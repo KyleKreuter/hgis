@@ -12,7 +12,13 @@ function ScrollArea({
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      className={cn("relative", className)}
+      // min-h-0 belongs here rather than at each call site: a flex child defaults to
+      // min-height:auto and therefore never shrinks below its content, so `flex-1` on a
+      // scroll area is not enough -- the root grows to its full content height, the
+      // viewport inherits that height via size-full, and nothing scrolls at all. It went
+      // unnoticed in the layer tree because no project had enough layers to overflow.
+      // Harmless outside a flex container, where min-height:0 changes nothing.
+      className={cn("relative min-h-0", className)}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
