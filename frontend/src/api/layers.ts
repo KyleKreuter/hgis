@@ -87,11 +87,13 @@ export type FieldType =
   | 'TIMESTAMP'
 
 /**
- * Geometry kinds the create-layer endpoint accepts. `GEOMETRY` (mixed) is excluded on
- * purpose: it needs three separate MapLibre layers on one source and is not a
- * meaningful choice for a layer that starts out empty (CONTRACT.md).
+ * Geometry kinds the create-layer endpoint accepts -- the full {@link GeometryType} set,
+ * `GEOMETRY` (mixed) included. Mixed layers are fully supported on the map side
+ * (`frontend/src/map/layerSpecs.ts` splits one source into three MapLibre layers by
+ * geometry type), so there is nothing left barring an empty layer from starting out
+ * mixed too (CONTRACT.md).
  */
-export type CreatableGeometryType = Exclude<GeometryType, 'GEOMETRY'>
+export type CreatableGeometryType = GeometryType
 
 export interface CreateLayerField {
   name: string

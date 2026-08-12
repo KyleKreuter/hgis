@@ -3,12 +3,29 @@ import type { CreatableGeometryType, CreateLayerInput, FieldType } from '@/api/l
 /** Server rejects more than this many fields per layer (CONTRACT.md). */
 export const MAX_FIELDS = 50
 
-/** The three geometry kinds this dialog offers -- `GEOMETRY` (mixed) is not one of them, see api/layers.ts. */
+/**
+ * The geometry kinds this dialog offers, in display order. The three specific types
+ * come first and stay the default -- they are right for most layers, since binding a
+ * layer to one geometry keeps a later edit from drawing a polygon into what was meant
+ * to be a point layer. `GEOMETRY` (mixed) is last: it needs a deliberate choice, not a
+ * default (see api/layers.ts).
+ */
 export const CREATABLE_GEOMETRY_TYPES: CreatableGeometryType[] = [
   'MULTIPOINT',
   'MULTILINESTRING',
   'MULTIPOLYGON',
+  'GEOMETRY',
 ]
+
+/**
+ * Short label and explanatory subtext for the "mixed" geometry option, shown as the
+ * two-line select item CreateProjectDialog already uses for CRS/basemap options.
+ * `GEOMETRY_LABELS.GEOMETRY` ("gemischte Geometrien") reads fine as a badge or tooltip
+ * elsewhere, but a single word matching the terse style of "Punkte"/"Linien"/"Flächen"
+ * fits this option list better, with the subtext carrying the explanation instead.
+ */
+export const MIXED_GEOMETRY_LABEL = 'Gemischt'
+export const MIXED_GEOMETRY_HINT = 'Punkte, Linien und Flächen in einem Layer'
 
 /** Plain-language labels for the fixed `FieldType` enum -- CONTRACT.md table. */
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {

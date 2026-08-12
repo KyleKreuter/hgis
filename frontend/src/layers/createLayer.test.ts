@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { buildCreateLayerInput, canSubmitLayer, fieldNameErrors, MAX_FIELDS } from './createLayer'
+import {
+  buildCreateLayerInput,
+  canSubmitLayer,
+  CREATABLE_GEOMETRY_TYPES,
+  fieldNameErrors,
+  MAX_FIELDS,
+} from './createLayer'
+
+describe('CREATABLE_GEOMETRY_TYPES', () => {
+  it('offers the three specific types first, mixed geometry last as the deliberate choice', () => {
+    expect(CREATABLE_GEOMETRY_TYPES).toEqual([
+      'MULTIPOINT',
+      'MULTILINESTRING',
+      'MULTIPOLYGON',
+      'GEOMETRY',
+    ])
+  })
+})
 
 describe('fieldNameErrors', () => {
   it('has no errors for distinct, non-blank names', () => {
@@ -84,6 +101,14 @@ describe('buildCreateLayerInput', () => {
     expect(buildCreateLayerInput('Baumkataster', 'MULTIPOLYGON', [])).toEqual({
       name: 'Baumkataster',
       geometryType: 'MULTIPOLYGON',
+      fields: [],
+    })
+  })
+
+  it('accepts GEOMETRY (mixed) as a geometry type', () => {
+    expect(buildCreateLayerInput('Mischlayer', 'GEOMETRY', [])).toEqual({
+      name: 'Mischlayer',
+      geometryType: 'GEOMETRY',
       fields: [],
     })
   })

@@ -29,9 +29,16 @@ import {
   FIELD_TYPE_LABELS,
   FIELD_TYPE_OPTIONS,
   MAX_FIELDS,
+  MIXED_GEOMETRY_HINT,
+  MIXED_GEOMETRY_LABEL,
   type DraftField,
 } from './createLayer'
 import { GEOMETRY_LABELS } from './geometry'
+
+/** Trigger and item share the same short label -- only the item also shows the hint. */
+function geometryTypeLabel(type: CreatableGeometryType): string {
+  return type === 'GEOMETRY' ? MIXED_GEOMETRY_LABEL : GEOMETRY_LABELS[type]
+}
 
 interface CreateLayerDialogProps {
   projectId: string
@@ -166,15 +173,24 @@ export function CreateLayerDialog({
               >
                 <SelectTrigger id="layer-geometry" className="w-full">
                   <SelectValue>
-                    {(value: string) => GEOMETRY_LABELS[value as CreatableGeometryType]}
+                    {(value: string) => geometryTypeLabel(value as CreatableGeometryType)}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {CREATABLE_GEOMETRY_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {GEOMETRY_LABELS[type]}
-                    </SelectItem>
-                  ))}
+                  {CREATABLE_GEOMETRY_TYPES.map((type) =>
+                    type === 'GEOMETRY' ? (
+                      <SelectItem key={type} value={type}>
+                        <span className="flex flex-col items-start">
+                          <span>{MIXED_GEOMETRY_LABEL}</span>
+                          <span className="text-xs text-muted-foreground">{MIXED_GEOMETRY_HINT}</span>
+                        </span>
+                      </SelectItem>
+                    ) : (
+                      <SelectItem key={type} value={type}>
+                        {GEOMETRY_LABELS[type]}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>
