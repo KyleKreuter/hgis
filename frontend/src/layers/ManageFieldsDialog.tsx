@@ -42,7 +42,12 @@ import { useEditing } from '@/state/editing'
 import { useTableEditing } from '@/table/useTableEditing'
 import { DeleteFieldDialog } from './DeleteFieldDialog'
 import { FIELD_TYPE_LABELS, FIELD_TYPE_OPTIONS, MAX_FIELDS } from './createLayer'
-import { buildAddFieldInput, buildRenameFieldInput, existingFieldNameError } from './manageFields'
+import {
+  buildAddFieldInput,
+  buildRenameFieldInput,
+  dataTypeLabel,
+  existingFieldNameError,
+} from './manageFields'
 
 interface ManageFieldsDialogProps {
   layer: LayerSummary | null
@@ -319,7 +324,7 @@ function FieldRow({
         {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
       </TableCell>
       <TableCell className="p-1.5 align-top text-xs text-muted-foreground">
-        {field.dataType}
+        {dataTypeLabel(field.dataType)}
       </TableCell>
       <TableCell className="p-1.5 align-top">
         <div className="flex items-center gap-0.5">

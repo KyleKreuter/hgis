@@ -1,5 +1,6 @@
 import type { AddLayerFieldInput, FieldType, LayerFieldUsage, RenameLayerFieldInput } from '@/api/layers'
 import { formatCount } from '@/lib/format'
+import { FIELD_TYPE_LABELS } from './createLayer'
 
 /**
  * The subset of {@link import('@/api/layers').LayerField} the duplicate check needs --
@@ -41,6 +42,52 @@ export function existingFieldNameError(
         field.columnName.trim().toLowerCase() === lower),
   )
   return collides ? 'Feldname bereits vergeben' : undefined
+}
+
+/**
+ * German label for a raw PostgreSQL `data_type`, for the "Typ" column of the fields
+ * table -- without it that column shows the wire value verbatim ("double precision"),
+ * which is exactly what {@link FIELD_TYPE_LABELS} exists to hide from the create dialog.
+ *
+ * Covers more than {@link FIELD_TYPE_LABELS}: a layer built from an import can carry
+ * column types the create dialog never offers (`smallint`, `real`, `decimal`, `uuid`,
+ * `bytea`, timestamp variants). The `timestamp*` prefix check mirrors `kindOf` in
+ * `table/fieldKind.ts` -- both exist to answer "what kind of field is this", one for an
+ * editor widget and one for a label, and should keep recognizing the same types.
+ *
+ * An unrecognized type falls back to the raw value instead of an empty cell -- still
+ * more useful than nothing.
+ */
+export function dataTypeLabel(dataType: string): string {
+  const type = dataType.toLowerCase()
+  if (type.startsWith('timestamp')) return FIELD_TYPE_LABELS.TIMESTAMP
+  switch (type) {
+    case 'text':
+      return FIELD_TYPE_LABELS.TEXT
+    case 'integer':
+    case 'smallint':
+      return FIELD_TYPE_LABELS.INTEGER
+    case 'bigint':
+      return FIELD_TYPE_LABELS.BIGINT
+    case 'double precision':
+    case 'real':
+      return FIELD_TYPE_LABELS.DOUBLE
+    case 'numeric':
+    case 'decimal':
+      return FIELD_TYPE_LABELS.NUMERIC
+    case 'boolean':
+      return FIELD_TYPE_LABELS.BOOLEAN
+    case 'date':
+      return FIELD_TYPE_LABELS.DATE
+    case 'time':
+      return FIELD_TYPE_LABELS.TIME
+    case 'uuid':
+      return 'Kennung'
+    case 'bytea':
+      return 'Binärdaten'
+    default:
+      return dataType
+  }
 }
 
 /** Builds the POST body for adding a field: trims the name, keeps the type as chosen. */

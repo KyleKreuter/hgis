@@ -4,6 +4,7 @@ import {
   buildAddFieldInput,
   buildDeleteFieldWarning,
   buildRenameFieldInput,
+  dataTypeLabel,
   existingFieldNameError,
   type ExistingField,
 } from './manageFields'
@@ -108,5 +109,42 @@ describe('buildDeleteFieldWarning', () => {
     ).toBe(
       '5 Objekte haben einen Wert in diesem Feld. Die Einfärbung nach diesem Feld wird dabei zurückgesetzt. Die Beschriftung nach diesem Feld wird dabei deaktiviert.',
     )
+  })
+})
+
+describe('dataTypeLabel', () => {
+  it('labels every type the create dialog itself offers', () => {
+    expect(dataTypeLabel('text')).toBe('Text')
+    expect(dataTypeLabel('integer')).toBe('Ganzzahl')
+    expect(dataTypeLabel('bigint')).toBe('große Ganzzahl')
+    expect(dataTypeLabel('double precision')).toBe('Dezimalzahl')
+    expect(dataTypeLabel('numeric')).toBe('exakte Dezimalzahl')
+    expect(dataTypeLabel('boolean')).toBe('Ja/Nein')
+    expect(dataTypeLabel('date')).toBe('Datum')
+    expect(dataTypeLabel('time')).toBe('Uhrzeit')
+    expect(dataTypeLabel('timestamp')).toBe('Zeitpunkt')
+  })
+
+  it('also labels the types only an import can produce', () => {
+    expect(dataTypeLabel('smallint')).toBe('Ganzzahl')
+    expect(dataTypeLabel('real')).toBe('Dezimalzahl')
+    expect(dataTypeLabel('decimal')).toBe('exakte Dezimalzahl')
+    expect(dataTypeLabel('uuid')).toBe('Kennung')
+    expect(dataTypeLabel('bytea')).toBe('Binärdaten')
+  })
+
+  it('recognizes every timestamp variant by prefix, like kindOf does', () => {
+    expect(dataTypeLabel('timestamp without time zone')).toBe('Zeitpunkt')
+    expect(dataTypeLabel('timestamp with time zone')).toBe('Zeitpunkt')
+  })
+
+  it('is case-insensitive, matching how Postgres reports data_type', () => {
+    expect(dataTypeLabel('TEXT')).toBe('Text')
+    expect(dataTypeLabel('Timestamp Without Time Zone')).toBe('Zeitpunkt')
+  })
+
+  it('falls back to the raw value for an unrecognized type rather than an empty cell', () => {
+    expect(dataTypeLabel('json')).toBe('json')
+    expect(dataTypeLabel('inet')).toBe('inet')
   })
 })
