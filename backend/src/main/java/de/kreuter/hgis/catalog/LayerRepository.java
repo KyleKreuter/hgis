@@ -46,9 +46,9 @@ public interface LayerRepository extends JpaRepository<Layer, UUID> {
 	/**
 	 * The project's current clip mask layer, if any -- at most one per project, an
 	 * invariant {@code LayerService} enforces on write. Read fresh wherever a tile or a
-	 * layer DTO is built rather than cached, so a newly marked, unmarked or edited mask
-	 * takes effect immediately (CONTRACT.md phase 19).
+	 * layer DTO is built rather than cached, so a newly marked, unmarked, edited or
+	 * mode-switched mask takes effect immediately (CONTRACT.md phase 19/20).
 	 */
-	@Query("SELECT l FROM Layer l WHERE l.project.id = :projectId AND l.clipMask = true")
+	@Query("SELECT l FROM Layer l WHERE l.project.id = :projectId AND l.clipMode IS NOT NULL")
 	Optional<Layer> findClipMask(@Param("projectId") UUID projectId);
 }

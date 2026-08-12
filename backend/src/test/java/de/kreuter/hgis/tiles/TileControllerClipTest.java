@@ -185,7 +185,7 @@ class TileControllerClipTest {
 	private void markAsMask(Layer layer) throws Exception {
 		mockMvc.perform(patch("/api/layers/{layerId}", layer.getId())
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{ \"clipMask\": true }"))
+						.content("{ \"clipMode\": \"inside\" }"))
 				.andExpect(status().isOk());
 	}
 

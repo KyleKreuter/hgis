@@ -54,7 +54,7 @@ class ProjectDuplicateServiceTest {
 				+ "(ST_Multi(ST_MakeEnvelope(1, 2, 3, 4, 25832)), 'Haus', 12),"
 				+ "(ST_Multi(ST_MakeEnvelope(5, 6, 7, 8, 25832)), 'Halle', 25)").update();
 		Layer layer = new Layer(layerId, source, "Gebäude", sourceTable, "MULTIPOLYGON", 25832);
-		layer.setCopyMetadata(2, false, 4, 3, 18, "{\"kind\":\"fill\"}", "opentopo", 0.6, false, null);
+		layer.setCopyMetadata(2, false, 4, 3, 18, "{\"kind\":\"fill\"}", "opentopo", 0.6, null, null);
 		layer = layers.saveAndFlush(layer);
 		fields.saveAndFlush(new LayerField(layer, "Titel", "titel", "text", 0));
 		fields.saveAndFlush(new LayerField(layer, "Höhe", "hoehe", "integer", 1));
@@ -118,15 +118,16 @@ class ProjectDuplicateServiceTest {
 	}
 
 	/**
-	 * CONTRACT.md phase 19: a duplicate must not silently lose its clip mask. Checking
-	 * only the flag would not be enough -- a flag that survived the copy but landed at
-	 * the wrong z-index would still cut the wrong layers, so this also confirms the mask
-	 * still clips a layer above it once both are in the target project.
+	 * CONTRACT.md phase 19/20: a duplicate must not silently lose its clip mask, or the
+	 * mode it clips in. Checking only the mode string would not be enough -- a mode that
+	 * survived the copy but landed at the wrong z-index would still cut the wrong
+	 * layers, so this also confirms the mask still clips a layer above it once both are
+	 * in the target project.
 	 */
 	@Test
 	void duplicatingAProjectWithAClipMaskKeepsItAndItsEffect() {
 		Layer maskLayer = layers.findByProjectOrdered(source.getId()).getFirst();
-		maskLayer.setClipMask(true);
+		maskLayer.setClipMode("outside");
 		layers.saveAndFlush(maskLayer);
 
 		UUID aboveId = UUID.randomUUID();
@@ -150,13 +151,14 @@ class ProjectDuplicateServiceTest {
 		assertThat(result.status()).isEqualTo("SUCCEEDED");
 
 		List<Layer> copiedLayers = layers.findByProjectOrdered(result.outputProjectId());
-		Layer maskCopy = copiedLayers.stream().filter(Layer::isClipMask).findFirst()
+		Layer maskCopy = copiedLayers.stream().filter(Layer::isMask).findFirst()
 				.orElseThrow(() -> new AssertionError("Kopie hat keine Maske"));
 		Layer aboveCopy = copiedLayers.stream()
 				.filter(l -> l.getName().equals("Dach")).findFirst().orElseThrow();
 
 		assertThat(maskCopy.getName()).isEqualTo(maskLayer.getName());
-		assertThat(copiedLayers.stream().filter(Layer::isClipMask).toList()).hasSize(1);
+		assertThat(maskCopy.getClipMode()).isEqualTo("outside");
+		assertThat(copiedLayers.stream().filter(Layer::isMask).toList()).hasSize(1);
 		// Preserved z-index is what makes the mask affect the same layer in the copy as
 		// in the source -- without it, the flag alone would be a lie about what clips.
 		assertThat(aboveCopy.getZIndex()).isGreaterThan(maskCopy.getZIndex());

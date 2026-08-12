@@ -69,12 +69,13 @@ public final class LayerDtos {
 			Double basemapOpacity,
 
 			/**
-			 * Whether this layer is the project's clip mask (CONTRACT.md phase 19). At
-			 * most one layer per project carries this at a time. True even while
-			 * {@code visible} is false -- the clip a mask produces does not depend on
-			 * whether the mask itself is drawn.
+			 * Null, or this layer's role as the project's clip mask: {@code "inside"} or
+			 * {@code "outside"} (CONTRACT.md phase 20). At most one layer per project
+			 * carries a non-null value at a time. Non-null even while {@code visible} is
+			 * false -- the clip a mask produces does not depend on whether the mask
+			 * itself is drawn.
 			 */
-			boolean clipMask,
+			String clipMode,
 
 			/**
 			 * Cache-buster for the effect a clip mask has on this layer's tiles, carried
@@ -82,10 +83,10 @@ public final class LayerDtos {
 			 * Zero when no mask currently affects this layer: none is marked in the
 			 * project, this layer is the mask itself, or it sits at or below the mask's
 			 * {@code zIndex}. Computed fresh on every read from the mask layer's current
-			 * identity and {@code dataVersion} rather than stored, so deleting the mask,
-			 * editing its geometry, or moving a layer across it all take effect
-			 * immediately, with no invalidation step to get wrong. See
-			 * {@link de.kreuter.hgis.catalog.Layer#clipVersion}.
+			 * identity, {@code dataVersion} and {@code clipMode} rather than stored, so
+			 * deleting the mask, editing its geometry, moving a layer across it, or
+			 * switching its mode all take effect immediately, with no invalidation step
+			 * to get wrong. See {@link de.kreuter.hgis.catalog.Layer#clipVersion}.
 			 */
 			long clipVersion) {
 	}
@@ -124,8 +125,8 @@ public final class LayerDtos {
 			/** @see Summary#basemapOpacity() */
 			Double basemapOpacity,
 
-			/** @see Summary#clipMask() */
-			boolean clipMask,
+			/** @see Summary#clipMode() */
+			String clipMode,
 
 			/** @see Summary#clipVersion() */
 			long clipVersion,
@@ -136,8 +137,8 @@ public final class LayerDtos {
 
 			/**
 			 * The id of a different layer that lost the clip mask marking because this
-			 * update set {@code clipMask} on this one -- at most one mask is allowed per
-			 * project (CONTRACT.md phase 19), so marking a second one silently demotes
+			 * update set {@code clipMode} on this one -- at most one mask is allowed per
+			 * project (CONTRACT.md phase 19/20), so marking a second one silently demotes
 			 * the first, and this is how the server reports that instead of leaving the
 			 * client to notice on its own. Null on every response but the one PATCH that
 			 * caused a demotion, including every GET.
@@ -238,13 +239,18 @@ public final class LayerDtos {
 			JsonNode basemapOpacity,
 
 			/**
-			 * Marks or unmarks this layer as the project's clip mask (CONTRACT.md phase
-			 * 19). Absent leaves it unchanged. Setting {@code true} on a layer that is
-			 * neither MULTIPOLYGON nor GEOMETRY is rejected with 400. Setting it on a
-			 * second layer silently unmarks whichever layer carried it before -- see
-			 * {@link Detail#previousClipMaskLayerId()}.
+			 * Sets or clears this layer's role as the project's clip mask (CONTRACT.md
+			 * phase 20): {@code "inside"} or {@code "outside"} as a JSON string to mark
+			 * it, or an explicit JSON {@code null} to clear it. Absent leaves it
+			 * unchanged -- a tree for the same reason as {@link #basemap()}: absent and an
+			 * explicit {@code null} both arrive as a plain {@code String} null, so only a
+			 * type that tells a missing field apart from a present JSON {@code null} can
+			 * carry "clear" as its own meaning. A string other than the two known modes is
+			 * rejected with 400, and so is either mode on a layer that is neither
+			 * MULTIPOLYGON nor GEOMETRY. Marking a second layer silently unmarks whichever
+			 * layer carried a mode before -- see {@link Detail#previousClipMaskLayerId()}.
 			 */
-			Boolean clipMask) {
+			JsonNode clipMode) {
 	}
 
 	/**
