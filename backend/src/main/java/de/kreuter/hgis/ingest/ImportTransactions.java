@@ -151,8 +151,22 @@ class ImportTransactions {
 	 * {@link ExtentCalculator}: the SQL version could not express a project whose only
 	 * layer holds a single point, because the union of one point is a point and the column
 	 * takes a polygon.
+	 *
+	 * <p>Read and write are one step, and the lock below is what makes them one. Two imports
+	 * finishing into the same project within the same moment would otherwise each roll up
+	 * the layers they can see -- neither seeing the other, since neither has committed --
+	 * and then write their answer over the other's. The project would end up framed around
+	 * whichever import committed last, with the other layer outside the view the map opens
+	 * on. Taking the row lock before the rollup reads anything turns that into a queue: the
+	 * second transaction waits, and by the time it reads, the first layer is committed and
+	 * counted.
 	 */
 	private void updateProjectExtent(UUID projectId) {
+		jdbc.sql("SELECT id FROM gis_meta.project WHERE id = :id FOR UPDATE")
+				.param("id", projectId)
+				.query(UUID.class)
+				.optional();
+
 		projectRepository.findById(projectId).ifPresent(project -> {
 			project.setExtent(extentCalculator.forProject(projectId));
 			projectRepository.flush();

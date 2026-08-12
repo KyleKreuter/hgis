@@ -166,6 +166,73 @@ class MvtServiceTest {
 		}
 	}
 
+	/**
+	 * The tile that used to answer 500.
+	 *
+	 * <p>{@code z=2/x=2/y=1} spans from 0° to 90° east. EPSG:25832 is a transverse Mercator
+	 * around 9° east and PROJ refuses any point 81° or more away from that meridian, so
+	 * transforming this envelope into the layer's CRS is not a slow query or an empty
+	 * result, it is an error -- and the tile query did exactly that for eight tiles on every
+	 * zoom level from 2 to 4.
+	 *
+	 * <p>Its own layer, and a deliberately coarse one: a tile at zoom 2 is 10.000 km wide, so
+	 * {@code ST_AsMVTGeom} quantises anything smaller than about 2,5 km away to nothing. The
+	 * class fixture's ten-metre envelopes would produce an empty tile here for a reason that
+	 * has nothing to do with what is being tested.
+	 */
+	@Test
+	@DisplayName("a tile too wide for the layer's CRS renders instead of failing")
+	void rendersATileBeyondTheProjectionDomain() {
+		String tableName = createCoarseLayer();
+		try {
+			byte[] mvt = mvtService.renderTile(tableName, 25832, List.of(), List.of(), 2, 2, 1);
+
+			assertThat(mvt).as("the tile covers the whole layer, so it cannot be empty").isNotNull();
+			assertThat(MvtTileDecoder.decode(mvt).get(0).featureIds()).hasSize(1);
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(tableName)).update();
+		}
+	}
+
+	/**
+	 * The other half of the same guarantee: giving up the projected envelope must not turn
+	 * into giving up the tile. A zoom-2 tile on the far side of the globe holds none of this
+	 * layer, and has to say so with an empty tile rather than with the whole of it.
+	 */
+	@Test
+	@DisplayName("a tile beyond the projection domain that holds no data still renders to nothing")
+	void rendersAnEmptyTileBeyondTheProjectionDomain() {
+		String tableName = createCoarseLayer();
+		try {
+			// z=2/x=0/y=1 spans 180° to 90° west -- as far from the layer as a tile gets.
+			byte[] mvt = mvtService.renderTile(tableName, 25832, List.of(), List.of(), 2, 0, 1);
+
+			assertThat(mvt).isNull();
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(tableName)).update();
+		}
+	}
+
+	/** One 200 km square around 9°..12° east, big enough to survive a zoom-2 tile grid. */
+	private String createCoarseLayer() {
+		String tableName = SqlIdentifier.tableName(java.util.UUID.randomUUID());
+		String table = SqlIdentifier.quoteLayerTable(tableName);
+
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom geometry(MultiPolygon, 25832) NOT NULL
+				)
+				""".formatted(table)).update();
+		jdbc.sql("CREATE INDEX ON %s USING GIST (geom)".formatted(table)).update();
+		jdbc.sql("INSERT INTO %s (geom) VALUES (ST_Multi(ST_MakeEnvelope(500000, 5800000, 700000, 6000000, 25832)))"
+				.formatted(table)).update();
+
+		return tableName;
+	}
+
 	private void assertIndexFriendly(String json) throws Exception {
 		JsonNode plan = objectMapper.readTree(json).get(0).get("Plan");
 		List<JsonNode> nodes = new ArrayList<>();

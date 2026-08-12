@@ -1,5 +1,6 @@
 package de.kreuter.hgis.tiles;
 
+import de.kreuter.hgis.common.ProjectionDomain;
 import de.kreuter.hgis.common.SqlIdentifier;
 import java.util.Collection;
 import java.util.List;
@@ -17,7 +18,8 @@ import org.springframework.stereotype.Service;
  * column against a bound value, exactly what the GiST index on {@code geom} was built
  * for. Transforming {@code geom} itself in the predicate would make that index
  * unusable and turn every tile request into a sequential scan over the whole layer
- * table.
+ * table. Where the tile is too wide for its CRS to describe at all, that narrowing is
+ * given up rather than faked -- see {@link #nativeBounds}.
  *
  * Beyond {@code fid} a tile carries only the attributes the layer's style classifies or
  * labels by. That is what lets MapLibre colour features itself with {@code match} or
@@ -37,7 +39,7 @@ public class MvtService {
 	private static final String TILE_QUERY = """
 			WITH bounds AS (
 			  SELECT ST_TileEnvelope(:z, :x, :y) AS merc,
-			         ST_Transform(ST_TileEnvelope(:z, :x, :y), :srid) AS native
+			         %s AS native
 			)
 			SELECT ST_AsMVT(tile, 'layer', 4096, 'geom', 'fid')
 			FROM (
@@ -49,6 +51,33 @@ public class MvtService {
 			WHERE tile.geom IS NOT NULL
 			""";
 
+	/**
+	 * How finely the tile envelope is sampled before it is transformed, in Web Mercator
+	 * metres -- roughly one degree at the equator.
+	 *
+	 * <p>{@code ST_Transform} moves vertices, not edges. A tile envelope has four of them,
+	 * and the projected image of the straight lines between them is curved, so the bounding
+	 * box of the four transformed corners can be narrower than the area the tile really
+	 * covers -- and every feature in the difference would silently drop out of the tile. Any
+	 * tile below about zoom 8 is wide enough for that to matter; above it the envelope is
+	 * shorter than one segment and this costs nothing at all.
+	 */
+	private static final int SEGMENT_METRES = 100_000;
+
+	/**
+	 * The stand-in for a tile envelope that cannot be expressed in the layer's CRS: a box so
+	 * large that {@code l.geom && b.native} is true for every row.
+	 *
+	 * <p>That is not a shortcut, it is the correct answer. The {@code &&} predicate exists to
+	 * let the GiST index narrow the scan; what actually decides a tile's content is
+	 * {@code ST_AsMVTGeom}, which clips against {@code b.merc} and returns NULL for anything
+	 * outside -- filtered out by the outer {@code WHERE}. Dropping the narrowing therefore
+	 * costs a sequential scan and changes nothing about the bytes that come back. Which is
+	 * the whole point: this case only arises at the low zoom levels where the tile covers
+	 * the entire layer anyway, so there was nothing to narrow.
+	 */
+	private static final String UNBOUNDED_NATIVE = "ST_MakeEnvelope(-1e12, -1e12, 1e12, 1e12, :srid)";
+
 	/** The four clip modes {@code layer.clip_mode} may carry (CONTRACT.md phase 21). */
 	private static final String MODE_INSIDE_WHOLE = "insideWhole";
 	private static final String MODE_INSIDE_CLIPPED = "insideClipped";
@@ -59,9 +88,11 @@ public class MvtService {
 	public record ClipMask(String tableName, String mode) {}
 
 	private final JdbcClient jdbc;
+	private final ProjectionDomain projectionDomain;
 
-	MvtService(JdbcClient jdbc) {
+	MvtService(JdbcClient jdbc, ProjectionDomain projectionDomain) {
 		this.jdbc = jdbc;
+		this.projectionDomain = projectionDomain;
 	}
 
 	/**
@@ -80,7 +111,7 @@ public class MvtService {
 	 */
 	public byte[] renderTile(String tableName, int srid, Collection<String> attributeColumns,
 			List<ClipMask> masks, int z, int x, int y) {
-		byte[] mvt = jdbc.sql(query(tableName, attributeColumns, masks))
+		byte[] mvt = jdbc.sql(query(tableName, attributeColumns, masks, srid, z, x, y))
 				.param("z", z)
 				.param("x", x)
 				.param("y", y)
@@ -97,7 +128,8 @@ public class MvtService {
 	 */
 	String explainTile(String tableName, int srid, Collection<String> attributeColumns,
 			List<ClipMask> masks, int z, int x, int y) {
-		String sql = "EXPLAIN (ANALYZE, FORMAT JSON) " + query(tableName, attributeColumns, masks);
+		String sql = "EXPLAIN (ANALYZE, FORMAT JSON) "
+				+ query(tableName, attributeColumns, masks, srid, z, x, y);
 		return jdbc.sql(sql)
 				.param("z", z)
 				.param("x", x)
@@ -131,11 +163,13 @@ public class MvtService {
 	 *       costs nothing in correctness and keeps this loop simple.</li>
 	 * </ul>
 	 */
-	private String query(String tableName, Collection<String> attributeColumns, List<ClipMask> masks) {
+	private String query(String tableName, Collection<String> attributeColumns, List<ClipMask> masks,
+			int srid, int z, int x, int y) {
 		String attributes = selectedAttributes(attributeColumns);
 		String layerTable = SqlIdentifier.quoteLayerTable(tableName);
+		String nativeBounds = nativeBounds(srid, z, x, y);
 		if (masks.isEmpty()) {
-			return TILE_QUERY.formatted(attributes, layerTable);
+			return TILE_QUERY.formatted(nativeBounds, attributes, layerTable);
 		}
 
 		StringBuilder ctes = new StringBuilder();
@@ -176,7 +210,7 @@ public class MvtService {
 		return """
 				WITH bounds AS (
 				  SELECT ST_TileEnvelope(:z, :x, :y) AS merc,
-				         ST_Transform(ST_TileEnvelope(:z, :x, :y), :srid) AS native
+				         %s AS native
 				)%s
 				SELECT ST_AsMVT(tile, 'layer', 4096, 'geom', 'fid')
 				FROM (
@@ -187,7 +221,49 @@ public class MvtService {
 				) AS tile
 				WHERE tile.geom IS NOT NULL
 				"""
-				.formatted(ctes, attributes, geom, from, where);
+				.formatted(nativeBounds, ctes, attributes, geom, from, where);
+	}
+
+	/**
+	 * The tile envelope in the layer's own CRS -- what every {@code &&} in this query
+	 * compares against.
+	 *
+	 * <p>Transformed only where the transform means anything. A projected CRS covers a part
+	 * of the globe, not all of it: PROJ rejects a point 81° or more from UTM32's central
+	 * meridian outright, and a Web Mercator tile is that wide from roughly zoom 4 downwards
+	 * -- which used to end the request in a 500 rather than a picture. Where the tile
+	 * reaches past what {@link ProjectionDomain} vouches for, the envelope is therefore
+	 * replaced by {@link #UNBOUNDED_NATIVE}; see that constant for why the tile still comes
+	 * out exactly the same.
+	 */
+	private String nativeBounds(int srid, int z, int x, int y) {
+		double[] footprint = tileFootprint(z, x, y);
+		if (!projectionDomain.covers(srid, footprint[0], footprint[1], footprint[2], footprint[3])) {
+			return UNBOUNDED_NATIVE;
+		}
+		return "ST_Transform(ST_Segmentize(ST_TileEnvelope(:z, :x, :y), " + SEGMENT_METRES + "), :srid)";
+	}
+
+	/**
+	 * What {@code ST_TileEnvelope(z, x, y)} covers in lng/lat, as
+	 * {@code minLng, minLat, maxLng, maxLat}.
+	 *
+	 * <p>Computed here rather than asked of the database: it is the closed form of the XYZ
+	 * scheme, it decides which of two queries to build in the first place, and a round trip
+	 * per tile request to learn something arithmetic would be a poor trade.
+	 */
+	private static double[] tileFootprint(int z, int x, int y) {
+		double tilesPerAxis = Math.scalb(1.0, z);
+		return new double[] {
+				x / tilesPerAxis * 360.0 - 180.0,
+				latitudeOf(y + 1, tilesPerAxis),
+				(x + 1) / tilesPerAxis * 360.0 - 180.0,
+				latitudeOf(y, tilesPerAxis) };
+	}
+
+	/** The northern edge of tile row {@code row}: the inverse Web Mercator of its y. */
+	private static double latitudeOf(int row, double tilesPerAxis) {
+		return Math.toDegrees(Math.atan(Math.sinh(Math.PI * (1.0 - 2.0 * row / tilesPerAxis))));
 	}
 
 	/**

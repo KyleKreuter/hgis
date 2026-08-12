@@ -79,6 +79,10 @@ public class TileController {
 		Layer layer = layerRepository.findById(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
 
+		if (z < layer.getMinZoom() || z > layer.getMaxZoom()) {
+			return outsideZoomRange();
+		}
+
 		// One extra, cheap lookup per tile request (every mask of the project) so the
 		// cache headers below always reflect whether a mask currently affects this layer
 		// -- see CONTRACT.md phase 19/21. It runs ahead of the expensive render, same as
@@ -111,6 +115,29 @@ public class TileController {
 			return response.build();
 		}
 		return response.contentType(MVT_MEDIA_TYPE).body(mvt);
+	}
+
+	/**
+	 * The answer for a zoom level the layer is not drawn at ({@code layer.min_zoom} /
+	 * {@code layer.max_zoom}, both part of the layer DTO the client styles from).
+	 *
+	 * <p>Enforced here and not left to the client, because the cost of not enforcing it is
+	 * carried by the server: a layer with 230.000 points renders into a single 4 MB tile at
+	 * zoom 1, and every one of those points has to be read, transformed and encoded before
+	 * the first byte goes out. A client that respects the zoom range never asks; a client
+	 * that does not -- a stale map style, a warm HTTP cache, a script -- must not be able to
+	 * make the server build it anyway.
+	 *
+	 * <p>Deliberately not cached, unlike every other answer this controller gives. The tile
+	 * URL carries the layer's data, style, clip and render versions, and the zoom range is
+	 * none of those: widening it later would leave a client holding a year-long
+	 * {@code immutable} "this layer is empty here" for a tile that now has content, with no
+	 * changed URL to bypass it. An empty answer is cheap enough to repeat.
+	 */
+	private static ResponseEntity<byte[]> outsideZoomRange() {
+		return ResponseEntity.status(HttpStatus.NO_CONTENT)
+				.header(HttpHeaders.CACHE_CONTROL, "no-store")
+				.build();
 	}
 
 	/** z is a Web Mercator zoom level; x/y must address a tile that actually exists within it. */

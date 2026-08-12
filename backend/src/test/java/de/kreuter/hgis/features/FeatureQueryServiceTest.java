@@ -15,6 +15,7 @@ import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.features.dto.FeatureDtos;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -370,6 +371,99 @@ class FeatureQueryServiceTest {
 		projectRepository.deleteById(hugeProject.getId());
 	}
 
+	private Project typeProject;
+	private Layer typeLayer;
+	private String typeTableName;
+
+	/** The three bigint values, all past 2^53 and one apart -- see {@link #pagesByABigintColumn}. */
+	private static final List<Long> HUGE_NUMBERS =
+			List.of(9_007_199_254_740_993L, 9_007_199_254_740_994L, 9_007_199_254_740_995L);
+
+	/**
+	 * A layer built out of the column types the query service used to break on.
+	 *
+	 * <p>Three of them had no cast when a cursor or a filter value was bound, and PostgreSQL
+	 * has no operator between them and the {@code varchar} a bound string arrives as, so
+	 * sorting or filtering by such a column answered 500 rather than rows. The fourth,
+	 * {@code bigint}, failed more quietly: a cursor carried its value as a JSON double, which
+	 * holds 53 of the 64 bits, so paging jumped over whatever sat between the rounded value
+	 * and the real one.
+	 *
+	 * <p>Only three rows, and one page size of one throughout: what is being tested is
+	 * whether a page boundary lands correctly, and every row here is a boundary.
+	 */
+	@BeforeAll
+	void createTypeLayer() {
+		typeProject = projectRepository.saveAndFlush(
+				new Project("Typen-Test " + UUID.randomUUID(), null, 4326, "osm"));
+
+		UUID layerId = UUID.randomUUID();
+		typeTableName = SqlIdentifier.tableName(layerId);
+		String table = SqlIdentifier.quoteLayerTable(typeTableName);
+
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid       bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom      geometry(MultiPoint, 4326) NOT NULL,
+				    zeit      time,
+				    kennung   uuid,
+				    rohdaten  bytea,
+				    grosszahl bigint
+				)
+				""".formatted(table)).update();
+
+		jdbc.sql("""
+				INSERT INTO %s (geom, zeit, kennung, rohdaten, grosszahl) VALUES
+				(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), '08:15:00',
+				 '00000000-0000-0000-0000-000000000001', '\\x01', :first),
+				(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), '12:30:45',
+				 '00000000-0000-0000-0000-000000000002', '\\x02', :second),
+				(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), '18:45:30',
+				 '00000000-0000-0000-0000-000000000003', '\\x03', :third)
+				""".formatted(table))
+				.param("first", HUGE_NUMBERS.get(0))
+				.param("second", HUGE_NUMBERS.get(1))
+				.param("third", HUGE_NUMBERS.get(2))
+				.update();
+
+		Layer newLayer = new Layer(layerId, typeProject, "Typen", typeTableName, "MULTIPOINT", 4326);
+		newLayer.setFeatureCount(3);
+		typeLayer = layerRepository.saveAndFlush(newLayer);
+
+		fieldRepository.saveAndFlush(new LayerField(typeLayer, "Zeit", "zeit", "time", 0));
+		fieldRepository.saveAndFlush(new LayerField(typeLayer, "Kennung", "kennung", "uuid", 1));
+		fieldRepository.saveAndFlush(new LayerField(typeLayer, "Rohdaten", "rohdaten", "bytea", 2));
+		fieldRepository.saveAndFlush(new LayerField(typeLayer, "Großzahl", "grosszahl", "bigint", 3));
+	}
+
+	@AfterAll
+	void dropTypeLayer() {
+		jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(typeTableName)).update();
+		layerRepository.deleteById(typeLayer.getId());
+		projectRepository.deleteById(typeProject.getId());
+	}
+
+	/** Walks the type layer one row per page and returns one column, in the order delivered. */
+	private List<Object> pageThroughTypeLayer(String sort, String column) {
+		List<Object> collected = new ArrayList<>();
+		String cursor = null;
+		int guard = 0;
+
+		do {
+			FeatureDtos.Page page = service.list(typeLayer.getId(),
+					new FeatureQueryService.Query(sort, false, null, null, null, null, false, cursor, 1));
+			page.features().forEach(feature -> collected.add(feature.properties().get(column)));
+			cursor = page.nextCursor();
+		}
+		while (cursor != null && ++guard < 10);
+
+		return collected;
+	}
+
+	private FeatureQueryService.Query typeQuery(String filter) {
+		return new FeatureQueryService.Query(null, false, filter, null, null, null, false, null, 100);
+	}
+
 	private FeatureQueryService.Query modeQuery(String mode) {
 		return new FeatureQueryService.Query(
 				null, false, null, null, SELECTION_RECT, mode, false, null, 100);
@@ -531,6 +625,53 @@ class FeatureQueryServiceTest {
 		assertThat(elsewhere.features()).as("Paris holds none of it").isEmpty();
 	}
 
+	/**
+	 * The bbox that used to find nothing at all.
+	 *
+	 * <p>The rectangle was transformed into the layer's CRS by moving its four corners, and
+	 * in EPSG:25832 both -180° and +180° fold back onto the central meridian: the box came
+	 * out zero metres wide, and a layer of 229.876 objects reported none of them. Reproduced
+	 * here on twelve rows, where the same query has to find all twelve.
+	 */
+	@Test
+	@DisplayName("a bbox spanning the whole world finds every row, not none")
+	void filtersByAWorldSpanningBoundingBox() {
+		FeatureDtos.Page page = service.list(layer.getId(), new FeatureQueryService.Query(
+				null, false, null, null, new double[] { -180, -90, 180, 90 }, null, false, null, 100));
+
+		assertThat(page.totalCount()).isEqualTo(ROWS.size());
+		assertThat(page.features()).hasSize(ROWS.size());
+	}
+
+	/**
+	 * And the half that keeps the first one honest: a bbox too wide for the layer's CRS must
+	 * still be a filter. Answering "everything" whenever the projection gives up would pass
+	 * the test above and be just as wrong -- only in the other direction.
+	 */
+	@Test
+	@DisplayName("a half-world bbox on the wrong side of the globe finds nothing")
+	void filtersByAWorldSpanningBoundingBoxOnTheOtherSide() {
+		FeatureDtos.Page page = service.list(layer.getId(), new FeatureQueryService.Query(
+				null, false, null, null, new double[] { -180, -90, -20, 90 }, null, false, null, 100));
+
+		assertThat(page.totalCount()).as("the fixture sits near 9,7° east").isZero();
+		assertThat(page.features()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("the exact selection modes survive a bbox spanning the whole world too")
+	void selectsByModeAcrossAWorldSpanningBoundingBox() {
+		double[] world = { -180, -90, 180, 90 };
+
+		FeatureDtos.Page intersecting = service.list(layer.getId(), new FeatureQueryService.Query(
+				null, false, null, null, world, "intersects", false, null, 100));
+		FeatureDtos.Page contained = service.list(layer.getId(), new FeatureQueryService.Query(
+				null, false, null, null, world, "contains", false, null, 100));
+
+		assertThat(intersecting.features()).hasSize(ROWS.size());
+		assertThat(contained.features()).as("everything lies inside the whole world").hasSize(ROWS.size());
+	}
+
 	@Test
 	void returnsGeometryOnlyWhenAsked() {
 		FeatureDtos.Feature without = service.list(layer.getId(), query(null, false, null, 1))
@@ -638,6 +779,74 @@ class FeatureQueryServiceTest {
 		FeatureDtos.Page page = service.list(layer.getId(), query(null, false, null, 10_000_000));
 
 		assertThat(page.features()).hasSize(ROWS.size());
+	}
+
+	// --- column types the cursor and the filter have to survive ---------------------------
+
+	@Test
+	@DisplayName("paging by a time column delivers every row once instead of failing")
+	void pagesByATimeColumn() {
+		assertThat(pageThroughTypeLayer("Zeit", "zeit"))
+				.hasSize(3)
+				.doesNotHaveDuplicates();
+	}
+
+	@Test
+	@DisplayName("paging by a uuid column delivers every row once instead of failing")
+	void pagesByAUuidColumn() {
+		assertThat(pageThroughTypeLayer("Kennung", "kennung"))
+				.hasSize(3)
+				.doesNotHaveDuplicates();
+	}
+
+	@Test
+	@DisplayName("paging by a bytea column delivers every row once instead of failing")
+	void pagesByAByteaColumn() {
+		// Compared as hex, because two byte arrays holding the same bytes are still two
+		// different objects and neither hasSize nor doesNotHaveDuplicates would notice.
+		List<String> pages = pageThroughTypeLayer("Rohdaten", "rohdaten").stream()
+				.map(value -> HexFormat.of().formatHex((byte[]) value))
+				.toList();
+
+		assertThat(pages).containsExactly("01", "02", "03");
+	}
+
+	/**
+	 * The one that fails without saying so. All three values sit past 2^53, where a double
+	 * can no longer tell neighbours apart: a cursor carrying the first one comes back as the
+	 * even number below it, "everything after that" includes the row it was taken from, and
+	 * the same page repeats until the guard stops the walk.
+	 */
+	@Test
+	@DisplayName("paging by a bigint past 2^53 keeps every digit of the cursor")
+	void pagesByABigintColumn() {
+		assertThat(pageThroughTypeLayer("Großzahl", "grosszahl"))
+				.containsExactlyElementsOf(HUGE_NUMBERS);
+	}
+
+	@Test
+	@DisplayName("a filter compares against a time column instead of failing on a missing cast")
+	void filtersByATimeValue() {
+		FeatureDtos.Page page = service.list(typeLayer.getId(), typeQuery("Zeit >= '12:00:00'"));
+
+		assertThat(page.features()).hasSize(2);
+	}
+
+	@Test
+	@DisplayName("a filter compares against a uuid column instead of failing on a missing cast")
+	void filtersByAUuidValue() {
+		FeatureDtos.Page page = service.list(typeLayer.getId(),
+				typeQuery("Kennung = '00000000-0000-0000-0000-000000000002'"));
+
+		assertThat(page.features()).hasSize(1);
+	}
+
+	@Test
+	@DisplayName("a filter compares against a bytea column instead of failing on a missing cast")
+	void filtersByAByteaValue() {
+		FeatureDtos.Page page = service.list(typeLayer.getId(), typeQuery("Rohdaten = '\\x02'"));
+
+		assertThat(page.features()).hasSize(1);
 	}
 
 	// --- search ------------------------------------------------------------------------

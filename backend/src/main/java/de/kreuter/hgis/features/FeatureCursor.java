@@ -1,8 +1,11 @@
 package de.kreuter.hgis.features;
 
 import de.kreuter.hgis.common.BadRequestException;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalTime;
 import java.util.Base64;
+import java.util.HexFormat;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -29,12 +32,46 @@ record FeatureCursor(Object sortValue, long fid) {
 		node.put("f", fid);
 		switch (sortValue) {
 			case null -> node.putNull("v");
-			case Number number -> node.put("v", number.doubleValue());
+			case Number number -> putNumber(node, number);
 			case Boolean bool -> node.put("v", bool);
+			// The driver hands a bytea column back as a byte array, whose toString() is its
+			// identity hash -- a cursor built from that points at nothing and pages forever
+			// through the same rows. PostgreSQL's own hex form is what the column can be
+			// compared against again.
+			case byte[] bytes -> node.put("v", "\\x" + HexFormat.of().formatHex(bytes));
+			// java.sql.Time prints hours, minutes and seconds and drops the milliseconds it
+			// still carries. A cursor rounded down that way lands *before* the row it was
+			// taken from, so the next page starts by repeating it -- and never gets past it.
+			case java.sql.Time time -> node.put("v", withMillis(time).toString());
 			default -> node.put("v", sortValue.toString());
 		}
 		return Base64.getUrlEncoder().withoutPadding()
 				.encodeToString(MAPPER.writeValueAsBytes(node));
+	}
+
+	/**
+	 * Writes a sort value that is a number.
+	 *
+	 * <p>Whole numbers stay whole. A {@code bigint} is 64 bits and a JSON double carries 53
+	 * of them, so an id or a population count past 9.007.199.254.740.992 would come back
+	 * with its last digits rounded -- and a keyset built on a value that never occurs in the
+	 * table steps straight over the rows between it and the real one.
+	 */
+	private static void putNumber(ObjectNode node, Number number) {
+		switch (number) {
+			case Byte b -> node.put("v", b.longValue());
+			case Short s -> node.put("v", s.longValue());
+			case Integer i -> node.put("v", i.longValue());
+			case Long l -> node.put("v", l);
+			case BigInteger big -> node.put("v", big);
+			default -> node.put("v", number.doubleValue());
+		}
+	}
+
+	/** {@code time} with the sub-second part the driver kept but {@code toString} hides. */
+	private static LocalTime withMillis(java.sql.Time time) {
+		return time.toLocalTime()
+				.withNano((int) (Math.floorMod(time.getTime(), 1000L) * 1_000_000L));
 	}
 
 	static FeatureCursor decode(String encoded) {
@@ -44,6 +81,9 @@ record FeatureCursor(Object sortValue, long fid) {
 			JsonNode value = node.get("v");
 
 			Object sortValue = (value == null || value.isNull()) ? null
+					// Read back as a long, mirroring encode(): going through a double here
+					// would throw away exactly the bigint digits it took care to keep.
+					: value.isIntegralNumber() ? value.asLong()
 					: value.isNumber() ? value.doubleValue()
 					: value.isBoolean() ? value.booleanValue()
 					: value.asString();
