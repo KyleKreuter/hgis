@@ -27,7 +27,7 @@ const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: 
 /** Below this many screen pixels, a drag is treated as a stray click -- see `isMeaningfulDrag`. */
 const DRAG_THRESHOLD_PX = 3
 
-const GENERIC_ERROR = 'Auswahl konnte nicht geladen werden'
+const GENERIC_ERROR = 'Das Programm konnte die Auswahl nicht laden'
 
 type Phase =
   | { type: 'idle' }
@@ -89,7 +89,7 @@ export function RectangleSelectTool({ layerId }: RectangleSelectToolProps) {
         // grown in between. Loading only part of it and calling that "the selection"
         // would be worse than refusing outright.
         toast.error(
-          `Das Rechteck enthält mehr als ${formatCount(RECTANGLE_SELECT_MAX)} Objekte — mehr, als geladen werden kann. Bitte einen kleineren Ausschnitt wählen.`,
+          `Das Rechteck enthält mehr als ${formatCount(RECTANGLE_SELECT_MAX)} Objekte. Das Programm kann so viele nicht laden. Wählen Sie einen kleineren Ausschnitt.`,
         )
         return
       }
@@ -131,7 +131,7 @@ export function RectangleSelectTool({ layerId }: RectangleSelectToolProps) {
     if (exceedsMaximum(totalCount)) {
       setPhase(IDLE)
       toast.error(
-        `Das Rechteck enthält ${formatCount(totalCount)} Objekte — mehr, als geladen werden kann (Obergrenze ${formatCount(RECTANGLE_SELECT_MAX)}). Bitte einen kleineren Ausschnitt wählen.`,
+        `Das Rechteck enthält ${formatCount(totalCount)} Objekte. Das Programm kann höchstens ${formatCount(RECTANGLE_SELECT_MAX)} Objekte laden. Wählen Sie einen kleineren Ausschnitt.`,
       )
       return
     }

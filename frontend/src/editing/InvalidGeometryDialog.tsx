@@ -33,8 +33,8 @@ export function InvalidGeometryDialog({ message, onRepair, onCancel }: InvalidGe
           <AlertDialogDescription>
             {message}
             <span className="mt-2 block">
-              Beim Reparieren wird die Form verändert — sie kann danach anders aussehen als
-              gezeichnet. Es wurde noch nichts gespeichert.
+              Die Reparatur verändert die Form. Danach kann sie anders aussehen als gezeichnet.
+              Das Programm hat noch nichts gespeichert.
             </span>
           </AlertDialogDescription>
         </AlertDialogHeader>

@@ -94,7 +94,7 @@ export function LayerTree({
   function applyMove(from: number, before: number) {
     if (isNoOpMove(from, before)) return
     reorder.mutate(reorderedIdsBottomToTop(displayed, from, before), {
-      onError: () => toast.error('Reihenfolge konnte nicht gespeichert werden'),
+      onError: () => toast.error('Das Programm konnte die Reihenfolge nicht speichern'),
     })
   }
 
@@ -175,7 +175,7 @@ export function LayerTree({
               onSelect={() => onSelectLayer(layer.id)}
               onZoom={() => {
                 if (!layer.extent) {
-                  toast.info(`„${layer.name}" enthält keine Objekte.`)
+                  toast.info(`„${layer.name}" enthält keine Objekte`)
                   return
                 }
                 onZoomToLayer(layer.extent)
@@ -341,7 +341,7 @@ function LayerRow({
         onClick={onSelect}
         onDoubleClick={onZoom}
         className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-        title={`${layer.name} — ${GEOMETRY_LABELS[layer.geometryType]}, ${formatCount(layer.featureCount)} Objekte`}
+        title={`${layer.name} (${GEOMETRY_LABELS[layer.geometryType]}, ${formatCount(layer.featureCount)} Objekte)`}
       >
         {/* Filled, not outlined: an outlined square sitting next to the visibility
             checkbox reads as a second, unticked checkbox. Filled it reads as what it

@@ -52,7 +52,7 @@ export function DeleteFieldDialog({
       toast.success(`Feld „${field.sourceName}" gelöscht`)
       onOpenChange(false)
     } catch {
-      toast.error('Feld konnte nicht gelöscht werden')
+      toast.error('Das Programm konnte das Feld nicht löschen')
     }
   }
 
@@ -64,7 +64,7 @@ export function DeleteFieldDialog({
           <AlertDialogDescription>
             {field && (
               <>
-                „{field.sourceName}" wird unwiderruflich aus „{layerName}" entfernt.{' '}
+                Das Programm löscht „{field.sourceName}" endgültig aus „{layerName}".{' '}
                 {usage ? buildDeleteFieldWarning(usage) : 'Wird geprüft…'}
               </>
             )}

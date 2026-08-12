@@ -93,13 +93,13 @@ describe('buildDeleteFieldWarning', () => {
 
   it('warns that the renderer is reset when the field drives it', () => {
     expect(buildDeleteFieldWarning(usage({ valueCount: 5, usedByRenderer: true }))).toBe(
-      '5 Objekte haben einen Wert in diesem Feld. Die Einfärbung nach diesem Feld wird dabei zurückgesetzt.',
+      '5 Objekte haben einen Wert in diesem Feld. Das Programm setzt dabei die Einfärbung nach diesem Feld zurück.',
     )
   })
 
   it('warns that labels are disabled when the field drives them', () => {
     expect(buildDeleteFieldWarning(usage({ valueCount: 5, usedByLabels: true }))).toBe(
-      '5 Objekte haben einen Wert in diesem Feld. Die Beschriftung nach diesem Feld wird dabei deaktiviert.',
+      '5 Objekte haben einen Wert in diesem Feld. Das Programm deaktiviert dabei die Beschriftung nach diesem Feld.',
     )
   })
 
@@ -107,7 +107,7 @@ describe('buildDeleteFieldWarning', () => {
     expect(
       buildDeleteFieldWarning(usage({ valueCount: 5, usedByRenderer: true, usedByLabels: true })),
     ).toBe(
-      '5 Objekte haben einen Wert in diesem Feld. Die Einfärbung nach diesem Feld wird dabei zurückgesetzt. Die Beschriftung nach diesem Feld wird dabei deaktiviert.',
+      '5 Objekte haben einen Wert in diesem Feld. Das Programm setzt dabei die Einfärbung nach diesem Feld zurück. Das Programm deaktiviert dabei die Beschriftung nach diesem Feld.',
     )
   })
 })

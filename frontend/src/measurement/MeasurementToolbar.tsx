@@ -11,13 +11,13 @@ const TOOLS: { mode: MeasureMode; label: string; hint: string; icon: typeof Rule
   {
     mode: 'distance',
     label: 'Strecke messen',
-    hint: 'Strecke messen: klicken setzt Punkte, Doppelklick beendet.',
+    hint: 'Strecke messen. Klicken Sie, um Punkte zu setzen. Doppelklicken Sie, um die Messung abzuschließen.',
     icon: Ruler,
   },
   {
     mode: 'area',
     label: 'Fläche messen',
-    hint: 'Fläche messen: mindestens drei Punkte, Doppelklick schließt die Fläche.',
+    hint: 'Fläche messen. Setzen Sie mindestens drei Punkte. Doppelklicken Sie, um die Messung abzuschließen.',
     icon: Pentagon,
   },
 ]
@@ -38,7 +38,7 @@ interface MeasurementToolbarProps {
  */
 export function MeasurementToolbar({
   disabled = false,
-  disabledReason = 'Während des Editierens nicht verfügbar',
+  disabledReason = 'Im Zeichenmodus nicht verfügbar',
 }: MeasurementToolbarProps) {
   const mode = useMeasurement((state) => state.mode)
   const hasSketch = useMeasurement((state) => state.points.length > 0)
@@ -131,7 +131,7 @@ export function MeasurementToolbar({
             />
             <TooltipContent>
               {hasSketch
-                ? 'Messung zurücksetzen (auch Esc) — das Werkzeug bleibt aktiv'
+                ? 'Messung zurücksetzen (auch Esc). Das Werkzeug bleibt aktiv.'
                 : 'Es ist nichts gemessen'}
             </TooltipContent>
           </Tooltip>

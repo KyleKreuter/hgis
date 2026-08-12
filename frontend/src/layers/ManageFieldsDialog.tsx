@@ -91,7 +91,7 @@ export function ManageFieldsDialog({ layer, projectId, onOpenChange }: ManageFie
   const deleteLocked =
     Boolean(layer) && (mapEditingLayerId === layerId || tableEditingLayerId === layerId)
   const deleteLockedReason =
-    'Felder lassen sich erst löschen, wenn die laufende Bearbeitung dieses Layers gespeichert oder verworfen wurde.'
+    'Speichern oder verwerfen Sie zuerst die laufende Bearbeitung dieses Layers, um Felder zu löschen.'
 
   // Only the layer identity resets the draft -- typing in the "new field" row must not
   // get wiped out by an unrelated refetch, e.g. one triggered by renaming another field.
@@ -124,7 +124,7 @@ export function ManageFieldsDialog({ layer, projectId, onOpenChange }: ManageFie
         // but a generic message still has to reach the user if the server disagrees.
         if (!onName) toast.error(caught.fieldError('type') ?? caught.message)
       } else {
-        toast.error('Feld konnte nicht hinzugefügt werden')
+        toast.error('Das Programm konnte das Feld nicht hinzufügen')
       }
     }
   }
@@ -150,7 +150,7 @@ export function ManageFieldsDialog({ layer, projectId, onOpenChange }: ManageFie
               <p className="text-xs text-muted-foreground">Felder werden geladen…</p>
             ) : fields.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                Dieser Layer führt noch keine Attributfelder.
+                Dieser Layer hat noch keine Attributfelder.
               </p>
             ) : (
               <div className="max-h-72 overflow-y-auto rounded-md border">
@@ -297,7 +297,7 @@ function FieldRow({
       if (caught instanceof ApiError) {
         setError(caught.fieldError('name') ?? caught.message)
       } else {
-        toast.error('Feld konnte nicht umbenannt werden')
+        toast.error('Das Programm konnte das Feld nicht umbenennen')
       }
     }
   }

@@ -50,7 +50,7 @@ export function LayerProperties({ layer, projectId }: LayerPropertiesProps) {
           />
         </Row>
         <p className="text-xs text-muted-foreground">
-          Außerhalb dieses Zoomfensters wird der Layer ausgeblendet.
+          Außerhalb dieses Zoomfensters blendet das Programm den Layer aus.
         </p>
       </Section>
     </div>

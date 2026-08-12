@@ -48,7 +48,7 @@ export function RenameLayerDialog({ layer, projectId, onOpenChange }: RenameLaye
       if (caught instanceof ApiError) {
         setError(caught.fieldError('name') ?? caught.message)
       } else {
-        toast.error('Layer konnte nicht umbenannt werden')
+        toast.error('Das Programm konnte den Layer nicht umbenennen')
       }
     }
   }

@@ -84,7 +84,7 @@ export function EditToolbar({
           }
         />
         <TooltipContent>
-          {canEdit ? 'Editiermodus starten' : 'Zuerst einen Layer im Layerbaum auswählen'}
+          {canEdit ? 'Zeichenmodus starten' : 'Wählen Sie zuerst einen Layer im Layerbaum aus'}
         </TooltipContent>
       </Tooltip>
     )
@@ -119,7 +119,7 @@ export function EditToolbar({
                   that silently disappears looks like a missing feature. */}
               {usable
                 ? label
-                : `${label} — der Layer nimmt nur ${geometryDescription(geometryType)} auf`}
+                : `${label}. Dieser Layer erlaubt nur ${geometryDescription(geometryType)}.`}
             </TooltipContent>
           </Tooltip>
         )

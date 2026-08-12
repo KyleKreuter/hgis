@@ -153,7 +153,7 @@ export const BASEMAPS: readonly BasemapDefinition[] = [
   {
     id: 'none',
     label: 'Keine Hintergrundkarte',
-    hint: 'Nur die eigenen Layer, ohne Kartenhintergrund',
+    hint: 'Nur die eigenen Layer, ohne Hintergrundkarte',
     attribution: [],
     sources: {},
     layers: [],

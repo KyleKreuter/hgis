@@ -31,7 +31,7 @@ export function AttributeForm({ fields, feature }: AttributeFormProps) {
   if (!feature) {
     return (
       <p className="p-3 text-sm text-muted-foreground">
-        Kein Objekt ausgewählt. Ein Objekt anklicken oder eines zeichnen.
+        Kein Objekt ausgewählt. Klicken Sie ein Objekt an, oder zeichnen Sie eines.
       </p>
     )
   }

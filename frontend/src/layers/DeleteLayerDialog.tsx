@@ -53,7 +53,7 @@ export function DeleteLayerDialog({
       onDeleted(layer.id)
       onOpenChange(false)
     } catch {
-      toast.error('Layer konnte nicht gelöscht werden')
+      toast.error('Das Programm konnte den Layer nicht löschen')
     }
   }
 
@@ -65,16 +65,16 @@ export function DeleteLayerDialog({
           <AlertDialogDescription>
             {layer && deleteLocked && (
               <>
-                „{layer.name}" wird gerade bearbeitet und lässt sich deshalb nicht löschen.
-                Erst die laufende Bearbeitung speichern oder verwerfen.
+                Sie bearbeiten „{layer.name}" gerade. Deshalb können Sie den Layer nicht
+                löschen. Speichern oder verwerfen Sie zuerst die laufende Bearbeitung.
               </>
             )}
             {layer && !deleteLocked && (
               <>
-                „{layer.name}" wird mit{' '}
+                Das Programm löscht „{layer.name}" mit{' '}
                 <span className="tabular-nums">{formatCount(layer.featureCount)}</span>{' '}
-                {layer.featureCount === 1 ? 'Objekt' : 'Objekten'} endgültig entfernt.
-                Die Daten lassen sich danach nicht wiederherstellen.
+                {layer.featureCount === 1 ? 'Objekt' : 'Objekten'} endgültig. Sie können die
+                Daten danach nicht wiederherstellen.
               </>
             )}
           </AlertDialogDescription>
