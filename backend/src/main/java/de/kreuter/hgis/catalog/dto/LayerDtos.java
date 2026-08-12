@@ -66,7 +66,28 @@ public final class LayerDtos {
 			String basemap,
 
 			/** This layer's own opacity for the basemap, or null to follow the project's. */
-			Double basemapOpacity) {
+			Double basemapOpacity,
+
+			/**
+			 * Whether this layer is the project's clip mask (CONTRACT.md phase 19). At
+			 * most one layer per project carries this at a time. True even while
+			 * {@code visible} is false -- the clip a mask produces does not depend on
+			 * whether the mask itself is drawn.
+			 */
+			boolean clipMask,
+
+			/**
+			 * Cache-buster for the effect a clip mask has on this layer's tiles, carried
+			 * in the tile URL alongside {@link #dataVersion()} and {@link #styleVersion()}.
+			 * Zero when no mask currently affects this layer: none is marked in the
+			 * project, this layer is the mask itself, or it sits at or below the mask's
+			 * {@code zIndex}. Computed fresh on every read from the mask layer's current
+			 * identity and {@code dataVersion} rather than stored, so deleting the mask,
+			 * editing its geometry, or moving a layer across it all take effect
+			 * immediately, with no invalidation step to get wrong. See
+			 * {@link de.kreuter.hgis.catalog.Layer#clipVersion}.
+			 */
+			long clipVersion) {
 	}
 
 	/** One entry of {@code LayerDetail.fields}. */
@@ -103,9 +124,26 @@ public final class LayerDtos {
 			/** @see Summary#basemapOpacity() */
 			Double basemapOpacity,
 
+			/** @see Summary#clipMask() */
+			boolean clipMask,
+
+			/** @see Summary#clipVersion() */
+			long clipVersion,
+
 			List<Field> fields,
 			Instant createdAt,
-			Instant updatedAt) {
+			Instant updatedAt,
+
+			/**
+			 * The id of a different layer that lost the clip mask marking because this
+			 * update set {@code clipMask} on this one -- at most one mask is allowed per
+			 * project (CONTRACT.md phase 19), so marking a second one silently demotes
+			 * the first, and this is how the server reports that instead of leaving the
+			 * client to notice on its own. Null on every response but the one PATCH that
+			 * caused a demotion, including every GET.
+			 */
+			@JsonInclude(JsonInclude.Include.NON_NULL)
+			UUID previousClipMaskLayerId) {
 	}
 
 	/**
@@ -197,7 +235,16 @@ public final class LayerDtos {
 			 * {@code null} to make it follow the project's again. Absent leaves it unchanged.
 			 * @see #basemap()
 			 */
-			JsonNode basemapOpacity) {
+			JsonNode basemapOpacity,
+
+			/**
+			 * Marks or unmarks this layer as the project's clip mask (CONTRACT.md phase
+			 * 19). Absent leaves it unchanged. Setting {@code true} on a layer that is
+			 * neither MULTIPOLYGON nor GEOMETRY is rejected with 400. Setting it on a
+			 * second layer silently unmarks whichever layer carried it before -- see
+			 * {@link Detail#previousClipMaskLayerId()}.
+			 */
+			Boolean clipMask) {
 	}
 
 	/**

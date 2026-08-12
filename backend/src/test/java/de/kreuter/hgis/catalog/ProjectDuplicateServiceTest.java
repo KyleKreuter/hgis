@@ -54,7 +54,7 @@ class ProjectDuplicateServiceTest {
 				+ "(ST_Multi(ST_MakeEnvelope(1, 2, 3, 4, 25832)), 'Haus', 12),"
 				+ "(ST_Multi(ST_MakeEnvelope(5, 6, 7, 8, 25832)), 'Halle', 25)").update();
 		Layer layer = new Layer(layerId, source, "Gebäude", sourceTable, "MULTIPOLYGON", 25832);
-		layer.setCopyMetadata(2, false, 4, 3, 18, "{\"kind\":\"fill\"}", "opentopo", 0.6, null);
+		layer.setCopyMetadata(2, false, 4, 3, 18, "{\"kind\":\"fill\"}", "opentopo", 0.6, false, null);
 		layer = layers.saveAndFlush(layer);
 		fields.saveAndFlush(new LayerField(layer, "Titel", "titel", "text", 0));
 		fields.saveAndFlush(new LayerField(layer, "Höhe", "hoehe", "integer", 1));
@@ -115,6 +115,54 @@ class ProjectDuplicateServiceTest {
 		assertThat(newFid).isGreaterThan(2);
 		assertThat(jdbc.sql("SELECT COUNT(*) FROM " + SqlIdentifier.quoteLayerTable(sourceTable))
 				.query(Long.class).single()).isEqualTo(2);
+	}
+
+	/**
+	 * CONTRACT.md phase 19: a duplicate must not silently lose its clip mask. Checking
+	 * only the flag would not be enough -- a flag that survived the copy but landed at
+	 * the wrong z-index would still cut the wrong layers, so this also confirms the mask
+	 * still clips a layer above it once both are in the target project.
+	 */
+	@Test
+	void duplicatingAProjectWithAClipMaskKeepsItAndItsEffect() {
+		Layer maskLayer = layers.findByProjectOrdered(source.getId()).getFirst();
+		maskLayer.setClipMask(true);
+		layers.saveAndFlush(maskLayer);
+
+		UUID aboveId = UUID.randomUUID();
+		String aboveTable = SqlIdentifier.tableName(aboveId);
+		String quotedAboveTable = SqlIdentifier.quoteLayerTable(aboveTable);
+		jdbc.sql("""
+				CREATE TABLE %s (
+				  fid  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				  geom geometry(MultiPolygon, 25832) NOT NULL
+				)
+				""".formatted(quotedAboveTable)).update();
+		jdbc.sql("CREATE INDEX " + SqlIdentifier.quoteColumn(aboveTable + "_geom_idx")
+				+ " ON " + quotedAboveTable + " USING GIST (geom)").update();
+		Layer above = new Layer(aboveId, source, "Dach", aboveTable, "MULTIPOLYGON", 25832);
+		above.setZIndex(maskLayer.getZIndex() + 1);
+		layers.saveAndFlush(above);
+
+		Job job = jobs.create(source.getId(), Job.Type.DUPLICATE, null);
+		duplicateService.runDuplicate(job.getId(), source.getId(), null);
+		JobDtos.Response result = jobs.get(job.getId());
+		assertThat(result.status()).isEqualTo("SUCCEEDED");
+
+		List<Layer> copiedLayers = layers.findByProjectOrdered(result.outputProjectId());
+		Layer maskCopy = copiedLayers.stream().filter(Layer::isClipMask).findFirst()
+				.orElseThrow(() -> new AssertionError("Kopie hat keine Maske"));
+		Layer aboveCopy = copiedLayers.stream()
+				.filter(l -> l.getName().equals("Dach")).findFirst().orElseThrow();
+
+		assertThat(maskCopy.getName()).isEqualTo(maskLayer.getName());
+		assertThat(copiedLayers.stream().filter(Layer::isClipMask).toList()).hasSize(1);
+		// Preserved z-index is what makes the mask affect the same layer in the copy as
+		// in the source -- without it, the flag alone would be a lie about what clips.
+		assertThat(aboveCopy.getZIndex()).isGreaterThan(maskCopy.getZIndex());
+		assertThat(aboveCopy.clipVersion(maskCopy))
+				.as("Layer über der Maske muss in der Kopie wirklich beschnitten werden")
+				.isNotZero();
 	}
 
 	@Test

@@ -24,7 +24,43 @@ import java.util.Map;
  */
 public final class MvtTileDecoder {
 
-	public record Feature(long id, Map<String, Object> properties) {
+	/**
+	 * @param rings the feature's geometry, one entry per ring or line part, each a
+	 *              sequence of tile-local points (0..extent, usually 0..4096); empty for
+	 *              a feature with no geometry field. Not closed explicitly -- a ring's
+	 *              last point connects back to its first, per the MVT ClosePath command,
+	 *              which carries no coordinates of its own to decode.
+	 */
+	public record Feature(long id, Map<String, Object> properties, List<List<long[]>> rings) {
+
+		/** Total vertex count across every ring -- the "Stützpunktzahl" CONTRACT.md phase 19 asks tests to compare. */
+		public int pointCount() {
+			return rings.stream().mapToInt(List::size).sum();
+		}
+
+		/**
+		 * The geometry's area in tile-local units, via the shoelace formula summed over
+		 * every ring: exterior rings add, holes -- opposite winding order -- subtract.
+		 * What CONTRACT.md phase 19 calls the "Fläche" a clip test should compare.
+		 */
+		public double area() {
+			double total = 0;
+			for (List<long[]> ring : rings) {
+				total += signedArea(ring);
+			}
+			return Math.abs(total) / 2.0;
+		}
+
+		private static double signedArea(List<long[]> ring) {
+			double sum = 0;
+			int n = ring.size();
+			for (int i = 0; i < n; i++) {
+				long[] p1 = ring.get(i);
+				long[] p2 = ring.get((i + 1) % n);
+				sum += (double) p1[0] * p2[1] - (double) p2[0] * p1[1];
+			}
+			return sum;
+		}
 	}
 
 	public record Layer(String name, List<String> keys, List<Feature> features) {
@@ -74,17 +110,18 @@ public final class MvtTileDecoder {
 		}
 
 		List<Feature> features = rawFeatures.stream()
-				.map(raw -> new Feature(raw.id(), properties(raw.tags(), keys, values)))
+				.map(raw -> new Feature(raw.id(), properties(raw.tags(), keys, values), decodeGeometry(raw.geometry())))
 				.toList();
 		return new Layer(name, keys, features);
 	}
 
-	private record RawFeature(long id, List<Integer> tags) {
+	private record RawFeature(long id, List<Integer> tags, List<Long> geometry) {
 	}
 
 	private static RawFeature decodeFeature(byte[] bytes) {
 		long id = 0;
 		List<Integer> tags = new ArrayList<>();
+		List<Long> geometry = new ArrayList<>();
 		Cursor c = new Cursor(bytes);
 		while (c.hasRemaining()) {
 			long tag = c.readVarint();
@@ -97,11 +134,56 @@ public final class MvtTileDecoder {
 				while (packed.hasRemaining()) {
 					tags.add((int) packed.readVarint());
 				}
+			} else if (field == 4 && wireType == 2) { // Feature.geometry, packed
+				Cursor packed = new Cursor(c.readBytes());
+				while (packed.hasRemaining()) {
+					geometry.add(packed.readVarint());
+				}
 			} else {
 				c.skip(wireType);
 			}
 		}
-		return new RawFeature(id, tags);
+		return new RawFeature(id, tags, geometry);
+	}
+
+	/**
+	 * Turns the packed command/parameter stream of {@code Feature.geometry} into rings
+	 * of tile-local points. Commands: 1 = MoveTo (starts a new ring), 2 = LineTo (adds a
+	 * point to the current ring), 7 = ClosePath (no parameters). Coordinates are
+	 * zigzag-encoded deltas from the previous point, cumulative across the whole feature.
+	 *
+	 * <p>Schema reference: https://github.com/mapbox/vector-tile-spec/blob/master/2.1/vector_tile.proto#L112
+	 */
+	private static List<List<long[]>> decodeGeometry(List<Long> commands) {
+		List<List<long[]>> rings = new ArrayList<>();
+		List<long[]> current = null;
+		long x = 0;
+		long y = 0;
+		int i = 0;
+		while (i < commands.size()) {
+			long commandInteger = commands.get(i++);
+			int id = (int) (commandInteger & 0x7);
+			int count = (int) (commandInteger >>> 3);
+			if (id == 1 || id == 2) { // MoveTo or LineTo
+				for (int p = 0; p < count; p++) {
+					x += zigzag(commands.get(i++));
+					y += zigzag(commands.get(i++));
+					if (id == 1) {
+						current = new ArrayList<>();
+						rings.add(current);
+					}
+					current.add(new long[] { x, y });
+				}
+			}
+			// ClosePath (id == 7) carries no parameters and needs no action here: a
+			// ring's last point is treated as connected back to its first wherever this
+			// decoder measures area or counts points.
+		}
+		return rings;
+	}
+
+	private static long zigzag(long value) {
+		return (value >>> 1) ^ -(value & 1);
 	}
 
 	/** Value is a one-of; whichever member is present carries the value. */

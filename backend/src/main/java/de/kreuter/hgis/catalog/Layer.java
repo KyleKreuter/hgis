@@ -95,6 +95,15 @@ public class Layer {
 	@Column(name = "basemap_opacity")
 	private Double basemapOpacity;
 
+	/**
+	 * Whether this layer is the project's clip mask (CONTRACT.md phase 19). At most one
+	 * layer per project carries this at a time -- {@code LayerService} enforces that by
+	 * unmarking whichever layer had it before. Independent of {@code visible}: a hidden
+	 * mask still clips everything above it, since the clip is not what draws it.
+	 */
+	@Column(name = "is_clip_mask", nullable = false)
+	private boolean clipMask = false;
+
 	@Column(columnDefinition = "geometry(Polygon,4326)")
 	private Polygon extent;
 
@@ -228,6 +237,50 @@ public class Layer {
 		this.basemapOpacity = basemapOpacity;
 	}
 
+	public boolean isClipMask() {
+		return clipMask;
+	}
+
+	public void setClipMask(boolean clipMask) {
+		this.clipMask = clipMask;
+	}
+
+	/**
+	 * Whether {@code maskLayer} clips this layer's tiles (CONTRACT.md phase 19): it has
+	 * to be marked, be a different layer than this one -- a mask never clips itself --
+	 * and sit below this layer in the stack, since a mask only reaches upward.
+	 *
+	 * @param maskLayer the project's current clip mask, or {@code null} if none is marked
+	 */
+	public boolean isClippedBy(Layer maskLayer) {
+		return maskLayer != null
+				&& !maskLayer.id.equals(this.id)
+				&& this.zIndex > maskLayer.zIndex;
+	}
+
+	/**
+	 * The version component the tile URL and its {@code ETag} carry for this layer's
+	 * clip state (CONTRACT.md phase 19). Computed fresh from the live catalog on every
+	 * call rather than stored, so deleting the mask, editing its geometry, or dragging a
+	 * layer across it all take effect on the very next read -- nothing to invalidate on
+	 * the way.
+	 *
+	 * <p>Zero exactly when {@link #isClippedBy} is false. Otherwise combines the mask
+	 * layer's identity with its {@code dataVersion}: {@code dataVersion} alone would let
+	 * two different masks that happen to share a data version number collide onto the
+	 * same clipVersion, and a client would then keep the old, wrongly clipped tile after
+	 * the project's mask changed to a different layer.
+	 *
+	 * @param maskLayer the project's current clip mask, or {@code null} if none is marked
+	 */
+	public long clipVersion(Layer maskLayer) {
+		if (!isClippedBy(maskLayer)) {
+			return 0;
+		}
+		UUID maskId = maskLayer.id;
+		return maskId.getMostSignificantBits() ^ maskId.getLeastSignificantBits() ^ maskLayer.dataVersion;
+	}
+
 	public Polygon getExtent() {
 		return extent;
 	}
@@ -236,8 +289,15 @@ public class Layer {
 		this.extent = extent;
 	}
 
+	/**
+	 * @param clipMask whether the source is the project's clip mask (CONTRACT.md phase
+	 *                 19). A duplicate is a project of its own, so copying this is safe
+	 *                 even though at most one layer per project may carry it: the source
+	 *                 project keeps its own mask untouched, and the target starts with at
+	 *                 most one too, since {@code source} could only ever be marked once.
+	 */
 	public void setCopyMetadata(long featureCount, boolean visible, int zIndex, int minZoom,
-			int maxZoom, String style, String basemap, Double basemapOpacity, Polygon extent) {
+			int maxZoom, String style, String basemap, Double basemapOpacity, boolean clipMask, Polygon extent) {
 		this.featureCount = featureCount;
 		this.visible = visible;
 		this.zIndex = zIndex;
@@ -246,6 +306,7 @@ public class Layer {
 		this.style = style;
 		this.basemap = basemap;
 		this.basemapOpacity = basemapOpacity;
+		this.clipMask = clipMask;
 		this.extent = extent;
 	}
 
