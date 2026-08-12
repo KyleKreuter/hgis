@@ -1,4 +1,5 @@
 import {
+  infiniteQueryOptions,
   queryOptions,
   useMutation,
   useQueryClient,
@@ -18,6 +19,22 @@ export interface ProjectSummary {
   featureCount: number
   lastOpenedAt: string | null
   createdAt: string
+  /** [lng, lat] in EPSG:4326, or null/missing while the project has never been viewed. */
+  center?: [number, number] | null
+  zoom?: number | null
+  /** [minLng, minLat, maxLng, maxLat] in EPSG:4326, or null/missing without any layer. */
+  extent?: [number, number, number, number] | null
+  /**
+   * Optional only so fixtures outside this package (CONTRACT.md phase 22) can build a
+   * `ProjectSummary` without it -- the backend always sets it.
+   */
+  basemap?: string
+}
+
+/** One page of `GET /api/projects`. `nextCursor` is opaque: never read, only replayed. */
+export interface ProjectPage {
+  items: ProjectSummary[]
+  nextCursor: string | null
 }
 
 export interface ProjectDetail extends ProjectSummary {
@@ -59,6 +76,8 @@ export interface DuplicateProjectInput {
 
 export const projectKeys = {
   all: ['projects'] as const,
+  /** One chain per search term, so a new search starts a fresh chain of pages. */
+  list: (q: string) => [...projectKeys.all, 'list', q] as const,
   detail: (id: string) => ['projects', id] as const,
   deletionImpact: (id: string) => ['projects', id, 'deletion-impact'] as const,
   /** Mutation key, not a query key: it is what finds a project's patches in flight. */
@@ -70,13 +89,31 @@ export const projectKeys = {
  * `projectKeys.all` is a prefix of every detail key, so invalidating it without this
  * would refetch the open project as well -- and a refetch landing in the middle of a
  * burst of patches is exactly what makes the map jump back to an older answer.
+ * `exact: false` on purpose here: there is one list chain per search term, and every
+ * one of them (not just the currently active search) needs to be marked stale.
  */
-const LIST_ONLY = { queryKey: projectKeys.all, exact: true } as const
+const LIST_ONLY = { queryKey: [...projectKeys.all, 'list'], exact: false } as const
 
-export const projectListQuery = () =>
-  queryOptions({
-    queryKey: projectKeys.all,
-    queryFn: () => api.get<ProjectSummary[]>('/api/projects'),
+/** Builds `GET /api/projects`, adding only the parameters that have a value. */
+function projectsUrl(cursor: string | undefined, q: string): string {
+  const params = new URLSearchParams()
+  if (cursor) params.set('cursor', cursor)
+  if (q.trim()) params.set('q', q.trim())
+  const query = params.toString()
+  return query ? `/api/projects?${query}` : '/api/projects'
+}
+
+/**
+ * @param q search term, matched server-side against name and description (CONTRACT.md
+ *   phase 22). Part of the query key so a new search begins its own chain of pages
+ *   instead of appending to whatever the previous search had already loaded.
+ */
+export const projectListInfiniteQuery = (q: string) =>
+  infiniteQueryOptions({
+    queryKey: projectKeys.list(q),
+    queryFn: ({ pageParam }) => api.get<ProjectPage>(projectsUrl(pageParam, q)),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   })
 
 /**
