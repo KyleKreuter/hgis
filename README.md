@@ -21,7 +21,7 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Sachdaten in einer Attributtabelle anzeigen, durchsuchen, filtern und sortieren
 - Alle Treffer einer Suche auf einmal auswählen und als Ganzes exportieren
 - Objekte gemeinsam in Karte und Attributtabelle auswählen
-- Felder einzelner Kartenobjekte abfragen
+- Werte einzelner Kartenobjekte abfragen
 - Punkte, Linien und Flächen zeichnen, verschieben und löschen
 - Beim Zeichnen auf Stützpunkte, Schnittpunkte und Kanten einrasten
 - Layer einheitlich, kategorisiert oder abgestuft darstellen. Die Farbe wechselt dabei je
@@ -102,8 +102,8 @@ Jede Spalte bekommt die Eingabe, die zu ihrem Typ passt: ein Datumsfeld für ein
 eine Auswahl für Ja/Nein, ein Zahlenfeld für Zahlen. Ein geleertes Feld bedeutet
 ausdrücklich NULL, nicht den leeren Text. Bei Ja/Nein gibt es NULL als dritte
 Möglichkeit. Sie arbeiten dabei mit der Tastatur: Pfeiltasten bewegen den Fokus, Enter
-oder ein Tastendruck öffnet eine Zelle. Enter springt danach eine Zeile tiefer, Tab eine
-Spalte weiter, Escape verwirft die Eingabe.
+öffnet eine Zelle, ebenso das Tippen eines Zeichens. Enter springt danach eine Zeile
+tiefer, Tab eine Spalte weiter, Escape verwirft die Eingabe.
 
 Ungespeicherte Änderungen gehen nicht unbemerkt verloren. Wenn Sie die Ansicht verlassen,
 den Layer wechseln, zurückgehen oder den Tab schließen, fragt das Programm nach. Es nennt
