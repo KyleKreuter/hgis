@@ -241,7 +241,12 @@ function Workspace() {
             >
               <ArrowLeft className="size-3.5" />
             </Link>
-            <span className="font-medium">{project.name}</span>
+            {/* Truncates instead of wrapping: a long name broke onto three lines in a
+                narrow window and pushed itself out of the toolbar's fixed height, over
+                the map below. The title attribute keeps the full name reachable. */}
+            <span className="min-w-0 truncate font-medium" title={project.name}>
+              {project.name}
+            </span>
             {/* The variant must match the primitive's data-vertical:self-stretch --
                 tailwind-merge treats prefixed and unprefixed utilities as separate
                 groups, so a bare self-center would not replace it. */}

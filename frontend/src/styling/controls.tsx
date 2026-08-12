@@ -7,10 +7,14 @@ import { cn } from '@/lib/utils'
  * a dock next to the map, not on a form page.
  */
 export function Row({ label, children }: { label: string; children: ReactNode }) {
+  // Wraps rather than overflowing: the side panel is resizable down to a narrow strip,
+  // and a fixed 5rem label plus its controls needs more room than it has there -- the row
+  // then ran out past the panel's edge instead of giving way. basis-40 keeps the controls
+  // on the label's line for as long as they fit.
   return (
-    <div className="flex min-h-6 items-center gap-2">
+    <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
       <span className="w-20 shrink-0 text-xs text-muted-foreground">{label}</span>
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">{children}</div>
+      <div className="flex min-w-0 flex-1 basis-40 items-center gap-1.5">{children}</div>
     </div>
   )
 }
@@ -75,7 +79,7 @@ interface NumberInputProps {
 export function NumberInput({ value, onChange, label, min, max, step = 1, className }: NumberInputProps) {
   const id = useId()
   return (
-    <div className={cn('flex items-center gap-1.5', className)}>
+    <div className={cn('flex min-w-0 items-center gap-1.5', className)}>
       <Label htmlFor={id} className="text-xs font-normal text-muted-foreground">
         {label}
       </Label>
@@ -91,7 +95,9 @@ export function NumberInput({ value, onChange, label, min, max, step = 1, classN
           if (!Number.isFinite(next)) return
           onChange(Math.min(max ?? Number.POSITIVE_INFINITY, Math.max(min ?? Number.NEGATIVE_INFINITY, next)))
         }}
-        className="h-6 w-14 rounded border border-input bg-transparent px-1.5 text-xs tabular-nums outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        // w-14 is the width it wants; min-w-0 lets it give way below that in a narrow
+        // panel instead of pushing the row past the edge.
+        className="h-6 w-14 min-w-0 rounded border border-input bg-transparent px-1.5 text-xs tabular-nums outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
       />
     </div>
   )

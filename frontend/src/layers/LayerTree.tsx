@@ -169,11 +169,17 @@ export function LayerTree({
   if (displayed.length === 0) {
     return (
       <Panel>
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
           <p className="text-sm text-muted-foreground">
             Noch keine Layer in diesem Projekt.
           </p>
-          <div className="flex gap-2">
+          {/*
+           * Wraps, and the buttons stretch to the full width once they do. Three of them
+           * side by side need more room than this panel has at its usual width -- they
+           * ran out past both edges, the outer two cut off mid-word. The panel is
+           * resizable down to a narrow strip, so no fixed row of three can hold.
+           */}
+          <div className="flex w-full flex-wrap justify-center gap-2 *:min-w-0 *:flex-1 *:basis-40">
             <Button variant="outline" size="sm" onClick={onImportClick}>
               <Upload className="size-3.5" />
               Daten importieren
