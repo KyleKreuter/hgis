@@ -50,7 +50,7 @@ export function DeleteProjectDialog({ project, onOpenChange }: DeleteProjectDial
       toast.success(`Projekt „${project.name}" gelöscht`)
       close()
     } catch {
-      toast.error('Projekt konnte nicht gelöscht werden')
+      toast.error('Das Projekt lässt sich nicht löschen.')
     }
   }
 
@@ -65,7 +65,7 @@ export function DeleteProjectDialog({ project, onOpenChange }: DeleteProjectDial
         <AlertDialogHeader>
           <AlertDialogTitle>Projekt löschen?</AlertDialogTitle>
           <AlertDialogDescription>
-            „{project?.name}" wird vollständig entfernt. Das lässt sich nicht rückgängig
+            Sie löschen „{project?.name}" endgültig. Das lässt sich nicht rückgängig
             machen.
           </AlertDialogDescription>
           {hasData && impact && (
@@ -80,7 +80,7 @@ export function DeleteProjectDialog({ project, onOpenChange }: DeleteProjectDial
         {hasData && (
           <div className="grid gap-1.5">
             <Label htmlFor="delete-confirm">
-              Zum Bestätigen den Projektnamen eingeben
+              Geben Sie zum Bestätigen den Projektnamen ein
             </Label>
             <Input
               id="delete-confirm"

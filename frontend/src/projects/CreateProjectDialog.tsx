@@ -29,10 +29,10 @@ import { BASEMAPS, DEFAULT_BASEMAP_ID, resolveBasemap } from '@/map/basemap'
  * PROJ knows would work -- this list just covers the cases that come up in practice.
  */
 const CRS_OPTIONS = [
-  { srid: 25832, short: 'EPSG:25832 — UTM 32N', hint: 'Deutschland West, metrisch' },
-  { srid: 25833, short: 'EPSG:25833 — UTM 33N', hint: 'Deutschland Ost, metrisch' },
-  { srid: 4326, short: 'EPSG:4326 — WGS 84', hint: 'weltweit, Grad' },
-  { srid: 3857, short: 'EPSG:3857 — Web Mercator', hint: 'renderfertig, verzerrte Flächen' },
+  { srid: 25832, short: 'EPSG:25832 - UTM 32N', hint: 'Deutschland West, metrisch' },
+  { srid: 25833, short: 'EPSG:25833 - UTM 33N', hint: 'Deutschland Ost, metrisch' },
+  { srid: 4326, short: 'EPSG:4326 - WGS 84', hint: 'weltweit, Grad' },
+  { srid: 3857, short: 'EPSG:3857 - Web Mercator', hint: 'renderfertig, verzerrte Flächen' },
 ]
 
 function crsLabel(srid: string): string {
@@ -83,7 +83,7 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
         setNameError(error.fieldError('name'))
         if (!error.fieldError('name')) toast.error(error.message)
       } else {
-        toast.error('Projekt konnte nicht angelegt werden')
+        toast.error('Das Projekt lässt sich nicht anlegen.')
       }
     }
   }
@@ -152,8 +152,8 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Nach dem Anlegen nicht mehr änderbar — ein Wechsel müsste jede
-                Layertabelle neu schreiben.
+                Das Koordinatensystem lässt sich nach dem Anlegen nicht mehr ändern. Ein
+                Wechsel müsste jede Layertabelle neu schreiben.
               </p>
             </div>
 

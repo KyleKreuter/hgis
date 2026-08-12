@@ -30,7 +30,7 @@ export function useSaveTableEdits(layerId: string, projectId: string) {
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         toast.error(error.message, {
-          description: 'Die Ansicht neu laden, um den aktuellen Stand zu sehen.',
+          description: 'Laden Sie die Ansicht neu, um den aktuellen Stand zu sehen.',
         })
         return
       }

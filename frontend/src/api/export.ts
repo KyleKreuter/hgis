@@ -89,7 +89,7 @@ export function filenameFromContentDisposition(
 export function exportErrorMessage(caught: unknown): string {
   if (caught instanceof ApiError) {
     if (caught.status === 413) {
-      return 'Zu viele Objekte für den Export ausgewählt.'
+      return 'Sie haben zu viele Objekte für den Export ausgewählt.'
     }
     return caught.message
   }

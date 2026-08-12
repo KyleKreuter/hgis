@@ -124,7 +124,7 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
 
       {numericFields.length === 0 && (
         <p className="py-1 text-xs text-muted-foreground">
-          Dieser Layer hat kein Zahlenfeld, das sich in Klassen einteilen liesse.
+          Dieser Layer hat kein Zahlenfeld, das sich in Klassen einteilen ließe.
         </p>
       )}
 
@@ -162,14 +162,14 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
 
       {isError && (
         <p className="py-1 text-xs text-destructive">
-          {error instanceof Error ? error.message : 'Klassen konnten nicht berechnet werden.'}
+          {error instanceof Error ? error.message : 'Klassen lassen sich nicht berechnen.'}
         </p>
       )}
 
       {classes.length > 0 && classes.length < classCount && (
         <p className="py-1 text-xs text-muted-foreground">
-          Das Feld hat zu wenige verschiedene Werte für {formatCount(classCount)} Klassen — es sind{' '}
-          {formatCount(classes.length)} geworden.
+          Das Feld hat zu wenige verschiedene Werte für {formatCount(classCount)} Klassen. Es sind
+          nur {formatCount(classes.length)} geworden.
         </p>
       )}
 

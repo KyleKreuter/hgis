@@ -81,7 +81,7 @@ describe('filenameFromContentDisposition', () => {
 describe('exportErrorMessage', () => {
   it('rewords a 413 into a non-technical sentence', () => {
     const error = new ApiError(413, { status: 413, detail: 'Anfrage überschreitet 4194304 Bytes' })
-    expect(exportErrorMessage(error)).toBe('Zu viele Objekte für den Export ausgewählt.')
+    expect(exportErrorMessage(error)).toBe('Sie haben zu viele Objekte für den Export ausgewählt.')
   })
 
   it('passes through the backend detail for other statuses', () => {

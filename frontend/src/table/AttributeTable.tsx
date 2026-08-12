@@ -269,14 +269,14 @@ export function AttributeTable({
   if (!layerId) {
     return (
       <Panel title="Attribute">
-        <Hint>Keinen Layer ausgewählt — im Layerbaum auf einen Layer klicken.</Hint>
+        <Hint>Kein Layer ausgewählt. Klicken Sie im Layerbaum auf einen Layer.</Hint>
       </Panel>
     )
   }
 
   return (
     <Panel
-      title={`Attribute${layerName ? ` — ${layerName}` : ''}`}
+      title={`Attribute${layerName ? ` - ${layerName}` : ''}`}
       toolbar={
         <>
           <FilterBar
