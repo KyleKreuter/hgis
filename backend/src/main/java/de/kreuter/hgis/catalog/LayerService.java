@@ -391,7 +391,8 @@ public class LayerService {
 				layer.getDataVersion(), layer.getStyleVersion(),
 				toBbox(layer.getExtent()), layer.getStyle(),
 				layer.getBasemap(), layer.getBasemapOpacity(),
-				layer.getClipMode(), layer.clipVersion(projectMasks), TileRenderVersion.CURRENT);
+				layer.getClipMode(), layer.clipVersion(projectMasks), TileRenderVersion.CURRENT,
+				toSource(layer));
 	}
 
 	private LayerDtos.Detail toDetail(Layer layer, List<Layer> projectMasks) {
@@ -407,7 +408,22 @@ public class LayerService {
 				toBbox(layer.getExtent()), layer.getStyle(),
 				layer.getBasemap(), layer.getBasemapOpacity(),
 				layer.getClipMode(), layer.clipVersion(projectMasks), TileRenderVersion.CURRENT,
-				fields, layer.getCreatedAt(), layer.getUpdatedAt());
+				toSource(layer), fields, layer.getCreatedAt(), layer.getUpdatedAt());
+	}
+
+	/**
+	 * Null for a layer not imported from the Geoportal (CONTRACT.md phase 23.7) --
+	 * {@code source_attribution} is null exactly then, since all eight provenance columns
+	 * are written together, in one call, or not at all (see {@code ImportTransactions#begin}).
+	 */
+	private static LayerDtos.Source toSource(Layer layer) {
+		if (layer.getSourceAttribution() == null) {
+			return null;
+		}
+		return new LayerDtos.Source(
+				layer.getSourceAttribution(), layer.getSourceLicenseName(), layer.getSourceLicenseUrl(),
+				layer.getSourceDatasetUri(), layer.getSourceMetadataUrl(), layer.getSourceDatasetId(),
+				layer.getSourceFeatureIdField(), layer.getSourceFetchedAt());
 	}
 
 	private static double[] toBbox(Polygon polygon) {

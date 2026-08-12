@@ -3,6 +3,7 @@ package de.kreuter.hgis.ingest;
 import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
+import de.kreuter.hgis.common.LayerProvenance;
 import de.kreuter.hgis.common.TableCreator.CreatedLayer;
 import de.kreuter.hgis.ingest.spi.SourceFeature;
 import de.kreuter.hgis.ingest.spi.SourceReader;
@@ -59,7 +60,29 @@ public class ImportService {
 	@Async(AsyncConfig.IMPORT_EXECUTOR)
 	public void runImportAsync(UUID jobId, UUID projectId, SourceReader reader, String layerName,
 			Integer sourceSridOverride) {
-		runImport(jobId, projectId, reader, layerName, sourceSridOverride);
+		runImport(jobId, projectId, reader, layerName, sourceSridOverride, null, -1, null);
+	}
+
+	/**
+	 * Same as {@link #runImportAsync(UUID, UUID, SourceReader, String, Integer)}, for the
+	 * Geoportal import (CONTRACT.md phase 23), whose reader needs {@code column_name}
+	 * derived from something other than {@code SourceSchema.fields()}' own names (decision
+	 * E1), reports which field carries the source's own stable id (decision E6), and whose
+	 * layer carries provenance (phase 23.7) nothing else in the application produces. See
+	 * {@link de.kreuter.hgis.common.TableCreator#createLayerTable(de.kreuter.hgis.catalog.Project,
+	 * SourceSchema, String, java.util.List, int)} for what {@code columnNameBasis} and
+	 * {@code idFieldIndex} mean. Kept as an overload rather than widening the
+	 * five-parameter version so every existing caller, and every existing test double of
+	 * {@link ImportTransactions#begin}, keeps compiling unchanged.
+	 *
+	 * @param provenance null for a file import; the layer's Geoportal origin otherwise,
+	 *                   written onto it in the same transaction as its creation
+	 */
+	@Async(AsyncConfig.IMPORT_EXECUTOR)
+	public void runImportAsync(UUID jobId, UUID projectId, SourceReader reader, String layerName,
+			Integer sourceSridOverride, List<String> columnNameBasis, int idFieldIndex,
+			LayerProvenance provenance) {
+		runImport(jobId, projectId, reader, layerName, sourceSridOverride, columnNameBasis, idFieldIndex, provenance);
 	}
 
 	/**
@@ -75,6 +98,12 @@ public class ImportService {
 	 */
 	public void runImport(UUID jobId, UUID projectId, SourceReader reader, String layerName,
 			Integer sourceSridOverride) {
+		runImport(jobId, projectId, reader, layerName, sourceSridOverride, null, -1, null);
+	}
+
+	/** @see #runImportAsync(UUID, UUID, SourceReader, String, Integer, java.util.List, int, LayerProvenance) */
+	public void runImport(UUID jobId, UUID projectId, SourceReader reader, String layerName,
+			Integer sourceSridOverride, List<String> columnNameBasis, int idFieldIndex, LayerProvenance provenance) {
 		Project project = projectRepository.findById(projectId).orElse(null);
 		if (project == null) {
 			transactions.failBeforeTableExists(jobId, "Projekt " + projectId + " existiert nicht");
@@ -96,8 +125,13 @@ public class ImportService {
 		try {
 			// Phase A. DDL is transactional in PostgreSQL, so a failure anywhere in here
 			// rolls back the table together with the catalog rows -- there is nothing to
-			// compensate, unlike every later phase.
-			created = transactions.begin(project, jobId, schema, layerName);
+			// compensate, unlike every later phase. The plain four-argument call stays the
+			// one every pre-existing caller (and its mocked ImportTransactions in tests)
+			// still exercises unchanged; only a caller that actually supplies one of the
+			// extra parameters pays for the wider overload.
+			created = (columnNameBasis == null && idFieldIndex < 0 && provenance == null)
+					? transactions.begin(project, jobId, schema, layerName)
+					: transactions.begin(project, jobId, schema, layerName, columnNameBasis, idFieldIndex, provenance);
 		} catch (Exception e) {
 			log.error("Import {} failed before its table existed", jobId, e);
 			transactions.failBeforeTableExists(jobId, "Der Import kann den Layer nicht anlegen: " + describe(e));
