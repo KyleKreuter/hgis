@@ -35,6 +35,33 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Einen Layer oder die aktuelle Auswahl als GeoJSON herunterladen
 - Sachdaten direkt in der Attributtabelle bearbeiten, mit der Tastatur und je Feldtyp
   passender Eingabe
+- Einstellungen und Arbeitsstand bleiben erhalten und kommen beim nächsten Öffnen zurück
+
+### Was das Programm sich merkt
+
+Alle Einstellungen eines Projekts liegen auf dem Server. Sie überstehen das Schließen des
+Browsers und den Wechsel an einen anderen Rechner. Dazu gehören die Symbologie mit allen
+Farben, Größen und Klassen, die Beschriftung, die Sichtbarkeit, die Reihenfolge der Layer
+und der Kartenausschnitt.
+
+Die Symbologie merkt sich auch, woraus die Klassen entstanden sind: die Methode, die Zahl
+der Klassen und den Farbverlauf. Beim Öffnen stehen sie wieder da. Das Programm berechnet
+die Klassen nur neu, wenn Sie eine dieser Angaben ändern.
+
+Der Arbeitsstand kommt ebenfalls zurück: der zuletzt gewählte Layer, die Sortierung der
+Attributtabelle, die Sucheingabe und die Auswahl. Vier Dinge fängt das Programm dabei ab:
+
+- Ein wiederhergestellter Filter zeigt weniger Objekte, als der Layer enthält. Über der
+  Attributtabelle steht dann ein Hinweis mit der Zahl der Treffer. Ein Klick löst den
+  Filter.
+- Zeigt ein gespeicherter Filter auf ein gelöschtes Feld, verwirft das Programm ihn und
+  meldet das. Die Attributtabelle bleibt nutzbar.
+- Zeigt die Auswahl auf gelöschte Objekte, fallen diese still weg.
+- Ein Link auf einen Layer gewinnt über den gespeicherten Stand.
+
+Ab 10.000 ausgewählten Objekten speichert das Programm die Auswahl nicht mehr. Es zeigt
+das an. Die Fensteraufteilung bleibt im Browser, denn sie beschreibt einen Bildschirm und
+kein Projekt.
 
 ### Eigene Layer anlegen
 
