@@ -38,9 +38,14 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 ### Eigene Layer anlegen
 
 Ein Layer muss nicht aus einer Datei stammen. „Neuer Layer“ legt einen leeren an — Name,
-Geometrieart (Punkte, Linien oder Flächen) und beliebig viele Attributfelder mit dem
-jeweils passenden Typ. Danach lässt sich sofort hineinzeichnen; alles Weitere,
-Einrasten und Rückgängig eingeschlossen, funktioniert wie bei importierten Daten.
+Geometrieart und beliebig viele Attributfelder mit dem jeweils passenden Typ. Danach lässt
+sich sofort hineinzeichnen; alles Weitere, Einrasten und Rückgängig eingeschlossen,
+funktioniert wie bei importierten Daten.
+
+Die Geometrieart legt fest, was der Layer aufnimmt: Punkte, Linien, Flächen — oder
+„gemischt“, wenn alles davon nebeneinander stehen soll. Die Festlegung auf eine Art ist
+kein Formalismus, sondern ein Schutz: In einen Layer „Bäume“ lässt sich dann keine Fläche
+zeichnen. Wer diese Bindung nicht will, wählt „gemischt“.
 
 Attributfelder lassen sich auch nachträglich verwalten — „Felder verwalten“ im
 Aktionsmenü des Layers legt neue an, benennt vorhandene um und löscht sie, bei
