@@ -46,9 +46,15 @@ class ProjectDuplicateTransactions {
 		}
 
 		Project target = new Project(name, source.getDescription(), source.getSrid(), source.getBasemap());
+		target.setBasemapOpacity(source.getBasemapOpacity());
 		target.setCenter(source.getCenter());
 		target.setZoom(source.getZoom());
 		target.setExtent(source.getExtent());
+		// view_state is deliberately NOT copied. It names layer ids of the source project,
+		// and the target gets fresh ones, so a copied value would point at nothing and be
+		// discarded the moment it was read anyway (ProjectService.viewState cleans up
+		// entries for layers that do not exist). A new copy also should not inherit the
+		// source's selection and filters -- it is meant to open clean.
 		target = projectRepository.saveAndFlush(target);
 
 		List<Layer> layers = layerRepository.findByProjectOrdered(sourceProjectId);
@@ -85,7 +91,8 @@ class ProjectDuplicateTransactions {
 		Layer copy = new Layer(targetLayerId, target, source.getName(), targetTable,
 				source.getGeometryType(), source.getSrid());
 		copy.setCopyMetadata(source.getFeatureCount(), source.isVisible(), source.getZIndex(),
-				source.getMinZoom(), source.getMaxZoom(), source.getStyle(), source.getExtent());
+				source.getMinZoom(), source.getMaxZoom(), source.getStyle(),
+				source.getBasemap(), source.getBasemapOpacity(), source.getExtent());
 		copy = layerRepository.save(copy);
 		for (LayerField field : fieldRepository.findByLayerIdOrderByOrdinalAsc(sourceLayerId)) {
 			fieldRepository.save(new LayerField(copy, field.getSourceName(), field.getColumnName(),

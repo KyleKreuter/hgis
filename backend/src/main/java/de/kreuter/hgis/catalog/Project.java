@@ -56,6 +56,10 @@ public class Project {
 	@Column(nullable = false)
 	private String basemap = "osm";
 
+	/** Opacity of the basemap itself, not of any layer's symbology. Every project has one. */
+	@Column(name = "basemap_opacity", nullable = false)
+	private double basemapOpacity = 1.0;
+
 	@Column(columnDefinition = "geometry(Polygon,4326)")
 	private Polygon extent;
 
@@ -139,6 +143,14 @@ public class Project {
 
 	public void setBasemap(String basemap) {
 		this.basemap = basemap;
+	}
+
+	public double getBasemapOpacity() {
+		return basemapOpacity;
+	}
+
+	public void setBasemapOpacity(double basemapOpacity) {
+		this.basemapOpacity = basemapOpacity;
 	}
 
 	public Polygon getExtent() {

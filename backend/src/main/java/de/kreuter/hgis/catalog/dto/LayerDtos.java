@@ -55,7 +55,18 @@ public final class LayerDtos {
 			 */
 			@JsonRawValue
 			@JsonInclude(JsonInclude.Include.NON_NULL)
-			String style) {
+			String style,
+
+			/**
+			 * This layer's own basemap, or null to follow the project's. Present here for the
+			 * same reason as {@link #style()}: the map has to know, for whichever layer becomes
+			 * active, whether it overrides the project's basemap -- without a detail request
+			 * per layer.
+			 */
+			String basemap,
+
+			/** This layer's own opacity for the basemap, or null to follow the project's. */
+			Double basemapOpacity) {
 	}
 
 	/** One entry of {@code LayerDetail.fields}. */
@@ -85,6 +96,12 @@ public final class LayerDtos {
 			@JsonRawValue
 			@JsonInclude(JsonInclude.Include.NON_NULL)
 			String style,
+
+			/** @see Summary#basemap() */
+			String basemap,
+
+			/** @see Summary#basemapOpacity() */
+			Double basemapOpacity,
 
 			List<Field> fields,
 			Instant createdAt,
@@ -161,7 +178,26 @@ public final class LayerDtos {
 			 * as it is, an explicit null resets the layer to the default rendering. A
 			 * record member cannot tell the two apart -- both arrive as null.
 			 */
-			JsonNode style) {
+			JsonNode style,
+
+			/**
+			 * The layer's own basemap, as a JSON string, or {@code null} to make it follow
+			 * the project's basemap again. Absent leaves it unchanged. A tree for the same
+			 * reason as {@link #style()}: absent and an explicit {@code null} both arrive as
+			 * a plain {@code String} null, so only a type that tells a missing field apart
+			 * from a present JSON {@code null} can carry "reset" as its own meaning.
+			 *
+			 * <p>Not checked against a catalogue -- the server does not know one, see
+			 * CONTRACT.md phase 18 -- only its length.
+			 */
+			JsonNode basemap,
+
+			/**
+			 * The layer's own opacity for the basemap, as a JSON number between 0 and 1, or
+			 * {@code null} to make it follow the project's again. Absent leaves it unchanged.
+			 * @see #basemap()
+			 */
+			JsonNode basemapOpacity) {
 	}
 
 	/**

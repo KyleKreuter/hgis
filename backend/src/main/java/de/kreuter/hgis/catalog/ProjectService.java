@@ -121,6 +121,9 @@ public class ProjectService {
 		if (request.basemap() != null) {
 			project.setBasemap(request.basemap());
 		}
+		if (request.basemapOpacity() != null) {
+			project.setBasemapOpacity(request.basemapOpacity());
+		}
 		if (request.center() != null) {
 			project.setCenter(toPoint(request.center()));
 		}
@@ -229,6 +232,7 @@ public class ProjectService {
 	private ProjectDtos.Detail toDetail(Project p, long layerCount, long featureCount) {
 		return new ProjectDtos.Detail(
 				p.getId(), p.getName(), p.getDescription(), p.getSrid(), p.getBasemap(),
+				p.getBasemapOpacity(),
 				toLngLat(p.getCenter()), p.getZoom(), toBbox(p.getExtent()),
 				layerCount, featureCount,
 				p.getLastOpenedAt(), p.getCreatedAt(), p.getUpdatedAt());
