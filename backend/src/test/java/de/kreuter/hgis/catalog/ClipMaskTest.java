@@ -190,4 +190,37 @@ class ClipMaskTest {
 		layer.setClipMode(clipMode);
 		return layer;
 	}
+
+	/**
+	 * clipVersion travels to the browser as a JSON number and lands in the tile URL,
+	 * where JavaScript holds it as a double. Past 2^53 that rounds -- in the range a raw
+	 * 64-bit hash reaches, to the nearest multiple of 1024. Two mask stacks differing by
+	 * less would arrive as the same number, produce the same URL, and never be re-fetched,
+	 * because tiles go out {@code immutable} and a client with a matching URL does not ask
+	 * at all. The correct ETag behind it would never be consulted.
+	 *
+	 * <p>Random ids on every run, so this is a different sample each time rather than one
+	 * fixed case that happened to pass.
+	 */
+	@Test
+	void clipVersionStaysWithinWhatAJavaScriptNumberHoldsExactly() {
+		long maxSafeInteger = 9007199254740991L;
+
+		for (int run = 0; run < 500; run++) {
+			Layer first = mask(0, "insideClipped");
+			Layer second = mask(1, "outsideWhole");
+			Layer top = layer(9);
+
+			long version = top.clipVersion(List.of(first, second));
+
+			assertThat(version)
+					.as("clipVersion muss in JavaScript exakt darstellbar bleiben")
+					.isPositive()
+					.isLessThanOrEqualTo(maxSafeInteger);
+			assertThat((double) version)
+					.as("Hin und zurueck ueber einen double darf den Wert nicht veraendern")
+					.isEqualTo((double) (long) (double) version);
+			assertThat((long) (double) version).isEqualTo(version);
+		}
+	}
 }

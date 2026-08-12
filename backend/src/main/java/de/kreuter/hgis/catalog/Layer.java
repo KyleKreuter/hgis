@@ -28,6 +28,12 @@ import org.locationtech.jts.geom.Polygon;
 @Table(name = "layer")
 public class Layer {
 
+	/**
+	 * {@code 2^53 - 1}, the largest integer a JavaScript number holds exactly. Any version
+	 * this class computes for the client is folded into it -- see {@link #clipVersion}.
+	 */
+	private static final long MAX_SAFE_INTEGER = 9007199254740991L;
+
 	@Id
 	@Column(nullable = false)
 	private UUID id;
@@ -310,6 +316,16 @@ public class Layer {
 	 * out, so adding a second mask identical in effect to one already in the stack would
 	 * leave the version -- and so the cached tile address -- unchanged.
 	 *
+	 * <p>The result is folded into 53 bits, and that is not cosmetic. This value travels
+	 * to the browser as a JSON number and ends up in the tile URL, where JavaScript holds
+	 * it as a double: anything past 2^53 is rounded to the nearest representable value,
+	 * in this range a multiple of 1024. Two mask stacks whose full 64-bit hashes differ by
+	 * less than that would reach the client as the same number, produce the same tile URL,
+	 * and -- since tiles are served {@code immutable} -- never be re-fetched at all. The
+	 * ETag would still be right and would never be consulted, because a client with a
+	 * matching immutable URL does not ask. 53 bits is still far more than cache-busting
+	 * needs; exactness on the client side is worth more here than the extra 11 bits.
+	 *
 	 * @param projectMasks every mask of the project, bottom-most first -- see {@link
 	 *                     #effectiveMasks}
 	 */
@@ -325,10 +341,12 @@ public class Layer {
 					^ mask.dataVersion ^ mask.clipMode.hashCode();
 			hash = hash * 31 + contribution;
 		}
-		// A non-empty mask stack must never land on the same value as the empty one --
-		// astronomically unlikely on its own, but a single guard costs nothing and turns
-		// "unlikely" into "impossible".
-		return hash == 0 ? 1 : hash;
+		// Fold into the range JavaScript can hold exactly (see above), then keep the
+		// rest state to itself: a non-empty mask stack must never land on the same value
+		// as the empty one. Astronomically unlikely on its own, but one guard costs
+		// nothing and turns "unlikely" into "impossible".
+		long safe = hash & MAX_SAFE_INTEGER;
+		return safe == 0 ? 1 : safe;
 	}
 
 	public Polygon getExtent() {
