@@ -390,6 +390,105 @@ class LayerStyleTest {
 				.andExpect(jsonPath("$.style.somethingElse").doesNotExist());
 	}
 
+	// --- the graduated/categorized metadata fields (method, classCount, ramp, palette) ---
+
+	@Test
+	@DisplayName("a graduated renderer's method, classCount and ramp survive storage and reading back")
+	void graduatedMetadataFieldsRoundTrip() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "graduated", "field": "gebaeudehoehe",
+				  "method": "equalInterval", "classCount": 5, "ramp": "viridis",
+				  "classes": [ { "min": 0, "max": 10, "label": "0 – 10",
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.method").value("equalInterval"))
+				.andExpect(jsonPath("$.style.renderer.classCount").value(5))
+				.andExpect(jsonPath("$.style.renderer.ramp").value("viridis"));
+
+		mockMvc.perform(get("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.method").value("equalInterval"))
+				.andExpect(jsonPath("$.style.renderer.classCount").value(5))
+				.andExpect(jsonPath("$.style.renderer.ramp").value("viridis"));
+	}
+
+	@Test
+	@DisplayName("a categorized renderer's palette survives storage and reading back")
+	void categorizedPaletteRoundTrips() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "categorized", "field": "nutzungsart",
+				  "palette": "categorical",
+				  "categories": [ { "value": "Wohnen",
+				                     "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.palette").value("categorical"));
+
+		mockMvc.perform(get("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.palette").value("categorical"));
+	}
+
+	@Test
+	@DisplayName("a style without the new metadata fields still reads -- the existing case")
+	void aStyleWithoutTheNewMetadataFieldsStillReads() throws Exception {
+		patchStyle(CATEGORIZED_BY_USE).andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.type").value("categorized"))
+				.andExpect(jsonPath("$.style.renderer.method").doesNotExist())
+				.andExpect(jsonPath("$.style.renderer.classCount").doesNotExist())
+				.andExpect(jsonPath("$.style.renderer.ramp").doesNotExist())
+				.andExpect(jsonPath("$.style.renderer.palette").doesNotExist());
+	}
+
+	@Test
+	void rejectsAnUnknownClassificationMethod() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "graduated", "field": "gebaeudehoehe",
+				  "method": "jenks",
+				  "classes": [ { "min": 0, "max": 10,
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""").andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void rejectsAClassCountOutsideTwoToTwelve() throws Exception {
+		patchStyle(graduatedStyleWithClassCount(1)).andExpect(status().isBadRequest());
+		patchStyle(graduatedStyleWithClassCount(13)).andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void rejectsARampNameOverSixtyFourCharacters() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "graduated", "field": "gebaeudehoehe",
+				  "ramp": "%s",
+				  "classes": [ { "min": 0, "max": 10,
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""".formatted("x".repeat(65))).andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void rejectsAPaletteNameOverSixtyFourCharacters() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "categorized", "field": "nutzungsart",
+				  "palette": "%s",
+				  "categories": [ { "value": "Wohnen",
+				                     "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""".formatted("x".repeat(65))).andExpect(status().isBadRequest());
+	}
+
+	private static String graduatedStyleWithClassCount(int classCount) {
+		return """
+				{ "style": { "renderer": { "type": "graduated", "field": "gebaeudehoehe",
+				  "classCount": %d,
+				  "classes": [ { "min": 0, "max": 10,
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""".formatted(classCount);
+	}
+
 	// --- rejections -------------------------------------------------------------------
 
 	@Test

@@ -59,6 +59,13 @@ public class LayerStyleService {
 
 	private static final int MAX_ZOOM = 24;
 
+	/** Same bounds the {@code classes} parameter of {@code /classify} enforces on itself. */
+	private static final int MIN_CLASS_COUNT = 2;
+	private static final int MAX_CLASS_COUNT = 12;
+
+	/** {@code ramp} and {@code palette} are display names the client alone interprets. */
+	private static final int MAX_DISPLAY_NAME_LENGTH = 64;
+
 	/**
 	 * The three "no style set" symbols a renderer reset by {@link #cleanupAfterFieldRemoval}
 	 * falls back to as a last resort. Kept byte for byte identical to the frontend's
@@ -237,7 +244,10 @@ public class LayerStyleService {
 			StyleDtos.Symbol symbol = renderer.symbol() != null ? renderer.symbol()
 					: renderer.fallbackSymbol() != null ? renderer.fallbackSymbol()
 					: defaultSymbolFor(geometryType);
-			renderer = new StyleDtos.Renderer(StyleDtos.RENDERER_SINGLE, symbol, null, null, null, null);
+			// method, classCount, ramp and palette describe a classification -- dropped along
+			// with it, not carried over onto a renderer type that no longer has one.
+			renderer = new StyleDtos.Renderer(
+					StyleDtos.RENDERER_SINGLE, symbol, null, null, null, null, null, null, null, null);
 		}
 		if (labelsHit) {
 			labels = new StyleDtos.Labels(false, null, labels.size(), labels.color(), labels.haloColor(),
@@ -312,7 +322,51 @@ public class LayerStyleService {
 				field,
 				validateCategories(renderer.categories()),
 				validateClasses(renderer.classes()),
-				validateSymbol(renderer.fallbackSymbol(), "fallbackSymbol"));
+				validateSymbol(renderer.fallbackSymbol(), "fallbackSymbol"),
+				validateMethod(renderer.method()),
+				validateClassCount(renderer.classCount()),
+				validateDisplayName(renderer.ramp(), "ramp"),
+				validateDisplayName(renderer.palette(), "palette"));
+	}
+
+	/**
+	 * The name of a graduated classification's method, if the renderer records one.
+	 *
+	 * <p>Reuses {@link ClassificationMethods#require} rather than allow-listing the three
+	 * names a second time -- {@code /classify} is the sole authority on what a "method" is,
+	 * and a style is only ever allowed to name one it could have asked {@code /classify} for.
+	 * Unlike {@code ClassificationService}, a blank method is not defaulted to quantile here:
+	 * absence is meaningful on its own (no method was ever recorded), not a request to compute
+	 * something.
+	 */
+	private static String validateMethod(String method) {
+		if (method == null || method.isBlank()) {
+			return null;
+		}
+		return ClassificationMethods.require(method);
+	}
+
+	private static Integer validateClassCount(Integer classCount) {
+		if (classCount == null) {
+			return null;
+		}
+		if (classCount < MIN_CLASS_COUNT || classCount > MAX_CLASS_COUNT) {
+			throw new BadRequestException("classCount muss zwischen " + MIN_CLASS_COUNT + " und "
+					+ MAX_CLASS_COUNT + " liegen. Wert war " + classCount + ".");
+		}
+		return classCount;
+	}
+
+	/** Length only, on {@code ramp} and {@code palette} alike: neither is a value this class interprets. */
+	private static String validateDisplayName(String value, String what) {
+		if (value == null) {
+			return null;
+		}
+		if (value.length() > MAX_DISPLAY_NAME_LENGTH) {
+			throw new BadRequestException(what + " darf höchstens " + MAX_DISPLAY_NAME_LENGTH
+					+ " Zeichen lang sein. Die Länge war " + value.length() + ".");
+		}
+		return value;
 	}
 
 	private List<StyleDtos.Category> validateCategories(List<StyleDtos.Category> categories) {
