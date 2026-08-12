@@ -625,7 +625,14 @@ function Row({
       style={{ top, gridTemplateColumns: gridTemplate(fields) }}
       onClick={() => toggle(layerId, feature.fid)}
     >
-      <span className="flex items-center justify-end truncate px-2 text-right text-muted-foreground tabular-nums">
+      {/*
+       * bg-inherit on every cell, here and in EditableCell: the row is positioned
+       * inset-x-0 and is therefore exactly as wide as the scroller, while its columns
+       * overflow that width. Selection and hover painted on the row alone stopped at the
+       * old viewport edge, leaving the columns further right unmarked. The cells span the
+       * full scroll width, so letting them inherit the row's colour carries it across.
+       */}
+      <span className="flex items-center justify-end truncate bg-inherit px-2 text-right text-muted-foreground tabular-nums">
         {feature.fid}
       </span>
       {fields.map((field, columnIndex) => (
@@ -640,7 +647,7 @@ function Row({
           onFocusCell={onFocusCell}
         />
       ))}
-      <span className="flex items-center justify-center">
+      <span className="flex items-center justify-center bg-inherit">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -710,7 +717,7 @@ function EditableCell({
 
   if (isEditing) {
     return (
-      <span ref={editorRef} className="flex items-center px-1" onClick={(event) => event.stopPropagation()}>
+      <span ref={editorRef} className="flex items-center bg-inherit px-1" onClick={(event) => event.stopPropagation()}>
         <FieldInput
           kind={kind}
           value={draft}
@@ -726,11 +733,15 @@ function EditableCell({
   return (
     <span
       className={cn(
-        'relative flex min-w-0 items-center px-2',
+        // bg-inherit: see the fid cell in Row. The edited-value tint sits on top as an
+        // overlay rather than as a background of its own, which would replace the
+        // inherited one -- a cell that is both edited and in a selected row has to show
+        // both, exactly as it did when the tint was layered over the row's colour.
+        'relative flex min-w-0 items-center bg-inherit px-2',
         numeric && 'justify-end text-right tabular-nums',
         canEdit && 'cursor-text',
         isFocused && 'ring-1 ring-inset ring-ring',
-        isDirty && 'bg-foreground/[0.06]',
+        isDirty && 'after:pointer-events-none after:absolute after:inset-0 after:bg-foreground/[0.06]',
       )}
       title={value === null || value === undefined ? undefined : String(value)}
       onClick={editable ? () => onFocusCell({ row: rowIndex, column: columnIndex }) : undefined}
