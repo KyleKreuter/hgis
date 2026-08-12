@@ -12,6 +12,7 @@ import {
   FileDown,
   Filter,
   FilterX,
+  Globe,
   Loader2,
   Magnet,
   Map as MapIcon,
@@ -100,6 +101,7 @@ interface LayerTreeProps {
   onZoomToLayer: (extent: [number, number, number, number]) => void
   onImportClick: () => void
   onCreateLayerClick: () => void
+  onGeoportalClick: () => void
   /** Layers marked as snap sources, or null when not editing -- the toggle only exists then. */
   snapSources?: string[] | null
   onToggleSnapSource?: (layerId: string) => void
@@ -112,6 +114,7 @@ export function LayerTree({
   onZoomToLayer,
   onImportClick,
   onCreateLayerClick,
+  onGeoportalClick,
   snapSources = null,
   onToggleSnapSource,
 }: LayerTreeProps) {
@@ -178,6 +181,10 @@ export function LayerTree({
             <Button variant="outline" size="sm" onClick={onCreateLayerClick}>
               <Plus className="size-3.5" />
               Neuer Layer
+            </Button>
+            <Button variant="outline" size="sm" onClick={onGeoportalClick}>
+              <Globe className="size-3.5" />
+              Geoportal Hamburg
             </Button>
           </div>
         </div>

@@ -1,10 +1,13 @@
 import type { ReactNode } from 'react'
-import type { LayerSummary } from '@/api/layers'
+import { useQuery } from '@tanstack/react-query'
+import { layerListQuery, type LayerSummary } from '@/api/layers'
 import type { ProjectDetail } from '@/api/projects'
 import { BasemapControl } from './BasemapControl'
+import { distinctVisibleAttributions } from './geoportalAttribution'
 import { computeInitialView } from './initialView'
 import { MapCanvas } from './MapCanvas'
 import { MapLayerSync } from './MapLayerSync'
+import { MapViewportTracker } from './MapViewportTracker'
 import { ViewportPersistence } from './ViewportPersistence'
 import { ZoomToExtent, type ZoomRequest } from './ZoomToExtent'
 import { IdentifyControl } from './IdentifyControl'
@@ -47,13 +50,21 @@ export function ProjectMap({
   // it knows nothing about layers or projects.
   const resolved = resolveBasemapSettings(activeLayer, project)
 
+  // Already in the cache from `MapLayerSync`'s own fetch of the same query -- this is
+  // what turns the layer list into the licence notices `MapCanvas` has to show next to
+  // the basemap's own attribution (CONTRACT.md phase 23, section 11.7).
+  const { data: layers } = useQuery(layerListQuery(project.id))
+  const geoportalAttributions = distinctVisibleAttributions(layers ?? [])
+
   return (
     <MapCanvas
       initialView={computeInitialView(project)}
       basemapId={resolved.basemapId}
       basemapOpacity={resolved.opacity}
+      geoportalAttributions={geoportalAttributions}
     >
       <MapLayerSync projectId={project.id} />
+      <MapViewportTracker />
       <ViewportPersistence projectId={project.id} />
       <ZoomToExtent request={zoomTo} />
       <SelectionHighlight projectId={project.id} />

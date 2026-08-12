@@ -1,0 +1,1 @@
+export { GeoportalDialog } from './GeoportalDialog'

@@ -1,5 +1,5 @@
 import { useUpdateLayer, type LayerSummary } from '@/api/layers'
-import { formatCount } from '@/lib/format'
+import { formatCount, formatRelative } from '@/lib/format'
 import { NumberInput, Row, Section } from '@/styling/controls'
 import { LAYER_ZOOM_MAX, LAYER_ZOOM_MIN, withMaxZoom, withMinZoom } from './zoomRange'
 
@@ -31,6 +31,46 @@ export function LayerProperties({ layer, projectId }: LayerPropertiesProps) {
           <span className="text-xs tabular-nums">EPSG:{layer.srid}</span>
         </Row>
       </Section>
+
+      {/* Only for a layer imported from the Geoportal Hamburg (CONTRACT.md phase 23,
+          section 11.7) -- the licence's clause 2 requires attribution, licence name and
+          link, and the fetch time, spelled out in full here rather than the shortened
+          form the map's attribution line uses. `datasetId` and `featureIdField` are
+          deliberately not shown -- they exist for a later stage's reconcile only. */}
+      {layer.source && (
+        <Section title="Herkunft">
+          <Row label="Quelle">
+            <span className="text-xs">{layer.source.attribution}</span>
+          </Row>
+          <Row label="Lizenz">
+            <a
+              href={layer.source.licenseUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs underline underline-offset-2 hover:text-foreground"
+            >
+              {layer.source.licenseName}
+            </a>
+          </Row>
+          {layer.source.metadataUrl && (
+            <Row label="Metadaten">
+              <a
+                href={layer.source.metadataUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs underline underline-offset-2 hover:text-foreground"
+              >
+                Metadatensatz
+              </a>
+            </Row>
+          )}
+          <Row label="Abgerufen">
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {formatRelative(layer.source.fetchedAt)}
+            </span>
+          </Row>
+        </Section>
+      )}
 
       <Section title="Sichtbarkeit">
         <Row label="Zoom">

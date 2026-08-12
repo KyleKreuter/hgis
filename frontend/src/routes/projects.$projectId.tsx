@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, Link, useBlocker, useNavigate, useRouter } from '@tanstack/react-router'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowLeft, Plus, Upload } from 'lucide-react'
+import { ArrowLeft, Globe, Plus, Upload } from 'lucide-react'
 import { WorkspaceLayout } from '@/layout/WorkspaceLayout'
 import { Separator } from '@/components/ui/separator'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import {
   totalUnsavedChanges,
   unsavedChangesVerb,
 } from '@/state/unsavedChanges'
+import { GeoportalDialog } from '@/geoportal'
 import { CreateLayerDialog, ImportDialog, LayerProperties, LayerTree } from '@/layers'
 import { ProjectMap, type ZoomRequest } from '@/map'
 import { SymbologyPanel } from '@/styling'
@@ -77,6 +78,7 @@ function Workspace() {
   const { data: layers } = useQuery(layerListQuery(projectId))
   const [importOpen, setImportOpen] = useState(false)
   const [createLayerOpen, setCreateLayerOpen] = useState(false)
+  const [geoportalOpen, setGeoportalOpen] = useState(false)
   // A counter, not a timestamp: zooming to the same layer twice has to produce a new
   // request object, and a counter does that without depending on the clock.
   const [zoomTo, setZoomTo] = useState<ZoomRequest | null>(null)
@@ -221,6 +223,7 @@ function Workspace() {
         onOpenChange={setCreateLayerOpen}
         onCreated={(layerId) => selectLayer(layerId)}
       />
+      <GeoportalDialog projectId={projectId} open={geoportalOpen} onOpenChange={setGeoportalOpen} />
       <InvalidGeometryDialog
         message={editing.invalidGeometry}
         onRepair={() => void editing.save(true)}
@@ -287,6 +290,10 @@ function Workspace() {
                     <Plus className="size-3.5" />
                     Neuer Layer
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => setGeoportalOpen(true)}>
+                    <Globe className="size-3.5" />
+                    Daten aus dem Geoportal Hamburg
+                  </Button>
                 </>
               )}
             </div>
@@ -302,6 +309,7 @@ function Workspace() {
                 onZoomToLayer={requestZoom}
                 onImportClick={() => setImportOpen(true)}
                 onCreateLayerClick={() => setCreateLayerOpen(true)}
+                onGeoportalClick={() => setGeoportalOpen(true)}
                 snapSources={editing.active ? editing.snapSourceLayerIds : null}
                 onToggleSnapSource={editing.toggleSnapSource}
               />

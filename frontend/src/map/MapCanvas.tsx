@@ -5,6 +5,7 @@ import { Map as MapLibreMap, prewarm } from 'maplibre-gl'
 import { MapContext } from './MapContext'
 import { buildBasemapStyle, resolveBasemap } from './basemap'
 import { applyBasemap, applyBasemapOpacity } from './applyBasemap'
+import { combinedAttributionParts, type GeoportalAttributionEntry } from './geoportalAttribution'
 
 export type InitialView =
   | { center: [number, number]; zoom: number }
@@ -22,6 +23,13 @@ interface MapCanvasProps {
   basemapId?: string | null
   /** The background map's opacity, already resolved the same way. Defaults to full. */
   basemapOpacity?: number
+  /**
+   * Licence notices to credit alongside the basemap's own attribution (CONTRACT.md
+   * phase 23, section 11.7) -- already reduced to one entry per distinct attribution
+   * among the *visible* Geoportal layers by the caller (`ProjectMap`, via
+   * `distinctVisibleAttributions`). `MapCanvas` itself still knows nothing about layers.
+   */
+  geoportalAttributions?: GeoportalAttributionEntry[]
   children?: ReactNode
 }
 
@@ -36,7 +44,13 @@ interface MapCanvasProps {
  * no-op, and the cleanup calling `map.remove()` is what makes the reset safe --
  * without it two maps would end up sharing the same container.
  */
-export function MapCanvas({ initialView, basemapId, basemapOpacity = 1, children }: MapCanvasProps) {
+export function MapCanvas({
+  initialView,
+  basemapId,
+  basemapOpacity = 1,
+  geoportalAttributions = [],
+  children,
+}: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
@@ -134,6 +148,8 @@ export function MapCanvas({ initialView, basemapId, basemapOpacity = 1, children
     applyBasemapOpacity(map, basemapOpacity)
   }, [basemap, basemapOpacity, isLoaded])
 
+  const attributionParts = combinedAttributionParts(basemap.attribution, geoportalAttributions)
+
   return (
     <MapContext value={{ mapRef, isLoaded }}>
       {/* A container, so the overlays can react to the width of the map panel rather
@@ -151,16 +167,20 @@ export function MapCanvas({ initialView, basemapId, basemapOpacity = 1, children
         <div ref={containerRef} className="h-full w-full" />
         {children}
         {/* Follows the selection: the OSM notice must not stay up over OpenTopoMap's
-            tiles, and "no basemap" credits nobody -- there is nothing to credit.
+            tiles, and "no basemap" credits nobody -- there is nothing to credit. A
+            visible Geoportal layer earns its own credit here regardless (CONTRACT.md
+            phase 23), which is why the box can appear even for "Keine Hintergrundkarte".
             The box itself stays transparent to the pointer so a drag that starts over
             it still pans the map; only the links themselves take clicks, which is the
             minimum a licence asking to be linked can be given. */}
-        {basemap.attribution.length > 0 && (
+        {attributionParts.length > 0 && (
           <p className="pointer-events-none absolute right-1.5 bottom-1 z-10 max-w-[80%] rounded bg-background/70 px-1 text-right text-[0.625rem] leading-4 text-muted-foreground">
-            {basemap.attribution.map((part) =>
+            {attributionParts.map((part, index) =>
               part.href ? (
                 <a
-                  key={part.text}
+                  // Index, not the text: two Geoportal credits can share the exact same
+                  // separator or closing paren, and the text alone would collide.
+                  key={index}
                   href={part.href}
                   target="_blank"
                   rel="noreferrer"
@@ -169,7 +189,7 @@ export function MapCanvas({ initialView, basemapId, basemapOpacity = 1, children
                   {part.text}
                 </a>
               ) : (
-                <span key={part.text}>{part.text}</span>
+                <span key={index}>{part.text}</span>
               ),
             )}
           </p>
