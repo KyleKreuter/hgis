@@ -30,6 +30,9 @@ public class LayerService {
 	/** Matches the CONTRACT: enough for a genuine attribute schema, not enough to be a dump. */
 	private static final int MAX_FIELDS = 50;
 
+	/** The server does not know the basemap catalogue, only how long a token may be. */
+	private static final int MAX_BASEMAP_LENGTH = 64;
+
 	private final LayerRepository layerRepository;
 	private final LayerFieldRepository fieldRepository;
 	private final ProjectRepository projectRepository;
@@ -117,6 +120,12 @@ public class LayerService {
 		}
 		if (request.style() != null) {
 			applyStyle(layer, request.style());
+		}
+		if (request.basemap() != null) {
+			layer.setBasemap(parseBasemap(request.basemap()));
+		}
+		if (request.basemapOpacity() != null) {
+			layer.setBasemapOpacity(parseBasemapOpacity(request.basemapOpacity()));
 		}
 
 		// Flush so updatedAt (set by the database trigger / @UpdateTimestamp on write)
@@ -266,6 +275,45 @@ public class LayerService {
 		}
 	}
 
+	/**
+	 * @param node the {@code basemap} member of the request; a JSON null resets the
+	 *             layer to follow the project's basemap
+	 * @return the token to store, or null to follow the project again
+	 */
+	private String parseBasemap(JsonNode node) {
+		if (node.isNull()) {
+			return null;
+		}
+		if (!node.isString()) {
+			throw new FieldValidationException("basemap", "Die Hintergrundkarte muss eine Zeichenkette sein");
+		}
+		String value = node.asString();
+		if (value.length() > MAX_BASEMAP_LENGTH) {
+			throw new FieldValidationException("basemap",
+					"Der Name der Hintergrundkarte darf höchstens " + MAX_BASEMAP_LENGTH + " Zeichen lang sein");
+		}
+		return value;
+	}
+
+	/**
+	 * @param node the {@code basemapOpacity} member of the request; a JSON null resets
+	 *             the layer to follow the project's opacity
+	 * @return the opacity to store, or null to follow the project again
+	 */
+	private Double parseBasemapOpacity(JsonNode node) {
+		if (node.isNull()) {
+			return null;
+		}
+		if (!node.isNumber()) {
+			throw new FieldValidationException("basemapOpacity", "Die Deckkraft muss eine Zahl sein");
+		}
+		double value = node.doubleValue();
+		if (value < 0 || value > 1) {
+			throw new FieldValidationException("basemapOpacity", "Die Deckkraft muss zwischen 0 und 1 liegen");
+		}
+		return value;
+	}
+
 	private Layer require(UUID layerId) {
 		return layerRepository.findById(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
@@ -281,7 +329,8 @@ public class LayerService {
 				layer.getFeatureCount(), layer.isVisible(), layer.getZIndex(),
 				layer.getMinZoom(), layer.getMaxZoom(),
 				layer.getDataVersion(), layer.getStyleVersion(),
-				toBbox(layer.getExtent()), layer.getStyle());
+				toBbox(layer.getExtent()), layer.getStyle(),
+				layer.getBasemap(), layer.getBasemapOpacity());
 	}
 
 	private LayerDtos.Detail toDetail(Layer layer) {
@@ -295,6 +344,7 @@ public class LayerService {
 				layer.getMinZoom(), layer.getMaxZoom(),
 				layer.getDataVersion(), layer.getStyleVersion(),
 				toBbox(layer.getExtent()), layer.getStyle(),
+				layer.getBasemap(), layer.getBasemapOpacity(),
 				fields, layer.getCreatedAt(), layer.getUpdatedAt());
 	}
 

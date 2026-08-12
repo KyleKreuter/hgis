@@ -37,6 +37,10 @@ public final class ProjectDtos {
 			String description,
 			int srid,
 			String basemap,
+
+			/** Opacity of the basemap itself, between 0 and 1. Every project has one. */
+			double basemapOpacity,
+
 			double[] center,
 			Double zoom,
 			double[] extent,
@@ -82,6 +86,11 @@ public final class ProjectDtos {
 			String description,
 
 			String basemap,
+
+			/** Opacity of the basemap itself. Null leaves it unchanged, like every other field here. */
+			@DecimalMin(value = "0", message = "Deckkraft muss zwischen 0 und 1 liegen")
+			@DecimalMax(value = "1", message = "Deckkraft muss zwischen 0 und 1 liegen")
+			Double basemapOpacity,
 
 			/** [lng, lat] in EPSG:4326. */
 			double[] center,

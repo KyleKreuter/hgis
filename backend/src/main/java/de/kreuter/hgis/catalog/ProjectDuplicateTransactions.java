@@ -46,6 +46,7 @@ class ProjectDuplicateTransactions {
 		}
 
 		Project target = new Project(name, source.getDescription(), source.getSrid(), source.getBasemap());
+		target.setBasemapOpacity(source.getBasemapOpacity());
 		target.setCenter(source.getCenter());
 		target.setZoom(source.getZoom());
 		target.setExtent(source.getExtent());
@@ -85,7 +86,8 @@ class ProjectDuplicateTransactions {
 		Layer copy = new Layer(targetLayerId, target, source.getName(), targetTable,
 				source.getGeometryType(), source.getSrid());
 		copy.setCopyMetadata(source.getFeatureCount(), source.isVisible(), source.getZIndex(),
-				source.getMinZoom(), source.getMaxZoom(), source.getStyle(), source.getExtent());
+				source.getMinZoom(), source.getMaxZoom(), source.getStyle(),
+				source.getBasemap(), source.getBasemapOpacity(), source.getExtent());
 		copy = layerRepository.save(copy);
 		for (LayerField field : fieldRepository.findByLayerIdOrderByOrdinalAsc(sourceLayerId)) {
 			fieldRepository.save(new LayerField(copy, field.getSourceName(), field.getColumnName(),

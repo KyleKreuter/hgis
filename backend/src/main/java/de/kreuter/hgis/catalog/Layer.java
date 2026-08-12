@@ -82,6 +82,19 @@ public class Layer {
 	@Column(columnDefinition = "jsonb")
 	private String style;
 
+	/**
+	 * This layer's own basemap, or null to follow the project's. Null is not a default
+	 * here but a distinct state -- see the layer_basemap_length check and CONTRACT.md
+	 * phase 18. Not validated against a catalogue; the server does not know the token
+	 * values, only their length.
+	 */
+	@Column(name = "basemap")
+	private String basemap;
+
+	/** This layer's own opacity for the basemap, or null to follow the project's. */
+	@Column(name = "basemap_opacity")
+	private Double basemapOpacity;
+
 	@Column(columnDefinition = "geometry(Polygon,4326)")
 	private Polygon extent;
 
@@ -199,6 +212,22 @@ public class Layer {
 		this.style = style;
 	}
 
+	public String getBasemap() {
+		return basemap;
+	}
+
+	public void setBasemap(String basemap) {
+		this.basemap = basemap;
+	}
+
+	public Double getBasemapOpacity() {
+		return basemapOpacity;
+	}
+
+	public void setBasemapOpacity(Double basemapOpacity) {
+		this.basemapOpacity = basemapOpacity;
+	}
+
 	public Polygon getExtent() {
 		return extent;
 	}
@@ -208,13 +237,15 @@ public class Layer {
 	}
 
 	public void setCopyMetadata(long featureCount, boolean visible, int zIndex, int minZoom,
-			int maxZoom, String style, Polygon extent) {
+			int maxZoom, String style, String basemap, Double basemapOpacity, Polygon extent) {
 		this.featureCount = featureCount;
 		this.visible = visible;
 		this.zIndex = zIndex;
 		this.minZoom = minZoom;
 		this.maxZoom = maxZoom;
 		this.style = style;
+		this.basemap = basemap;
+		this.basemapOpacity = basemapOpacity;
 		this.extent = extent;
 	}
 

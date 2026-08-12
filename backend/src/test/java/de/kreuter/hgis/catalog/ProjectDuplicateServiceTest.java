@@ -35,7 +35,9 @@ class ProjectDuplicateServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		source = projects.saveAndFlush(new Project("Kopie Quelle " + UUID.randomUUID(), "Beschreibung", 25832, "osm"));
+		source = new Project("Kopie Quelle " + UUID.randomUUID(), "Beschreibung", 25832, "osm");
+		source.setBasemapOpacity(0.4);
+		source = projects.saveAndFlush(source);
 		UUID layerId = UUID.randomUUID();
 		sourceTable = SqlIdentifier.tableName(layerId);
 		String table = SqlIdentifier.quoteLayerTable(sourceTable);
@@ -52,7 +54,7 @@ class ProjectDuplicateServiceTest {
 				+ "(ST_Multi(ST_MakeEnvelope(1, 2, 3, 4, 25832)), 'Haus', 12),"
 				+ "(ST_Multi(ST_MakeEnvelope(5, 6, 7, 8, 25832)), 'Halle', 25)").update();
 		Layer layer = new Layer(layerId, source, "Gebäude", sourceTable, "MULTIPOLYGON", 25832);
-		layer.setCopyMetadata(2, false, 4, 3, 18, "{\"kind\":\"fill\"}", null);
+		layer.setCopyMetadata(2, false, 4, 3, 18, "{\"kind\":\"fill\"}", "opentopo", 0.6, null);
 		layer = layers.saveAndFlush(layer);
 		fields.saveAndFlush(new LayerField(layer, "Titel", "titel", "text", 0));
 		fields.saveAndFlush(new LayerField(layer, "Höhe", "hoehe", "integer", 1));
@@ -75,6 +77,7 @@ class ProjectDuplicateServiceTest {
 		Project target = projects.findById(result.outputProjectId()).orElseThrow();
 		assertThat(target.getName()).isEqualTo(source.getName() + " (Kopie)");
 		assertThat(target.getDescription()).isEqualTo("Beschreibung");
+		assertThat(target.getBasemapOpacity()).isEqualTo(0.4);
 
 		Layer sourceLayer = layers.findByProjectOrdered(source.getId()).getFirst();
 		Layer targetLayer = layers.findByProjectOrdered(target.getId()).getFirst();
@@ -83,6 +86,10 @@ class ProjectDuplicateServiceTest {
 		assertThat(targetLayer.getFeatureCount()).isEqualTo(2);
 		assertThat(targetLayer.getDataVersion()).isEqualTo(1);
 		assertThat(targetLayer.getStyleVersion()).isEqualTo(1);
+		// The test one forgets: a layer's own basemap and its opacity must survive the
+		// copy, or the duplicate silently falls back to the project's basemap.
+		assertThat(targetLayer.getBasemap()).isEqualTo("opentopo");
+		assertThat(targetLayer.getBasemapOpacity()).isEqualTo(0.6);
 		assertThat(fields.findByLayerIdOrderByOrdinalAsc(targetLayer.getId()))
 				.extracting(LayerField::getColumnName).containsExactly("titel", "hoehe");
 
