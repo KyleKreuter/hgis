@@ -10,8 +10,8 @@ const MODE_LABEL: Record<MeasureMode, string> = {
 }
 
 const HINT: Record<MeasureMode, string> = {
-  distance: 'Klicken setzt Punkte · Doppelklick beendet',
-  area: 'Mindestens drei Punkte · Doppelklick beendet',
+  distance: 'Klicken Sie, um Punkte zu setzen. Doppelklicken Sie, um abzuschließen.',
+  area: 'Setzen Sie mindestens drei Punkte. Doppelklicken Sie, um abzuschließen.',
 }
 
 /**
@@ -61,7 +61,7 @@ export function MeasurementReadout() {
       </div>
 
       <div className="mt-0.5 text-base font-medium tabular-nums">
-        {result.meaningful ? primary : '—'}
+        {result.meaningful ? primary : '-'}
       </div>
 
       <div className="text-xs text-muted-foreground tabular-nums">
