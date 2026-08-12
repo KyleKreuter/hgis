@@ -345,8 +345,8 @@ function Workspace() {
 
       <DiscardEditsDialog
         open={pendingSwitch === 'toTable'}
-        title="Karten-Editiermodus verlassen?"
-        description={`Sie haben ${describeUnsavedChanges(editing.pending)} im Karten-Editiermodus. Diese ${unsavedChangesVerb(editing.pending)} verloren, wenn Sie jetzt die Tabelle bearbeiten.`}
+        title="Zeichenmodus verlassen?"
+        description={`Sie haben ${describeUnsavedChanges(editing.pending)} im Zeichenmodus. Diese ${unsavedChangesVerb(editing.pending)} verloren, wenn Sie jetzt die Tabelle bearbeiten.`}
         confirmLabel="Änderungen verwerfen"
         onConfirm={() => {
           editing.stop()
@@ -357,8 +357,8 @@ function Workspace() {
       />
       <DiscardEditsDialog
         open={pendingSwitch === 'toMap'}
-        title="Tabellenbearbeitung verlassen?"
-        description={`Sie haben ${describeUnsavedChanges(tableChanges)} in der Tabelle. Diese ${unsavedChangesVerb(tableChanges)} verloren, wenn Sie jetzt den Karten-Editiermodus starten.`}
+        title="Bearbeitungsmodus verlassen?"
+        description={`Sie haben ${describeUnsavedChanges(tableChanges)} in der Tabelle. Diese ${unsavedChangesVerb(tableChanges)} verloren, wenn Sie jetzt den Zeichenmodus starten.`}
         confirmLabel="Änderungen verwerfen"
         onConfirm={() => {
           useTableEditing.getState().end()
