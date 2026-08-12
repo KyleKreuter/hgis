@@ -1,13 +1,15 @@
 {
+  // Solution-style: this file compiles nothing itself, it only points at the two real
+  // projects. That is why `tsc --noEmit` on it checks zero files and always passes --
+  // use `npm run typecheck` (tsc -b), which follows the references below.
+  //
+  // No compilerOptions here on purpose: they would apply to the empty file list only.
+  // The ones that matter live in tsconfig.app.json; `baseUrl` used to sit here and did
+  // nothing but raise TS5101, which read like the sole finding of a check that had in
+  // fact examined nothing.
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
-  ],
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  }
+  ]
 }
