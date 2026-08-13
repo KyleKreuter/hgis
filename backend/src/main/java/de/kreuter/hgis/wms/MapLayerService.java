@@ -70,6 +70,15 @@ public class MapLayerService {
 		Project project = projectRepository.findById(projectId)
 				.orElseThrow(() -> new NotFoundException("Projekt " + projectId + " existiert nicht"));
 
+		// An unnamed grouping layer (WmsDtos.Layer#name() null, orchestrator amendment)
+		// is a heading, not a choice -- @NotEmpty on the request only rejects an empty
+		// list, never a null element inside a non-empty one, so a client echoing one back
+		// from /api/wms/capabilities has to be caught here explicitly.
+		if (request.layers().contains(null)) {
+			throw new BadRequestException(
+					"Die Layerliste darf keinen leeren Eintrag enthalten -- eine Gruppe ohne Namen hat nichts zu zeichnen.");
+		}
+
 		// Re-read, not trusted from an earlier /api/wms/capabilities call: the service
 		// may have changed its layers or dropped EPSG:3857 in the meantime, and the
 		// same guards (SSRF, version, EPSG:3857) have to run again either way.
@@ -111,13 +120,22 @@ public class MapLayerService {
 		return layerService.getSummary(layer.getId());
 	}
 
-	/** Every requested name resolved against the service's own layer list, in the requested order. */
+	/**
+	 * Every requested name resolved against the service's own layer list, in the
+	 * requested order.
+	 *
+	 * <p>{@code requestedName.equals(layer.name())}, not the other way round: the
+	 * capabilities answer can now hold entries with a null {@code name()} of their own --
+	 * unnamed grouping layers, listed as headings (orchestrator amendment) -- and
+	 * {@code null.equals(requestedName)} would throw before the real, named entries are
+	 * ever reached. The caller has already rejected a null {@code requestedName} outright.
+	 */
 	private static List<WmsDtos.Layer> resolveChosenLayers(List<String> requestedNames,
 			WmsDtos.CapabilitiesResponse capabilities) {
 		List<WmsDtos.Layer> chosen = new ArrayList<>(requestedNames.size());
 		for (String requestedName : requestedNames) {
 			WmsDtos.Layer match = capabilities.layers().stream()
-					.filter(layer -> layer.name().equals(requestedName))
+					.filter(layer -> requestedName.equals(layer.name()))
 					.findFirst()
 					.orElseThrow(() -> new BadRequestException(
 							"Der Dienst bietet keinen Layer namens '" + requestedName + "' an."));

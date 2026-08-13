@@ -51,13 +51,10 @@ import org.xml.sax.SAXException;
  * meaningless entry above everything else every single service would carry.</li>
  * <li><strong>{@code HH_WMS_Fachdaten_ALKIS}</strong> nests the same way, several levels
  * deep, except every one of its grouping layers is unnamed -- only the leaves carry a
- * {@code <Name>}. CONTRACT.md says an unnamed group "is not listed", but says nothing
- * about what that does to the leaves' {@code depth}: collapsing it (counting only named
- * ancestors) would put every single layer of this service at depth 0, indistinguishable
- * from a flat list -- which defeats the one thing this fixture was chosen to exercise.
- * Depth here therefore counts every {@code <Layer>} boundary crossed, named or not; an
- * unnamed group still contributes no entry of its own, only a nesting level for what is
- * inside it.</li>
+ * {@code <Name>}. Depth counts every {@code <Layer>} boundary crossed, named or not:
+ * counting only named ancestors would put every single layer of this service at depth 0,
+ * indistinguishable from a flat list -- which defeats the one thing this fixture was
+ * chosen to exercise.</li>
  * </ul>
  *
  * <p>The rule that satisfies all three: the outermost {@code <Layer>} is treated as the
@@ -65,13 +62,24 @@ import org.xml.sax.SAXException;
  * its children then start the flat list at depth 0, and depth increases by one for every
  * further {@code <Layer>} nesting level regardless of whether the layer crossed has a
  * name. Only when the outermost element has no children at all does it become the list's
- * one entry, at depth 0, since there is then nothing else to offer.
+ * one entry, at depth 0, since there is then nothing else to offer. Confirmed correct by
+ * the orchestrator against the frontend's own indentation
+ * ({@code paddingLeft: 0.5 + depth * 1.25} rem).
  *
- * <p>This is the one real interpretive call this class makes beyond what CONTRACT.md
- * spells out -- flagged in the implementation report for the orchestrator to confirm
- * against the frontend's actual indentation, since CONTRACT.md's own example (a
- * two-entry excerpt, depth 0 and 1) is consistent with either reading and does not
- * distinguish them on its own.
+ * <h2>Unnamed groups with children ({@link WmsDtos.Layer#name()})</h2>
+ *
+ * <p>An unnamed layer that has no children of its own contributes nothing -- no name to
+ * pick, and no children whose position it would need to explain. One that <em>does</em>
+ * have children is listed anyway, with {@code name} null: hiding it entirely, the first
+ * cut of this class, made its named children read as if they belonged to whichever named
+ * entry happened to sit above them in the flattened list. Orchestrator finding on
+ * {@code HH_WMS_Fachdaten_ALKIS}: "Nacht-Schutzzone" and its two siblings looked like
+ * children of "vorbereitende Untersuchung Staedtebauliche Entwicklungsmassnahme" two
+ * entries above them, when their real, unnamed parent -- and the one title that actually
+ * explains what a "Nacht-Schutzzone" is -- is "Laermschutzbereiche". Measured at 1 of 31
+ * checked services, and exactly the one with the deepest catalog (32 layers, six datasets
+ * pointing at it): misleading is worse than incomplete, and it lands hardest where
+ * orientation matters most.
  */
 final class WmsCapabilitiesParser {
 
@@ -156,12 +164,27 @@ final class WmsCapabilitiesParser {
 		Double effectiveMaxScale = ownMaxScale != null ? ownMaxScale : inherited.maxScale();
 
 		String name = textOf(child(layerEl, "Name"));
+		List<Element> children = childElements(layerEl, "Layer");
 		if (name != null && !name.isBlank()) {
 			out.add(buildEntry(layerEl, name, depth, effectiveBbox, effectiveMinScale, effectiveMaxScale));
 		}
+		else if (!children.isEmpty()) {
+			// An unnamed grouping layer is not itself pickable -- it names nothing a
+			// GetMap request could draw -- but hiding it entirely made its named children
+			// look like they belonged to whichever named entry happened to sit above them
+			// in the flattened list. Measured on HH_WMS_Fachdaten_ALKIS: "Nacht-Schutzzone"
+			// and its two siblings read as children of "vorbereitende Untersuchung..."
+			// two entries above, when their real, unnamed parent is "Laermschutzbereiche"
+			// -- the one title that actually explains what a "Nacht-Schutzzone" is.
+			// Listed with name null and queryable/legendUrl fixed to false/null, since
+			// neither GetMap nor GetFeatureInfo can ever address an entry with no name.
+			out.add(unnamedGroupEntry(layerEl, depth, effectiveBbox, effectiveMinScale, effectiveMaxScale));
+		}
+		// An unnamed layer with no children of its own contributes nothing: no name to
+		// pick, and no children whose position it would need to explain.
 
 		Inherited nextInherited = new Inherited(effectiveBbox, effectiveMinScale, effectiveMaxScale);
-		for (Element child : childElements(layerEl, "Layer")) {
+		for (Element child : children) {
 			walk(child, depth + 1, nextInherited, out);
 		}
 	}
@@ -172,6 +195,12 @@ final class WmsCapabilitiesParser {
 		boolean queryable = "1".equals(layerEl.getAttribute("queryable"));
 		return new WmsDtos.Layer(name, title != null && !title.isBlank() ? title : name, depth, queryable,
 				legendUrlOf(layerEl), minScale, maxScale, bbox);
+	}
+
+	private static WmsDtos.Layer unnamedGroupEntry(Element layerEl, int depth, double[] bbox,
+			Double minScale, Double maxScale) {
+		String title = textOf(child(layerEl, "Title"));
+		return new WmsDtos.Layer(null, title, depth, false, null, minScale, maxScale, bbox);
 	}
 
 	/**

@@ -106,17 +106,10 @@ class WmsCapabilitiesParserTest {
 	// --- HH_WMS_Fachdaten_ALKIS: several levels of unnamed grouping layers --------------
 
 	@Test
-	@DisplayName("unnamed grouping layers are never listed themselves, but still count toward their children's depth")
-	void unnamedGroupsAreInvisibleButStillNest() {
+	@DisplayName("unnamed grouping layers still count toward their children's depth")
+	void unnamedGroupsStillNestTheirChildren() {
 		WmsDtos.CapabilitiesResponse response = WmsCapabilitiesParser.parse(
 				fixture("HH_WMS_Fachdaten_ALKIS.xml"), "https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS");
-
-		assertThat(response.layers()).hasSize(32);
-		// Every listed name is a bare number or "default" in this service -- proof that no
-		// unnamed intermediate group ever leaked its own (nonexistent) name into the list.
-		assertThat(response.layers()).extracting(WmsDtos.Layer::name)
-				.doesNotContainNull()
-				.allMatch(name -> !name.isBlank());
 
 		// "8" sits directly under the (unnamed) root's direct child -- no, it sits as a
 		// direct child of the outermost <Layer>, one level below an unnamed sibling group,
@@ -136,9 +129,65 @@ class WmsCapabilitiesParserTest {
 		assertThat(entryNamed(response, "24").queryable()).isTrue();
 	}
 
+	/**
+	 * Orchestrator finding: hiding an unnamed group entirely made its named children
+	 * read as if they belonged to whichever named entry happened to sit above them in
+	 * the flattened list. "Nacht-Schutzzone", "Tag-Schutzzone 2" and "Tag-Schutzzone 1"
+	 * are not children of "vorbereitende Untersuchung..." two entries above them -- their
+	 * real, unnamed parent is "Laermschutzbereiche", the one title that actually explains
+	 * what a "Nacht-Schutzzone" is.
+	 */
+	@Test
+	@DisplayName("an unnamed group with children is listed with name null, as a heading for what follows it")
+	void anUnnamedGroupWithChildrenIsListedAsAHeading() {
+		WmsDtos.CapabilitiesResponse response = WmsCapabilitiesParser.parse(
+				fixture("HH_WMS_Fachdaten_ALKIS.xml"), "https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS");
+
+		WmsDtos.Layer heading = entryTitled(response, "Laermschutzbereiche");
+		assertThat(heading.name()).isNull();
+		assertThat(heading.depth()).isZero();
+		assertThat(heading.queryable()).isFalse();
+		assertThat(heading.legendUrl()).isNull();
+
+		// Its children keep the depth they already had -- listing the group changes
+		// nothing about where its children sit, only what explains them.
+		WmsDtos.Layer firstChild = entryNamed(response, "1");
+		assertThat(firstChild.title()).isEqualTo("Nacht-Schutzzone");
+		assertThat(firstChild.depth()).isEqualTo(1);
+
+		// The heading comes right before its children in document order.
+		int headingIndex = response.layers().indexOf(heading);
+		int firstChildIndex = response.layers().indexOf(firstChild);
+		assertThat(firstChildIndex).isEqualTo(headingIndex + 1);
+	}
+
+	@Test
+	@DisplayName("every unnamed group with children is listed, every unnamed leaf is not")
+	void exactlySixteenUnnamedGroupsAreListedInThisFixture() {
+		WmsDtos.CapabilitiesResponse response = WmsCapabilitiesParser.parse(
+				fixture("HH_WMS_Fachdaten_ALKIS.xml"), "https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS");
+
+		long unnamed = response.layers().stream().filter(layer -> layer.name() == null).count();
+		long named = response.layers().stream().filter(layer -> layer.name() != null).count();
+
+		assertThat(unnamed).as("every unnamed grouping layer that has children").isEqualTo(16);
+		assertThat(named).as("the pickable layers, unchanged by this addition").isEqualTo(32);
+		assertThat(response.layers()).hasSize(48);
+	}
+
+	/**
+	 * {@code name.equals(l.name())}, not the other way round: the list now also holds
+	 * entries whose own {@code name()} is null (unnamed groups with children), and
+	 * {@code null.equals(name)} would throw before a real match is ever found.
+	 */
 	private static WmsDtos.Layer entryNamed(WmsDtos.CapabilitiesResponse response, String name) {
-		return response.layers().stream().filter(l -> l.name().equals(name)).findFirst()
+		return response.layers().stream().filter(l -> name.equals(l.name())).findFirst()
 				.orElseThrow(() -> new AssertionError("no layer named " + name));
+	}
+
+	private static WmsDtos.Layer entryTitled(WmsDtos.CapabilitiesResponse response, String title) {
+		return response.layers().stream().filter(l -> title.equals(l.title())).findFirst()
+				.orElseThrow(() -> new AssertionError("no layer titled " + title));
 	}
 
 	// --- HH_WMS_Cache_Rasterplan: cannot serve EPSG:3857 --------------------------------

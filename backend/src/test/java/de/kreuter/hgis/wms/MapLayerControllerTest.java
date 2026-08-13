@@ -140,6 +140,42 @@ class MapLayerControllerTest {
 	}
 
 	@Test
+	@DisplayName("a null entry in the requested layer list is a 400, not an internal error")
+	void aNullLayerEntryInTheRequestIsBadRequest() throws Exception {
+		given(capabilitiesService.capabilities(SERVICE_URL)).willReturn(twoLayerCapabilities());
+
+		mockMvc.perform(post("/api/projects/{projectId}/map-layers", project.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestBody("[\"stadtplan\", null]", null, null)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("nichts zu zeichnen")));
+
+		assertThat(layerRepository.findByProjectOrdered(project.getId())).isEmpty();
+	}
+
+	/**
+	 * Orchestrator amendment: the capabilities answer can now hold an unnamed grouping
+	 * layer (name null) mixed in with the pickable ones -- resolving the client's chosen
+	 * names against that list must not throw on the group heading it never asked for.
+	 */
+	@Test
+	@DisplayName("an unnamed group heading in the capabilities answer does not break resolving the chosen layers")
+	void anUnnamedGroupHeadingInCapabilitiesDoesNotBreakResolution() throws Exception {
+		WmsDtos.Layer heading = new WmsDtos.Layer(null, "Gruppe ohne Namen", 0, false, null, null, null, null);
+		WmsDtos.Layer stadtplan = new WmsDtos.Layer("stadtplan", "Stadtplan", 1, true, null, null, null,
+				new double[] { 9.6, 53.3, 10.4, 53.8 });
+		given(capabilitiesService.capabilities(SERVICE_URL)).willReturn(new WmsDtos.CapabilitiesResponse(
+				SERVICE_URL, "WMS Cache Stadtplan Hamburg", "1.3.0", List.of("image/png"),
+				List.of(heading, stadtplan)));
+
+		mockMvc.perform(post("/api/projects/{projectId}/map-layers", project.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestBody("[\"stadtplan\"]", null, null)))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.wms.layers[0]").value("stadtplan"));
+	}
+
+	@Test
 	@DisplayName("a layer name the service does not offer is a 400")
 	void anUnknownLayerNameIsBadRequest() throws Exception {
 		given(capabilitiesService.capabilities(SERVICE_URL)).willReturn(twoLayerCapabilities());
