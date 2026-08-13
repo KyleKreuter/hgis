@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import de.kreuter.hgis.common.JsonFields;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.ProblemDetailAdvice;
 import de.kreuter.hgis.geoportal.dto.GeoportalDtos;
@@ -22,6 +23,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.client.ResourceAccessException;
+import org.springframework.test.web.servlet.MvcResult;
+import tools.jackson.databind.JsonNode;
 
 /**
  * CONTRACT.md 11.2 through 11.5, with {@link GeoportalDatasetService} mocked -- what this
@@ -163,5 +166,56 @@ class GeoportalCatalogControllerTest {
 		mvc.perform(get("/api/geoportal/datasets"))
 				.andExpect(status().isServiceUnavailable())
 				.andExpect(jsonPath("$.detail", org.hamcrest.Matchers.containsString("Geoportal Hamburg")));
+	}
+
+	/**
+	 * The whole shape of the catalog answer (CONTRACT.md 11.2), envelope and row.
+	 *
+	 * <p>The row is where this matters most: the dialog filters by {@code agency} and
+	 * {@code topic}, sorts by {@code title} and decides from {@code kind} whether a
+	 * dataset can be imported at all. None of that fails loudly when a name changes --
+	 * the filters simply stop matching and every entry falls into "Nur Kartenbild".
+	 *
+	 * <p>The fixture fills every field on purpose. A null one would still appear in the
+	 * JSON, but a fixture that leaves fields out invites reading the assertion as the
+	 * shape of this fixture rather than the shape of the DTO.
+	 */
+	@Test
+	@DisplayName("the catalog response and its rows carry exactly the fields of the contract")
+	void catalogResponseKeepsItsShape() throws Exception {
+		given(service.list()).willReturn(new GeoportalDtos.CatalogResponse(Instant.parse("2026-08-12T09:00:00Z"),
+				List.of(new GeoportalDtos.DatasetSummary(SLASHED_ID, "Straßenbaumkataster Hamburg",
+						"Alle Straßenbäume der Stadt", "FEATURES", "BUKEA", "Umwelt", 229876L,
+						new double[] { 8.4, 53.4, 10.3, 54.0 }))));
+
+		MvcResult result = mvc.perform(get("/api/geoportal/datasets"))
+				.andExpect(status().isOk())
+				.andReturn();
+
+		JsonNode body = JsonFields.tree(result);
+		JsonFields.assertFieldNames(body, "GeoportalDtos.CatalogResponse", "fetchedAt", "datasets");
+		JsonFields.assertFieldNames(body.get("datasets").get(0), "GeoportalDtos.DatasetSummary",
+				"id", "title", "description", "kind", "agency", "topic", "featureCount", "bbox");
+	}
+
+	/** The detail answer (CONTRACT.md 11.4) -- the dialog reads every one of these. */
+	@Test
+	@DisplayName("the dataset detail carries exactly the fields of the contract")
+	void datasetDetailKeepsItsShape() throws Exception {
+		given(service.detail(SLASHED_ID)).willReturn(new GeoportalDtos.DatasetDetail(
+				SLASHED_ID, "Straßenbaumkataster Hamburg", "Alle Straßenbäume der Stadt", "FEATURES",
+				"BUKEA", "Umwelt", 229876L, new double[] { 8.4, 53.4, 10.3, 54.0 },
+				"Freie und Hansestadt Hamburg, BUKEA", GeoportalLicense.NAME, GeoportalLicense.URL,
+				"https://registry.gdi-de.org/id/de.hh/x", "https://metaver.de/trefferanzeige?docuuid=x",
+				25832, "gid", List.of()));
+
+		MvcResult result = mvc.perform(get("/api/geoportal/datasets/" + SLASHED_ID))
+				.andExpect(status().isOk())
+				.andReturn();
+
+		JsonFields.assertFieldNames(JsonFields.tree(result), "GeoportalDtos.DatasetDetail",
+				"id", "title", "description", "kind", "agency", "topic", "featureCount", "bbox",
+				"attribution", "licenseName", "licenseUrl", "datasetUri", "metadataUrl", "storageSrid",
+				"sourceFeatureIdField", "fields");
 	}
 }

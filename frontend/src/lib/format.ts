@@ -34,6 +34,12 @@ export function formatRelative(iso: string | null): string {
   if (!iso) return 'nie geöffnet'
 
   const then = new Date(iso).getTime()
+  // An unparseable timestamp yields NaN, and every comparison below is then false, so the
+  // value would fall through to the date branch and throw a RangeError out of
+  // Intl.DateTimeFormat -- taking down whatever was rendering it, a project tile among
+  // others. A date nobody can read is not worth a blank page.
+  if (Number.isNaN(then)) return 'unbekannt'
+
   const diffSeconds = Math.round((then - Date.now()) / 1000)
   const absSeconds = Math.abs(diffSeconds)
 
