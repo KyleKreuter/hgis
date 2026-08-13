@@ -50,13 +50,14 @@ class GeoportalCatalogControllerTest {
 	void listReturnsTheCatalog() throws Exception {
 		given(service.list()).willReturn(new GeoportalDtos.CatalogResponse(Instant.parse("2026-08-12T09:00:00Z"),
 				List.of(new GeoportalDtos.DatasetSummary(SLASHED_ID, "Straßenbaumkataster Hamburg", null,
-						"FEATURES", "BUKEA", "Umwelt", null, null))));
+						"FEATURES", "BUKEA", "Umwelt", null, null, 1))));
 
 		mvc.perform(get("/api/geoportal/datasets"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.datasets", org.hamcrest.Matchers.hasSize(1)))
 				.andExpect(jsonPath("$.datasets[0].id").value(SLASHED_ID))
-				.andExpect(jsonPath("$.datasets[0].agency").value("BUKEA"));
+				.andExpect(jsonPath("$.datasets[0].agency").value("BUKEA"))
+				.andExpect(jsonPath("$.datasets[0].collectionCount").value(1));
 	}
 
 	@Test
@@ -77,7 +78,7 @@ class GeoportalCatalogControllerTest {
 				229876L, new double[] { 8.4, 53.4, 10.3, 54.0 },
 				"Freie und Hansestadt Hamburg, Behörde für Umwelt, Klima, Energie und Agrarwirtschaft",
 				GeoportalLicense.NAME, GeoportalLicense.URL, "https://registry.gdi-de.org/id/de.hh/x",
-				"https://metaver.de/trefferanzeige?docuuid=x", 25832, "gid", List.of()));
+				"https://metaver.de/trefferanzeige?docuuid=x", 25832, "gid", List.of(), 1, List.of()));
 
 		mvc.perform(get("/api/geoportal/datasets/" + SLASHED_ID))
 				.andExpect(status().isOk())
@@ -186,7 +187,7 @@ class GeoportalCatalogControllerTest {
 		given(service.list()).willReturn(new GeoportalDtos.CatalogResponse(Instant.parse("2026-08-12T09:00:00Z"),
 				List.of(new GeoportalDtos.DatasetSummary(SLASHED_ID, "Straßenbaumkataster Hamburg",
 						"Alle Straßenbäume der Stadt", "FEATURES", "BUKEA", "Umwelt", 229876L,
-						new double[] { 8.4, 53.4, 10.3, 54.0 }))));
+						new double[] { 8.4, 53.4, 10.3, 54.0 }, 1))));
 
 		MvcResult result = mvc.perform(get("/api/geoportal/datasets"))
 				.andExpect(status().isOk())
@@ -195,7 +196,26 @@ class GeoportalCatalogControllerTest {
 		JsonNode body = JsonFields.tree(result);
 		JsonFields.assertFieldNames(body, "GeoportalDtos.CatalogResponse", "fetchedAt", "datasets");
 		JsonFields.assertFieldNames(body.get("datasets").get(0), "GeoportalDtos.DatasetSummary",
-				"id", "title", "description", "kind", "agency", "topic", "featureCount", "bbox");
+				"id", "title", "description", "kind", "agency", "topic", "featureCount", "bbox",
+				"collectionCount");
+	}
+
+	/**
+	 * CONTRACT.md 11.9: a service listed as one row. The client decides from
+	 * {@code collectionCount > 1} alone that a collection has to be picked first, so the
+	 * field has to arrive as a number in the listing, not only in the detail.
+	 */
+	@Test
+	@DisplayName("ein als eine Zeile gelisteter Dienst nennt seine Sammlungszahl in der Liste")
+	void aServiceRowCarriesItsCollectionCount() throws Exception {
+		given(service.list()).willReturn(new GeoportalDtos.CatalogResponse(Instant.parse("2026-08-12T09:00:00Z"),
+				List.of(new GeoportalDtos.DatasetSummary("xplan", "XPlanungsdaten Hamburg", null, "BOTH", "BSW",
+						"Regionen und Städte", null, null, 247))));
+
+		mvc.perform(get("/api/geoportal/datasets"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.datasets[0].id").value("xplan"))
+				.andExpect(jsonPath("$.datasets[0].collectionCount").value(247));
 	}
 
 	/** The detail answer (CONTRACT.md 11.4) -- the dialog reads every one of these. */
@@ -207,7 +227,7 @@ class GeoportalCatalogControllerTest {
 				"BUKEA", "Umwelt", 229876L, new double[] { 8.4, 53.4, 10.3, 54.0 },
 				"Freie und Hansestadt Hamburg, BUKEA", GeoportalLicense.NAME, GeoportalLicense.URL,
 				"https://registry.gdi-de.org/id/de.hh/x", "https://metaver.de/trefferanzeige?docuuid=x",
-				25832, "gid", List.of()));
+				25832, "gid", List.of(), 1, List.of()));
 
 		MvcResult result = mvc.perform(get("/api/geoportal/datasets/" + SLASHED_ID))
 				.andExpect(status().isOk())
@@ -216,6 +236,35 @@ class GeoportalCatalogControllerTest {
 		JsonFields.assertFieldNames(JsonFields.tree(result), "GeoportalDtos.DatasetDetail",
 				"id", "title", "description", "kind", "agency", "topic", "featureCount", "bbox",
 				"attribution", "licenseName", "licenseUrl", "datasetUri", "metadataUrl", "storageSrid",
-				"sourceFeatureIdField", "fields");
+				"sourceFeatureIdField", "fields", "collectionCount", "collections");
+	}
+
+	/**
+	 * CONTRACT.md 11.9: the detail of a service listed as one row is where its collections
+	 * are picked. Their ids are dataset ids like any other -- a slash inside one has to
+	 * survive the same route this suite already proves for a flat id, since asking for the
+	 * chosen collection's detail is literally the next request the dialog makes.
+	 */
+	@Test
+	@DisplayName("das Detail eines Dienstes liefert seine Sammlungen mit Kennung und Namen")
+	void aServiceDetailListsItsCollections() throws Exception {
+		given(service.detail("xplan")).willReturn(new GeoportalDtos.DatasetDetail(
+				"xplan", "XPlanungsdaten Hamburg", null, "BOTH", "BSW", "Regionen und Städte", null, null,
+				"Behörde für Stadtentwicklung und Wohnen (BSW)", GeoportalLicense.NAME, GeoportalLicense.URL,
+				"https://registry.gdi-de.org/id/de.hh/d247341c-66e6-40fe-96dd-370b141ac473", null,
+				null, null, List.of(), 247,
+				List.of(new GeoportalDtos.CollectionRef("xplan/bp_baugrenze", "BP_BauGrenze"))));
+
+		MvcResult result = mvc.perform(get("/api/geoportal/datasets/xplan"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.collectionCount").value(247))
+				.andExpect(jsonPath("$.fields", org.hamcrest.Matchers.hasSize(0)))
+				.andExpect(jsonPath("$.featureCount").value(org.hamcrest.Matchers.nullValue()))
+				.andExpect(jsonPath("$.collections[0].id").value("xplan/bp_baugrenze"))
+				.andExpect(jsonPath("$.collections[0].title").value("BP_BauGrenze"))
+				.andReturn();
+
+		JsonFields.assertFieldNames(JsonFields.tree(result).get("collections").get(0),
+				"GeoportalDtos.CollectionRef", "id", "title");
 	}
 }

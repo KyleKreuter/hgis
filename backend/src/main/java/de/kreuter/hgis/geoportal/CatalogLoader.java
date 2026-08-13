@@ -10,6 +10,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -242,6 +243,7 @@ class CatalogLoader {
 		byte[] csv = fetchCsvBytes();
 		Map<String, DatasetRow> byLandingPage = new LinkedHashMap<>();
 		List<GeoportalCatalogEntry> unboundDatasets = new ArrayList<>();
+		Set<String> takenIds = new HashSet<>();
 		try (CSVReader csvReader =
 				new CSVReader(new InputStreamReader(new ByteArrayInputStream(csv), StandardCharsets.UTF_8))) {
 			String[] header = csvReader.readNextSilently();
@@ -258,7 +260,7 @@ class CatalogLoader {
 			while ((row = csvReader.readNextSilently()) != null) {
 				rowNumber++;
 				try {
-					readRow(row, columnIndex, rowNumber, knownServiceUrls, byLandingPage, unboundDatasets);
+					readRow(row, columnIndex, rowNumber, knownServiceUrls, byLandingPage, unboundDatasets, takenIds);
 				}
 				catch (RuntimeException ignored) {
 					// One malformed row must not empty the whole catalog (plan section 9, point 1).
@@ -283,9 +285,13 @@ class CatalogLoader {
 		});
 	}
 
+	/**
+	 * @param takenIds the ids already handed out to rows of this file, so no two rows can end
+	 *                 up with the same one -- see {@link #fallbackId}
+	 */
 	private static void readRow(String[] row, Map<String, Integer> columnIndex, int rowNumber,
 			Set<String> knownServiceUrls, Map<String, DatasetRow> byLandingPage,
-			List<GeoportalCatalogEntry> unboundDatasets) {
+			List<GeoportalCatalogEntry> unboundDatasets, Set<String> takenIds) {
 		if (!REACHABLE.equals(valueOf(row, columnIndex, "Aufrufbar"))) {
 			// The other two values (plan section 3.5) mean the service sits in Hamburg's
 			// internal network -- nothing this backend, running outside it, could ever reach.
@@ -327,7 +333,7 @@ class CatalogLoader {
 		// only reads OGC API Features, so a row that gets here is listed and not importable.
 		String kind = (hasWfs || hasOaf) ? (hasWms ? "BOTH" : "FEATURES") : "WMS";
 		unboundDatasets.add(new GeoportalCatalogEntry(
-				"md:" + fallbackId(parsed.metadataUrl(), rowNumber),
+				"md:" + fallbackId(parsed.metadataUrl(), rowNumber, takenIds),
 				title.trim(), kind, parsed.agency(), parsed.attribution(), parsed.topic(), parsed.metadataUrl(),
 				null, null, null, Map.of()));
 	}
@@ -445,16 +451,29 @@ class CatalogLoader {
 		return matcher.find() ? matcher.group(1).trim() : trimmed;
 	}
 
-	/** The service directory's own {@code md_id}, when a URL in this row's own columns happens to carry one; a
-	 *  row number otherwise, so every entry still gets a stable, unique id within one load. */
-	private static String fallbackId(String metadataUrl, int rowNumber) {
+	/**
+	 * The metadata record's own uuid, when a URL in this row's own columns carries one; a row
+	 * number otherwise, so every entry still gets a stable, unique id within one load.
+	 *
+	 * <p>The uuid is not unique by itself, which was measured and cost two datasets: two
+	 * pairs of rows -- {@code ALKIS - Flurstücke und Gebäude (gelb)} with {@code
+	 * Gewerbeflächen-Exposé}, and the two {@code Zentraler AdressService Hamburg} rows --
+	 * point at one metadata record each. Both second rows were listed under an id that
+	 * already belonged to the first, so asking for their detail answered with the other
+	 * dataset. A repeat therefore falls back to the row number, exactly as a row with no
+	 * uuid at all does; the first row of a pair keeps the id it always had.
+	 */
+	private static String fallbackId(String metadataUrl, int rowNumber, Set<String> takenIds) {
+		String id = "row-" + rowNumber;
 		if (metadataUrl != null) {
 			Matcher matcher = MD_ID_PARAM.matcher(metadataUrl);
 			if (matcher.find()) {
-				return matcher.group(1).toLowerCase(Locale.ROOT);
+				String fromMetadataRecord = matcher.group(1).toLowerCase(Locale.ROOT);
+				id = takenIds.contains(fromMetadataRecord) ? id : fromMetadataRecord;
 			}
 		}
-		return "row-" + rowNumber;
+		takenIds.add(id);
+		return id;
 	}
 
 	private static Map<String, Integer> indexOf(String[] header) {

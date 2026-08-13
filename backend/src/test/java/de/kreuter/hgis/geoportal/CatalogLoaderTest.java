@@ -78,7 +78,7 @@ class CatalogLoaderTest {
 			              "rs_id":"https://registry.gdi-de.org/id/de.hh/948321ba-e9b2-4290-88c3-8dda2912defa"}]},
 			"""
 			+ xplan()
-			+ "]").stripTrailing();
+			+ "]");
 
 	/**
 	 * Header BOM-prefixed, a quoted field with an embedded comma, and rows in the exact
@@ -93,8 +93,8 @@ class CatalogLoaderTest {
 	 */
 	private static final String DATASET_LIST = "﻿"
 			+ "Datensatzname,Organisation,Kategorie,Metadaten,Portal,WMS-Adresse,WFS-Adresse,OAF-Landing Page,Aufrufbar\n"
-			+ biotopverbundRow("Feuchtlebensräume", FEUCHT_SERVICE, "9C0927DD-F9DC-4C1E-8287-E8773DAC208E")
-			+ biotopverbundRow("Trockenlebensräume", TROCKEN_SERVICE, "DA9ADA8E-4A4D-4F71-BD98-95E939378D1C")
+			+ biotopverbundRow("feuchtlebensraeume", FEUCHT_SERVICE, "9C0927DD-F9DC-4C1E-8287-E8773DAC208E")
+			+ biotopverbundRow("trockenlebensraeume", TROCKEN_SERVICE, "DA9ADA8E-4A4D-4F71-BD98-95E939378D1C")
 			+ "Straßenbaumkataster Hamburg,\"Behörde für Umwelt, Klima, Energie und Agrarwirtschaft (BUKEA)\",Umwelt,"
 			+ "https://metaver.de/trefferanzeige?docuuid=C1C61928-C602-4E37-AF31-2D23901E2540,"
 			+ "https://geoportal-hamburg.de/Geoportal/geo-online/?mdid=C1C61928-C602-4E37-AF31-2D23901E2540,"
@@ -140,13 +140,14 @@ class CatalogLoaderTest {
 				.collect(Collectors.joining(","));
 	}
 
+	/** @param kind the technical half of the service id, e.g. {@code feuchtlebensraeume} */
 	private static String biotopverbundRow(String kind, String serviceName, String uuid) {
 		return serviceName + ",\"Behörde für Umwelt, Klima, Energie und Agrarwirtschaft (BUKEA)\",Umwelt,"
 				+ "https://metaver.de/trefferanzeige?docuuid=" + uuid + ","
 				+ "https://geoportal-hamburg.de/Geoportal/geo-online/?mdid=" + uuid + ","
-				+ "https://geodienste.hamburg.de/wms_biotopverbund_" + kind.toLowerCase(Locale.ROOT) + "?SERVICE=WMS,"
-				+ "https://geodienste.hamburg.de/wfs_biotopverbund_" + kind.toLowerCase(Locale.ROOT) + "?SERVICE=WFS,"
-				+ API + "biotopverbund_" + kind.toLowerCase(Locale.ROOT) + ",FHHNET/Internet\n";
+				+ "https://geodienste.hamburg.de/wms_biotopverbund_" + kind + "?SERVICE=WMS,"
+				+ "https://geodienste.hamburg.de/wfs_biotopverbund_" + kind + "?SERVICE=WFS,"
+				+ API + "biotopverbund_" + kind + ",FHHNET/Internet\n";
 	}
 
 	private List<GeoportalCatalogEntry> load() {
