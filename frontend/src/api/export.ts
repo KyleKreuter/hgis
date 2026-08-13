@@ -102,8 +102,12 @@ export function exportErrorMessage(caught: unknown): string {
  * The object URL is revoked right after, but not synchronously with `click()`: some
  * browsers start the navigation on the next tick, and revoking too early can cancel a
  * download that never got to read the blob.
+ *
+ * Exported because the map image export (CONTRACT.md 13) hands over a blob it built in
+ * the browser rather than one it fetched, and the two have nothing else in common --
+ * only this last step.
  */
-function triggerDownload(blob: Blob, filename: string): void {
+export function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
