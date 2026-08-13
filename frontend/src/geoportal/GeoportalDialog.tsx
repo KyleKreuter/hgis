@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { toast } from 'sonner'
 import {
   ExternalLink,
@@ -8,6 +9,7 @@ import {
   Search,
   TriangleAlert,
 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -41,12 +43,19 @@ import {
   useGeoportalDataset,
   useRefreshGeoportalCatalog,
   useStartGeoportalImport,
+  type GeoportalCollection,
   type GeoportalDatasetKind,
   type GeoportalDatasetSummary,
   type GeoportalField,
 } from '@/api/geoportal'
 import { formatFeatureCount } from '@/layers/inspection'
 import { useMapViewport } from '@/map/mapViewportStore'
+import {
+  activeDatasetId,
+  isServiceEntry,
+  needsCollectionChoice,
+  visibleCollections,
+} from './collections'
 import { formatFieldValues, isImportable } from './fields'
 import { buildGeoportalImportBody } from './importBody'
 import {
@@ -76,6 +85,9 @@ const KIND_TITLES: Record<GeoportalDatasetKind, string> = {
   WMS: 'Nur Kartenbild',
 }
 
+/** Row height in pixels. Must match the class on the row, or the virtualiser drifts. */
+const ROW_HEIGHT = 44
+
 interface GeoportalDialogProps {
   projectId: string
   open: boolean
@@ -97,6 +109,10 @@ export function GeoportalDialog({ projectId, open, onOpenChange }: GeoportalDial
 
   const [filters, setFilters] = useState<GeoportalFilters>(defaultGeoportalFilters)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Only ever set for a service entry (CONTRACT.md 11.9). A flat entry's own id already
+  // names a collection, so there is nothing left to choose.
+  const [collectionId, setCollectionId] = useState<string | null>(null)
+  const [collectionQuery, setCollectionQuery] = useState('')
   const [name, setName] = useState('')
   const [useMapExtent, setUseMapExtent] = useState(false)
   const [selectFieldsEnabled, setSelectFieldsEnabled] = useState(false)
@@ -104,8 +120,15 @@ export function GeoportalDialog({ projectId, open, onOpenChange }: GeoportalDial
   const [error, setError] = useState<string>()
   const [jobId, setJobId] = useState<string | null>(null)
 
-  const detail = useGeoportalDataset(selectedId)
-  const count = useGeoportalCount(selectedId, useMapExtent ? viewportBbox : null)
+  // Two detail calls, because a service entry needs both: its own detail carries the
+  // collection list, and the chosen collection's carries the fields and the object
+  // count. Keeping the first one mounted is what lets the user pick a different
+  // collection afterwards without a second round trip.
+  const entryDetail = useGeoportalDataset(selectedId)
+  const collectionDetail = useGeoportalDataset(collectionId)
+  const detail = collectionId === null ? entryDetail : collectionDetail
+  const datasetId = activeDatasetId(selectedId, collectionId)
+  const count = useGeoportalCount(datasetId, useMapExtent ? viewportBbox : null)
 
   const { data: job } = useJob(jobId)
   const finished = isJobFinished(job?.status)
@@ -129,14 +152,21 @@ export function GeoportalDialog({ projectId, open, onOpenChange }: GeoportalDial
 
   const summary = datasets.find((dataset) => dataset.id === selectedId) ?? null
   const wmsOnly = summary !== null && !isImportable(summary.kind)
-  const effectiveFeatureCount =
-    useMapExtent && count.data ? count.data.featureCount : (detail.data ?? summary)?.featureCount ?? null
+  const needsCollection = needsCollectionChoice(summary, collectionId)
+  // Nothing to count while the entry stands for a whole service: its own detail carries
+  // no `featureCount`, and the summary's belongs to no collection either (11.9).
+  const effectiveFeatureCount = needsCollection
+    ? null
+    : useMapExtent && count.data
+      ? count.data.featureCount
+      : (detail.data ?? summary)?.featureCount ?? null
   const exceedsWarning = exceedsWarningThreshold(effectiveFeatureCount)
   const duration = effectiveFeatureCount !== null ? estimateImportDuration(effectiveFeatureCount) : null
 
   function reset() {
     setFilters(defaultGeoportalFilters())
     setSelectedId(null)
+    clearCollection()
     setName('')
     setUseMapExtent(false)
     setSelectFieldsEnabled(false)
@@ -145,8 +175,27 @@ export function GeoportalDialog({ projectId, open, onOpenChange }: GeoportalDial
     setJobId(null)
   }
 
+  /** Back to the choice itself -- both halves of it, or the search would outlive the list. */
+  function clearCollection() {
+    setCollectionId(null)
+    setCollectionQuery('')
+  }
+
   function handleSelect(id: string) {
     setSelectedId(id)
+    clearCollection()
+    setName('')
+    setUseMapExtent(false)
+    setSelectFieldsEnabled(false)
+    setError(undefined)
+  }
+
+  /**
+   * A different collection is a different dataset: the layer name and the map-extent
+   * count were chosen for the previous one and would otherwise carry over silently.
+   */
+  function handleChooseCollection(id: string) {
+    setCollectionId(id)
     setName('')
     setUseMapExtent(false)
     setSelectFieldsEnabled(false)
@@ -163,14 +212,16 @@ export function GeoportalDialog({ projectId, open, onOpenChange }: GeoportalDial
   }
 
   async function handleImport() {
-    if (!detail.data) return
+    // `datasetId` rather than `detail.data.id`: for a service entry the two differ, and
+    // a service id alone is a `400` on the import endpoint (CONTRACT.md 11.9).
+    if (!detail.data || datasetId === null || needsCollection) return
     setError(undefined)
 
     const allFieldNames = detail.data.fields.map((field) => field.name)
     try {
       const started = await startImport.mutateAsync(
         buildGeoportalImportBody({
-          datasetId: detail.data.id,
+          datasetId,
           name,
           allFieldNames,
           // The checkboxes only matter once the toggle reveals them -- with it off,
@@ -240,6 +291,13 @@ export function GeoportalDialog({ projectId, open, onOpenChange }: GeoportalDial
                 summary={summary}
                 wmsOnly={wmsOnly}
                 detail={detail}
+                collections={entryDetail.data?.collections ?? []}
+                needsCollection={needsCollection}
+                collectionId={collectionId}
+                collectionQuery={collectionQuery}
+                onCollectionQueryChange={setCollectionQuery}
+                onChooseCollection={handleChooseCollection}
+                onClearCollection={clearCollection}
                 name={name}
                 onNameChange={setName}
                 useMapExtent={useMapExtent}
@@ -282,7 +340,9 @@ export function GeoportalDialog({ projectId, open, onOpenChange }: GeoportalDial
               <Button
                 type="button"
                 onClick={handleImport}
-                disabled={!summary || wmsOnly || !detail.data || startImport.isPending}
+                disabled={
+                  !summary || wmsOnly || needsCollection || !detail.data || startImport.isPending
+                }
               >
                 {startImport.isPending ? 'Wird gestartet…' : 'Importieren'}
               </Button>
@@ -419,30 +479,62 @@ function DatasetList({
   selectedId: string | null
   onSelect: (id: string) => void
 }) {
+  // A plain scroller rather than ScrollArea: the virtualiser needs the scrolling element
+  // itself, and ScrollArea keeps its viewport to itself. Same arrangement the attribute
+  // table uses for the same reason.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: datasets.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
+  })
+
+  // A changed filter is a different list under the same scroll offset -- staying put
+  // would leave the user looking at entry 700 of a search that just started over.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [datasets])
+
   return (
-    <div className="flex w-2/5 min-w-0 flex-col rounded-md border">
-      <ScrollArea className="flex-1">
-        {loading && <p className="p-3 text-xs text-muted-foreground">Katalog wird geladen…</p>}
-        {error && (
-          <Alert variant="destructive" className="m-2">
-            <AlertTitle>Katalog nicht verfügbar</AlertTitle>
-            <AlertDescription>Das Programm konnte den Geoportal-Katalog nicht laden.</AlertDescription>
-          </Alert>
-        )}
-        {!loading && !error && datasets.length === 0 && (
-          <p className="p-3 text-xs text-muted-foreground">Kein Datensatz gefunden.</p>
-        )}
-        <ul className="p-1">
-          {datasets.map((dataset) => (
+    <div ref={scrollRef} className="w-2/5 min-w-0 overflow-y-auto rounded-md border p-1">
+      {loading && <p className="p-2 text-xs text-muted-foreground">Katalog wird geladen…</p>}
+      {error && (
+        <Alert variant="destructive" className="m-1">
+          <AlertTitle>Katalog nicht verfügbar</AlertTitle>
+          <AlertDescription>Das Programm konnte den Geoportal-Katalog nicht laden.</AlertDescription>
+        </Alert>
+      )}
+      {!loading && !error && datasets.length === 0 && (
+        <p className="p-2 text-xs text-muted-foreground">Kein Datensatz gefunden.</p>
+      )}
+      {/*
+       * Only the rows in view exist in the DOM. Measured before it was written: with all
+       * 1100 entries rendered, a keystroke that widens the list back to the whole catalog
+       * cost 78 ms in a production build on fast hardware -- five frames, on every press
+       * of the backspace key. Of that, 10 ms was the filtering and sorting itself; the
+       * rest was building and laying out 1100 rows nobody can see at once.
+       */}
+      <ul
+        aria-label="Datensätze im Geoportal-Katalog"
+        className="relative"
+        style={{ height: virtualizer.getTotalSize() }}
+      >
+        {virtualizer.getVirtualItems().map((row) => {
+          const dataset = datasets[row.index]
+          return (
             <DatasetRow
               key={dataset.id}
               dataset={dataset}
               selected={dataset.id === selectedId}
+              top={row.start}
+              position={row.index + 1}
+              total={datasets.length}
               onSelect={() => onSelect(dataset.id)}
             />
-          ))}
-        </ul>
-      </ScrollArea>
+          )
+        })}
+      </ul>
     </div>
   )
 }
@@ -450,35 +542,59 @@ function DatasetList({
 function DatasetRow({
   dataset,
   selected,
+  top,
+  position,
+  total,
   onSelect,
 }: {
   dataset: GeoportalDatasetSummary
   selected: boolean
+  top: number
+  position: number
+  total: number
   onSelect: () => void
 }) {
   const Icon = KIND_ICONS[dataset.kind]
+  const service = isServiceEntry(dataset)
   return (
-    <li>
+    // `aria-setsize`/`aria-posinset` because the DOM now holds a window, not the list:
+    // without them a screen reader announces "1 of 20" for a catalog of 1100.
+    <li
+      className="absolute inset-x-0"
+      style={{ top, height: ROW_HEIGHT }}
+      aria-setsize={total}
+      aria-posinset={position}
+    >
       {/* Two lines, not one row of columns: the name is what the user searches by and
           has to win the space, and an agency like "Landesbetrieb Geoinformation und
           Vermessung" claims a whole row's width on its own -- sharing a line with it
           left names like "ALK…" unreadable. The object count moved to the detail pane;
-          the catalog itself carries no count for most of the 509 entries (the service
-          directory does not report one), so a column that reads "—" almost everywhere
-          told the user nothing. */}
+          the catalog itself carries no count for most entries (the service directory
+          does not report one), so a column that reads "—" almost everywhere told the
+          user nothing. */}
       <button
         type="button"
         onClick={onSelect}
         className={cn(
-          'flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-xs',
+          'flex size-full items-center gap-2 overflow-hidden rounded px-2 text-left text-xs',
           selected ? 'bg-accent' : 'hover:bg-accent/50',
         )}
       >
-        <span title={KIND_TITLES[dataset.kind]} className="mt-0.5 shrink-0">
+        <span title={KIND_TITLES[dataset.kind]} className="shrink-0">
           <Icon className="size-3.5 text-muted-foreground" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium">{dataset.title}</span>
+          <span className="flex items-center gap-1.5">
+            <span className="truncate font-medium">{dataset.title}</span>
+            {/* Says before the click that this entry is a service and that a choice
+                follows. The count is the point: 247 collections and 2 are a different
+                promise, and neither entry carries an object count to show instead. */}
+            {service && (
+              <Badge variant="secondary" className="shrink-0 font-normal">
+                {formatCount(dataset.collectionCount)} Sammlungen
+              </Badge>
+            )}
+          </span>
           {dataset.agency && <span className="block truncate text-muted-foreground">{dataset.agency}</span>}
         </span>
       </button>
@@ -490,6 +606,15 @@ interface DatasetDetailPaneProps {
   summary: GeoportalDatasetSummary | null
   wmsOnly: boolean
   detail: ReturnType<typeof useGeoportalDataset>
+  /** The service's collections, empty for a flat entry (CONTRACT.md 11.9). */
+  collections: GeoportalCollection[]
+  /** True while a service entry is selected and no collection is chosen yet. */
+  needsCollection: boolean
+  collectionId: string | null
+  collectionQuery: string
+  onCollectionQueryChange: (query: string) => void
+  onChooseCollection: (id: string) => void
+  onClearCollection: () => void
   name: string
   onNameChange: (name: string) => void
   useMapExtent: boolean
@@ -509,6 +634,13 @@ function DatasetDetailPane({
   summary,
   wmsOnly,
   detail,
+  collections,
+  needsCollection,
+  collectionId,
+  collectionQuery,
+  onCollectionQueryChange,
+  onChooseCollection,
+  onClearCollection,
   name,
   onNameChange,
   useMapExtent,
@@ -561,7 +693,11 @@ function DatasetDetailPane({
               {summary.topic}
             </span>
           )}
-          <span className="tabular-nums">{formatFeatureCount(effectiveFeatureCount)}</span>
+          {/* No count line for a service: "Anzahl unbekannt" would claim the number is
+              missing, when in truth no collection is chosen to count yet (11.9). */}
+          {!needsCollection && (
+            <span className="tabular-nums">{formatFeatureCount(effectiveFeatureCount)}</span>
+          )}
         </div>
 
         {wmsOnly && (
@@ -588,7 +724,30 @@ function DatasetDetailPane({
           </Alert>
         )}
 
-        {detail.data && !wmsOnly && (
+        {/* The choice this entry still owes, before anything that describes one
+            collection. Nothing below says a word about fields or objects until it is
+            made -- the detail carries none while no collection is chosen (11.9). */}
+        {needsCollection && detail.data && (
+          <CollectionPicker
+            collections={collections}
+            query={collectionQuery}
+            onQueryChange={onCollectionQueryChange}
+            onChoose={onChooseCollection}
+          />
+        )}
+
+        {collectionId !== null && (
+          <ChosenCollection
+            title={
+              collections.find((collection) => collection.id === collectionId)?.title ??
+              detail.data?.title ??
+              collectionId
+            }
+            onClear={onClearCollection}
+          />
+        )}
+
+        {!needsCollection && detail.data && !wmsOnly && (
           <div className="grid gap-1.5">
             <Label htmlFor="geoportal-name">Layername</Label>
             <Input
@@ -600,7 +759,7 @@ function DatasetDetailPane({
           </div>
         )}
 
-        {detail.data && (
+        {!needsCollection && detail.data && (
           <div className="grid gap-1.5">
             <span className="text-xs font-medium tracking-wide uppercase text-muted-foreground">Felder</span>
             <FieldsTable
@@ -659,7 +818,7 @@ function DatasetDetailPane({
           </div>
         )}
 
-        {!wmsOnly && detail.data && (
+        {!needsCollection && !wmsOnly && detail.data && (
           <div className="grid gap-2 border-t pt-3">
             <label className="flex items-start gap-2 text-xs">
               <Checkbox
@@ -701,6 +860,94 @@ function DatasetDetailPane({
         )}
       </div>
     </ScrollArea>
+  )
+}
+
+/**
+ * The collection choice for a service entry (CONTRACT.md 11.9).
+ *
+ * With a search field, not without: `xplan` alone holds 247 collections, and a list of
+ * that length with no way to narrow it is a list nobody reads to the end. Not
+ * virtualised, unlike the catalog beside it -- 247 rows re-render in about 6 ms, well
+ * inside a frame, and the measurement is what decides that, not the row count.
+ */
+function CollectionPicker({
+  collections,
+  query,
+  onQueryChange,
+  onChoose,
+}: {
+  collections: GeoportalCollection[]
+  query: string
+  onQueryChange: (query: string) => void
+  onChoose: (id: string) => void
+}) {
+  const visible = useMemo(() => visibleCollections(collections, query), [collections, query])
+
+  if (collections.length === 0) {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Keine Sammlung erhalten</AlertTitle>
+        <AlertDescription>Der Dienst hat keine Sammlung gemeldet.</AlertDescription>
+      </Alert>
+    )
+  }
+
+  return (
+    <div className="grid gap-2 border-t pt-3">
+      <div className="grid gap-0.5">
+        <span className="text-xs font-medium tracking-wide uppercase text-muted-foreground">
+          Sammlung wählen
+        </span>
+        <p className="text-xs text-muted-foreground">
+          Dieser Dienst enthält {formatCount(collections.length)} Sammlungen. Wählen Sie eine
+          Sammlung aus. Danach können Sie sie importieren.
+        </p>
+      </div>
+
+      <div className="relative">
+        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="Sammlung suchen"
+          aria-label="Sammlungen durchsuchen"
+          className="pl-8"
+        />
+      </div>
+
+      <ul aria-label="Sammlungen des Dienstes" className="max-h-64 overflow-y-auto rounded-md border p-1">
+        {visible.length === 0 && (
+          <li className="p-2 text-xs text-muted-foreground">Keine Sammlung gefunden.</li>
+        )}
+        {visible.map((collection) => (
+          <li key={collection.id}>
+            <button
+              type="button"
+              onClick={() => onChoose(collection.id)}
+              className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-accent/50"
+            >
+              {collection.title}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** What was chosen, and the way back to the list -- the picker itself is gone by then. */
+function ChosenCollection({ title, onClear }: { title: string; onClear: () => void }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-2 py-1.5 text-xs">
+      <span className="min-w-0 flex-1">
+        <span className="text-muted-foreground">Sammlung </span>
+        <span className="font-medium">{title}</span>
+      </span>
+      <Button type="button" variant="outline" size="sm" onClick={onClear}>
+        Andere Sammlung
+      </Button>
+    </div>
   )
 }
 
