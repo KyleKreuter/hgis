@@ -11,6 +11,7 @@ import { MapViewportTracker } from './MapViewportTracker'
 import { ViewportPersistence } from './ViewportPersistence'
 import { ZoomToExtent, type ZoomRequest } from './ZoomToExtent'
 import { IdentifyControl } from './IdentifyControl'
+import { MapImageControl } from './imageExport/MapImageControl'
 import { resolveBasemapSettings } from './resolveBasemapSettings'
 import { SelectionHighlight } from './SelectionHighlight'
 import { MapControls } from './controls/MapControls'
@@ -71,8 +72,11 @@ export function ProjectMap({
       {identifyEnabled && <IdentifyControl activeLayerId={activeLayer?.id ?? null} />}
       {/* Top right, immediately left of the zoom stack (`right-11` clears its 28px
           column plus a gap): the top left corner is where the measurement readout
-          appears, and the two must not sit on top of each other. */}
-      <div className="absolute top-2 right-11 z-10">
+          appears, and the two must not sit on top of each other. The image export shares
+          the row -- it acts on the same thing the basemap picker does, the view on
+          screen. */}
+      <div className="absolute top-2 right-11 z-10 flex items-center gap-2">
+        <MapImageControl projectName={project.name} />
         <BasemapControl projectId={project.id} project={project} activeLayer={activeLayer} />
       </div>
       {children}
