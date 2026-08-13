@@ -1,11 +1,10 @@
 package de.kreuter.hgis.ingest.reader;
 
+import de.kreuter.hgis.common.AmbiguousTitles;
 import java.sql.Date;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import tools.jackson.databind.JsonNode;
 
@@ -81,22 +80,22 @@ public final class QueryablesSchema {
 
 	/**
 	 * "On a collision the second field keeps its technical name as its title, or
-	 * LayerFields.find becomes ambiguous" (CONTRACT.md 11.4). Only the second and later
-	 * occurrence of a repeated title is rewritten; the first keeps whatever
-	 * {@link #resolveTitle} gave it, matching the plan's own worked example.
+	 * LayerFields.find becomes ambiguous" (CONTRACT.md 11.4). Which occurrences count as a
+	 * collision is {@link AmbiguousTitles}, shared with the Geoportal catalog's own
+	 * ambiguous collection names (CONTRACT.md 11.9); what a collision is replaced with is
+	 * this method's own: the technical name, which is unique within one schema by
+	 * construction. The first occurrence keeps whatever {@link #resolveTitle} gave it,
+	 * matching the plan's own worked example.
 	 */
 	private static List<Field> deduplicateTitles(List<Field> fields) {
-		Map<String, Boolean> seenTitles = new LinkedHashMap<>();
+		boolean[] repeats = AmbiguousTitles.repeats(fields.stream().map(Field::title).toList());
 		List<Field> result = new ArrayList<>(fields.size());
-		for (Field field : fields) {
-			String key = field.title().toLowerCase(Locale.ROOT);
-			if (seenTitles.putIfAbsent(key, Boolean.TRUE) != null) {
-				result.add(new Field(field.technicalName(), field.technicalName(), field.javaType(),
-						field.idField(), field.enumValues()));
-			}
-			else {
-				result.add(field);
-			}
+		for (int i = 0; i < fields.size(); i++) {
+			Field field = fields.get(i);
+			result.add(repeats[i]
+					? new Field(field.technicalName(), field.technicalName(), field.javaType(),
+							field.idField(), field.enumValues())
+					: field);
 		}
 		return result;
 	}

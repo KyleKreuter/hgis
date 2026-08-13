@@ -1,6 +1,7 @@
 package de.kreuter.hgis.geoportal;
 
 import com.opencsv.CSVReader;
+import de.kreuter.hgis.common.AmbiguousTitles;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -8,10 +9,12 @@ import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
@@ -25,30 +28,41 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Fetches and merges the two files Hamburg publishes as its catalog (plan section 3.5) into
  * the entries {@link GeoportalCatalogService} holds: the 7.6&nbsp;MB service directory
- * ({@code services-internet.json}), which knows every OGC API Features binding but nothing
- * about public reachability, and the dataset list ({@code datasets.csv}), which is the
- * other way round -- one row per dataset, reachability included, but no collection id.
+ * ({@code services-internet.json}), which describes every OGC API Features collection there
+ * is, and the dataset list ({@code datasets.csv}), which names the responsible agency, the
+ * topic and the metadata record -- per dataset, which here means per service.
  *
- * <p>The dataset list is the join's spine: CONTRACT.md 11.2's 511 entries are exactly its
- * rows whose {@code Aufrufbar} column reads {@code FHHNET/Internet} (plan section 3.5),
- * verified against the live files while this was written. The service directory only ever
- * <em>adds</em> the OGC API Features binding (and its German field labels) to a row that
- * already exists; a row the service directory cannot match still becomes a catalog entry,
- * just one CONTRACT.md 11.6 cannot import yet -- kind {@code WMS}, or {@code FEATURES} /
+ * <h2>The service directory is the spine (CONTRACT.md 11.9)</h2>
+ *
+ * <p>It used to be the other way round, and that cost 1164 of 1569 collections: a service
+ * can carry more than one collection, the dataset list names only the service, and binding
+ * each of its rows to the first collection found made every further collection of that
+ * service unreachable. Nothing was missing from the files -- every entry of the service
+ * directory names its own {@code url}, {@code collection}, title and {@code gfiAttributes}
+ * -- so the catalog is now built from the directory, and the dataset list only adds agency,
+ * topic and licence to the service its rows point at. Every collection of that service
+ * inherits those; measured live, 403 of 405 services have such a row.
+ *
+ * <p>A dataset-list row the service directory knows nothing about still becomes a catalog
+ * entry, just one CONTRACT.md 11.6 cannot import -- kind {@code WMS}, or {@code FEATURES} /
  * {@code BOTH} backed only by WFS, which stage 3 (plan section 8) reads, not this class.
+ * Measured live: 108 of the 511 publicly reachable rows.
  *
- * <h2>A genuine simplification, not a silent one</h2>
+ * <h2>Two shapes, decided by size</h2>
  *
- * <p>One API landing page can hold more than one collection -- measured live, up to 247 for
- * a single dataset row -- and the dataset list names only the landing page, never which
- * collection is "the" one. Splitting every such row into one catalog entry per collection
- * would make the catalog's size depend on an implementation detail the two source files
- * disagree about, and CONTRACT.md's own worked example counts by dataset, not by
- * collection. This loader instead keeps one entry per dataset row and binds it to the
- * <em>first</em> collection the service directory lists for that landing page --
- * deterministic, but arbitrary beyond that. It is the one respect in which "importable via
- * CONTRACT.md 11.6" does not yet mean "every collection Hamburg offers under this dataset
- * name is reachable"; see the phase 23 backend report for the full account.
+ * <p>A service whose collections <em>are</em> the datasets is listed flat, one entry per
+ * collection. A service whose collections are the object classes of one data model would
+ * flood the list -- {@code xplan} alone has 247 -- so from {@link #SERVICE_ROW_THRESHOLD}
+ * collections up the service is listed once and its collections are chosen in the detail
+ * pane. Measured live: eight services cross that line, holding 475 collections between
+ * them, and the listing ends at 1094 collections plus those eight rows.
+ *
+ * <h2>Titles</h2>
+ *
+ * <p>A collection is listed under its own name, not its service's. Where that name is
+ * ambiguous -- 24 of them are, "2013" and "Verbindungsräume" among them, covering 66
+ * entries -- the service name is prefixed, following {@link AmbiguousTitles}: the second
+ * and every later occurrence is qualified, so a unique name is never dressed up.
  */
 @Component
 class CatalogLoader {
@@ -58,6 +72,18 @@ class CatalogLoader {
 
 	/** Plan section 3.5: the only value of {@code Aufrufbar} that means "reachable from the internet". */
 	private static final String REACHABLE = "FHHNET/Internet";
+
+	/**
+	 * CONTRACT.md 11.9: from this many collections up, a service is listed as one row
+	 * instead of as its collections. The line runs through the data rather than beside it --
+	 * measured live, one service carries 19 collections and is listed flat, the next carries
+	 * 20 and is not -- so this number is the contract's decision, not a fact about Hamburg,
+	 * and moving it moves those two services.
+	 */
+	private static final int SERVICE_ROW_THRESHOLD = 20;
+
+	/** Between the service name and the collection name when an ambiguous title has to be qualified. */
+	private static final String TITLE_QUALIFIER_SEPARATOR = ": ";
 
 	private static final Pattern MD_ID_PARAM = Pattern.compile("(?:docuuid|mdid)=([0-9A-Fa-f-]{36})");
 	private static final Pattern TRAILING_PARENTHESIS = Pattern.compile("\\(([^()]+)\\)\\s*$");
@@ -69,29 +95,55 @@ class CatalogLoader {
 		this.restClient = geoportalRestClient;
 	}
 
-	/**
-	 * One OGC API Features binding as the service directory describes it, keyed by its
-	 * landing page URL so a dataset row's {@code OAF-Landing Page} column resolves it
-	 * directly.
-	 */
-	private record OafBinding(String apiUrl, String apiId, String collection, String rsId,
+	/** One collection of one service, as the service directory describes it. */
+	private record OafCollection(String collection, String title, String datasetUri,
 			Map<String, String> gfiAttributes) {
 	}
 
+	/**
+	 * One OGC API Features service: its landing page, the name Hamburg's metadata record
+	 * gives it, and every collection it carries, in the order the directory lists them.
+	 */
+	private record OafService(String apiUrl, String apiId, String name, List<OafCollection> collections) {
+	}
+
+	/** What the dataset list adds to a service: everything about it that is not per collection. */
+	private record DatasetRow(String agency, String attribution, String topic, String metadataUrl, boolean hasWms) {
+	}
+
+	/**
+	 * The dataset list, split by whether the service directory knows the row's service:
+	 * a known one only contributes {@link DatasetRow}, an unknown one is a catalog entry of
+	 * its own.
+	 */
+	private record DatasetList(Map<String, DatasetRow> byLandingPage, List<GeoportalCatalogEntry> unboundDatasets) {
+	}
+
+	/**
+	 * One row of the listing before its title is final, with the service name that qualifies
+	 * it should the title turn out to be ambiguous. Null where nothing could qualify it: a
+	 * service row (its title is that very name) and a dataset the service directory does not
+	 * know (it belongs to no service here).
+	 */
+	private record Listing(GeoportalCatalogEntry entry, String qualifier) {
+	}
+
 	List<GeoportalCatalogEntry> load() {
-		Map<String, OafBinding> oafByApiUrl = loadServiceDirectory();
-		return loadDatasetList(oafByApiUrl);
+		Map<String, OafService> services = loadServiceDirectory();
+		DatasetList datasetList = loadDatasetList(services.keySet());
+		return listing(services, datasetList);
 	}
 
 	// --- services-internet.json ---------------------------------------------------------
 
-	private Map<String, OafBinding> loadServiceDirectory() {
+	private Map<String, OafService> loadServiceDirectory() {
 		URI uri = URI.create(SERVICE_DIRECTORY_URL);
 		return restClient.get().uri(uri).exchange((request, response) -> {
 			if (!response.getStatusCode().is2xxSuccessful()) {
 				throw new CatalogLoadException("Dienstverzeichnis antwortete mit " + response.getStatusCode());
 			}
-			Map<String, OafBinding> byUrl = new LinkedHashMap<>();
+			Map<String, List<OafCollection>> collectionsByUrl = new LinkedHashMap<>();
+			Map<String, String> serviceNameByUrl = new HashMap<>();
 			try (InputStream body = response.getBody(); JsonParser parser = mapper.createParser(body)) {
 				if (parser.nextToken() != JsonToken.START_ARRAY) {
 					throw new CatalogLoadException("Dienstverzeichnis ist kein JSON-Array");
@@ -104,7 +156,7 @@ class CatalogLoader {
 					// One malformed entry among 6500 must not empty the whole catalog (plan
 					// section 9, point 1) -- skip it and keep reading the rest of the array.
 					try {
-						addOafBinding(byUrl, parser.readValueAsTree());
+						addOafCollection(collectionsByUrl, serviceNameByUrl, parser.readValueAsTree());
 					}
 					catch (RuntimeException ignored) {
 						// intentionally swallowed, see above
@@ -114,11 +166,20 @@ class CatalogLoader {
 			catch (IOException | JacksonException e) {
 				throw new CatalogLoadException("Dienstverzeichnis kann nicht gelesen werden", e);
 			}
-			return byUrl;
+			return toServices(collectionsByUrl, serviceNameByUrl);
 		});
 	}
 
-	private static void addOafBinding(Map<String, OafBinding> byUrl, JsonNode entry) {
+	/**
+	 * Every OAF entry of the directory is one collection of one service -- unlike before,
+	 * none is dropped for belonging to a service already seen. The service's own name comes
+	 * from its metadata record ({@code md_name}), which every one of the 1569 measured
+	 * entries carries and which is the same string for every collection of one service; it
+	 * is also, on all 403 services the dataset list covers, exactly that list's
+	 * {@code Datensatzname}.
+	 */
+	private static void addOafCollection(Map<String, List<OafCollection>> collectionsByUrl,
+			Map<String, String> serviceNameByUrl, JsonNode entry) {
 		if (!"OAF".equals(entry.path("typ").asString(""))) {
 			return;
 		}
@@ -127,18 +188,34 @@ class CatalogLoader {
 		if (url.isEmpty() || collection == null) {
 			return;
 		}
-		if (byUrl.containsKey(url)) {
-			// Plan section 3.2: one API may hold several collections. The first one listed
-			// wins -- see the class Javadoc for why that is a reported simplification, not
-			// a silent one.
-			return;
-		}
-		JsonNode firstDataset = entry.path("datasets").isArray() && !entry.path("datasets").isEmpty()
+		JsonNode metadata = entry.path("datasets").isArray() && !entry.path("datasets").isEmpty()
 				? entry.path("datasets").get(0)
 				: null;
-		String rsId = firstDataset == null ? null : firstDataset.path("rs_id").asString(null);
-		Map<String, String> gfiAttributes = readGfiAttributes(entry.path("gfiAttributes"));
-		byUrl.put(url, new OafBinding(url, apiIdOf(url), collection, rsId, gfiAttributes));
+		String title = blankToNull(entry.path("name").asString(null));
+		String datasetUri = metadata == null ? null : metadata.path("rs_id").asString(null);
+		collectionsByUrl.computeIfAbsent(url, key -> new ArrayList<>())
+				.add(new OafCollection(collection, title != null ? title : collection, datasetUri,
+						readGfiAttributes(entry.path("gfiAttributes"))));
+
+		String serviceName = metadata == null ? null : blankToNull(metadata.path("md_name").asString(null));
+		if (serviceName != null) {
+			serviceNameByUrl.putIfAbsent(url, serviceName);
+		}
+	}
+
+	private static Map<String, OafService> toServices(Map<String, List<OafCollection>> collectionsByUrl,
+			Map<String, String> serviceNameByUrl) {
+		Map<String, OafService> services = new LinkedHashMap<>();
+		for (Map.Entry<String, List<OafCollection>> entry : collectionsByUrl.entrySet()) {
+			String url = entry.getKey();
+			String apiId = apiIdOf(url);
+			// Falls back to the API id rather than to a collection's title: a service listed
+			// as one row would otherwise be named after whichever of its collections came
+			// first, which is exactly the arbitrary binding this loader stopped making.
+			String name = serviceNameByUrl.getOrDefault(url, apiId);
+			services.put(url, new OafService(url, apiId, name, List.copyOf(entry.getValue())));
+		}
+		return services;
 	}
 
 	private static Map<String, String> readGfiAttributes(JsonNode node) {
@@ -161,9 +238,10 @@ class CatalogLoader {
 
 	// --- datasets.csv ---------------------------------------------------------------------
 
-	private List<GeoportalCatalogEntry> loadDatasetList(Map<String, OafBinding> oafByApiUrl) {
+	private DatasetList loadDatasetList(Set<String> knownServiceUrls) {
 		byte[] csv = fetchCsvBytes();
-		List<GeoportalCatalogEntry> entries = new ArrayList<>();
+		Map<String, DatasetRow> byLandingPage = new LinkedHashMap<>();
+		List<GeoportalCatalogEntry> unboundDatasets = new ArrayList<>();
 		try (CSVReader csvReader =
 				new CSVReader(new InputStreamReader(new ByteArrayInputStream(csv), StandardCharsets.UTF_8))) {
 			String[] header = csvReader.readNextSilently();
@@ -180,10 +258,7 @@ class CatalogLoader {
 			while ((row = csvReader.readNextSilently()) != null) {
 				rowNumber++;
 				try {
-					GeoportalCatalogEntry entry = toEntry(row, columnIndex, rowNumber, oafByApiUrl);
-					if (entry != null) {
-						entries.add(entry);
-					}
+					readRow(row, columnIndex, rowNumber, knownServiceUrls, byLandingPage, unboundDatasets);
 				}
 				catch (RuntimeException ignored) {
 					// One malformed row must not empty the whole catalog (plan section 9, point 1).
@@ -193,7 +268,7 @@ class CatalogLoader {
 		catch (IOException e) {
 			throw new CatalogLoadException("Datensatzliste kann nicht gelesen werden", e);
 		}
-		return entries;
+		return new DatasetList(byLandingPage, unboundDatasets);
 	}
 
 	private byte[] fetchCsvBytes() {
@@ -208,16 +283,17 @@ class CatalogLoader {
 		});
 	}
 
-	private GeoportalCatalogEntry toEntry(String[] row, Map<String, Integer> columnIndex, int rowNumber,
-			Map<String, OafBinding> oafByApiUrl) {
+	private static void readRow(String[] row, Map<String, Integer> columnIndex, int rowNumber,
+			Set<String> knownServiceUrls, Map<String, DatasetRow> byLandingPage,
+			List<GeoportalCatalogEntry> unboundDatasets) {
 		if (!REACHABLE.equals(valueOf(row, columnIndex, "Aufrufbar"))) {
 			// The other two values (plan section 3.5) mean the service sits in Hamburg's
 			// internal network -- nothing this backend, running outside it, could ever reach.
-			return null;
+			return;
 		}
 		String title = valueOf(row, columnIndex, "Datensatzname");
 		if (isBlank(title)) {
-			return null;
+			return;
 		}
 
 		String wmsAddress = valueOf(row, columnIndex, "WMS-Adresse");
@@ -227,37 +303,129 @@ class CatalogLoader {
 		boolean hasWfs = !isBlank(wfsAddress);
 		boolean hasOaf = !isBlank(oafLandingPage);
 		if (!hasWms && !hasWfs && !hasOaf) {
-			return null; // no access path this catalog could ever offer
+			return; // no access path this catalog could ever offer
 		}
-		// "kind" follows the plan's own glossary (section 2): FEATURES means an object
-		// service exists (WFS and/or OGC API Features), independent of which -- stage 1
-		// only reads OGC API Features, but a WFS-only entry still belongs in the listing
-		// (CONTRACT.md 11.2 counts 511, not 406) and is simply not importable yet.
-		String kind = (hasWfs || hasOaf) ? (hasWms ? "BOTH" : "FEATURES") : "WMS";
-
-		OafBinding binding = hasOaf ? oafByApiUrl.get(trimTrailingSlash(oafLandingPage)) : null;
 
 		String organisation = valueOf(row, columnIndex, "Organisation");
-		String agency = agencyOf(organisation);
-		String attribution = isBlank(organisation) ? null : organisation.trim();
-		String metadataUrl = blankToNull(valueOf(row, columnIndex, "Metadaten"));
-
-		String id = binding != null
-				? binding.apiId() + "/" + binding.collection()
-				: "md:" + fallbackId(metadataUrl, rowNumber);
-
-		return new GeoportalCatalogEntry(
-				id,
-				title.trim(),
-				kind,
-				agency,
-				attribution,
+		DatasetRow parsed = new DatasetRow(
+				agencyOf(organisation),
+				isBlank(organisation) ? null : organisation.trim(),
 				blankToNull(valueOf(row, columnIndex, "Kategorie")),
-				metadataUrl,
-				binding != null ? binding.rsId() : null,
-				binding != null ? binding.apiUrl() : null,
-				binding != null ? binding.collection() : null,
-				binding != null ? binding.gfiAttributes() : Map.of());
+				blankToNull(valueOf(row, columnIndex, "Metadaten")),
+				hasWms);
+
+		String landingPage = hasOaf ? trimTrailingSlash(oafLandingPage.trim()) : "";
+		if (knownServiceUrls.contains(landingPage)) {
+			// The service directory describes this service collection by collection; this row
+			// only says whose it is and under which licence -- see the class Javadoc.
+			byLandingPage.put(landingPage, parsed);
+			return;
+		}
+
+		// "kind" follows the plan's own glossary (section 2): FEATURES means an object
+		// service exists (WFS and/or OGC API Features), independent of which -- stage 1
+		// only reads OGC API Features, so a row that gets here is listed and not importable.
+		String kind = (hasWfs || hasOaf) ? (hasWms ? "BOTH" : "FEATURES") : "WMS";
+		unboundDatasets.add(new GeoportalCatalogEntry(
+				"md:" + fallbackId(parsed.metadataUrl(), rowNumber),
+				title.trim(), kind, parsed.agency(), parsed.attribution(), parsed.topic(), parsed.metadataUrl(),
+				null, null, null, Map.of()));
+	}
+
+	// --- merge ----------------------------------------------------------------------------
+
+	/**
+	 * The listing itself: every service either as its collections or as one row, then every
+	 * dataset the service directory does not know. Order follows the service directory, and
+	 * the dataset list after it -- which is also the order the title rule reads as "first"
+	 * and "later".
+	 */
+	private static List<GeoportalCatalogEntry> listing(Map<String, OafService> services, DatasetList datasetList) {
+		List<Listing> listings = new ArrayList<>();
+		for (OafService service : services.values()) {
+			DatasetRow row = datasetList.byLandingPage().get(service.apiUrl());
+			if (service.collections().size() >= SERVICE_ROW_THRESHOLD) {
+				listings.add(new Listing(serviceEntry(service, row), null));
+			}
+			else {
+				for (OafCollection collection : service.collections()) {
+					listings.add(new Listing(collectionEntry(service, collection, row), service.name()));
+				}
+			}
+		}
+		for (GeoportalCatalogEntry unbound : datasetList.unboundDatasets()) {
+			listings.add(new Listing(unbound, null));
+		}
+		return qualifyAmbiguousTitles(listings);
+	}
+
+	/** One collection of a service, listed and importable as it stands. */
+	private static GeoportalCatalogEntry collectionEntry(OafService service, OafCollection collection,
+			DatasetRow row) {
+		return new GeoportalCatalogEntry(
+				service.apiId() + "/" + collection.collection(),
+				collection.title(),
+				kindOf(row),
+				row == null ? null : row.agency(),
+				row == null ? null : row.attribution(),
+				row == null ? null : row.topic(),
+				row == null ? null : row.metadataUrl(),
+				collection.datasetUri(),
+				service.apiUrl(),
+				collection.collection(),
+				collection.gfiAttributes());
+	}
+
+	/**
+	 * A service listed as one row (CONTRACT.md 11.9). It names no collection of its own, so
+	 * it is not importable; its collections travel with it as complete entries, which is what
+	 * lets a later detail or import call resolve the one the user picks without another fetch.
+	 */
+	private static GeoportalCatalogEntry serviceEntry(OafService service, DatasetRow row) {
+		List<GeoportalCatalogEntry> collections = service.collections().stream()
+				.map(collection -> collectionEntry(service, collection, row))
+				.toList();
+		return new GeoportalCatalogEntry(
+				service.apiId(),
+				service.name(),
+				kindOf(row),
+				row == null ? null : row.agency(),
+				row == null ? null : row.attribution(),
+				row == null ? null : row.topic(),
+				row == null ? null : row.metadataUrl(),
+				// One metadata record per service, measured: no service of the directory
+				// names more than one, so the first collection's is the service's own.
+				collections.isEmpty() ? null : collections.get(0).datasetUri(),
+				service.apiUrl(),
+				null,
+				Map.of(),
+				collections);
+	}
+
+	/**
+	 * Every entry built from the service directory has an object service by construction;
+	 * whether a map image exists next to it is the one thing only the dataset list says.
+	 */
+	private static String kindOf(DatasetRow row) {
+		return row != null && row.hasWms() ? "BOTH" : "FEATURES";
+	}
+
+	/**
+	 * CONTRACT.md 11.9: an ambiguous title is qualified with its service name, at the second
+	 * and every later occurrence. A repeat with nothing to qualify it -- a service row, or a
+	 * dataset the service directory does not know -- keeps its title; measured live, neither
+	 * ever repeats.
+	 */
+	private static List<GeoportalCatalogEntry> qualifyAmbiguousTitles(List<Listing> listings) {
+		boolean[] repeats = AmbiguousTitles.repeats(listings.stream().map(listing -> listing.entry().title()).toList());
+		List<GeoportalCatalogEntry> entries = new ArrayList<>(listings.size());
+		for (int i = 0; i < listings.size(); i++) {
+			Listing listing = listings.get(i);
+			entries.add(repeats[i] && listing.qualifier() != null
+					? listing.entry().withTitle(listing.qualifier() + TITLE_QUALIFIER_SEPARATOR + listing.entry().title())
+					: listing.entry());
+		}
+		return entries;
 	}
 
 	/**
