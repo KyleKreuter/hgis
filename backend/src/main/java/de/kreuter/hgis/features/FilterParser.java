@@ -261,18 +261,35 @@ public final class FilterParser {
 	}
 
 	/**
-	 * Registers a value and returns its placeholder. Date and timestamp columns get an
-	 * explicit cast so a bound string is compared as a date rather than lexically.
+	 * Registers a value and returns its placeholder. A column whose type a bound string
+	 * cannot be compared against directly gets an explicit cast -- see {@link #castFor}.
 	 */
 	private String bind(LayerField field, Object value) {
 		String name = "f" + parameters.size();
 		parameters.put(name, value);
 
-		String type = baseType(field);
-		if (value instanceof String && (type.equals("date") || type.startsWith("timestamp"))) {
-			return "CAST(:" + name + " AS " + (type.equals("date") ? "date" : "timestamptz") + ")";
+		String cast = value instanceof String ? castFor(baseType(field)) : null;
+		return cast == null ? ":" + name : "CAST(:" + name + " AS " + cast + ")";
+	}
+
+	/**
+	 * The SQL type a bound string has to be read as for this column, or null when it can be
+	 * compared as it is.
+	 *
+	 * <p>Two different reasons meet here. A date or timestamp would otherwise be compared
+	 * lexically, which quietly gives the wrong rows. A {@code time}, {@code uuid} or
+	 * {@code bytea} has no operator against the {@code varchar} a bound string arrives as at
+	 * all, so the whole filter came back as a 500 -- and {@code time} is one of the nine
+	 * types a field can be created with, while the other two come out of an import.
+	 */
+	private static String castFor(String type) {
+		if (type.startsWith("timestamp")) {
+			return "timestamptz";
 		}
-		return ":" + name;
+		return switch (type) {
+			case "date", "time", "uuid", "bytea" -> type;
+			default -> null;
+		};
 	}
 
 	// --- tokenizer --------------------------------------------------------------------

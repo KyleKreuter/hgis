@@ -13,6 +13,9 @@ import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.UnsupportedCharsetException;
 import java.util.UUID;
+import java.util.concurrent.RejectedExecutionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,6 +39,8 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 public class ImportController {
+
+	private static final Logger log = LoggerFactory.getLogger(ImportController.class);
 
 	private final ProjectRepository projectRepository;
 	private final JobService jobService;
@@ -108,10 +113,47 @@ public class ImportController {
 			throw ex;
 		}
 
-		importService.runImportAsync(job.getId(), projectId,
-				new UploadConsumingReader(reader, uploadStorage, upload.file()), layerName, srid);
+		try {
+			importService.runImportAsync(job.getId(), projectId,
+					new UploadConsumingReader(reader, uploadStorage, upload.file()), layerName, srid);
+		}
+		catch (RejectedExecutionException ex) {
+			refuse(job, reader, ex);
+			throw ex;
+		}
 
 		return ResponseEntity.accepted().body(jobService.get(job.getId()));
+	}
+
+	/**
+	 * Undoes what was already set up for an import the executor never accepted.
+	 *
+	 * <p>The import pool is bounded -- four threads and fifty waiting places -- so being
+	 * turned away is a normal outcome, and it happens at the one moment when everything is
+	 * ready except the thread to do it on. Left alone, the rejection took two things with
+	 * it: a job that stays PENDING forever, shown as "wartend" by a progress dialog that
+	 * nothing will ever finish, and an open reader holding the directory a Shapefile ZIP was
+	 * extracted into, which nothing else in the application ever revisits.
+	 *
+	 * <p>The upload itself is deliberately kept. A 503 asks the client to come back, and
+	 * asking someone to send half a gigabyte again because the server was busy would be a
+	 * poor way to say so; {@link UploadJanitor} takes it if they never do.
+	 *
+	 * <p>{@link ImportOverloadAdvice} turns the rethrown rejection into the 503 the client
+	 * sees.
+	 */
+	private void refuse(Job job, SourceReader reader, RejectedExecutionException ex) {
+		jobService.markFailed(job.getId(),
+				"Es laufen bereits zu viele Importe. Starten Sie den Import in einem Moment erneut.");
+		try {
+			reader.close();
+		}
+		catch (Exception closing) {
+			log.warn("Rejected import {} could not close its source reader", job.getId(), closing);
+		}
+		// Not an error: the limit did what it is for. Worth a line all the same, because a
+		// pool that fills regularly is a sizing question rather than a client one.
+		log.warn("Import {} rejected, pool is saturated: {}", job.getId(), ex.getMessage());
 	}
 
 	private void requireProject(UUID projectId) {

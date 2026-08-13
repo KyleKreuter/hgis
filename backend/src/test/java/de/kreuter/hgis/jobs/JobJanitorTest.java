@@ -1,21 +1,29 @@
 package de.kreuter.hgis.jobs;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 
+import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
 import de.kreuter.hgis.common.GeometryType;
+import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.common.TableCreator;
 import de.kreuter.hgis.TestcontainersConfiguration;
 import de.kreuter.hgis.ingest.spi.SourceField;
 import de.kreuter.hgis.ingest.spi.SourceSchema;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import jakarta.persistence.EntityManager;
 
@@ -54,6 +62,14 @@ class JobJanitorTest {
 
 	@Autowired
 	private EntityManager entityManager;
+
+	/**
+	 * Spied so the catalog delete can be made to fail on demand -- the one half of the
+	 * cleanup that has to roll back the other. Everything not stubbed runs for real, so the
+	 * rest of this class is unaffected.
+	 */
+	@MockitoSpyBean
+	private LayerRepository layerRepository;
 
 	@Test
 	void dropsTheHalfWrittenTableAndFailsAnOrphanedRunningJob() {
@@ -112,6 +128,72 @@ class JobJanitorTest {
 		entityManager.flush();
 		entityManager.clear();
 		assertThat(projectRepository.findById(target.getId())).isEmpty();
+	}
+
+	/**
+	 * The cleanup is one unit of work or it is nothing.
+	 *
+	 * <p>{@code TableCreator.dropLayer} drops the physical table and then deletes the catalog
+	 * row, and it carries no transaction of its own -- it borrows the caller's. The janitor
+	 * used to declare one with {@code @Transactional} on a package-private method it called
+	 * on itself, which is two reasons for the annotation to do nothing: a proxy sees neither
+	 * a self-call nor a non-public method. So in production the two statements ran
+	 * separately, and a failure in between left a catalog row whose table was already gone --
+	 * a layer that answers every tile request with an error and can never be repaired by
+	 * running the janitor again.
+	 *
+	 * <p>The failure is injected where it actually hurts, on the catalog delete, and the
+	 * assertion is that afterwards the table and its row still agree. Runs outside the
+	 * class's test transaction on purpose: with one already open, any transaction boundary
+	 * would look correct, including the one that was not there.
+	 */
+	@Test
+	@Transactional(propagation = Propagation.NOT_SUPPORTED)
+	@DisplayName("a failure halfway through the cleanup leaves the layer and its table intact")
+	void rollsBackTheWholeCleanUpWhenTheCatalogDeleteFails() {
+		Project project = projectRepository.saveAndFlush(
+				new Project("Janitor-Rollback " + UUID.randomUUID(), null, 25832, "osm"));
+		Job job = jobService.create(project.getId(), Job.Type.IMPORT, "abgebrochen.geojson");
+		TableCreator.CreatedLayer created =
+				tableCreator.createLayerTable(project, minimalSchema(), "Halb geschriebener Layer");
+		jobService.markRunning(job.getId(), created.layer().getId(), 10L);
+
+		UUID layerId = created.layer().getId();
+		String tableName = created.layer().getTableName();
+		doThrow(new IllegalStateException("Die Katalogzeile lässt sich nicht löschen"))
+				.when(layerRepository).deleteById(layerId);
+
+		assertThatThrownBy(() -> janitor.cleanUpOne(job.getId()))
+				.isInstanceOf(IllegalStateException.class);
+
+		assertThat(tableExists(tableName))
+				.as("the DROP TABLE must roll back with the catalog delete it belongs to")
+				.isTrue();
+		assertThat(layerCatalogRows(layerId)).isEqualTo(1);
+		assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus())
+				.as("nothing happened at all, so the job is still there to be cleaned up")
+				.isEqualTo(Job.Status.RUNNING);
+
+		Mockito.reset(layerRepository);
+		jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(tableName)).update();
+		jobRepository.deleteById(job.getId());
+		layerRepository.deleteById(layerId);
+		projectRepository.deleteById(project.getId());
+	}
+
+	private boolean tableExists(String tableName) {
+		return jdbc.sql("""
+				SELECT COUNT(*) FROM information_schema.tables
+				WHERE table_schema = 'gis_data' AND table_name = :tableName
+				""")
+				.param("tableName", tableName)
+				.query(Long.class).single() == 1;
+	}
+
+	private long layerCatalogRows(UUID layerId) {
+		return jdbc.sql("SELECT COUNT(*) FROM gis_meta.layer WHERE id = :id")
+				.param("id", layerId)
+				.query(Long.class).single();
 	}
 
 	private static SourceSchema minimalSchema() {

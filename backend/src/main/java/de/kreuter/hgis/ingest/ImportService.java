@@ -159,7 +159,37 @@ public class ImportService {
 			transactions.complete(jobId, layer.getId(), targetSrid, processed, skipped);
 		} catch (Exception e) {
 			log.error("Import {} failed, compensating", jobId, e);
-			transactions.compensateAndFail(jobId, layer.getId(), layer.getTableName(), describe(e));
+			compensate(jobId, layer, describe(e));
+		}
+	}
+
+	/**
+	 * Undoes phase A and records why, without ever letting a second failure escape.
+	 *
+	 * <p>The class promises above that this method never throws, and until now the
+	 * compensation itself could break that promise: a lock timeout or a lost connection
+	 * while dropping the table took the exception straight out of {@code runImport}, off a
+	 * background thread nobody is listening on, and left the job RUNNING for good -- polled
+	 * by a progress bar that never moves and picked up by no janitor short of a restart.
+	 *
+	 * <p>So the failure to clean up is separated from the failure to report. If the drop
+	 * cannot happen, the job is still moved to FAILED, and the message says that the table
+	 * stayed behind: {@link de.kreuter.hgis.jobs.JobJanitor} already lists tables without a
+	 * catalog entry on the next start, which is exactly what one of those is.
+	 */
+	private void compensate(UUID jobId, Layer layer, String reason) {
+		try {
+			transactions.compensateAndFail(jobId, layer.getId(), layer.getTableName(), reason);
+		} catch (Exception compensation) {
+			log.error("Import {} could not drop its half-written table {}", jobId, layer.getTableName(),
+					compensation);
+			try {
+				transactions.failBeforeTableExists(jobId, reason
+						+ " Das Aufräumen danach ist ebenfalls fehlgeschlagen."
+						+ " Die Tabelle des Layers blieb zurück.");
+			} catch (Exception report) {
+				log.error("Import {} could not even be marked as failed and stays RUNNING", jobId, report);
+			}
 		}
 	}
 

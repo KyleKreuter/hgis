@@ -6,6 +6,7 @@ import de.kreuter.hgis.catalog.LayerFieldRepository;
 import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.NotFoundException;
+import de.kreuter.hgis.common.ProjectionDomain;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.features.dto.FeatureDtos;
 import java.time.LocalDate;
@@ -45,14 +46,23 @@ public class FeatureQueryService {
 	 */
 	private static final int MAX_FIDS = 100_000;
 
+	/**
+	 * How finely a bbox is sampled before it is transformed into the layer's CRS, in
+	 * degrees. Small enough to follow the curve a projection puts into a straight
+	 * lng/lat line, large enough to leave a city-sized rectangle at its four corners.
+	 */
+	private static final int SEGMENT_DEGREES = 1;
+
 	private final LayerRepository layerRepository;
 	private final LayerFieldRepository fieldRepository;
+	private final ProjectionDomain projectionDomain;
 	private final JdbcClient jdbc;
 
 	FeatureQueryService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
-			JdbcClient jdbc) {
+			ProjectionDomain projectionDomain, JdbcClient jdbc) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
+		this.projectionDomain = projectionDomain;
 		this.jdbc = jdbc;
 	}
 
@@ -212,25 +222,45 @@ public class FeatureQueryService {
 			if (bbox.length != 4) {
 				throw new BadRequestException("bbox erwartet vier Werte: minLng,minLat,maxLng,maxLat");
 			}
-			// The envelope is transformed into the layer's CRS, never geom into 4326 --
-			// same reasoning as the tile query: only an untransformed geom column can use
-			// its GiST index.
-			String envelope = "ST_Transform("
-					+ "ST_MakeEnvelope(:bboxMinX, :bboxMinY, :bboxMaxX, :bboxMaxY, 4326), :layerSrid)";
-			conditions.add("f.geom && " + envelope);
 			parameters.put("bboxMinX", bbox[0]);
 			parameters.put("bboxMinY", bbox[1]);
 			parameters.put("bboxMaxX", bbox[2]);
 			parameters.put("bboxMaxY", bbox[3]);
-			parameters.put("layerSrid", layer.getSrid());
+
+			String rectangle = "ST_MakeEnvelope(:bboxMinX, :bboxMinY, :bboxMaxX, :bboxMaxY, 4326)";
+			String envelope;
+			String geom;
+			if (projectionDomain.covers(layer.getSrid(), bbox[0], bbox[1], bbox[2], bbox[3])) {
+				// The envelope is transformed into the layer's CRS, never geom into 4326 --
+				// same reasoning as the tile query: only an untransformed geom column can use
+				// its GiST index. ST_Segmentize first, because ST_Transform moves the four
+				// corners and leaves the curve between them to be guessed: for anything wider
+				// than a city the box around those corners is narrower than the rectangle
+				// really covers, and every row in the difference would go missing.
+				envelope = "ST_Transform(ST_Segmentize(" + rectangle + ", " + SEGMENT_DEGREES + "), :layerSrid)";
+				geom = "f.geom";
+				parameters.put("layerSrid", layer.getSrid());
+			}
+			else {
+				// The rectangle reaches past what the layer's CRS can describe, so the sides
+				// swap: the geometry is transformed instead. That gives up the GiST index on
+				// geom and reads the whole table -- the price of an answer at all. Projecting
+				// it anyway is what produced the reported bug: a bbox of the whole world
+				// folded UTM32's ±180° back onto its central meridian and became a rectangle
+				// of zero width, so the layer that holds 229.876 objects reported none.
+				envelope = rectangle;
+				geom = "ST_Transform(f.geom, 4326)";
+			}
+
+			conditions.add(geom + " && " + envelope);
 
 			// && alone only narrows by bounding box; these add the precise test the
 			// client asked for, on top of it -- not instead of it (see SelectionMode).
 			if (mode == SelectionMode.INTERSECTS) {
-				conditions.add("ST_Intersects(f.geom, " + envelope + ")");
+				conditions.add("ST_Intersects(" + geom + ", " + envelope + ")");
 			}
 			else if (mode == SelectionMode.CONTAINS) {
-				conditions.add("ST_Contains(" + envelope + ", f.geom)");
+				conditions.add("ST_Contains(" + envelope + ", " + geom + ")");
 			}
 		}
 
@@ -287,19 +317,32 @@ public class FeatureQueryService {
 	}
 
 	/**
-	 * A cursor value travels as JSON and comes back as a string or a double, so a date
-	 * column needs the cast spelled out -- otherwise the comparison would be lexical.
-	 * The type comes from our own TypeMapper, never from the client.
+	 * A cursor value travels as JSON and comes back as a string or a number, so a column
+	 * whose type has no string form of its own needs the cast spelled out.
+	 *
+	 * <p>For {@code date} and {@code timestamp} that is a matter of meaning: without the
+	 * cast the comparison would be lexical, and "09.05." would sort before "10.01.". For
+	 * {@code time}, {@code uuid} and {@code bytea} it is a matter of the query running at
+	 * all -- PostgreSQL has no operator between those types and the {@code varchar} a bound
+	 * string arrives as, so the page after the first one came back as a 500. All three are
+	 * reachable: {@code time} is one of the nine types a field can be created with, the
+	 * other two come out of an import.
+	 *
+	 * <p>{@code numeric} is here for a third reason: it is exact, and JSON has no number
+	 * that is. {@link FeatureCursor} therefore sends its digits as text, and this is where
+	 * they become a number again -- comparing them as text would put "10" before "9".
+	 *
+	 * <p>The type comes from our own TypeMapper, never from the client.
 	 */
 	private String castedCursorValue(LayerField sortField) {
 		String type = sortField.getDataType().toLowerCase(Locale.ROOT);
-		if (type.equals("date")) {
-			return "CAST(:cursorValue AS date)";
-		}
 		if (type.startsWith("timestamp")) {
 			return "CAST(:cursorValue AS timestamptz)";
 		}
-		return ":cursorValue";
+		return switch (type) {
+			case "date", "time", "uuid", "bytea", "numeric" -> "CAST(:cursorValue AS " + type + ")";
+			default -> ":cursorValue";
+		};
 	}
 
 	private String orderBy(LayerField sortField, boolean descending) {

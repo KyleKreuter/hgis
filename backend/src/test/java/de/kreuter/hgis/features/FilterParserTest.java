@@ -168,6 +168,23 @@ class FilterParserTest {
 			assertThat(filter.sql()).isEqualTo("\"erfasst_am\" > CAST(:f0 AS timestamptz)");
 		}
 
+		/**
+		 * A cast is not cosmetic for these three. PostgreSQL has no operator between
+		 * {@code time}, {@code uuid} or {@code bytea} and the {@code varchar} a bound string
+		 * arrives as, so without it the filter reached the database as an error rather than
+		 * as a query -- and {@code time} is one of the nine types a field can be created
+		 * with, while the other two come out of every import that carries them.
+		 */
+		@ParameterizedTest
+		@ValueSource(strings = { "time", "uuid", "bytea" })
+		void castsBoundStringsForColumnsWithoutAStringOperator(String type) {
+			List<LayerField> fields = List.of(new LayerField(null, "wert", "wert", type, 0));
+
+			ParsedFilter filter = FilterParser.parse("wert = 'x'", fields);
+
+			assertThat(filter.sql()).isEqualTo("\"wert\" = CAST(:f0 AS " + type + ")");
+		}
+
 		@Test
 		void returnsNullForABlankExpression() {
 			assertThat(FilterParser.parse("   ", FIELDS)).isNull();

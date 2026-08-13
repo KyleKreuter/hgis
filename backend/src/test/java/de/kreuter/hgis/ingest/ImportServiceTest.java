@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -18,6 +19,7 @@ import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
 import de.kreuter.hgis.common.SqlIdentifier;
+import de.kreuter.hgis.common.TableCreator;
 import de.kreuter.hgis.jobs.Job;
 import de.kreuter.hgis.jobs.JobService;
 import de.kreuter.hgis.jobs.dto.JobDtos;
@@ -28,6 +30,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -249,6 +252,50 @@ class ImportServiceTest {
 				.isTrue();
 		verify(transactions).failBeforeTableExists(eq(jobId), any());
 		verify(transactions, never()).complete(any(), any(), anyInt(), anyLong(), anyLong());
+	}
+
+	/**
+	 * The last promise the class makes: {@code runImport} never throws.
+	 *
+	 * <p>Until now the compensation itself could break it. A lock timeout or a lost
+	 * connection while dropping the half-written table took the exception straight out of
+	 * {@code runImport} -- on a background thread, where nothing catches it -- and the job
+	 * stayed RUNNING for good: polled by a progress bar that never moves, and out of reach
+	 * of the janitor, which only ever runs at startup.
+	 *
+	 * <p>So the two are separated: cleaning up may fail, reporting must not. The job ends
+	 * FAILED either way, and its message says the table stayed behind, which is exactly what
+	 * {@code JobJanitor} lists on the next start.
+	 */
+	@Test
+	@DisplayName("a compensation that fails itself still ends the job instead of leaving it RUNNING")
+	void reportsTheFailureEvenWhenTheCompensationFails() {
+		UUID projectId = UUID.randomUUID();
+		ProjectRepository stubbedProjectRepository = mock(ProjectRepository.class);
+		when(stubbedProjectRepository.findById(projectId)).thenReturn(Optional.of(project));
+
+		Layer halfWritten = new Layer(UUID.randomUUID(), project, "Halb geschrieben",
+				SqlIdentifier.tableName(UUID.randomUUID()), "MULTIPOLYGON", project.getSrid());
+		ImportTransactions transactions = mock(ImportTransactions.class);
+		when(transactions.begin(any(), any(), any(), any()))
+				.thenReturn(new TableCreator.CreatedLayer(halfWritten, List.of()));
+		doThrow(new RuntimeException("Der Abschluss ist fehlgeschlagen"))
+				.when(transactions).complete(any(), any(), anyInt(), anyLong(), anyLong());
+		doThrow(new RuntimeException("Die Tabelle lässt sich nicht löschen"))
+				.when(transactions).compensateAndFail(any(), any(), any(), any());
+
+		ImportService serviceUnderTest = new ImportService(transactions, stubbedProjectRepository);
+		UUID jobId = UUID.randomUUID();
+
+		serviceUnderTest.runImport(jobId, projectId,
+				FakeSourceReader.singlePolygon(project.getSrid()), "Layer", null);
+
+		ArgumentCaptor<String> reason = ArgumentCaptor.forClass(String.class);
+		verify(transactions).failBeforeTableExists(eq(jobId), reason.capture());
+		assertThat(reason.getValue())
+				.as("the reason names the original failure and says the table stayed behind")
+				.contains("Der Abschluss ist fehlgeschlagen")
+				.contains("Tabelle des Layers blieb zurück");
 	}
 
 	private long countGisDataTables() {

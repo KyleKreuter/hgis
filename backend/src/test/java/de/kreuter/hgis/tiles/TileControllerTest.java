@@ -197,6 +197,63 @@ class TileControllerTest {
 				.andExpect(status().isBadRequest());
 	}
 
+	/**
+	 * The zoom range is the catalog's answer to "at which scales is this layer drawn", and
+	 * until now only the client read it. That made it advice rather than a rule: one tile at
+	 * zoom 1 carries every feature a layer has -- 4 MB measured for 230.000 points -- and any
+	 * request at all, from a stale map style or a script, made the server build it.
+	 */
+	@Test
+	@DisplayName("a tile below the layer's minimum zoom is answered empty, not rendered")
+	void refusesATileBelowTheMinimumZoom() throws Exception {
+		layer.setMinZoom(testLayer.zoom() + 1);
+		layerRepository.saveAndFlush(layer);
+
+		mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt",
+						layer.getId(), testLayer.zoom(), testLayer.tileX(), testLayer.tileY()))
+				.andExpect(status().isNoContent());
+	}
+
+	@Test
+	@DisplayName("a tile above the layer's maximum zoom is answered empty, not rendered")
+	void refusesATileAboveTheMaximumZoom() throws Exception {
+		layer.setMaxZoom(testLayer.zoom() - 1);
+		layerRepository.saveAndFlush(layer);
+
+		mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt",
+						layer.getId(), testLayer.zoom(), testLayer.tileX(), testLayer.tileY()))
+				.andExpect(status().isNoContent());
+	}
+
+	/**
+	 * The refusal must not be cached the way a rendered tile is. Nothing in the tile URL
+	 * follows the zoom range, so a year-long {@code immutable} "empty here" would survive the
+	 * moment the user widens the range and make the layer look permanently missing.
+	 */
+	@Test
+	@DisplayName("the refusal outside the zoom range is not cached")
+	void doesNotCacheTheRefusalOutsideTheZoomRange() throws Exception {
+		layer.setMinZoom(testLayer.zoom() + 1);
+		layerRepository.saveAndFlush(layer);
+
+		mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt",
+						layer.getId(), testLayer.zoom(), testLayer.tileX(), testLayer.tileY()))
+				.andExpect(status().isNoContent())
+				.andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"));
+	}
+
+	@Test
+	@DisplayName("a tile at the very edge of the zoom range is still rendered")
+	void rendersAtTheEdgeOfTheZoomRange() throws Exception {
+		layer.setMinZoom(testLayer.zoom());
+		layer.setMaxZoom(testLayer.zoom());
+		layerRepository.saveAndFlush(layer);
+
+		mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt",
+						layer.getId(), testLayer.zoom(), testLayer.tileX(), testLayer.tileY()))
+				.andExpect(status().isOk());
+	}
+
 	@Test
 	void returnsNotFoundForAnUnknownLayer() throws Exception {
 		mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt", UUID.randomUUID(), 10, 0, 0))

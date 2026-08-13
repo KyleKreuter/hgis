@@ -12,7 +12,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Runs once after startup and cleans up after a crash.
@@ -38,10 +38,11 @@ public class JobJanitor {
 	private final JdbcClient jdbc;
 	private final ProjectDeletionService projectDeletionService;
 	private final JobParameters parameters;
+	private final TransactionTemplate transactionTemplate;
 
 	JobJanitor(JobRepository jobRepository, JobService jobService, LayerRepository layerRepository,
 			TableCreator tableCreator, JdbcClient jdbc, ProjectDeletionService projectDeletionService,
-			JobParameters parameters) {
+			JobParameters parameters, TransactionTemplate transactionTemplate) {
 		this.jobRepository = jobRepository;
 		this.jobService = jobService;
 		this.layerRepository = layerRepository;
@@ -49,6 +50,7 @@ public class JobJanitor {
 		this.jdbc = jdbc;
 		this.projectDeletionService = projectDeletionService;
 		this.parameters = parameters;
+		this.transactionTemplate = transactionTemplate;
 	}
 
 	@EventListener(ApplicationReadyEvent.class)
@@ -65,8 +67,24 @@ public class JobJanitor {
 		reportUncatalogedTables();
 	}
 
-	@Transactional
+	/**
+	 * Cleans up one orphaned job, all of it or none of it.
+	 *
+	 * <p>The transaction is opened by hand rather than declared with {@code @Transactional},
+	 * and that is the whole point of this method's shape. An annotation is applied by a
+	 * proxy, so it does nothing for a call that never passes through one -- and the only
+	 * caller in production is {@link #cleanUpOrphanedJobs} right above, calling from inside
+	 * this same object. What that left behind was a {@code DROP TABLE} and a catalog delete
+	 * running as two separate units of work: fail in between, and the layer row survives its
+	 * own table, after which every tile request for it ends in an error. A
+	 * {@link TransactionTemplate} has no such blind spot, and it joins the caller's
+	 * transaction where there already is one.
+	 */
 	void cleanUpOne(UUID jobId) {
+		transactionTemplate.executeWithoutResult(status -> cleanUp(jobId));
+	}
+
+	private void cleanUp(UUID jobId) {
 		Job job = jobRepository.findById(jobId).orElse(null);
 		if (job == null || job.getStatus() != Job.Status.RUNNING) {
 			return; // already handled, e.g. by a concurrent call; nothing left to do
