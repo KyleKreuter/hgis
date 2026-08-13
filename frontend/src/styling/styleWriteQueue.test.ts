@@ -52,8 +52,14 @@ describe('createStyleWriteQueue', () => {
     queue.queue({ layerId: 'a', style: styleOf('#00ff00') }, { defer: true })
     vi.advanceTimersByTime(100)
     queue.queue({ layerId: 'a', style: styleOf('#0000ff') }, { defer: true })
-    vi.advanceTimersByTime(DEFER_MS)
 
+    // Die Wartezeit läuft ab der letzten Änderung, nicht ab der ersten: solange der
+    // Benutzer den Regler noch zieht, geht nichts raus. Ohne das ginge alle 400 ms ein
+    // Schreibvorgang los, und die Zusammenfassung wäre keine.
+    vi.advanceTimersByTime(DEFER_MS - 1)
+    expect(written).toEqual([])
+
+    vi.advanceTimersByTime(1)
     // Nur der zuletzt gesehene Wert, und nur einmal -- die Zwischenwerte beschreiben
     // einen Stil, über den der Benutzer bereits hinweg ist.
     expect(written).toEqual([{ layerId: 'a', style: styleOf('#0000ff') }])

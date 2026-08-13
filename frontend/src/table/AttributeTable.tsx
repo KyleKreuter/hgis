@@ -96,9 +96,10 @@ export function AttributeTable({
   const filter = mode === 'filter' ? text : ''
   const search = mode === 'search' ? text : ''
 
-  // Which layers have already had their saved sort/query/selection applied this session --
-  // restoring is a one-time seed from `viewState.document`, not something that should run
-  // again just because a later write changes that document (see the restore effect below).
+  // Which layers have already been seeded from the saved working state this session. Read
+  // by the seed below to tell a first visit from a return, and written by the selection
+  // effect next to it. A one-time seed from `viewState.document`, not something that should
+  // run again just because a later write changes that document.
   const restoredLayers = useRef<Set<string>>(new Set())
   // Set right before a restored selection is written into the store, so the write it
   // triggers (the subscription below fires on every store change) does not turn straight
@@ -208,64 +209,91 @@ export function AttributeTable({
     }
   }, [text, query.error])
 
-  // Seeds this layer's sort/query/selection from the saved working state (CONTRACT.md
-  // phase 17, schema B). Runs as a one-shot restore rather than an effect that keeps
-  // `sort`/`mode`/`text` in sync with `viewState.document`: the latter would also fire
-  // every time this layer's own write lands back in the document a moment later, undoing
-  // whatever the user just did in between.
+  /**
+   * Which layer the `sort`/`mode`/`text` above currently describe.
+   *
+   * State rather than a ref because the seed below reads it while rendering, and that is
+   * the whole point of it: the render that brings a new `layerId` still holds the previous
+   * layer's sort and query, and `featurePagesQuery` is built from all four at once. Seeding
+   * from an effect therefore let exactly one request go out with the layer just opened and
+   * the filter of the one just left. Setting state during rendering makes React drop that
+   * pass and run the component again with the seeded values -- the dropped pass reaches no
+   * effect, so react-query never gets to start the request.
+   */
+  const [seededLayerId, setSeededLayerId] = useState<string | null>(null)
+
+  // Seeds this layer's sort and query from the saved working state (CONTRACT.md phase 17,
+  // schema B). A one-shot seed per layer, not a subscription that keeps the two in sync
+  // with `viewState.document`: the latter would also fire every time this layer's own
+  // write lands back in the document a moment later, undoing whatever the user just did
+  // in between.
   //
   // Reset *and* restore, never restore-only: this component stays mounted across a layer
   // switch, so whatever is not written here is simply inherited from the layer before --
-  // see `layerTableStateOf`, which is where the whole decision lives. The selection is
-  // the one part that stays once per layer per session; it costs a request, and the
-  // switch itself already cleared it (`selectLayer` in the workspace route).
+  // see `layerTableStateOf`, which is where the whole decision lives.
+  if (viewState.ready && layerId !== seededLayerId) {
+    setSeededLayerId(layerId)
+    if (layerId) {
+      // `restoredLayers` is only ever written from the effect below, so this read is the
+      // same on both passes of a StrictMode double render.
+      const table = layerTableStateOf(
+        layerStateOf(viewState.document, layerId),
+        !restoredLayers.current.has(layerId),
+      )
+      setSort(table.sort)
+      setMode(table.mode)
+      setText(table.text)
+      setRestoredQuery(table.restoredQuery)
+    }
+  }
+
+  // Restores the saved selection, once per layer per session -- the one part of the saved
+  // state that costs a request, which is why it stays in an effect and stays at the first
+  // visit. The layer switch itself already cleared the selection (`selectLayer` in the
+  // workspace route), so there is nothing here to reset on a later visit.
   useEffect(() => {
     if (!layerId || !viewState.ready) return
     const firstVisit = !restoredLayers.current.has(layerId)
+    // Marks the layer as seeded whether or not there is a selection to fetch: this is what
+    // the seed above reads to tell a first visit from a return.
     restoredLayers.current.add(layerId)
 
     const saved = layerStateOf(viewState.document, layerId)
-    const table = layerTableStateOf(saved, firstVisit)
-    setSort(table.sort)
-    setMode(table.mode)
-    setText(table.text)
-    setRestoredQuery(table.restoredQuery)
+    if (!firstVisit || saved.selection.length === 0) return
 
     let cancelled = false
-    if (firstVisit && saved.selection.length > 0) {
-      // The selection as it stands before the request goes out. Every action that changes
-      // it puts a new Set in the store, so a different identity on arrival means the user
-      // selected something themselves in the meantime -- that is the newer intent, and a
-      // seed from a saved state must not overtake it.
-      const before = useSelection.getState().selected
-      // No endpoint answers "do these fids still exist" directly, so this reuses the
-      // fids endpoint "select all matches" already relies on, unfiltered -- the layer's
-      // complete current fid set, fids only, no attributes or geometry (CONTRACT.md
-      // rule 3, "Die Auswahl zeigt auf gelöschte Objekte").
-      fetchFeatureFids({ layerId })
-        .then(({ fids }) => {
-          if (cancelled || useSelection.getState().selected !== before) return
-          const surviving = survivingSelection(saved.selection, new Set(fids))
-          if (surviving.length === 0) {
-            toast.error('Das Programm konnte die gespeicherte Auswahl nicht wiederherstellen')
-            return
-          }
-          // Raised for exactly the store write it belongs to, and lowered again the
-          // moment it returns: the subscription below runs synchronously inside `select`,
-          // so a flag held for the whole request would swallow every selection the user
-          // makes while it is in flight -- and their selections are worth saving.
-          suppressSelectionEcho.current = true
-          try {
-            useSelection.getState().select(layerId, surviving, 'replace')
-          } finally {
-            suppressSelectionEcho.current = false
-          }
-        })
-        .catch(() => {
-          if (cancelled) return
+    // The selection as it stands before the request goes out. Every action that changes
+    // it puts a new Set in the store, so a different identity on arrival means the user
+    // selected something themselves in the meantime -- that is the newer intent, and a
+    // seed from a saved state must not overtake it.
+    const before = useSelection.getState().selected
+    // No endpoint answers "do these fids still exist" directly, so this reuses the
+    // fids endpoint "select all matches" already relies on, unfiltered -- the layer's
+    // complete current fid set, fids only, no attributes or geometry (CONTRACT.md
+    // rule 3, "Die Auswahl zeigt auf gelöschte Objekte").
+    fetchFeatureFids({ layerId })
+      .then(({ fids }) => {
+        if (cancelled || useSelection.getState().selected !== before) return
+        const surviving = survivingSelection(saved.selection, new Set(fids))
+        if (surviving.length === 0) {
           toast.error('Das Programm konnte die gespeicherte Auswahl nicht wiederherstellen')
-        })
-    }
+          return
+        }
+        // Raised for exactly the store write it belongs to, and lowered again the
+        // moment it returns: the subscription below runs synchronously inside `select`,
+        // so a flag held for the whole request would swallow every selection the user
+        // makes while it is in flight -- and their selections are worth saving.
+        suppressSelectionEcho.current = true
+        try {
+          useSelection.getState().select(layerId, surviving, 'replace')
+        } finally {
+          suppressSelectionEcho.current = false
+        }
+      })
+      .catch(() => {
+        if (cancelled) return
+        toast.error('Das Programm konnte die gespeicherte Auswahl nicht wiederherstellen')
+      })
 
     return () => {
       // Switching layers while the fids are still in flight: the answer describes the

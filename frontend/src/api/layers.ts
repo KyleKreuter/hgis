@@ -330,17 +330,6 @@ export function useUpdateLayer(layerId: string, projectId: string) {
 }
 
 /**
- * Writes the symbology. Separate from `useUpdateLayer` because its cache rules are
- * the opposite ones.
- *
- * The list cache already carries what the user sees -- the symbology panel writes every
- * change into it so the map follows the colour picker without waiting for a round trip.
- * So the response must NOT put its `style` back: while a debounced request is in flight
- * the user has usually moved on, and the answer to the older request would drag the map
- * back for one frame. Everything else from the response is taken, `styleVersion` above
- * all: that one decides whether the tiles have to be fetched again.
- */
-/**
  * One symbology write. Mirrors `styling/styleWriteQueue`'s `StyleWrite`, which is what
  * the panel queues -- the two are the same pair of values seen from either end.
  */
@@ -350,7 +339,15 @@ export interface LayerStyleUpdate {
 }
 
 /**
- * Writes one layer's symbology.
+ * Writes one layer's symbology. Separate from `useUpdateLayer` because its cache rules are
+ * the opposite ones.
+ *
+ * The list cache already carries what the user sees -- the symbology panel writes every
+ * change into it so the map follows the colour picker without waiting for a round trip.
+ * So the response must NOT put its `style` back: while a deferred request is in flight
+ * the user has usually moved on, and the answer to the older request would drag the map
+ * back for one frame. Everything else from the response is taken, `styleVersion` above
+ * all: that one decides whether the tiles have to be fetched again.
  *
  * The layer is a mutation variable rather than an argument of this hook on purpose: the
  * panel holds a write back while a colour is still being dragged (`useStyleEditor`), and

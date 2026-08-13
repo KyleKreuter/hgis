@@ -54,6 +54,8 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
   const [snapSourceLayerIds, setSnapSourceLayerIds] = useState<string[]>([])
 
   const buffer = useEditing((state) => state.buffer)
+  /** Non-null exactly while a drawing session is open -- see `isStaleEditSession`. */
+  const sessionLayerId = useEditing((state) => state.layerId)
   const beginEditing = useEditing((state) => state.begin)
   const endEditing = useEditing((state) => state.end)
   const resetBuffer = useEditing((state) => state.reset)
@@ -186,6 +188,15 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
   // is column_name-keyed. Ended here rather than in the route, which owns the same guard
   // for the table session (`useTableEditing`) and would otherwise need a second copy of
   // it: this hook already sees every change of the active layer through its own argument.
+  //
+  // The effect can only run after the render that brought the new layer, and the workspace
+  // mounts `DrawController` and `EditingTileFilter` on `active` -- so for that one render
+  // both were still up, now pointed at the layer just opened. That was enough for the
+  // drawing tool to start loading the new layer's features into a session that was about
+  // to end, and for the tile filter to touch the new layer's tiles. `active` is therefore
+  // reported as false as soon as the session is stale, one render before `stop` runs.
+  const stale = isStaleEditSession(sessionLayerId, layerId)
+
   useEffect(() => {
     if (isStaleEditSession(useEditing.getState().layerId, layerId)) stop()
   }, [layerId, stop])
@@ -193,7 +204,7 @@ export function useEditSession({ layerId, projectId }: EditSessionOptions) {
   const selectedFeature = resolveSelectedFeature(buffer, selectedFid, selectedOriginal)
 
   return {
-    active,
+    active: active && !stale,
     reloadNonce,
     snapEnabled,
     toggleSnap: () => setSnapEnabled((previous) => !previous),
