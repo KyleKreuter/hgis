@@ -1,0 +1,1181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<WMS_Capabilities version="1.3.0"
+  xmlns="http://www.opengis.net/wms"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:esri_wms="http://www.esri.com/wms"
+  xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd">
+  <Service>
+    <Name><![CDATA[WMS]]></Name>
+    <Title><![CDATA[Fachdaten]]></Title>
+    <Abstract>WMS</Abstract>
+    <KeywordList><Keyword><![CDATA[]]></Keyword></KeywordList>
+    <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?"/>
+    <ContactInformation>
+      <ContactPersonPrimary>
+        <ContactPerson><![CDATA[]]></ContactPerson>
+        <ContactOrganization><![CDATA[Landesbetrieb Geoinformation und Vermessung]]></ContactOrganization>
+      </ContactPersonPrimary>
+      <ContactPosition><![CDATA[Präsentation Geobasisdaten]]></ContactPosition>
+      <ContactAddress>
+        <AddressType><![CDATA[]]></AddressType>
+        <Address><![CDATA[Neuenfelder Straße 19]]></Address>
+        <City><![CDATA[Hamburg]]></City>
+        <StateOrProvince><![CDATA[HH]]></StateOrProvince>
+        <PostCode><![CDATA[21109]]></PostCode>
+        <Country><![CDATA[Germany]]></Country>
+      </ContactAddress>
+      <ContactVoiceTelephone><![CDATA[]]></ContactVoiceTelephone>
+      <ContactFacsimileTelephone><![CDATA[]]></ContactFacsimileTelephone>
+      <ContactElectronicMailAddress><![CDATA[LGVALKIS-Hilfe@gv.hamburg.de]]></ContactElectronicMailAddress>
+    </ContactInformation>
+    <Fees><![CDATA[Datenlizenz Deutschland - Namensnennung - Version 2.0; https://www.govdata.de/dl-de/by-2-0; dl-de-by-2.0; Namensnennung: "Freie und Hansestadt Hamburg, Landesbetrieb Geoinformation und Vermessung"]]></Fees>
+    <AccessConstraints><![CDATA[Es gelten keine Zugangsbeschränkungen]]></AccessConstraints>
+    <MaxWidth>12288</MaxWidth>
+    <MaxHeight>12288</MaxHeight>
+  </Service>
+  <Capability>
+    <Request>
+      <GetCapabilities>
+        <Format>application/vnd.ogc.wms_xml</Format>
+        <Format>text/xml</Format>
+        <DCPType>
+          <HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?"/></Get></HTTP>
+        </DCPType>
+      </GetCapabilities>
+      <GetMap>
+        <Format>image/bmp</Format>
+        <Format>image/jpeg</Format>
+        <Format>image/tiff</Format>
+        <Format>image/png</Format>
+        <Format>image/png8</Format>
+        <Format>image/png24</Format>
+        <Format>image/png32</Format>
+        <Format>image/gif</Format>
+        <Format>image/svg+xml</Format>
+        <DCPType>
+          <HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?"/></Get></HTTP>
+        </DCPType>
+      </GetMap>
+      <GetFeatureInfo>
+        <Format>application/vnd.esri.wms_raw_xml</Format>
+        <Format>application/vnd.esri.wms_featureinfo_xml</Format>
+        <Format>application/vnd.ogc.wms_xml</Format>
+        <Format>application/geo+json</Format>
+        <Format>text/xml</Format>
+        <Format>text/html</Format>
+        <Format>text/plain</Format>
+        <DCPType>
+          <HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?"/></Get></HTTP>
+        </DCPType>
+      </GetFeatureInfo>
+    </Request>
+    <Exception>
+      <Format>application/vnd.ogc.se_xml</Format>
+      <Format>application/vnd.ogc.se_inimage</Format>
+      <Format>application/vnd.ogc.se_blank</Format>
+      <Format>text/xml</Format>
+      <Format>XML</Format>
+    </Exception>
+    <Layer>
+      <Title><![CDATA[Layer]]></Title>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.341365</eastBoundLongitude><southBoundLatitude>53.394007</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.394007" maxx="10.341365" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394007" miny="8.412924" maxx="53.966209" maxy="10.341365"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5916918.107000" maxx="588010.382000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+      <Layer queryable="1">
+        <Title><![CDATA[Laermschutzbereiche]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.332586</eastBoundLongitude><southBoundLatitude>53.422531</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.422531" maxx="10.332586" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.422531" miny="8.412924" maxx="53.966209" maxy="10.332586"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5920081.617000" maxx="587434.153000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7061540.473933" maxx="1150218.177886" maxy="7163759.342354"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7061540.473933" maxx="1150218.177886" maxy="7163759.342354"/>
+      <Layer queryable="1">
+        <Name>1</Name>
+        <Title><![CDATA[Nacht-Schutzzone]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.332586</eastBoundLongitude><southBoundLatitude>53.422531</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.422531" maxx="10.332586" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.422531" miny="8.412924" maxx="53.966209" maxy="10.332586"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5920081.617000" maxx="587434.153000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7061540.473933" maxx="1150218.177886" maxy="7163759.342354"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7061540.473933" maxx="1150218.177886" maxy="7163759.342354"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Nacht-Schutzzone]]></Title>
+          <LegendURL width="114" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=1" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>236235.119048</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Name>2</Name>
+        <Title><![CDATA[Tag-Schutzzone 2]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.332586</eastBoundLongitude><southBoundLatitude>53.422531</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.422531" maxx="10.332586" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.422531" miny="8.412924" maxx="53.966209" maxy="10.332586"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5920081.617000" maxx="587434.153000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7061540.473933" maxx="1150218.177886" maxy="7163759.342354"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7061540.473933" maxx="1150218.177886" maxy="7163759.342354"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Tag-Schutzzone 2]]></Title>
+          <LegendURL width="114" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=2" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>236235.119048</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Name>3</Name>
+        <Title><![CDATA[Tag-Schutzzone 1]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.332586</eastBoundLongitude><southBoundLatitude>53.422531</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.422531" maxx="10.332586" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.422531" miny="8.412924" maxx="53.966209" maxy="10.332586"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5920081.617000" maxx="587434.153000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7061540.473933" maxx="1150218.177886" maxy="7163759.342354"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7061540.473933" maxx="1150218.177886" maxy="7163759.342354"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Tag-Schutzzone 1]]></Title>
+          <LegendURL width="114" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=3" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>236235.119048</MaxScaleDenominator>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Wasser - Festlegungen]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>9.727519</westBoundLongitude><eastBoundLongitude>10.334270</eastBoundLongitude><southBoundLatitude>53.394007</southBoundLatitude><northBoundLatitude>53.741420</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="9.727519" miny="53.394007" maxx="10.334270" maxy="53.741420"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394007" miny="9.727519" maxx="53.741420" maxy="10.334270"/>
+<BoundingBox CRS="EPSG:25832" minx="548372.279000" miny="5916918.107000" maxx="588010.382000" maxy="5955002.165000"/>
+<BoundingBox CRS="EPSG:3857" minx="1082862.497292" miny="7056213.723200" maxx="1150405.723095" maxy="7121335.584981"/>
+<BoundingBox CRS="EPSG:102100" minx="1082862.497292" miny="7056213.723200" maxx="1150405.723095" maxy="7121335.584981"/>
+      <Layer queryable="1">
+        <Name>5</Name>
+        <Title><![CDATA[Ueberschwemmungsgebiete]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>9.761682</westBoundLongitude><eastBoundLongitude>10.318587</eastBoundLongitude><southBoundLatitude>53.396620</southBoundLatitude><northBoundLatitude>53.718823</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="9.761682" miny="53.396620" maxx="10.318587" maxy="53.718823"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396620" miny="9.761682" maxx="53.718823" maxy="10.318587"/>
+<BoundingBox CRS="EPSG:25832" minx="550641.029000" miny="5917190.647000" maxx="587021.799000" maxy="5952511.947000"/>
+<BoundingBox CRS="EPSG:3857" minx="1086665.452023" miny="7056701.539281" maxx="1148659.871359" maxy="7117083.636651"/>
+<BoundingBox CRS="EPSG:102100" minx="1086665.452023" miny="7056701.539281" maxx="1148659.871359" maxy="7117083.636651"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Ueberschwemmungsgebiete]]></Title>
+          <LegendURL width="150" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=5" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>236235.119048</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Name>6</Name>
+        <Title><![CDATA[Wasser- und Bodenverbaende]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>9.761682</westBoundLongitude><eastBoundLongitude>10.318587</eastBoundLongitude><southBoundLatitude>53.396620</southBoundLatitude><northBoundLatitude>53.718823</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="9.761682" miny="53.396620" maxx="10.318587" maxy="53.718823"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396620" miny="9.761682" maxx="53.718823" maxy="10.318587"/>
+<BoundingBox CRS="EPSG:25832" minx="550641.029000" miny="5917190.647000" maxx="587021.799000" maxy="5952511.947000"/>
+<BoundingBox CRS="EPSG:3857" minx="1086665.452023" miny="7056701.539281" maxx="1148659.871359" maxy="7117083.636651"/>
+<BoundingBox CRS="EPSG:102100" minx="1086665.452023" miny="7056701.539281" maxx="1148659.871359" maxy="7117083.636651"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Wasser- und Bodenverbaende]]></Title>
+          <LegendURL width="174" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=6" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>236235.119048</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Name>7</Name>
+        <Title><![CDATA[Wasserrecht]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>9.727519</westBoundLongitude><eastBoundLongitude>10.334270</eastBoundLongitude><southBoundLatitude>53.394007</southBoundLatitude><northBoundLatitude>53.741420</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="9.727519" miny="53.394007" maxx="10.334270" maxy="53.741420"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394007" miny="9.727519" maxx="53.741420" maxy="10.334270"/>
+<BoundingBox CRS="EPSG:25832" minx="548372.279000" miny="5916918.107000" maxx="588010.382000" maxy="5955002.165000"/>
+<BoundingBox CRS="EPSG:3857" minx="1082862.497292" miny="7056213.723200" maxx="1150405.723095" maxy="7121335.584981"/>
+<BoundingBox CRS="EPSG:102100" minx="1082862.497292" miny="7056213.723200" maxx="1150405.723095" maxy="7121335.584981"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Wasserrecht]]></Title>
+          <LegendURL width="84" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=7" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>236235.119048</MaxScaleDenominator>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Name>8</Name>
+        <Title><![CDATA[vorbereitende Untersuchung Staedtebauliche Entwicklungsmaßnahme]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.490333</westBoundLongitude><eastBoundLongitude>10.339846</eastBoundLongitude><southBoundLatitude>53.396234</southBoundLatitude><northBoundLatitude>53.923108</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.490333" miny="53.396234" maxx="10.339846" maxy="53.923108"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396234" miny="8.490333" maxx="53.923108" maxy="10.339846"/>
+<BoundingBox CRS="EPSG:25832" minx="466529.284000" miny="5917165.798220" maxx="588001.332000" maxy="5974966.679000"/>
+<BoundingBox CRS="EPSG:3857" minx="945139.527919" miny="7056629.541267" maxx="1151026.395370" maxy="7155607.303086"/>
+<BoundingBox CRS="EPSG:102100" minx="945139.527919" miny="7056629.541267" maxx="1151026.395370" maxy="7155607.303086"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[vorbereitende Untersuchung Staedtebauliche Entwicklungsmaßnahme]]></Title>
+          <LegendURL width="390" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=8" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>236235.119048</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Name>9</Name>
+        <Title><![CDATA[Besonderes Vorkaufsrecht]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.490333</westBoundLongitude><eastBoundLongitude>10.339846</eastBoundLongitude><southBoundLatitude>53.396234</southBoundLatitude><northBoundLatitude>53.923108</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.490333" miny="53.396234" maxx="10.339846" maxy="53.923108"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396234" miny="8.490333" maxx="53.923108" maxy="10.339846"/>
+<BoundingBox CRS="EPSG:25832" minx="466529.284000" miny="5917165.798220" maxx="588001.332000" maxy="5974966.679000"/>
+<BoundingBox CRS="EPSG:3857" minx="945139.527919" miny="7056629.541267" maxx="1151026.395370" maxy="7155607.303086"/>
+<BoundingBox CRS="EPSG:102100" minx="945139.527919" miny="7056629.541267" maxx="1151026.395370" maxy="7155607.303086"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Besonderes Vorkaufsrecht]]></Title>
+          <LegendURL width="162" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=9" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>236235.119048</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Umlegungs- und Sanierungsgebiete]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.490333</westBoundLongitude><eastBoundLongitude>10.339846</eastBoundLongitude><southBoundLatitude>53.396234</southBoundLatitude><northBoundLatitude>53.923108</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.490333" miny="53.396234" maxx="10.339846" maxy="53.923108"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396234" miny="8.490333" maxx="53.923108" maxy="10.339846"/>
+<BoundingBox CRS="EPSG:25832" minx="466529.284000" miny="5917165.798220" maxx="588001.332000" maxy="5974966.679000"/>
+<BoundingBox CRS="EPSG:3857" minx="945139.527919" miny="7056629.541267" maxx="1151026.395370" maxy="7155607.303086"/>
+<BoundingBox CRS="EPSG:102100" minx="945139.527919" miny="7056629.541267" maxx="1151026.395370" maxy="7155607.303086"/>
+      <Layer queryable="1">
+        <Name>11</Name>
+        <Title><![CDATA[Sanierungsgebiete]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.490333</westBoundLongitude><eastBoundLongitude>10.339846</eastBoundLongitude><southBoundLatitude>53.396234</southBoundLatitude><northBoundLatitude>53.923108</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.490333" miny="53.396234" maxx="10.339846" maxy="53.923108"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396234" miny="8.490333" maxx="53.923108" maxy="10.339846"/>
+<BoundingBox CRS="EPSG:25832" minx="466529.284000" miny="5917165.798220" maxx="588001.332000" maxy="5974966.679000"/>
+<BoundingBox CRS="EPSG:3857" minx="945139.527919" miny="7056629.541267" maxx="1151026.395370" maxy="7155607.303086"/>
+<BoundingBox CRS="EPSG:102100" minx="945139.527919" miny="7056629.541267" maxx="1151026.395370" maxy="7155607.303086"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Sanierungsgebiete]]></Title>
+          <LegendURL width="120" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=11" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>236235.119048</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Name>12</Name>
+        <Title><![CDATA[Umlegungsgebiete]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.490333</westBoundLongitude><eastBoundLongitude>10.339846</eastBoundLongitude><southBoundLatitude>53.396234</southBoundLatitude><northBoundLatitude>53.923108</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.490333" miny="53.396234" maxx="10.339846" maxy="53.923108"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396234" miny="8.490333" maxx="53.923108" maxy="10.339846"/>
+<BoundingBox CRS="EPSG:25832" minx="466529.284000" miny="5917165.798220" maxx="588001.332000" maxy="5974966.679000"/>
+<BoundingBox CRS="EPSG:3857" minx="945139.527919" miny="7056629.541267" maxx="1151026.395370" maxy="7155607.303086"/>
+<BoundingBox CRS="EPSG:102100" minx="945139.527919" miny="7056629.541267" maxx="1151026.395370" maxy="7155607.303086"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Umlegungsgebiete]]></Title>
+          <LegendURL width="114" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=12" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>236235.119048</MaxScaleDenominator>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Tatsaechliche Nutzung]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.341365</eastBoundLongitude><southBoundLatitude>53.394007</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.394007" maxx="10.341365" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394007" miny="8.412924" maxx="53.966209" maxy="10.341365"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5916918.107000" maxx="588010.382000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+        <MaxScaleDenominator>14174.107143</MaxScaleDenominator>
+      <Layer queryable="1">
+        <Name>14</Name>
+        <Title><![CDATA[Gewaesser]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.336157</eastBoundLongitude><southBoundLatitude>53.394064</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.394064" maxx="10.336157" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394064" miny="8.412924" maxx="53.966209" maxy="10.336157"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5916918.107000" maxx="587668.537000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7056224.338897" maxx="1150615.719965" maxy="7163759.342288"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7056224.338897" maxx="1150615.719965" maxy="7163759.342288"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Gewaesser]]></Title>
+          <LegendURL width="204" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=14" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      <Layer queryable="1">
+        <Name>15</Name>
+        <Title><![CDATA[Vegetation]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.423851</westBoundLongitude><eastBoundLongitude>10.341193</eastBoundLongitude><southBoundLatitude>53.395290</southBoundLatitude><northBoundLatitude>53.965139</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.423851" miny="53.395290" maxx="10.341193" maxy="53.965139"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395290" miny="8.423851" maxx="53.965139" maxy="10.341193"/>
+<BoundingBox CRS="EPSG:25832" minx="462201.070000" miny="5917060.729000" maxx="588001.332000" maxy="5979643.063000"/>
+<BoundingBox CRS="EPSG:3857" minx="937738.760277" miny="7056453.270393" maxx="1151176.354316" maxy="7163556.870578"/>
+<BoundingBox CRS="EPSG:102100" minx="937738.760277" miny="7056453.270393" maxx="1151176.354316" maxy="7163556.870578"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Vegetation]]></Title>
+          <LegendURL width="216" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=15" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      <Layer queryable="1">
+        <Name>16</Name>
+        <Title><![CDATA[Verkehr]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.486621</westBoundLongitude><eastBoundLongitude>10.340300</eastBoundLongitude><southBoundLatitude>53.396388</southBoundLatitude><northBoundLatitude>53.932976</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.486621" miny="53.396388" maxx="10.340300" maxy="53.932976"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396388" miny="8.486621" maxx="53.932976" maxy="10.340300"/>
+<BoundingBox CRS="EPSG:25832" minx="466293.463000" miny="5917183.001000" maxx="588010.382000" maxy="5976064.594000"/>
+<BoundingBox CRS="EPSG:3857" minx="944726.329672" miny="7056658.120514" maxx="1151076.905851" maxy="7157472.977130"/>
+<BoundingBox CRS="EPSG:102100" minx="944726.329672" miny="7056658.120514" maxx="1151076.905851" maxy="7157472.977130"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Verkehr]]></Title>
+          <LegendURL width="198" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=16" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      <Layer queryable="1">
+        <Name>17</Name>
+        <Title><![CDATA[Siedlung]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.487674</westBoundLongitude><eastBoundLongitude>10.332534</eastBoundLongitude><southBoundLatitude>53.396742</southBoundLatitude><northBoundLatitude>53.924134</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.487674" miny="53.396742" maxx="10.332534" maxy="53.924134"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396742" miny="8.487674" maxx="53.924134" maxy="10.332534"/>
+<BoundingBox CRS="EPSG:25832" minx="466355.484000" miny="5917213.373000" maxx="587518.813000" maxy="5975080.796000"/>
+<BoundingBox CRS="EPSG:3857" minx="944843.536216" miny="7056724.330100" maxx="1150212.466896" maxy="7155801.199791"/>
+<BoundingBox CRS="EPSG:102100" minx="944843.536216" miny="7056724.330100" maxx="1150212.466896" maxy="7155801.199791"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Siedlung]]></Title>
+          <LegendURL width="204" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=17" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Brunnen Bohrungen]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.442257</westBoundLongitude><eastBoundLongitude>10.327959</eastBoundLongitude><southBoundLatitude>53.396728</southBoundLatitude><northBoundLatitude>53.963489</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.442257" miny="53.396728" maxx="10.327959" maxy="53.963489"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396728" miny="8.442257" maxx="53.963489" maxy="10.327959"/>
+<BoundingBox CRS="EPSG:25832" minx="463407.288000" miny="5917204.715000" maxx="587136.200000" maxy="5979459.436000"/>
+<BoundingBox CRS="EPSG:3857" minx="939787.796686" miny="7056721.618869" maxx="1149703.191555" maxy="7163244.566140"/>
+<BoundingBox CRS="EPSG:102100" minx="939787.796686" miny="7056721.618869" maxx="1149703.191555" maxy="7163244.566140"/>
+        <MaxScaleDenominator>18898.809524</MaxScaleDenominator>
+      <Layer queryable="1">
+        <Name>19</Name>
+        <Title><![CDATA[Brunnen Bohrungen (flaechenartig)]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.442257</westBoundLongitude><eastBoundLongitude>10.324126</eastBoundLongitude><southBoundLatitude>53.396769</southBoundLatitude><northBoundLatitude>53.963489</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.442257" miny="53.396769" maxx="10.324126" maxy="53.963489"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396769" miny="8.442257" maxx="53.963489" maxy="10.324126"/>
+<BoundingBox CRS="EPSG:25832" minx="463407.288000" miny="5917204.715000" maxx="586884.594000" maxy="5979459.436000"/>
+<BoundingBox CRS="EPSG:3857" minx="939787.796686" miny="7056729.359790" maxx="1149276.464393" maxy="7163244.566065"/>
+<BoundingBox CRS="EPSG:102100" minx="939787.796686" miny="7056729.359790" maxx="1149276.464393" maxy="7163244.566065"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Brunnen Bohrungen (flaechenartig)]]></Title>
+          <LegendURL width="72" height="36">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=19" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      <Layer queryable="1">
+        <Name>20</Name>
+        <Title><![CDATA[Brunnen Bohrungen (punktartig)]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>9.734405</westBoundLongitude><eastBoundLongitude>10.320598</eastBoundLongitude><southBoundLatitude>53.397350</southBoundLatitude><northBoundLatitude>53.727862</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="9.734405" miny="53.397350" maxx="10.320598" maxy="53.727862"/>
+<BoundingBox CRS="EPSG:4326" minx="53.397350" miny="9.734405" maxx="53.727862" maxy="10.320598"/>
+<BoundingBox CRS="EPSG:25832" minx="548826.487000" miny="5917274.000000" maxx="587136.200000" maxy="5953498.400000"/>
+<BoundingBox CRS="EPSG:3857" minx="1083629.016248" miny="7056837.859904" maxx="1148883.693354" maxy="7118784.188788"/>
+<BoundingBox CRS="EPSG:102100" minx="1083629.016248" miny="7056837.859904" maxx="1148883.693354" maxy="7118784.188788"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Brunnen Bohrungen (punktartig)]]></Title>
+          <LegendURL width="72" height="37">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=20" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Name>21</Name>
+        <Title><![CDATA[Gebaeudeflaechen]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.429053</westBoundLongitude><eastBoundLongitude>10.335204</eastBoundLongitude><southBoundLatitude>53.396692</southBoundLatitude><northBoundLatitude>53.963470</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.429053" miny="53.396692" maxx="10.335204" maxy="53.963470"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396692" miny="8.429053" maxx="53.963470" maxy="10.335204"/>
+<BoundingBox CRS="EPSG:25832" minx="462540.898000" miny="5917209.548000" maxx="587611.770000" maxy="5979457.375000"/>
+<BoundingBox CRS="EPSG:3857" minx="938317.882395" miny="7056715.034724" maxx="1150509.695808" maxy="7163241.060748"/>
+<BoundingBox CRS="EPSG:102100" minx="938317.882395" miny="7056715.034724" maxx="1150509.695808" maxy="7163241.060748"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Gebaeudeflaechen]]></Title>
+          <LegendURL width="102" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=21" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>2834.821429</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Flurstuecks- und Gebaeudeumringe]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.341365</eastBoundLongitude><southBoundLatitude>53.394007</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.394007" maxx="10.341365" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394007" miny="8.412924" maxx="53.966209" maxy="10.341365"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5916918.107000" maxx="588010.382000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+      <Layer queryable="1">
+        <Title><![CDATA[gelb]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.341365</eastBoundLongitude><southBoundLatitude>53.394007</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.394007" maxx="10.341365" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394007" miny="8.412924" maxx="53.966209" maxy="10.341365"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5916918.107000" maxx="588010.382000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+        <MaxScaleDenominator>4724.702381</MaxScaleDenominator>
+      <Layer queryable="1">
+        <Name>24</Name>
+        <Title><![CDATA[Flurstuecke]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.341365</eastBoundLongitude><southBoundLatitude>53.394007</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.394007" maxx="10.341365" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394007" miny="8.412924" maxx="53.966209" maxy="10.341365"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5916918.107000" maxx="588010.382000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Flurstuecke]]></Title>
+          <LegendURL width="78" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=24" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>9449.404762</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Name>25</Name>
+        <Title><![CDATA[Gebaeude]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.429053</westBoundLongitude><eastBoundLongitude>10.335204</eastBoundLongitude><southBoundLatitude>53.396692</southBoundLatitude><northBoundLatitude>53.963470</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.429053" miny="53.396692" maxx="10.335204" maxy="53.963470"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396692" miny="8.429053" maxx="53.963470" maxy="10.335204"/>
+<BoundingBox CRS="EPSG:25832" minx="462540.898000" miny="5917209.548000" maxx="587611.770000" maxy="5979457.375000"/>
+<BoundingBox CRS="EPSG:3857" minx="938317.882395" miny="7056715.034724" maxx="1150509.695808" maxy="7163241.060748"/>
+<BoundingBox CRS="EPSG:102100" minx="938317.882395" miny="7056715.034724" maxx="1150509.695808" maxy="7163241.060748"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Gebaeude]]></Title>
+          <LegendURL width="60" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=25" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>9449.404762</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Name>26</Name>
+        <Title><![CDATA[Zuordnungspfeil]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.341365</eastBoundLongitude><southBoundLatitude>53.394007</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.394007" maxx="10.341365" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394007" miny="8.412924" maxx="53.966209" maxy="10.341365"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5916918.107000" maxx="588010.382000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Zuordnungspfeil]]></Title>
+          <LegendURL width="108" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=26" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>1889.880952</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Flurstuecksnummer]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <MaxScaleDenominator>2456.845238</MaxScaleDenominator>
+      <Layer>
+        <Name>28</Name>
+        <Title><![CDATA[default]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[default]]></Title>
+          <LegendURL width="0" height="0">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=28" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Strassenname]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <MaxScaleDenominator>2456.845238</MaxScaleDenominator>
+      <Layer>
+        <Name>30</Name>
+        <Title><![CDATA[default]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[default]]></Title>
+          <LegendURL width="0" height="0">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=30" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Pseudonummer]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <MaxScaleDenominator>2456.845238</MaxScaleDenominator>
+      <Layer>
+        <Name>32</Name>
+        <Title><![CDATA[default]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[default]]></Title>
+          <LegendURL width="0" height="0">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=32" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Hausnummer]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <MaxScaleDenominator>2456.845238</MaxScaleDenominator>
+      <Layer>
+        <Name>34</Name>
+        <Title><![CDATA[default]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[default]]></Title>
+          <LegendURL width="0" height="0">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=34" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[schwarz]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.341365</eastBoundLongitude><southBoundLatitude>53.394007</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.394007" maxx="10.341365" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394007" miny="8.412924" maxx="53.966209" maxy="10.341365"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5916918.107000" maxx="588010.382000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+        <MaxScaleDenominator>4724.702381</MaxScaleDenominator>
+      <Layer queryable="1">
+        <Name>36</Name>
+        <Title><![CDATA[Flurstuecke]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.341365</eastBoundLongitude><southBoundLatitude>53.394007</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.394007" maxx="10.341365" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394007" miny="8.412924" maxx="53.966209" maxy="10.341365"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5916918.107000" maxx="588010.382000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Flurstuecke]]></Title>
+          <LegendURL width="78" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=36" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>9449.404762</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Name>37</Name>
+        <Title><![CDATA[Gebaeude]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.429053</westBoundLongitude><eastBoundLongitude>10.335204</eastBoundLongitude><southBoundLatitude>53.396692</southBoundLatitude><northBoundLatitude>53.963470</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.429053" miny="53.396692" maxx="10.335204" maxy="53.963470"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396692" miny="8.429053" maxx="53.963470" maxy="10.335204"/>
+<BoundingBox CRS="EPSG:25832" minx="462540.898000" miny="5917209.548000" maxx="587611.770000" maxy="5979457.375000"/>
+<BoundingBox CRS="EPSG:3857" minx="938317.882395" miny="7056715.034724" maxx="1150509.695808" maxy="7163241.060748"/>
+<BoundingBox CRS="EPSG:102100" minx="938317.882395" miny="7056715.034724" maxx="1150509.695808" maxy="7163241.060748"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Gebaeude]]></Title>
+          <LegendURL width="60" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=37" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>9449.404762</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Name>38</Name>
+        <Title><![CDATA[Zuordnungspfeil]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.412924</westBoundLongitude><eastBoundLongitude>10.341365</eastBoundLongitude><southBoundLatitude>53.394007</southBoundLatitude><northBoundLatitude>53.966209</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.412924" miny="53.394007" maxx="10.341365" maxy="53.966209"/>
+<BoundingBox CRS="EPSG:4326" minx="53.394007" miny="8.412924" maxx="53.966209" maxy="10.341365"/>
+<BoundingBox CRS="EPSG:25832" minx="461485.132000" miny="5916918.107000" maxx="588010.382000" maxy="5979762.107000"/>
+<BoundingBox CRS="EPSG:3857" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+<BoundingBox CRS="EPSG:102100" minx="936522.363499" miny="7056213.723200" maxx="1151195.526479" maxy="7163759.342039"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Zuordnungspfeil]]></Title>
+          <LegendURL width="108" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=38" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>1889.880952</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Flurstuecksnummer]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <MaxScaleDenominator>2456.845238</MaxScaleDenominator>
+      <Layer>
+        <Name>40</Name>
+        <Title><![CDATA[default]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[default]]></Title>
+          <LegendURL width="0" height="0">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=40" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Strassenname]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <MaxScaleDenominator>2456.845238</MaxScaleDenominator>
+      <Layer>
+        <Name>42</Name>
+        <Title><![CDATA[default]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[default]]></Title>
+          <LegendURL width="0" height="0">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=42" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Pseudonummer]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <MaxScaleDenominator>2456.845238</MaxScaleDenominator>
+      <Layer>
+        <Name>44</Name>
+        <Title><![CDATA[default]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[default]]></Title>
+          <LegendURL width="0" height="0">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=44" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Title><![CDATA[Hausnummer]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <MaxScaleDenominator>2456.845238</MaxScaleDenominator>
+      <Layer>
+        <Name>46</Name>
+        <Title><![CDATA[default]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.430502</westBoundLongitude><eastBoundLongitude>10.340147</eastBoundLongitude><southBoundLatitude>53.395382</southBoundLatitude><northBoundLatitude>53.963460</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.430502" miny="53.395382" maxx="10.340147" maxy="53.963460"/>
+<BoundingBox CRS="EPSG:4326" minx="53.395382" miny="8.430502" maxx="53.963460" maxy="10.340147"/>
+<BoundingBox CRS="EPSG:25832" minx="462635.981210" miny="5917069.732930" maxx="587936.231880" maxy="5979456.225420"/>
+<BoundingBox CRS="EPSG:3857" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+<BoundingBox CRS="EPSG:102100" minx="938479.218669" miny="7056470.400578" maxx="1151059.946102" maxy="7163239.105676"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[default]]></Title>
+          <LegendURL width="0" height="0">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=46" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+      </Layer>
+      </Layer>
+      </Layer>
+      </Layer>
+      <Layer queryable="1">
+        <Name>47</Name>
+        <Title><![CDATA[Denkmalschutzrecht]]></Title>
+        <Abstract><![CDATA[]]></Abstract>
+<CRS>CRS:84</CRS>
+<CRS>EPSG:4326</CRS>
+<CRS>EPSG:25832</CRS>
+<CRS>EPSG:3857</CRS>
+ <!-- alias 3857 -->
+<CRS>EPSG:102100</CRS>
+<EX_GeographicBoundingBox><westBoundLongitude>8.481216</westBoundLongitude><eastBoundLongitude>10.317991</eastBoundLongitude><southBoundLatitude>53.396688</southBoundLatitude><northBoundLatitude>53.932938</northBoundLatitude></EX_GeographicBoundingBox>
+<BoundingBox CRS="CRS:84" minx="8.481216" miny="53.396688" maxx="10.317991" maxy="53.932938"/>
+<BoundingBox CRS="EPSG:4326" minx="53.396688" miny="8.481216" maxx="53.932938" maxy="10.317991"/>
+<BoundingBox CRS="EPSG:25832" minx="465938.573000" miny="5917189.435000" maxx="586545.151000" maxy="5976060.327000"/>
+<BoundingBox CRS="EPSG:3857" minx="944124.697327" miny="7056714.132145" maxx="1148593.537887" maxy="7157465.725554"/>
+<BoundingBox CRS="EPSG:102100" minx="944124.697327" miny="7056714.132145" maxx="1148593.537887" maxy="7157465.725554"/>
+        <Style>
+          <Name>default</Name>
+          <Title><![CDATA[Denkmalschutzrecht]]></Title>
+          <LegendURL width="126" height="18">
+            <Format>image/png</Format>
+            <OnlineResource xlink:href="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?request=GetLegendGraphic%26version=1.3.0%26format=image/png%26layer=47" xlink:type="simple" xmlns:xlink="http://www.w3.org/1999/xlink" />
+          </LegendURL>
+        </Style>
+        <MaxScaleDenominator>18898.809524</MaxScaleDenominator>
+      </Layer>
+    </Layer>
+  </Capability>
+</WMS_Capabilities>

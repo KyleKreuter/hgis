@@ -34,7 +34,7 @@ class GeoportalDatasetServiceTest {
 		return new GeoportalCatalogEntry(DATASET_ID, "Straßenbaumkataster Hamburg", "FEATURES", "BUKEA",
 				"Freie und Hansestadt Hamburg, Behörde für Umwelt, Klima, Energie und Agrarwirtschaft", "Umwelt",
 				"https://metaver.de/trefferanzeige?docuuid=x", "https://registry.gdi-de.org/id/de.hh/x",
-				API_URL, COLLECTION, Map.of());
+				API_URL, COLLECTION, Map.of(), null);
 	}
 
 	/**
@@ -47,13 +47,13 @@ class GeoportalDatasetServiceTest {
 		List<GeoportalCatalogEntry> collections = List.of(
 				new GeoportalCatalogEntry("xplan/bp_baugrenze", "BP_BauGrenze", "BOTH", "BSW",
 						"Behörde für Stadtentwicklung und Wohnen (BSW)", "Regionen und Städte", null, null,
-						apiUrl, "bp_baugrenze", Map.of()),
+						apiUrl, "bp_baugrenze", Map.of(), null),
 				new GeoportalCatalogEntry("xplan/bp_baulinie", "BP_BauLinie", "BOTH", "BSW",
 						"Behörde für Stadtentwicklung und Wohnen (BSW)", "Regionen und Städte", null, null,
-						apiUrl, "bp_baulinie", Map.of()));
+						apiUrl, "bp_baulinie", Map.of(), null));
 		return new GeoportalCatalogEntry("xplan", "XPlanungsdaten Hamburg", "BOTH", "BSW",
 				"Behörde für Stadtentwicklung und Wohnen (BSW)", "Regionen und Städte", null, null,
-				apiUrl, null, Map.of(), collections);
+				apiUrl, null, Map.of(), null, collections);
 	}
 
 	private static GeoportalDatasetService serviceFor(GeoportalCatalogEntry entry, RestClient restClient) {
@@ -201,11 +201,13 @@ class GeoportalDatasetServiceTest {
 
 		GeoportalCatalogEntry wmsOnly = new GeoportalCatalogEntry(
 				"md:x", "ALKIS Flurstücke (gelb)", "WMS", "LGV", "Landesbetrieb Geoinformation und Vermessung (LGV)",
-				"Umwelt", "https://metaver.de/trefferanzeige?docuuid=y", null, null, null, Map.of());
+				"Umwelt", "https://metaver.de/trefferanzeige?docuuid=y", null, null, null, Map.of(),
+				"https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS_gelb");
 
 		GeoportalDtos.DatasetDetail detail = serviceFor(wmsOnly, builder.build()).detail("md:x");
 
 		assertThat(detail.description()).isNull();
+		assertThat(detail.wmsUrl()).isEqualTo("https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS_gelb");
 		assertThat(detail.featureCount()).isNull();
 		server.verify();
 	}

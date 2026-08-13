@@ -1,5 +1,6 @@
 package de.kreuter.hgis.catalog;
 
+import de.kreuter.hgis.common.ConflictException;
 import de.kreuter.hgis.common.LayerProvenance;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,9 +19,12 @@ import org.hibernate.type.SqlTypes;
 import org.locationtech.jts.geom.Polygon;
 
 /**
- * Catalog entry for one layer. The actual features live in a table of their own in
- * gis_data, named {@code layer_<hex of id>} and created at runtime -- this entity only
- * describes it.
+ * Catalog entry for one layer. Two kinds share this table (plan "Kartenbilder aus dem
+ * Geoportal Hamburg", stage 1, {@link #kind}): a {@code VECTOR} layer, whose features
+ * live in a table of their own in gis_data, named {@code layer_<hex of id>} and created
+ * at runtime -- this entity only describes it; and a {@code WMS} layer, a map image an
+ * external service draws, which has no such table and carries its own service address
+ * and chosen layers instead (see the {@code wms*} fields below).
  *
  * The extent is EPSG:4326 like all metadata geometry, so the client can zoom to a layer
  * without knowing the project's storage CRS.
@@ -46,16 +50,34 @@ public class Layer {
 	@Column(nullable = false)
 	private String name;
 
-	/** Always 'layer_' + hex(id). Never derived from user input. */
-	@Column(name = "table_name", nullable = false, updatable = false)
+	/**
+	 * {@code VECTOR} or {@code WMS} (V9__map_image_layer.sql). Held as a plain string,
+	 * the same way {@link #geometryType}, {@link #basemap} and {@link #clipMode} are:
+	 * the database CHECK constraint from that migration is the single source of truth
+	 * for which two tokens are legal, not an enum here.
+	 */
+	@Column(nullable = false)
+	private String kind = "VECTOR";
+
+	/**
+	 * Always 'layer_' + hex(id) for a {@code VECTOR} layer, never derived from user
+	 * input. Null for a {@code WMS} layer -- a map image has no payload table (V9's
+	 * layer_kind_columns CHECK enforces the two kinds never mix which of these three
+	 * columns is set). See {@link #requireVector()} before reading this.
+	 */
+	@Column(name = "table_name", updatable = false)
 	private String tableName;
 
-	/** MULTIPOINT, MULTILINESTRING, MULTIPOLYGON or GEOMETRY for genuinely mixed sources. */
-	@Column(name = "geometry_type", nullable = false, updatable = false)
+	/**
+	 * MULTIPOINT, MULTILINESTRING, MULTIPOLYGON or GEOMETRY for genuinely mixed
+	 * sources -- {@code VECTOR} only, null for {@code WMS}. See {@link #tableName}.
+	 */
+	@Column(name = "geometry_type", updatable = false)
 	private String geometryType;
 
-	@Column(nullable = false, updatable = false)
-	private int srid;
+	/** {@code VECTOR} only, null for {@code WMS}. See {@link #tableName}. */
+	@Column(updatable = false)
+	private Integer srid;
 
 	@Column(name = "feature_count", nullable = false)
 	private long featureCount;
@@ -122,6 +144,38 @@ public class Layer {
 	@Column(columnDefinition = "geometry(Polygon,4326)")
 	private Polygon extent;
 
+	// --- WMS map image (plan "Kartenbilder aus dem Geoportal Hamburg", stage 1) ----------
+	// Set together, only for kind = 'WMS' -- see V9__map_image_layer.sql's
+	// layer_wms_fields CHECK, which is this class's single source of truth the same way
+	// layer_kind_columns is for tableName/geometryType/srid above.
+
+	/** The service's own address, without any query parameters -- see {@link #wmsLayers}. */
+	@Column(name = "wms_service_url")
+	private String wmsServiceUrl;
+
+	/**
+	 * Which of the service's layers this map image draws, and in which order: the first
+	 * entry is drawn first and therefore sits at the bottom, matching the GetMap
+	 * {@code LAYERS} parameter's own convention. A native array rather than a jsonb
+	 * document -- see V9__map_image_layer.sql for why an ordered list of scalar names
+	 * needs nothing a document would add.
+	 */
+	@JdbcTypeCode(SqlTypes.ARRAY)
+	@Column(name = "wms_layers")
+	private List<String> wmsLayers;
+
+	/** GetMap {@code FORMAT}, e.g. {@code image/png}. */
+	@Column(name = "wms_image_format")
+	private String wmsImageFormat;
+
+	/** GetLegendGraphic address, or null when the service names none for the chosen layers. */
+	@Column(name = "wms_legend_url")
+	private String wmsLegendUrl;
+
+	/** Whether GetFeatureInfo works for the chosen layers (stage 5). */
+	@Column(name = "wms_queryable")
+	private Boolean wmsQueryable;
+
 	// --- Geoportal provenance (CONTRACT.md phase 23.7) -----------------------------------
 	// All eight null together for a layer not imported from the Geoportal -- see
 	// V7__layer_source.sql. Kept as flat columns like basemap and clipMode above rather
@@ -167,14 +221,35 @@ public class Layer {
 		// for JPA
 	}
 
+	/** A {@code VECTOR} layer, backed by the payload table {@link TableCreator} just created. */
 	public Layer(UUID id, Project project, String name, String tableName,
 			String geometryType, int srid) {
 		this.id = id;
 		this.project = project;
 		this.name = name;
+		this.kind = "VECTOR";
 		this.tableName = tableName;
 		this.geometryType = geometryType;
 		this.srid = srid;
+	}
+
+	/**
+	 * A {@code WMS} layer -- a map image with no payload table of its own.
+	 *
+	 * @param wmsLayers copied defensively: the caller's list must not be able to change
+	 *                   this row's drawing order after the fact
+	 */
+	public Layer(UUID id, Project project, String name, String wmsServiceUrl,
+			List<String> wmsLayers, String wmsImageFormat, String wmsLegendUrl, boolean wmsQueryable) {
+		this.id = id;
+		this.project = project;
+		this.name = name;
+		this.kind = "WMS";
+		this.wmsServiceUrl = wmsServiceUrl;
+		this.wmsLayers = List.copyOf(wmsLayers);
+		this.wmsImageFormat = wmsImageFormat;
+		this.wmsLegendUrl = wmsLegendUrl;
+		this.wmsQueryable = wmsQueryable;
 	}
 
 	public UUID getId() {
@@ -193,16 +268,66 @@ public class Layer {
 		this.name = name;
 	}
 
+	public String getKind() {
+		return kind;
+	}
+
+	public boolean isVectorLayer() {
+		return "VECTOR".equals(kind);
+	}
+
+	/**
+	 * Guards every operation that assumes this layer has a payload table -- reading
+	 * {@link #getTableName()}, {@link #getGeometryType()} or {@link #getSrid()}. A map
+	 * image layer (kind {@code WMS}) has none of those three set (V9's
+	 * layer_kind_columns CHECK), so skipping this turns into a {@code NullPointerException}
+	 * deep inside a query rather than an answer the client can act on and show.
+	 *
+	 * @throws ConflictException mapped to 409: the request is valid for a layer in
+	 *     general, just not for this one -- not malformed (400) and not aimed at
+	 *     something that does not exist (404)
+	 */
+	public void requireVector() {
+		if (!isVectorLayer()) {
+			throw new ConflictException(
+					"Layer '" + name + "' ist ein Kartenbild und hat keine eigenen Objektdaten.", null);
+		}
+	}
+
+	/** Only meaningful for a {@code VECTOR} layer -- see {@link #requireVector()}. */
 	public String getTableName() {
 		return tableName;
 	}
 
+	/** Only meaningful for a {@code VECTOR} layer -- see {@link #requireVector()}. */
 	public String getGeometryType() {
 		return geometryType;
 	}
 
-	public int getSrid() {
+	/** Only meaningful for a {@code VECTOR} layer -- see {@link #requireVector()}. */
+	public Integer getSrid() {
 		return srid;
+	}
+
+	public String getWmsServiceUrl() {
+		return wmsServiceUrl;
+	}
+
+	/** The service's chosen layers, bottom first. Empty, never null, for a {@code VECTOR} layer. */
+	public List<String> getWmsLayers() {
+		return wmsLayers == null ? List.of() : wmsLayers;
+	}
+
+	public String getWmsImageFormat() {
+		return wmsImageFormat;
+	}
+
+	public String getWmsLegendUrl() {
+		return wmsLegendUrl;
+	}
+
+	public Boolean getWmsQueryable() {
+		return wmsQueryable;
 	}
 
 	public long getFeatureCount() {

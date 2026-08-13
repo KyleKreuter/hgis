@@ -50,7 +50,7 @@ class GeoportalCatalogControllerTest {
 	void listReturnsTheCatalog() throws Exception {
 		given(service.list()).willReturn(new GeoportalDtos.CatalogResponse(Instant.parse("2026-08-12T09:00:00Z"),
 				List.of(new GeoportalDtos.DatasetSummary(SLASHED_ID, "Straßenbaumkataster Hamburg", null,
-						"FEATURES", "BUKEA", "Umwelt", null, null, 1))));
+						"FEATURES", "BUKEA", "Umwelt", null, null, 1, null))));
 
 		mvc.perform(get("/api/geoportal/datasets"))
 				.andExpect(status().isOk())
@@ -78,7 +78,7 @@ class GeoportalCatalogControllerTest {
 				229876L, new double[] { 8.4, 53.4, 10.3, 54.0 },
 				"Freie und Hansestadt Hamburg, Behörde für Umwelt, Klima, Energie und Agrarwirtschaft",
 				GeoportalLicense.NAME, GeoportalLicense.URL, "https://registry.gdi-de.org/id/de.hh/x",
-				"https://metaver.de/trefferanzeige?docuuid=x", 25832, "gid", List.of(), 1, List.of()));
+				"https://metaver.de/trefferanzeige?docuuid=x", 25832, "gid", List.of(), 1, List.of(), null));
 
 		mvc.perform(get("/api/geoportal/datasets/" + SLASHED_ID))
 				.andExpect(status().isOk())
@@ -187,7 +187,8 @@ class GeoportalCatalogControllerTest {
 		given(service.list()).willReturn(new GeoportalDtos.CatalogResponse(Instant.parse("2026-08-12T09:00:00Z"),
 				List.of(new GeoportalDtos.DatasetSummary(SLASHED_ID, "Straßenbaumkataster Hamburg",
 						"Alle Straßenbäume der Stadt", "FEATURES", "BUKEA", "Umwelt", 229876L,
-						new double[] { 8.4, 53.4, 10.3, 54.0 }, 1))));
+						new double[] { 8.4, 53.4, 10.3, 54.0 }, 1,
+						"https://geodienste.hamburg.de/HH_WMS_Strassenbaumkataster"))));
 
 		MvcResult result = mvc.perform(get("/api/geoportal/datasets"))
 				.andExpect(status().isOk())
@@ -197,7 +198,7 @@ class GeoportalCatalogControllerTest {
 		JsonFields.assertFieldNames(body, "GeoportalDtos.CatalogResponse", "fetchedAt", "datasets");
 		JsonFields.assertFieldNames(body.get("datasets").get(0), "GeoportalDtos.DatasetSummary",
 				"id", "title", "description", "kind", "agency", "topic", "featureCount", "bbox",
-				"collectionCount");
+				"collectionCount", "wmsUrl");
 	}
 
 	/**
@@ -210,7 +211,7 @@ class GeoportalCatalogControllerTest {
 	void aServiceRowCarriesItsCollectionCount() throws Exception {
 		given(service.list()).willReturn(new GeoportalDtos.CatalogResponse(Instant.parse("2026-08-12T09:00:00Z"),
 				List.of(new GeoportalDtos.DatasetSummary("xplan", "XPlanungsdaten Hamburg", null, "BOTH", "BSW",
-						"Regionen und Städte", null, null, 247))));
+						"Regionen und Städte", null, null, 247, null))));
 
 		mvc.perform(get("/api/geoportal/datasets"))
 				.andExpect(status().isOk())
@@ -227,7 +228,8 @@ class GeoportalCatalogControllerTest {
 				"BUKEA", "Umwelt", 229876L, new double[] { 8.4, 53.4, 10.3, 54.0 },
 				"Freie und Hansestadt Hamburg, BUKEA", GeoportalLicense.NAME, GeoportalLicense.URL,
 				"https://registry.gdi-de.org/id/de.hh/x", "https://metaver.de/trefferanzeige?docuuid=x",
-				25832, "gid", List.of(), 1, List.of()));
+				25832, "gid", List.of(), 1, List.of(),
+				"https://geodienste.hamburg.de/HH_WMS_Strassenbaumkataster"));
 
 		MvcResult result = mvc.perform(get("/api/geoportal/datasets/" + SLASHED_ID))
 				.andExpect(status().isOk())
@@ -236,7 +238,7 @@ class GeoportalCatalogControllerTest {
 		JsonFields.assertFieldNames(JsonFields.tree(result), "GeoportalDtos.DatasetDetail",
 				"id", "title", "description", "kind", "agency", "topic", "featureCount", "bbox",
 				"attribution", "licenseName", "licenseUrl", "datasetUri", "metadataUrl", "storageSrid",
-				"sourceFeatureIdField", "fields", "collectionCount", "collections");
+				"sourceFeatureIdField", "fields", "collectionCount", "collections", "wmsUrl");
 	}
 
 	/**
@@ -253,7 +255,7 @@ class GeoportalCatalogControllerTest {
 				"Behörde für Stadtentwicklung und Wohnen (BSW)", GeoportalLicense.NAME, GeoportalLicense.URL,
 				"https://registry.gdi-de.org/id/de.hh/d247341c-66e6-40fe-96dd-370b141ac473", null,
 				null, null, List.of(), 247,
-				List.of(new GeoportalDtos.CollectionRef("xplan/bp_baugrenze", "BP_BauGrenze"))));
+				List.of(new GeoportalDtos.CollectionRef("xplan/bp_baugrenze", "BP_BauGrenze")), null));
 
 		MvcResult result = mvc.perform(get("/api/geoportal/datasets/xplan"))
 				.andExpect(status().isOk())

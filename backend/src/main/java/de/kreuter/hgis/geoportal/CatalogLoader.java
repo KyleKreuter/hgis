@@ -108,8 +108,17 @@ class CatalogLoader {
 	private record OafService(String apiUrl, String apiId, String name, List<OafCollection> collections) {
 	}
 
-	/** What the dataset list adds to a service: everything about it that is not per collection. */
-	private record DatasetRow(String agency, String attribution, String topic, String metadataUrl, boolean hasWms) {
+	/**
+	 * What the dataset list adds to a service: everything about it that is not per
+	 * collection.
+	 *
+	 * @param wmsUrl the CSV's {@code WMS-Adresse} column, or null -- shared by every
+	 *               collection of the service this row binds to, the same way {@code
+	 *               hasWms} already is (plan "Kartenbilder aus dem Geoportal Hamburg",
+	 *               stage 2): the row describes the service, not one collection of it
+	 */
+	private record DatasetRow(String agency, String attribution, String topic, String metadataUrl, boolean hasWms,
+			String wmsUrl) {
 	}
 
 	/**
@@ -318,7 +327,8 @@ class CatalogLoader {
 				isBlank(organisation) ? null : organisation.trim(),
 				blankToNull(valueOf(row, columnIndex, "Kategorie")),
 				blankToNull(valueOf(row, columnIndex, "Metadaten")),
-				hasWms);
+				hasWms,
+				blankToNull(wmsAddress));
 
 		String landingPage = hasOaf ? trimTrailingSlash(oafLandingPage.trim()) : "";
 		if (knownServiceUrls.contains(landingPage)) {
@@ -335,7 +345,7 @@ class CatalogLoader {
 		unboundDatasets.add(new GeoportalCatalogEntry(
 				"md:" + fallbackId(parsed.metadataUrl(), rowNumber, takenIds),
 				title.trim(), kind, parsed.agency(), parsed.attribution(), parsed.topic(), parsed.metadataUrl(),
-				null, null, null, Map.of()));
+				null, null, null, Map.of(), parsed.wmsUrl()));
 	}
 
 	// --- merge ----------------------------------------------------------------------------
@@ -379,7 +389,8 @@ class CatalogLoader {
 				collection.datasetUri(),
 				service.apiUrl(),
 				collection.collection(),
-				collection.gfiAttributes());
+				collection.gfiAttributes(),
+				row == null ? null : row.wmsUrl());
 	}
 
 	/**
@@ -405,6 +416,7 @@ class CatalogLoader {
 				service.apiUrl(),
 				null,
 				Map.of(),
+				row == null ? null : row.wmsUrl(),
 				collections);
 	}
 

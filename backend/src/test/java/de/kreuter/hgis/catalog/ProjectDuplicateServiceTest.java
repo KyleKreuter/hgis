@@ -13,6 +13,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -339,6 +340,45 @@ class ProjectDuplicateServiceTest {
 		String longName = "x".repeat(200);
 		assertThat(ProjectDuplicateTransactions.copyName(longName, 1)).hasSize(200).endsWith(" (Kopie)");
 		assertThat(ProjectDuplicateTransactions.copyName(longName, 12)).hasSize(200).endsWith(" (Kopie 12)");
+	}
+
+	/**
+	 * A map image (kind WMS) has no payload table -- {@code copyLayer}'s vector path
+	 * (CREATE TABLE ... LIKE the source) would fail outright on it, since {@code
+	 * source.getTableName()} is null. The map image branch has to run instead, copying
+	 * only the catalog row and its service binding.
+	 */
+	@Test
+	@DisplayName("duplicating a project also copies a map image layer, without a payload table")
+	void duplicatingAProjectCopiesAMapImageLayerToo() {
+		Layer mapImage = new Layer(UUID.randomUUID(), source, "Kartenbild",
+				"https://geodienste.hamburg.de/HH_WMS_Cache_Stadtplan", List.of("stadtplan"), "image/png",
+				"https://geodienste.hamburg.de/legend.png", true);
+		mapImage.setZIndex(9);
+		layers.saveAndFlush(mapImage);
+
+		Job job = jobs.create(source.getId(), Job.Type.DUPLICATE, null);
+		duplicateService.runDuplicate(job.getId(), source.getId(), null);
+		JobDtos.Response result = jobs.get(job.getId());
+		assertThat(result.status()).isEqualTo("SUCCEEDED");
+
+		Layer copy = layers.findByProjectOrdered(result.outputProjectId()).stream()
+				.filter(l -> l.getName().equals("Kartenbild")).findFirst().orElseThrow();
+		assertThat(copy.getId()).isNotEqualTo(mapImage.getId());
+		assertThat(copy.getKind()).isEqualTo("WMS");
+		assertThat(copy.getTableName()).isNull();
+		assertThat(copy.getWmsServiceUrl()).isEqualTo("https://geodienste.hamburg.de/HH_WMS_Cache_Stadtplan");
+		assertThat(copy.getWmsLayers()).containsExactly("stadtplan");
+		assertThat(copy.getWmsImageFormat()).isEqualTo("image/png");
+		assertThat(copy.getWmsLegendUrl()).isEqualTo("https://geodienste.hamburg.de/legend.png");
+		assertThat(copy.getWmsQueryable()).isTrue();
+		assertThat(copy.getZIndex()).isEqualTo(9);
+
+		// The vector sibling still copied correctly -- the map image branch must not have
+		// disturbed the ordinary path.
+		Layer vectorCopy = layers.findByProjectOrdered(result.outputProjectId()).stream()
+				.filter(l -> l.getName().equals("Gebäude")).findFirst().orElseThrow();
+		assertThat(vectorCopy.getFeatureCount()).isEqualTo(2);
 	}
 
 	@Test

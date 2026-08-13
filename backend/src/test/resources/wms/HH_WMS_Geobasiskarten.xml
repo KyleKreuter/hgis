@@ -1,0 +1,544 @@
+<?xml version='1.0' encoding="UTF-8" standalone="no" ?>
+<WMS_Capabilities version="1.3.0"  xmlns="http://www.opengis.net/wms"   xmlns:sld="http://www.opengis.net/sld"   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"   xmlns:inspire_common="http://inspire.ec.europa.eu/schemas/common/1.0"   xmlns:inspire_vs="http://inspire.ec.europa.eu/schemas/inspire_vs/1.0"   xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd  http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd  http://inspire.ec.europa.eu/schemas/inspire_vs/1.0  http://inspire.ec.europa.eu/schemas/inspire_vs/1.0/inspire_vs.xsd http://mapserver.gis.umn.edu/mapserver https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;service=WMS&amp;version=1.3.0&amp;request=GetSchemaExtension">
+<Service>
+  <Name>WMS</Name>
+  <Title>WMS Geobasiskarten Hamburg (farbig)</Title>
+  <Abstract>Der Web Map Service (WMS) stellt die GeoBasisKarten Hamburg farbig, dynamisch in verschiedenen Maßstäben, dar. Zur genaueren Beschreibung der Daten und Datenverantwortung nutzen Sie bitte den Verweis zur Datensatzbeschreibung.</Abstract>
+  <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/>
+  <ContactInformation>
+    <ContactPersonPrimary>
+      <ContactPerson></ContactPerson>
+      <ContactOrganization>LGV Hamburg</ContactOrganization>
+    </ContactPersonPrimary>
+      <ContactPosition></ContactPosition>
+    <ContactAddress>
+        <AddressType>postal</AddressType>
+        <Address>Neuenfelder Straße 19</Address>
+        <City>Hamburg</City>
+        <StateOrProvince>HH</StateOrProvince>
+        <PostCode>21109</PostCode>
+        <Country>Germany</Country>
+    </ContactAddress>
+      <ContactVoiceTelephone></ContactVoiceTelephone>
+      <ContactFacsimileTelephone></ContactFacsimileTelephone>
+  <ContactElectronicMailAddress>udp-hilfe@gv.hamburg.de</ContactElectronicMailAddress>
+  </ContactInformation>
+  <Fees>Datenlizenz Deutschland Namensnennung 2.0, Quellenvermerk: Freie und Hansestadt Hamburg, Landesbetrieb Geoinformation und Vermessung</Fees>
+  <AccessConstraints>Es gelten keine Zugriffsbeschränkungen</AccessConstraints>
+  <MaxWidth>14276</MaxWidth>
+  <MaxHeight>14276</MaxHeight>
+</Service>
+
+<Capability>
+  <Request>
+    <GetCapabilities>
+      <Format>text/xml</Format>
+      <DCPType>
+        <HTTP>
+          <Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Get>
+          <Post><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Post>
+        </HTTP>
+      </DCPType>
+    </GetCapabilities>
+    <GetMap>
+      <Format>image/png</Format>
+      <Format>image/jpeg</Format>
+      <Format>image/png; mode=8bit</Format>
+      <Format>image/vnd.jpeg-png</Format>
+      <Format>image/vnd.jpeg-png8</Format>
+      <Format>application/x-pdf</Format>
+      <Format>image/svg+xml</Format>
+      <Format>image/tiff</Format>
+      <Format>application/vnd.google-earth.kml+xml</Format>
+      <Format>application/vnd.google-earth.kmz</Format>
+      <Format>application/vnd.mapbox-vector-tile</Format>
+      <Format>application/x-protobuf</Format>
+      <Format>application/json</Format>
+      <DCPType>
+        <HTTP>
+          <Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Get>
+          <Post><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Post>
+        </HTTP>
+      </DCPType>
+    </GetMap>
+    <GetFeatureInfo>
+      <Format>text/plain</Format>
+      <Format>application/vnd.ogc.gml</Format>
+      <DCPType>
+        <HTTP>
+          <Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Get>
+          <Post><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Post>
+        </HTTP>
+      </DCPType>
+    </GetFeatureInfo>
+    <sld:DescribeLayer>
+      <Format>text/xml</Format>
+      <DCPType>
+        <HTTP>
+          <Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Get>
+          <Post><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Post>
+        </HTTP>
+      </DCPType>
+    </sld:DescribeLayer>
+    <sld:GetLegendGraphic>
+      <Format>image/png</Format>
+      <Format>image/jpeg</Format>
+      <Format>image/png; mode=8bit</Format>
+      <Format>image/vnd.jpeg-png</Format>
+      <Format>image/vnd.jpeg-png8</Format>
+      <DCPType>
+        <HTTP>
+          <Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Get>
+          <Post><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Post>
+        </HTTP>
+      </DCPType>
+    </sld:GetLegendGraphic>
+    <ms:GetStyles>
+      <Format>text/xml</Format>
+      <DCPType>
+        <HTTP>
+          <Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Get>
+          <Post><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;"/></Post>
+        </HTTP>
+      </DCPType>
+    </ms:GetStyles>
+  </Request>
+  <Exception>
+    <Format>XML</Format>
+    <Format>INIMAGE</Format>
+    <Format>BLANK</Format>
+  </Exception>
+  <sld:UserDefinedSymbolization SupportSLD="1" UserLayer="0" UserStyle="1" RemoteWFS="0" InlineFeature="0" RemoteWCS="0"/>
+  <inspire_vs:ExtendedCapabilities>
+    <inspire_common:MetadataUrl xsi:type="inspire_common:resourceLocatorType">
+      <inspire_common:URL>http://www.metaver.de/csw?Service=CSW&amp;Request=GetRecordById&amp;Version=2.0.2&amp;id=3CFD37D9-C920-4DD5-81B3-B3FE1671D7B9&amp;outputSchema=http://www.isotc211.org/2005/gmd&amp;elementSetName=full</inspire_common:URL>
+      <inspire_common:MediaType>application/vnd.ogc.csw.GetRecordByIdResponse_xml</inspire_common:MediaType>
+    </inspire_common:MetadataUrl>
+    <inspire_common:SupportedLanguages>
+      <inspire_common:DefaultLanguage><inspire_common:Language>ger</inspire_common:Language></inspire_common:DefaultLanguage>
+    </inspire_common:SupportedLanguages>
+    <inspire_common:ResponseLanguage><inspire_common:Language>ger</inspire_common:Language></inspire_common:ResponseLanguage>
+  </inspire_vs:ExtendedCapabilities>
+  <Layer>
+    <Name>wms_geobasiskarten_n</Name>
+    <Title>WMS Geobasiskarten Hamburg (farbig)</Title>
+    <Abstract>Der Web Map Service (WMS) stellt die GeoBasisKarten Hamburg farbig, dynamisch in verschiedenen Maßstäben, dar. Zur genaueren Beschreibung der Daten und Datenverantwortung nutzen Sie bitte den Verweis zur Datensatzbeschreibung.</Abstract>
+    <CRS>EPSG:25832</CRS>
+    <CRS>EPSG:4326</CRS>
+    <CRS>EPSG:4647</CRS>
+    <CRS>CRS:84</CRS>
+    <CRS>EPSG:4258</CRS>
+    <CRS>EPSG:31467</CRS>
+    <CRS>EPSG:3857</CRS>
+    <CRS>EPSG:3044</CRS>
+    <CRS>EPSG:3034</CRS>
+    <CRS>EPSG:3035</CRS>
+    <EX_GeographicBoundingBox>
+        <westBoundLongitude>7.969920</westBoundLongitude>
+        <eastBoundLongitude>12.977997</eastBoundLongitude>
+        <southBoundLatitude>52.512109</southBoundLatitude>
+        <northBoundLatitude>55.088186</northBoundLatitude>
+    </EX_GeographicBoundingBox>
+    <BoundingBox CRS="EPSG:25832"
+                minx="434246" miny="5.8246e+06" maxx="754250" maxy="6.1046e+06" />
+    <BoundingBox CRS="EPSG:4326"
+                minx="52.512109" miny="7.969920" maxx="55.088186" maxy="12.977997" />
+    <BoundingBox CRS="EPSG:4647"
+                minx="3.24342e+07" miny="5.8246e+06" maxx="3.27542e+07" maxy="6.1046e+06" />
+    <BoundingBox CRS="CRS:84"
+                minx="7.969920" miny="52.512109" maxx="12.977997" maxy="55.088186" />
+    <BoundingBox CRS="EPSG:4258"
+                minx="52.512109" miny="7.969920" maxx="55.088186" maxy="12.977997" />
+    <BoundingBox CRS="EPSG:31467"
+                minx="5.82649e+06" miny="3.43429e+06" maxx="6.10661e+06" maxy="3.75442e+06" />
+    <BoundingBox CRS="EPSG:3857"
+                minx="887207" miny="6.89326e+06" maxx="1.4447e+06" maxy="7.379e+06" />
+    <BoundingBox CRS="EPSG:3044"
+                minx="5.8246e+06" miny="434246" maxx="6.1046e+06" maxy="754250" />
+    <BoundingBox CRS="EPSG:3034"
+                minx="2.85839e+06" miny="3.87096e+06" maxx="3.13356e+06" maxy="4.18437e+06" />
+    <BoundingBox CRS="EPSG:3035"
+                minx="3.2705e+06" miny="4.18743e+06" maxx="3.55499e+06" maxy="4.51148e+06" />
+    <Style>
+       <Name>default</Name>
+       <Title>default</Title>
+       <LegendURL width="165" height="160">
+          <Format>image/png</Format>
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;version=1.3.0&amp;service=WMS&amp;request=GetLegendGraphic&amp;sld_version=1.1.0&amp;layer=wms_geobasiskarten_n&amp;format=image/png&amp;STYLE=default"/>
+       </LegendURL>
+    </Style>
+    <Layer>
+      <Name>geobasiskarten_farbig</Name>
+      <Title>Geobasiskarten (farbig)</Title>
+      <Abstract>geobasiskarten_farbig</Abstract>
+    <Style>
+       <Name>default</Name>
+       <Title>default</Title>
+       <LegendURL width="165" height="160">
+          <Format>image/png</Format>
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?language=ger&amp;version=1.3.0&amp;service=WMS&amp;request=GetLegendGraphic&amp;sld_version=1.1.0&amp;layer=geobasiskarten_farbig&amp;format=image/png&amp;STYLE=default"/>
+       </LegendURL>
+    </Style>
+      <Layer queryable="0" opaque="0" cascaded="0">
+        <Name>m2500_farbig</Name>
+        <Title>M2500 (farbig)</Title>
+        <Abstract>M2500 (farbig)</Abstract>
+        <CRS>EPSG:25832</CRS>
+        <CRS>EPSG:25833</CRS>
+        <CRS>EPSG:31467</CRS>
+        <CRS>EPSG:4258</CRS>
+        <CRS>EPSG:4326</CRS>
+        <CRS>EPSG:3044</CRS>
+        <CRS>EPSG:3857</CRS>
+        <CRS>CRS:84</CRS>
+        <EX_GeographicBoundingBox>
+            <westBoundLongitude>8.405498</westBoundLongitude>
+            <eastBoundLongitude>10.432697</eastBoundLongitude>
+            <southBoundLatitude>53.384725</southBoundLatitude>
+            <northBoundLatitude>53.968392</northBoundLatitude>
+        </EX_GeographicBoundingBox>
+        <BoundingBox CRS="EPSG:25832"
+                    minx="461000" miny="5.916e+06" maxx="594000" maxy="5.98e+06" />
+        <BoundingBox CRS="EPSG:25833"
+                    minx="62270.5" miny="5.92488e+06" maxx="200425" maxy="6e+06" />
+        <BoundingBox CRS="EPSG:31467"
+                    minx="5.91793e+06" miny="3.46105e+06" maxx="5.98196e+06" maxy="3.59411e+06" />
+        <BoundingBox CRS="EPSG:4258"
+                    minx="53.384725" miny="8.405498" maxx="53.968392" maxy="10.432697" />
+        <BoundingBox CRS="EPSG:4326"
+                    minx="53.384725" miny="8.405498" maxx="53.968392" maxy="10.432697" />
+        <BoundingBox CRS="EPSG:3044"
+                    minx="5.916e+06" miny="461000" maxx="5.98e+06" maxy="594000" />
+        <BoundingBox CRS="EPSG:3857"
+                    minx="935696" miny="7.05448e+06" maxx="1.16136e+06" maxy="7.16417e+06" />
+        <BoundingBox CRS="CRS:84"
+                    minx="8.405498" miny="53.384725" maxx="10.432697" maxy="53.968392" />
+        <AuthorityURL name="LGV">
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geoinfo.hamburg.de"/>
+        </AuthorityURL>
+        <Identifier authority="LGV"></Identifier>
+        <MetadataURL type="ISO19115:2003">
+          <Format>application/xml</Format>
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://www.metaver.de/csw?REQUEST=GetRecordById&amp;SERVICE=CSW&amp;VERSION=2.0.2&amp;id=B6A59A2B-2D40-4676-9094-0EB73039ED34&amp;iplug=/ingrid-group:ige-iplug-HH&amp;elementSetName=full"/>
+        </MetadataURL>
+        <MaxScaleDenominator>3000</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="0" opaque="0" cascaded="0">
+        <Name>m5000_farbig</Name>
+        <Title>M5000 (farbig)</Title>
+        <Abstract>M5000 (farbig)</Abstract>
+        <CRS>EPSG:25832</CRS>
+        <CRS>EPSG:25833</CRS>
+        <CRS>EPSG:31467</CRS>
+        <CRS>EPSG:4258</CRS>
+        <CRS>EPSG:4326</CRS>
+        <CRS>EPSG:3044</CRS>
+        <CRS>EPSG:3857</CRS>
+        <CRS>CRS:84</CRS>
+        <EX_GeographicBoundingBox>
+            <westBoundLongitude>8.405498</westBoundLongitude>
+            <eastBoundLongitude>10.432697</eastBoundLongitude>
+            <southBoundLatitude>53.384725</southBoundLatitude>
+            <northBoundLatitude>53.968392</northBoundLatitude>
+        </EX_GeographicBoundingBox>
+        <BoundingBox CRS="EPSG:25832"
+                    minx="461000" miny="5.916e+06" maxx="594000" maxy="5.98e+06" />
+        <BoundingBox CRS="EPSG:25833"
+                    minx="62270.5" miny="5.92488e+06" maxx="200425" maxy="6e+06" />
+        <BoundingBox CRS="EPSG:31467"
+                    minx="5.91793e+06" miny="3.46105e+06" maxx="5.98196e+06" maxy="3.59411e+06" />
+        <BoundingBox CRS="EPSG:4258"
+                    minx="53.384725" miny="8.405498" maxx="53.968392" maxy="10.432697" />
+        <BoundingBox CRS="EPSG:4326"
+                    minx="53.384725" miny="8.405498" maxx="53.968392" maxy="10.432697" />
+        <BoundingBox CRS="EPSG:3044"
+                    minx="5.916e+06" miny="461000" maxx="5.98e+06" maxy="594000" />
+        <BoundingBox CRS="EPSG:3857"
+                    minx="935696" miny="7.05448e+06" maxx="1.16136e+06" maxy="7.16417e+06" />
+        <BoundingBox CRS="CRS:84"
+                    minx="8.405498" miny="53.384725" maxx="10.432697" maxy="53.968392" />
+        <AuthorityURL name="LGV">
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geoinfo.hamburg.de"/>
+        </AuthorityURL>
+        <Identifier authority="LGV"></Identifier>
+        <MetadataURL type="ISO19115:2003">
+          <Format>application/xml</Format>
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://www.metaver.de/csw?service=CSW&amp;request=GetRecordById&amp;version=2.0.2&amp;id=B6A59A2B-2D40-4676-9094-0EB73039ED34&amp;outputSchema=http://www.isotc211.org/2005/gmd&amp;elementSetName=full"/>
+        </MetadataURL>
+        <MinScaleDenominator>3000</MinScaleDenominator>
+        <MaxScaleDenominator>7000</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="0" opaque="0" cascaded="0">
+        <Name>m10000_farbig</Name>
+        <Title>M10000 (farbig)</Title>
+        <Abstract>M10000 (farbig)</Abstract>
+        <CRS>EPSG:25832</CRS>
+        <CRS>EPSG:25833</CRS>
+        <CRS>EPSG:31467</CRS>
+        <CRS>EPSG:4258</CRS>
+        <CRS>EPSG:4326</CRS>
+        <CRS>EPSG:3044</CRS>
+        <CRS>EPSG:3857</CRS>
+        <CRS>CRS:84</CRS>
+        <EX_GeographicBoundingBox>
+            <westBoundLongitude>8.359495</westBoundLongitude>
+            <eastBoundLongitude>10.463799</eastBoundLongitude>
+            <southBoundLatitude>53.384365</southBoundLatitude>
+            <northBoundLatitude>53.986368</northBoundLatitude>
+        </EX_GeographicBoundingBox>
+        <BoundingBox CRS="EPSG:25832"
+                    minx="458000" miny="5.916e+06" maxx="596000" maxy="5.982e+06" />
+        <BoundingBox CRS="EPSG:25833"
+                    minx="59274.1" miny="5.92471e+06" maxx="202589" maxy="6.00225e+06" />
+        <BoundingBox CRS="EPSG:31467"
+                    minx="5.91793e+06" miny="3.45805e+06" maxx="5.98396e+06" maxy="3.59611e+06" />
+        <BoundingBox CRS="EPSG:4258"
+                    minx="53.384365" miny="8.359495" maxx="53.986368" maxy="10.463799" />
+        <BoundingBox CRS="EPSG:4326"
+                    minx="53.384365" miny="8.359495" maxx="53.986368" maxy="10.463799" />
+        <BoundingBox CRS="EPSG:3044"
+                    minx="5.916e+06" miny="458000" maxx="5.982e+06" maxy="596000" />
+        <BoundingBox CRS="EPSG:3857"
+                    minx="930575" miny="7.05441e+06" maxx="1.16482e+06" maxy="7.16757e+06" />
+        <BoundingBox CRS="CRS:84"
+                    minx="8.359495" miny="53.384365" maxx="10.463799" maxy="53.986368" />
+        <AuthorityURL name="LGV">
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geoinfo.hamburg.de"/>
+        </AuthorityURL>
+        <Identifier authority="LGV"></Identifier>
+        <MetadataURL type="ISO19115:2003">
+          <Format>application/xml</Format>
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://www.metaver.de/csw?service=CSW&amp;request=GetRecordById&amp;version=2.0.2&amp;id=B6A59A2B-2D40-4676-9094-0EB73039ED34&amp;outputSchema=http://www.isotc211.org/2005/gmd&amp;elementSetName=full"/>
+        </MetadataURL>
+        <MinScaleDenominator>7000</MinScaleDenominator>
+        <MaxScaleDenominator>15000</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="0" opaque="0" cascaded="0">
+        <Name>m20000_farbig</Name>
+        <Title>M20000 (farbig)</Title>
+        <Abstract>M20000 (farbig)</Abstract>
+        <CRS>EPSG:25832</CRS>
+        <CRS>EPSG:25833</CRS>
+        <CRS>EPSG:31467</CRS>
+        <CRS>EPSG:4258</CRS>
+        <CRS>EPSG:4326</CRS>
+        <CRS>EPSG:3044</CRS>
+        <CRS>EPSG:3857</CRS>
+        <CRS>CRS:84</CRS>
+        <EX_GeographicBoundingBox>
+            <westBoundLongitude>8.359495</westBoundLongitude>
+            <eastBoundLongitude>10.463799</eastBoundLongitude>
+            <southBoundLatitude>53.384365</southBoundLatitude>
+            <northBoundLatitude>53.986368</northBoundLatitude>
+        </EX_GeographicBoundingBox>
+        <BoundingBox CRS="EPSG:25832"
+                    minx="458000" miny="5.916e+06" maxx="596000" maxy="5.982e+06" />
+        <BoundingBox CRS="EPSG:25833"
+                    minx="59274.1" miny="5.92471e+06" maxx="202589" maxy="6.00225e+06" />
+        <BoundingBox CRS="EPSG:31467"
+                    minx="5.91793e+06" miny="3.45805e+06" maxx="5.98396e+06" maxy="3.59611e+06" />
+        <BoundingBox CRS="EPSG:4258"
+                    minx="53.384365" miny="8.359495" maxx="53.986368" maxy="10.463799" />
+        <BoundingBox CRS="EPSG:4326"
+                    minx="53.384365" miny="8.359495" maxx="53.986368" maxy="10.463799" />
+        <BoundingBox CRS="EPSG:3044"
+                    minx="5.916e+06" miny="458000" maxx="5.982e+06" maxy="596000" />
+        <BoundingBox CRS="EPSG:3857"
+                    minx="930575" miny="7.05441e+06" maxx="1.16482e+06" maxy="7.16757e+06" />
+        <BoundingBox CRS="CRS:84"
+                    minx="8.359495" miny="53.384365" maxx="10.463799" maxy="53.986368" />
+        <AuthorityURL name="LGV">
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geoinfo.hamburg.de"/>
+        </AuthorityURL>
+        <Identifier authority="LGV"></Identifier>
+        <MetadataURL type="ISO19115:2003">
+          <Format>application/xml</Format>
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://www.metaver.de/csw?service=CSW&amp;request=GetRecordById&amp;version=2.0.2&amp;id=B6A59A2B-2D40-4676-9094-0EB73039ED34&amp;outputSchema=http://www.isotc211.org/2005/gmd&amp;elementSetName=full"/>
+        </MetadataURL>
+        <MinScaleDenominator>15000</MinScaleDenominator>
+        <MaxScaleDenominator>29000</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="0" opaque="0" cascaded="0">
+        <Name>m40000_farbig</Name>
+        <Title>M40000 (farbig)</Title>
+        <Abstract>M40000 (farbig)</Abstract>
+        <CRS>EPSG:25832</CRS>
+        <CRS>EPSG:25833</CRS>
+        <CRS>EPSG:31467</CRS>
+        <CRS>EPSG:4258</CRS>
+        <CRS>EPSG:4326</CRS>
+        <CRS>EPSG:3044</CRS>
+        <CRS>EPSG:3857</CRS>
+        <CRS>CRS:84</CRS>
+        <EX_GeographicBoundingBox>
+            <westBoundLongitude>8.144880</westBoundLongitude>
+            <eastBoundLongitude>10.709863</eastBoundLongitude>
+            <southBoundLatitude>53.165571</southBoundLatitude>
+            <northBoundLatitude>54.040295</northBoundLatitude>
+        </EX_GeographicBoundingBox>
+        <BoundingBox CRS="EPSG:25832"
+                    minx="443998" miny="5.892e+06" maxx="612000" maxy="5.988e+06" />
+        <BoundingBox CRS="EPSG:25833"
+                    minx="43266.5" miny="5.89943e+06" maxx="219055" maxy="6.00943e+06" />
+        <BoundingBox CRS="EPSG:31467"
+                    minx="5.89392e+06" miny="3.44405e+06" maxx="5.98996e+06" maxy="3.61212e+06" />
+        <BoundingBox CRS="EPSG:4258"
+                    minx="53.165571" miny="8.144880" maxx="54.040295" maxy="10.709863" />
+        <BoundingBox CRS="EPSG:4326"
+                    minx="53.165571" miny="8.144880" maxx="54.040295" maxy="10.709863" />
+        <BoundingBox CRS="EPSG:3044"
+                    minx="5.892e+06" miny="443998" maxx="5.988e+06" maxy="612000" />
+        <BoundingBox CRS="EPSG:3857"
+                    minx="906684" miny="7.01368e+06" maxx="1.19222e+06" maxy="7.17779e+06" />
+        <BoundingBox CRS="CRS:84"
+                    minx="8.144880" miny="53.165571" maxx="10.709863" maxy="54.040295" />
+        <AuthorityURL name="LGV">
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geoinfo.hamburg.de"/>
+        </AuthorityURL>
+        <Identifier authority="LGV"></Identifier>
+        <MetadataURL type="ISO19115:2003">
+          <Format>application/xml</Format>
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://www.metaver.de/csw?service=CSW&amp;request=GetRecordById&amp;version=2.0.2&amp;id=B6A59A2B-2D40-4676-9094-0EB73039ED34&amp;outputSchema=http://www.isotc211.org/2005/gmd&amp;elementSetName=full"/>
+        </MetadataURL>
+        <MinScaleDenominator>29000</MinScaleDenominator>
+        <MaxScaleDenominator>41000</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="0" opaque="0" cascaded="0">
+        <Name>m60000_farbig</Name>
+        <Title>M60000 (farbig)</Title>
+        <Abstract>M60000 (farbig)</Abstract>
+        <CRS>EPSG:25832</CRS>
+        <CRS>EPSG:25833</CRS>
+        <CRS>EPSG:31467</CRS>
+        <CRS>EPSG:4258</CRS>
+        <CRS>EPSG:4326</CRS>
+        <CRS>EPSG:3044</CRS>
+        <CRS>EPSG:3857</CRS>
+        <CRS>CRS:84</CRS>
+        <EX_GeographicBoundingBox>
+            <westBoundLongitude>8.144880</westBoundLongitude>
+            <eastBoundLongitude>10.709863</eastBoundLongitude>
+            <southBoundLatitude>53.165571</southBoundLatitude>
+            <northBoundLatitude>54.040295</northBoundLatitude>
+        </EX_GeographicBoundingBox>
+        <BoundingBox CRS="EPSG:25832"
+                    minx="443998" miny="5.892e+06" maxx="612000" maxy="5.988e+06" />
+        <BoundingBox CRS="EPSG:25833"
+                    minx="43266.5" miny="5.89943e+06" maxx="219055" maxy="6.00943e+06" />
+        <BoundingBox CRS="EPSG:31467"
+                    minx="5.89392e+06" miny="3.44405e+06" maxx="5.98996e+06" maxy="3.61212e+06" />
+        <BoundingBox CRS="EPSG:4258"
+                    minx="53.165571" miny="8.144880" maxx="54.040295" maxy="10.709863" />
+        <BoundingBox CRS="EPSG:4326"
+                    minx="53.165571" miny="8.144880" maxx="54.040295" maxy="10.709863" />
+        <BoundingBox CRS="EPSG:3044"
+                    minx="5.892e+06" miny="443998" maxx="5.988e+06" maxy="612000" />
+        <BoundingBox CRS="EPSG:3857"
+                    minx="906684" miny="7.01368e+06" maxx="1.19222e+06" maxy="7.17779e+06" />
+        <BoundingBox CRS="CRS:84"
+                    minx="8.144880" miny="53.165571" maxx="10.709863" maxy="54.040295" />
+        <AuthorityURL name="LGV">
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geoinfo.hamburg.de"/>
+        </AuthorityURL>
+        <Identifier authority="LGV"></Identifier>
+        <MetadataURL type="ISO19115:2003">
+          <Format>application/xml</Format>
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://www.metaver.de/csw?service=CSW&amp;request=GetRecordById&amp;version=2.0.2&amp;id=B6A59A2B-2D40-4676-9094-0EB73039ED34&amp;outputSchema=http://www.isotc211.org/2005/gmd&amp;elementSetName=full"/>
+        </MetadataURL>
+        <MinScaleDenominator>41000</MinScaleDenominator>
+        <MaxScaleDenominator>75000</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="0" opaque="0" cascaded="0">
+        <Name>m100000_farbig</Name>
+        <Title>M100000 (farbig)</Title>
+        <Abstract>M100000 (farbig)</Abstract>
+        <CRS>EPSG:25832</CRS>
+        <CRS>EPSG:25833</CRS>
+        <CRS>EPSG:31467</CRS>
+        <CRS>EPSG:4258</CRS>
+        <CRS>EPSG:4326</CRS>
+        <CRS>EPSG:3044</CRS>
+        <CRS>EPSG:3857</CRS>
+        <CRS>CRS:84</CRS>
+        <EX_GeographicBoundingBox>
+            <westBoundLongitude>7.969920</westBoundLongitude>
+            <eastBoundLongitude>12.977997</eastBoundLongitude>
+            <southBoundLatitude>52.512109</southBoundLatitude>
+            <northBoundLatitude>55.088186</northBoundLatitude>
+        </EX_GeographicBoundingBox>
+        <BoundingBox CRS="EPSG:25832"
+                    minx="434246" miny="5.8246e+06" maxx="754250" maxy="6.1046e+06" />
+        <BoundingBox CRS="EPSG:25833"
+                    minx="27876.5" miny="5.82038e+06" maxx="370739" maxy="6.12672e+06" />
+        <BoundingBox CRS="EPSG:31467"
+                    minx="5.82649e+06" miny="3.43429e+06" maxx="6.10661e+06" maxy="3.75442e+06" />
+        <BoundingBox CRS="EPSG:4258"
+                    minx="52.512109" miny="7.969920" maxx="55.088186" maxy="12.977997" />
+        <BoundingBox CRS="EPSG:4326"
+                    minx="52.512109" miny="7.969920" maxx="55.088186" maxy="12.977997" />
+        <BoundingBox CRS="EPSG:3044"
+                    minx="5.8246e+06" miny="434246" maxx="6.1046e+06" maxy="754250" />
+        <BoundingBox CRS="EPSG:3857"
+                    minx="887207" miny="6.89326e+06" maxx="1.4447e+06" maxy="7.379e+06" />
+        <BoundingBox CRS="CRS:84"
+                    minx="7.969920" miny="52.512109" maxx="12.977997" maxy="55.088186" />
+        <AuthorityURL name="LGV">
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geoinfo.hamburg.de"/>
+        </AuthorityURL>
+        <Identifier authority="LGV"></Identifier>
+        <MetadataURL type="ISO19115:2003">
+          <Format>application/xml</Format>
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://www.metaver.de/csw?service=CSW&amp;request=GetRecordById&amp;version=2.0.2&amp;id=B6A59A2B-2D40-4676-9094-0EB73039ED34&amp;outputSchema=http://www.isotc211.org/2005/gmd&amp;elementSetName=full"/>
+        </MetadataURL>
+        <MinScaleDenominator>75000</MinScaleDenominator>
+        <MaxScaleDenominator>125000</MaxScaleDenominator>
+      </Layer>
+      <Layer queryable="0" opaque="0" cascaded="0">
+        <Name>m125000_farbig</Name>
+        <Title>M125000 (farbig)</Title>
+        <Abstract>M125000 (farbig)</Abstract>
+        <CRS>EPSG:25832</CRS>
+        <CRS>EPSG:25833</CRS>
+        <CRS>EPSG:31467</CRS>
+        <CRS>EPSG:4258</CRS>
+        <CRS>EPSG:4326</CRS>
+        <CRS>EPSG:3044</CRS>
+        <CRS>EPSG:3857</CRS>
+        <CRS>CRS:84</CRS>
+        <EX_GeographicBoundingBox>
+            <westBoundLongitude>7.969920</westBoundLongitude>
+            <eastBoundLongitude>12.977997</eastBoundLongitude>
+            <southBoundLatitude>52.512109</southBoundLatitude>
+            <northBoundLatitude>55.088186</northBoundLatitude>
+        </EX_GeographicBoundingBox>
+        <BoundingBox CRS="EPSG:25832"
+                    minx="434246" miny="5.8246e+06" maxx="754250" maxy="6.1046e+06" />
+        <BoundingBox CRS="EPSG:25833"
+                    minx="27876.5" miny="5.82038e+06" maxx="370739" maxy="6.12672e+06" />
+        <BoundingBox CRS="EPSG:31467"
+                    minx="5.82649e+06" miny="3.43429e+06" maxx="6.10661e+06" maxy="3.75442e+06" />
+        <BoundingBox CRS="EPSG:4258"
+                    minx="52.512109" miny="7.969920" maxx="55.088186" maxy="12.977997" />
+        <BoundingBox CRS="EPSG:4326"
+                    minx="52.512109" miny="7.969920" maxx="55.088186" maxy="12.977997" />
+        <BoundingBox CRS="EPSG:3044"
+                    minx="5.8246e+06" miny="434246" maxx="6.1046e+06" maxy="754250" />
+        <BoundingBox CRS="EPSG:3857"
+                    minx="887207" miny="6.89326e+06" maxx="1.4447e+06" maxy="7.379e+06" />
+        <BoundingBox CRS="CRS:84"
+                    minx="7.969920" miny="52.512109" maxx="12.977997" maxy="55.088186" />
+        <AuthorityURL name="LGV">
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geoinfo.hamburg.de"/>
+        </AuthorityURL>
+        <Identifier authority="LGV"></Identifier>
+        <MetadataURL type="ISO19115:2003">
+          <Format>application/xml</Format>
+          <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://www.metaver.de/csw?service=CSW&amp;request=GetRecordById&amp;version=2.0.2&amp;id=B6A59A2B-2D40-4676-9094-0EB73039ED34&amp;outputSchema=http://www.isotc211.org/2005/gmd&amp;elementSetName=full"/>
+        </MetadataURL>
+        <MinScaleDenominator>125000</MinScaleDenominator>
+        <MaxScaleDenominator>2.5e+06</MaxScaleDenominator>
+      </Layer>
+    </Layer>
+  </Layer>
+</Capability>
+</WMS_Capabilities>

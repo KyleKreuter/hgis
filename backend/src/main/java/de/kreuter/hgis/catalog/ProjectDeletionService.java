@@ -33,8 +33,11 @@ public class ProjectDeletionService {
 
 	@Transactional
 	public void deleteProject(UUID projectId) {
+		// table_name is NULL for a map image layer (kind WMS) -- it has no payload table
+		// to drop, so it is excluded here rather than passed on to the check below, which
+		// exists for a name, not for the absence of one.
 		List<String> tableNames = jdbc
-				.sql("SELECT table_name FROM gis_meta.layer WHERE project_id = :projectId")
+				.sql("SELECT table_name FROM gis_meta.layer WHERE project_id = :projectId AND table_name IS NOT NULL")
 				.param("projectId", projectId)
 				.query(String.class)
 				.list();

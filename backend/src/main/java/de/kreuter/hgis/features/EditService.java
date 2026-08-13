@@ -58,6 +58,7 @@ public class EditService {
 	public EditDtos.Response apply(UUID layerId, EditDtos.Request request) {
 		Layer layer = layerRepository.findById(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
+		layer.requireVector();
 
 		int total = request.creates().size() + request.updates().size() + request.deletes().size();
 		if (total == 0) {
