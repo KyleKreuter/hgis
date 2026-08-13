@@ -35,6 +35,8 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Objekte per Rechteck auswählen, wahlweise berührte oder vollständig eingeschlossene,
   und die Auswahl mit Umschalt ergänzen oder mit Alt abziehen
 - Einen Layer oder die aktuelle Auswahl als GeoJSON herunterladen
+- Die Karte als PNG speichern, in A4 oder A3 mit 96, 150 oder 300 dpi, mit Titel,
+  Nordpfeil, Maßstabsbalken und Quellenangabe
 - Sachdaten direkt in der Attributtabelle bearbeiten, mit der Tastatur und je Feldtyp
   passender Eingabe
 - Einstellungen und Arbeitsstand bleiben erhalten und kommen beim nächsten Öffnen zurück
@@ -288,6 +290,25 @@ POST /api/layers/{layerId}/export.geojson             dieselbe Auswahl als JSON-
 
 Dabei gilt: Ein leer übergebener Parameter bedeutet ausdrücklich „nichts auswählen“. Er
 liefert eine leere Datei, nicht den ganzen Layer. Der Export nach GeoPackage fehlt noch.
+
+### Die Karte als Bild
+
+Der Knopf oben rechts auf der Karte speichert den aktuellen Ausschnitt als PNG. Sie
+wählen einen Titel, ein Seitenformat (A4 oder A3, hoch oder quer, oder die Größe des
+Kartenfensters) und die Auflösung (96, 150 oder 300 dpi). A4 quer bei 300 dpi ergibt
+3508 x 2480 Pixel.
+
+Auf dem Bild stehen der Titel, ein Maßstabsbalken, die Quellenangabe der Hintergrundkarte
+und die Angaben der sichtbaren Geoportal-Layer. Der Nordpfeil erscheint nur, wenn die
+Karte gedreht oder geneigt ist. Eine Legende fehlt noch.
+
+Das Programm zeichnet das Bild auf einer zweiten, verborgenen Karte in der Größe der
+Seite. Die sichtbare Karte bleibt unberührt und verliert keine Leistung. Der Maßstab des
+Bildes ist ein anderer als der des Bildschirms, weil die Seite eine andere Form hat. Der
+Balken gilt für das Bild.
+
+Sehr große Formate lehnt das Programm ab und nennt die größte Bildgröße, die Ihre
+Grafikkarte verarbeitet. Ein stillschweigend kleineres Bild gibt es nicht.
 
 ## Fachliches Konzept
 
