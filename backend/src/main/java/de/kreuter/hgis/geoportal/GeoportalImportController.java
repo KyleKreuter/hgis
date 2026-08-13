@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -74,6 +75,13 @@ class GeoportalImportController {
 		}
 		catch (BadRequestException ex) {
 			jobService.markFailed(job.getId(), ex.getMessage());
+			throw ex;
+		}
+		catch (ResourceAccessException ex) {
+			// The service never answered. Rethrown unchanged so GeoportalOutageAdvice can
+			// report it as an outage: wrapping it into a BadRequestException like the catch
+			// below would blame the request for something no request could have avoided.
+			jobService.markFailed(job.getId(), "Das Geoportal Hamburg antwortet nicht: " + describe(ex));
 			throw ex;
 		}
 		catch (RuntimeException ex) {

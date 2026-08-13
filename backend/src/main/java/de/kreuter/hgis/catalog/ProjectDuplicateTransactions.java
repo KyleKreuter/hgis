@@ -72,7 +72,9 @@ class ProjectDuplicateTransactions {
 		String targetTable = SqlIdentifier.tableName(targetLayerId);
 
 		// INCLUDING ALL would copy the source's index definitions and their schema-wide
-		// names. Excluding indexes avoids that collision; PK and GiST are recreated below.
+		// names. Excluding indexes avoids that collision, at the price of dropping every
+		// index rather than only the colliding ones -- so PK, GiST and the source's own
+		// attribute indexes are all recreated below, under the copy's own names.
 		jdbc.sql("CREATE TABLE " + SqlIdentifier.quoteLayerTable(targetTable) + " (LIKE "
 				+ SqlIdentifier.quoteLayerTable(source.getTableName())
 				+ " INCLUDING ALL EXCLUDING INDEXES)").update();
@@ -83,6 +85,7 @@ class ProjectDuplicateTransactions {
 				+ " ADD PRIMARY KEY (fid)").update();
 		jdbc.sql("CREATE INDEX " + SqlIdentifier.quoteColumn(targetTable + "_geom_idx") + " ON "
 				+ SqlIdentifier.quoteLayerTable(targetTable) + " USING GIST (geom)").update();
+		copyAttributeIndexes(source.getTableName(), targetTable);
 		long nextFid = jdbc.sql("SELECT COALESCE(MAX(fid), 0) + 1 FROM "
 				+ SqlIdentifier.quoteLayerTable(targetTable)).query(Long.class).single();
 		jdbc.sql("ALTER TABLE " + SqlIdentifier.quoteLayerTable(targetTable)
@@ -104,6 +107,62 @@ class ProjectDuplicateTransactions {
 				FROM gis_meta.layer WHERE project_id = :projectId
 				""").param("projectId", targetProjectId).query(Long.class).single();
 		jobService.updateProgress(jobId, processed, totalFeatures, 0);
+	}
+
+	/**
+	 * Recreates the source table's plain attribute indexes on the copy. {@code EXCLUDING
+	 * INDEXES} above drops every index, not only the two names that would have collided, and
+	 * the primary key and the GiST index are the only two put back explicitly -- so a layer
+	 * imported from the Geoportal lost the index on the service's own feature id (decision
+	 * E6), the one the later reconcile looks rows up by. Nothing reports that kind of loss:
+	 * the copy answers every query it is asked, only slowly, and only once the table is large
+	 * enough to notice.
+	 *
+	 * <p>Which columns to index is read off the source table rather than derived again from
+	 * the layer's fields. {@code layer.source_feature_id_field} holds the service's technical
+	 * name, and the column was named from it by {@link SqlIdentifier#toColumnName}, whose
+	 * result also depends on the other columns present -- re-running that here would be a
+	 * second, separate implementation of the same rule, free to disagree with the first. The
+	 * source table already knows the answer.
+	 *
+	 * <p>Restricted to plain single-column indexes -- not unique, not the primary key, no
+	 * expression, no {@code WHERE} predicate -- and skipping {@code geom}, whose GiST index
+	 * is recreated above: that is exactly what {@code TableCreator.createAttributeIndex}
+	 * produces. An index of any other shape is left alone rather than silently recreated as
+	 * something weaker than it was.
+	 */
+	private void copyAttributeIndexes(String sourceTable, String targetTable) {
+		List<String> columns = jdbc.sql("""
+				SELECT a.attname
+				FROM pg_index i
+				JOIN pg_class c ON c.oid = i.indrelid
+				JOIN pg_namespace n ON n.oid = c.relnamespace
+				JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = i.indkey[0]
+				WHERE n.nspname = 'gis_data'
+				  AND c.relname = :table
+				  AND NOT i.indisprimary
+				  AND NOT i.indisunique
+				  AND i.indnatts = 1
+				  AND i.indexprs IS NULL
+				  AND i.indpred IS NULL
+				  AND a.attname <> 'geom'
+				ORDER BY a.attname
+				""").param("table", sourceTable).query(String.class).list();
+
+		for (String column : columns) {
+			jdbc.sql("CREATE INDEX " + SqlIdentifier.quoteColumn(attributeIndexName(targetTable, column))
+					+ " ON " + SqlIdentifier.quoteLayerTable(targetTable)
+					+ " (" + SqlIdentifier.quoteColumn(column) + ")").update();
+		}
+	}
+
+	/** Same name and same truncation rule {@code TableCreator.createAttributeIndex} uses, so a
+	 *  copy is indistinguishable from a freshly imported layer. */
+	private static String attributeIndexName(String tableName, String columnName) {
+		String suffix = "_idx";
+		int budget = SqlIdentifier.MAX_LENGTH - tableName.length() - 1 - suffix.length();
+		String columnPart = columnName.length() > budget ? columnName.substring(0, budget) : columnName;
+		return tableName + "_" + columnPart + suffix;
 	}
 
 	@Transactional

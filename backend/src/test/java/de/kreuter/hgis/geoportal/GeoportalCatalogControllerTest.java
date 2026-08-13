@@ -5,6 +5,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -20,6 +21,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.client.ResourceAccessException;
 
 /**
  * CONTRACT.md 11.2 through 11.5, with {@link GeoportalDatasetService} mocked -- what this
@@ -29,7 +31,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * still wins over the greedy {@code {id:.+}} pattern the detail mapping uses.
  */
 @WebMvcTest(controllers = GeoportalCatalogController.class)
-@Import(ProblemDetailAdvice.class)
+@Import({ ProblemDetailAdvice.class, GeoportalOutageAdvice.class })
 class GeoportalCatalogControllerTest {
 
 	@Autowired
@@ -119,5 +121,47 @@ class GeoportalCatalogControllerTest {
 	void malformedBboxIsBadRequest() throws Exception {
 		mvc.perform(get("/api/geoportal/datasets/" + SLASHED_ID + "/count").param("bbox", "not,a,bbox"))
 				.andExpect(status().isBadRequest());
+	}
+
+	// --- an outage upstream is not a fault of this program ------------------------------
+
+	/**
+	 * All three cases below used to reach the user as 500 "Interner Fehler" -- the timeout
+	 * one after a full minute of waiting. That message names the wrong culprit: nothing here
+	 * is broken, a service this program depends on did not answer, and the difference is
+	 * exactly what tells a user whether retrying is worth anything.
+	 */
+	@Test
+	@DisplayName("ein Serverfehler des Geoportals ist ein 502, kein interner Fehler")
+	void anUpstreamServerFaultIsBadGateway() throws Exception {
+		given(service.detail(SLASHED_ID))
+				.willThrow(new GeoportalUnavailableException("Geoportal antwortete mit 503 auf https://api.hamburg.de/x"));
+
+		mvc.perform(get("/api/geoportal/datasets/" + SLASHED_ID))
+				.andExpect(status().isBadGateway())
+				.andExpect(header().string("Retry-After", "60"))
+				.andExpect(jsonPath("$.title").value("Geoportal nicht erreichbar"))
+				.andExpect(jsonPath("$.detail", org.hamcrest.Matchers.containsString("Geoportal Hamburg")));
+	}
+
+	@Test
+	@DisplayName("eine Zeitüberschreitung zum Geoportal ist ein 503, kein interner Fehler")
+	void aTimeoutIsServiceUnavailable() throws Exception {
+		given(service.detail(SLASHED_ID)).willThrow(new ResourceAccessException("Read timed out"));
+
+		mvc.perform(get("/api/geoportal/datasets/" + SLASHED_ID))
+				.andExpect(status().isServiceUnavailable())
+				.andExpect(header().string("Retry-After", "60"))
+				.andExpect(jsonPath("$.detail", org.hamcrest.Matchers.containsString("Geoportal Hamburg")));
+	}
+
+	@Test
+	@DisplayName("ein fehlgeschlagenes erstes Laden des Katalogs ist ein 503, kein interner Fehler")
+	void aFailedFirstCatalogLoadIsServiceUnavailable() throws Exception {
+		given(service.list()).willThrow(new CatalogLoadException("Dienstverzeichnis antwortete mit 502"));
+
+		mvc.perform(get("/api/geoportal/datasets"))
+				.andExpect(status().isServiceUnavailable())
+				.andExpect(jsonPath("$.detail", org.hamcrest.Matchers.containsString("Geoportal Hamburg")));
 	}
 }

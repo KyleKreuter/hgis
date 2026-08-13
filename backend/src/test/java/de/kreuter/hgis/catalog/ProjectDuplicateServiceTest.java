@@ -156,6 +156,94 @@ class ProjectDuplicateServiceTest {
 		assertThat(copy.getSourceFetchedAt()).isEqualTo(Instant.parse("2026-08-12T09:14:00Z"));
 	}
 
+	/**
+	 * CONTRACT.md 11.7: {@code source} belongs to every layer imported from the Geoportal,
+	 * and {@code attribution} may be null within it -- the two are separate questions.
+	 * {@code grundwassermessstellen/grundwassermessstellen} (191,140 features, importable)
+	 * is exactly that case, measured live: a licence and a metadata record, but no
+	 * attribution, because the service directory leaves its agency blank. While "came from
+	 * the Geoportal" was keyed on the attribution, duplicating a project dropped such a
+	 * layer's provenance entirely, and the copy showed no licence notice at all -- the one
+	 * obligation clause 2 of the licence puts on this program.
+	 */
+	@Test
+	void duplicatingALayerWithoutAttributionStillCarriesItsProvenanceForward() {
+		Layer gebaeude = layers.findByProjectOrdered(source.getId()).getFirst();
+		gebaeude.setSource(
+				null,
+				"Datenlizenz Deutschland – Namensnennung – Version 2.0",
+				"https://www.govdata.de/dl-de/by-2-0",
+				null,
+				"https://metaver.de/trefferanzeige?docuuid=z",
+				"grundwassermessstellen/grundwassermessstellen",
+				"gid",
+				Instant.parse("2026-08-12T09:14:00Z"));
+		layers.saveAndFlush(gebaeude);
+
+		Job job = jobs.create(source.getId(), Job.Type.DUPLICATE, null);
+		duplicateService.runDuplicate(job.getId(), source.getId(), null);
+		JobDtos.Response result = jobs.get(job.getId());
+		assertThat(result.status()).isEqualTo("SUCCEEDED");
+
+		Layer copy = layers.findByProjectOrdered(result.outputProjectId()).getFirst();
+		assertThat(copy.getProvenance()).as("die Herkunft überlebt das Duplizieren").isNotNull();
+		assertThat(copy.getSourceAttribution()).as("und bleibt dabei ohne Quellenvermerk").isNull();
+		assertThat(copy.getSourceLicenseName()).isEqualTo("Datenlizenz Deutschland – Namensnennung – Version 2.0");
+		assertThat(copy.getSourceLicenseUrl()).isEqualTo("https://www.govdata.de/dl-de/by-2-0");
+		assertThat(copy.getSourceMetadataUrl()).isEqualTo("https://metaver.de/trefferanzeige?docuuid=z");
+		assertThat(copy.getSourceDatasetId()).isEqualTo("grundwassermessstellen/grundwassermessstellen");
+		assertThat(copy.getSourceFeatureIdField()).isEqualTo("gid");
+		assertThat(copy.getSourceFetchedAt()).isEqualTo(Instant.parse("2026-08-12T09:14:00Z"));
+	}
+
+	/**
+	 * CONTRACT.md phase 23, decision E6: a Geoportal layer carries a non-unique index on the
+	 * service's own feature id, and stage 5's reconcile is what it exists for. {@code LIKE
+	 * ... EXCLUDING INDEXES} drops every index of the source, not only the two whose
+	 * schema-wide names would have collided, and only the primary key and the GiST index are
+	 * put back by name -- so the copy used to lose exactly the index the reconcile needs.
+	 * Nothing reports that: the copy answers every query, only slowly, and only once it is
+	 * large enough to matter.
+	 */
+	@Test
+	void duplicatingALayerCarriesItsAttributeIndexForward() {
+		// What TableCreator.createAttributeIndex leaves on a layer imported from the Geoportal.
+		jdbc.sql("CREATE INDEX " + SqlIdentifier.quoteColumn(sourceTable + "_titel_idx") + " ON "
+				+ SqlIdentifier.quoteLayerTable(sourceTable) + " (titel)").update();
+
+		Job job = jobs.create(source.getId(), Job.Type.DUPLICATE, null);
+		duplicateService.runDuplicate(job.getId(), source.getId(), null);
+		JobDtos.Response result = jobs.get(job.getId());
+		assertThat(result.status()).isEqualTo("SUCCEEDED");
+
+		Layer copy = layers.findByProjectOrdered(result.outputProjectId()).getFirst();
+		assertThat(indexedAttributeColumnsOf(copy.getTableName()))
+				.as("die Kopie behält den Index auf dem Kennfeld")
+				.containsExactly("titel");
+		assertThat(indexedAttributeColumnsOf(sourceTable))
+				.as("und die Quelle bleibt unberührt")
+				.containsExactly("titel");
+		// The geometry index is recreated under the copy's own name, so both still exist.
+		assertThat(jdbc.sql("SELECT count(*) FROM pg_indexes WHERE schemaname = 'gis_data' AND tablename = :table")
+				.param("table", copy.getTableName()).query(Long.class).single())
+				.as("Primärschlüssel, GiST und Attributindex")
+				.isEqualTo(3);
+	}
+
+	/** Every plain, single-column index on an ordinary attribute of one layer table. */
+	private List<String> indexedAttributeColumnsOf(String tableName) {
+		return jdbc.sql("""
+				SELECT a.attname
+				FROM pg_index i
+				JOIN pg_class c ON c.oid = i.indrelid
+				JOIN pg_namespace n ON n.oid = c.relnamespace
+				JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = i.indkey[0]
+				WHERE n.nspname = 'gis_data' AND c.relname = :table
+				  AND NOT i.indisprimary AND i.indnatts = 1 AND a.attname <> 'geom'
+				ORDER BY a.attname
+				""").param("table", tableName).query(String.class).list();
+	}
+
 	/** A layer never touched by {@code setSource} must copy as having no provenance -- null,
 	 *  not some accidental default, matching {@code copiesCatalogRowsPayloadIndexesAndIdentityWithoutTouchingSource}. */
 	@Test
