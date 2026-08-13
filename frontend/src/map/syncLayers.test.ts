@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AddLayerObject, VectorSourceSpecification } from 'maplibre-gl'
-import type { LayerSummary } from '@/api/layers'
+import type { LayerSummary, MapImageLayerSummary } from '@/api/layers'
 import type { LayerStyle } from '@/styling/types'
 import { type AppliedLayer, type MapLike, syncMapLayers } from './syncLayers'
 
@@ -429,6 +429,131 @@ describe('syncMapLayers mit Symbologie', () => {
       'A',
       '#0072b2',
       '#a3a3a3',
+    ])
+    expect(map.removeSource).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The Deckkraft slider in `LayerProperties.tsx` writes `layer.style.opacity` without
+   * bumping `dataVersion`/`styleVersion` -- the opacity update addendum is explicit that
+   * the tiles do not change. If `syncMapLayers` treated that as a reason to rebuild, the
+   * raster layer would flicker (removed and re-added) on every step of the slider
+   * instead of just repainting, which is what `isRebuildRequired` exists to prevent.
+   */
+  it('wendet eine geänderte Deckkraft als reine Farbänderung an, ohne den Layer neu aufzubauen', () => {
+    const { map } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    syncMapLayers(map, [makeWmsLayer()], applied)
+    ;(map.addLayer as ReturnType<typeof vi.fn>).mockClear()
+    ;(map.removeLayer as ReturnType<typeof vi.fn>).mockClear()
+    ;(map.addSource as ReturnType<typeof vi.fn>).mockClear()
+    ;(map.removeSource as ReturnType<typeof vi.fn>).mockClear()
+
+    syncMapLayers(map, [makeWmsLayer({ style: { opacity: 0.5 } })], applied)
+
+    expect(map.setPaintProperty).toHaveBeenCalledWith('hgis-layer-img-1-render', 'raster-opacity', 0.5)
+    expect(map.addLayer).not.toHaveBeenCalled()
+    expect(map.removeLayer).not.toHaveBeenCalled()
+    expect(map.addSource).not.toHaveBeenCalled()
+    expect(map.removeSource).not.toHaveBeenCalled()
+  })
+})
+
+function makeWmsLayer(overrides: Partial<MapImageLayerSummary> = {}): MapImageLayerSummary {
+  return {
+    id: 'img-1',
+    name: 'Stadtplan',
+    kind: 'WMS',
+    geometryType: null,
+    srid: null,
+    featureCount: 0,
+    visible: true,
+    zIndex: 0,
+    minZoom: 0,
+    maxZoom: 22,
+    dataVersion: 1,
+    styleVersion: 1,
+    extent: null,
+    wms: {
+      serviceUrl: 'https://geodienste.hamburg.de/HH_WMS_Cache_Stadtplan',
+      layers: ['stadtplan'],
+      imageFormat: 'image/png',
+      legendUrl: null,
+      queryable: true,
+    },
+    ...overrides,
+  }
+}
+
+describe('syncMapLayers mit Kartenbildern', () => {
+  it('legt für ein Kartenbild eine Rasterquelle mit der GetMap-Adresse an, keine Vektorquelle', () => {
+    const { map, sources, layers } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+
+    syncMapLayers(map, [makeWmsLayer()], applied)
+
+    const source = sources.get('hgis-layer-img-1')!.spec as unknown as {
+      type: string
+      tiles: string[]
+      tileSize: number
+    }
+    expect(source.type).toBe('raster')
+    expect(source.tiles).toEqual([
+      'https://geodienste.hamburg.de/HH_WMS_Cache_Stadtplan?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap' +
+        '&LAYERS=stadtplan&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}' +
+        '&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE',
+    ])
+    expect(source.tileSize).toBe(256)
+    expect([...layers.keys()]).toEqual(['hgis-layer-img-1-render'])
+    expect(layers.get('hgis-layer-img-1-render')?.type).toBe('raster')
+  })
+
+  it('schreibt die Deckkraft als raster-opacity, nicht fill-opacity', () => {
+    const { map, layers } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+
+    syncMapLayers(map, [makeWmsLayer()], applied)
+
+    const paint = (layers.get('hgis-layer-img-1-render') as AddLayerObject & { paint?: Record<string, unknown> }).paint
+    expect(paint).toEqual({ 'raster-opacity': 1 })
+    expect(paint).not.toHaveProperty('fill-opacity')
+  })
+
+  it('behält die Reihenfolge zweier übereinanderliegender Kartenbilder', () => {
+    const { map, layerOrder } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    const bottom = makeWmsLayer({ id: 'img-bottom', zIndex: 0 })
+    const top = makeWmsLayer({ id: 'img-top', zIndex: 1, wms: { ...makeWmsLayer().wms, serviceUrl: 'https://example.org/wms' } })
+
+    syncMapLayers(map, [top, bottom], applied)
+
+    expect(layerOrder).toEqual(['hgis-layer-img-bottom-render', 'hgis-layer-img-top-render'])
+  })
+
+  it('mischt ein Kartenbild und einen Vektorlayer im selben Projekt, jedes mit seiner eigenen Quellenart', () => {
+    const { map, sources } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    const vector = makeLayer({ id: 'v-1', zIndex: 0 })
+    const image = makeWmsLayer({ id: 'img-1', zIndex: 1 })
+
+    syncMapLayers(map, [vector, image], applied)
+
+    expect((sources.get('hgis-layer-v-1')!.spec as unknown as { type: string }).type).toBe('vector')
+    expect((sources.get('hgis-layer-img-1')!.spec as unknown as { type: string }).type).toBe('raster')
+  })
+
+  it('holt beim Wechsel des Bildformats die Quelle über setTiles neu, nicht mit removeSource', () => {
+    const { map, sources } = createFakeMap({ sourceSupportsSetTiles: true })
+    const applied = new Map<string, AppliedLayer>()
+    syncMapLayers(map, [makeWmsLayer()], applied)
+
+    const setTilesSpy = sources.get('hgis-layer-img-1')!.setTiles!
+    syncMapLayers(map, [makeWmsLayer({ wms: { ...makeWmsLayer().wms, imageFormat: 'image/jpeg' } })], applied)
+
+    expect(setTilesSpy).toHaveBeenCalledWith([
+      'https://geodienste.hamburg.de/HH_WMS_Cache_Stadtplan?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap' +
+        '&LAYERS=stadtplan&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}' +
+        '&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg&TRANSPARENT=TRUE',
     ])
     expect(map.removeSource).not.toHaveBeenCalled()
   })

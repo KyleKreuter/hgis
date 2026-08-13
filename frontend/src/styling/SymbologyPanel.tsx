@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RotateCcw } from 'lucide-react'
-import { layerDetailQuery, type LayerSummary } from '@/api/layers'
+import { layerDetailQuery, type VectorLayerSummary } from '@/api/layers'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
@@ -23,7 +23,7 @@ import type { LabelStyle, LayerStyle, Renderer, RendererType } from './types'
 import { useStyleEditor } from './useStyleEditor'
 
 interface SymbologyPanelProps {
-  layer: LayerSummary
+  layer: VectorLayerSummary
   projectId: string
 }
 

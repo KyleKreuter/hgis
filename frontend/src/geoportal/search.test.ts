@@ -21,6 +21,7 @@ function dataset(overrides: Partial<GeoportalDatasetSummary> = {}): GeoportalDat
     featureCount: 229_876,
     bbox: [8.42, 53.39, 10.33, 53.97],
     collectionCount: 1,
+    wmsUrl: null,
     ...overrides,
   }
 }

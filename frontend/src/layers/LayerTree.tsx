@@ -13,6 +13,7 @@ import {
   Filter,
   FilterX,
   Globe,
+  Image as ImageIcon,
   Loader2,
   Magnet,
   Map as MapIcon,
@@ -48,6 +49,7 @@ import { cn } from '@/lib/utils'
 import { formatCount } from '@/lib/format'
 import { exportErrorMessage, useExportLayer } from '@/api/export'
 import {
+  isVectorLayer,
   layerListQuery,
   useReorderLayers,
   useUpdateLayer,
@@ -102,6 +104,8 @@ interface LayerTreeProps {
   onImportClick: () => void
   onCreateLayerClick: () => void
   onGeoportalClick: () => void
+  /** Opens `AddMapImageDialog` -- the second way a Kartenbild comes in (plan Stufe 4). */
+  onAddMapImageClick: () => void
   /** Layers marked as snap sources, or null when not editing -- the toggle only exists then. */
   snapSources?: string[] | null
   onToggleSnapSource?: (layerId: string) => void
@@ -115,6 +119,7 @@ export function LayerTree({
   onImportClick,
   onCreateLayerClick,
   onGeoportalClick,
+  onAddMapImageClick,
   snapSources = null,
   onToggleSnapSource,
 }: LayerTreeProps) {
@@ -192,6 +197,10 @@ export function LayerTree({
               <Globe className="size-3.5" />
               Geoportal Hamburg
             </Button>
+            <Button variant="outline" size="sm" onClick={onAddMapImageClick}>
+              <ImageIcon className="size-3.5" />
+              Eigener WMS-Dienst
+            </Button>
           </div>
         </div>
       </Panel>
@@ -221,7 +230,8 @@ export function LayerTree({
               canMoveUp={index > 0}
               canMoveDown={index < displayed.length - 1}
               isSnapSource={snapSources?.includes(layer.id) ?? false}
-              showSnapToggle={snapSources !== null && layer.id !== activeLayerId}
+              // A Kartenbild has no geometry, so it can never serve as a snap source.
+              showSnapToggle={snapSources !== null && layer.id !== activeLayerId && isVectorLayer(layer)}
               onToggleSnapSource={() => onToggleSnapSource?.(layer.id)}
               onSelect={() => onSelectLayer(layer.id)}
               onZoom={() => {
@@ -331,9 +341,15 @@ function LayerRow({
   onDragOverHalf,
 }: LayerRowProps) {
   const updateLayer = useUpdateLayer(layer.id, projectId)
-  const Icon = GEOMETRY_ICONS[layer.geometryType]
-  const previewColor = previewColorOf(layer.style)
-  const clipMaskLocked = clipMaskLockedReason(layer.geometryType)
+  const isVector = isVectorLayer(layer)
+  // GEOMETRY_ICONS is only defined for a real geometry -- a Kartenbild gets its own
+  // icon instead of a lookup that would otherwise need a null key (GEOMETRY_ICONS ab
+  // Zeile 74 is the pattern this follows).
+  const Icon = isVector ? GEOMETRY_ICONS[layer.geometryType] : ImageIcon
+  // A Kartenbild has no fill/line/marker colour to preview -- null reads as the neutral
+  // muted-foreground icon, the same as a vector layer that has never been styled.
+  const previewColor = isVector ? previewColorOf(layer.style) : null
+  const clipMaskLocked = isVector ? clipMaskLockedReason(layer.geometryType) : null
   const ClipModeIcon = layer.clipMode != null ? CLIP_MODE_ICONS[layer.clipMode] : null
 
   function handleClipModeChange(mode: ClipMode | null) {
@@ -415,7 +431,11 @@ function LayerRow({
         // overflow-hidden so what does not fit is cut off here rather than running on
         // over the buttons to the right of it.
         className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-left"
-        title={`${layer.name} (${GEOMETRY_LABELS[layer.geometryType]}, ${formatCount(layer.featureCount)} Objekte)`}
+        title={
+          isVector
+            ? `${layer.name} (${GEOMETRY_LABELS[layer.geometryType]}, ${formatCount(layer.featureCount)} Objekte)`
+            : `${layer.name} (Kartenbild)`
+        }
       >
         {/* Filled, not outlined: an outlined square sitting next to the visibility
             checkbox reads as a second, unticked checkbox. Filled it reads as what it
@@ -435,9 +455,14 @@ function LayerRow({
         <span className={cn('min-w-8 truncate', !layer.visible && 'text-muted-foreground')}>
           {layer.name}
         </span>
-        <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground tabular-nums">
-          {formatCount(layer.featureCount)}
-        </span>
+        {/* A Kartenbild's featureCount is always 0 (contract "wird nicht angezeigt") --
+            showing it would read as an empty layer rather than as one with no concept
+            of objects at all. */}
+        {isVector && (
+          <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground tabular-nums">
+            {formatCount(layer.featureCount)}
+          </span>
+        )}
       </button>
 
       {/* Kept outside the button: `layer.visible` never dims it, because the mask goes
@@ -526,66 +551,75 @@ function LayerRow({
             <Pencil className="size-3.5" />
             Umbenennen
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onManageFields}>
-            <Columns3 className="size-3.5" />
-            Felder verwalten
-          </DropdownMenuItem>
+          {/* A Kartenbild has no attributes, no mask geometry and nothing to export --
+              only the actions that make sense for a picture stay (message "Im
+              Aktionsmenü fallen weg: Felder verwalten, Als Maske, Exportieren"). */}
+          {isVector && (
+            <DropdownMenuItem onClick={onManageFields}>
+              <Columns3 className="size-3.5" />
+              Felder verwalten
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={onSetBasemap}>
             <MapIcon className="size-3.5" />
             Hintergrundkarte
           </DropdownMenuItem>
-          {/* Shown for every geometry type, disabled with a reason for the two that
-              cannot hold a mask -- contract "erscheint gesperrt mit dem Grund, nicht
-              wortlos". A submenu, not a checkbox item: this is a choice between five
-              states (no clip, plus the four modes from CONTRACT.md phase 21), not a
-              single flag to toggle (contract "keine Ja/Nein-Marke mehr"). */}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger disabled={clipMaskLocked !== null}>
-              <Scissors className="size-3.5" />
-              {clipMaskLocked ? (
-                <span className="flex flex-col">
-                  <span>Zuschnitt für alles darüber</span>
-                  <span className="text-xs text-muted-foreground">{clipMaskLocked}</span>
-                </span>
-              ) : (
-                'Zuschnitt für alles darüber'
-              )}
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              {/* A `DropdownMenuRadioGroup`, not a plain list of items: the five choices
-                  are mutually exclusive, the same role radio buttons play in a form. */}
-              <DropdownMenuRadioGroup
-                value={layer.clipMode ?? null}
-                onValueChange={(value) => handleClipModeChange(value as ClipMode | null)}
+          {isVector && (
+            <>
+              {/* Shown for every geometry type, disabled with a reason for the two that
+                  cannot hold a mask -- contract "erscheint gesperrt mit dem Grund, nicht
+                  wortlos". A submenu, not a checkbox item: this is a choice between five
+                  states (no clip, plus the four modes from CONTRACT.md phase 21), not a
+                  single flag to toggle (contract "keine Ja/Nein-Marke mehr"). */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={clipMaskLocked !== null}>
+                  <Scissors className="size-3.5" />
+                  {clipMaskLocked ? (
+                    <span className="flex flex-col">
+                      <span>Zuschnitt für alles darüber</span>
+                      <span className="text-xs text-muted-foreground">{clipMaskLocked}</span>
+                    </span>
+                  ) : (
+                    'Zuschnitt für alles darüber'
+                  )}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {/* A `DropdownMenuRadioGroup`, not a plain list of items: the five choices
+                      are mutually exclusive, the same role radio buttons play in a form. */}
+                  <DropdownMenuRadioGroup
+                    value={layer.clipMode ?? null}
+                    onValueChange={(value) => handleClipModeChange(value as ClipMode | null)}
+                  >
+                    {availableClipModes(layer.geometryType).map((mode) => (
+                      <DropdownMenuRadioItem key={mode ?? 'none'} value={mode}>
+                        {clipModeLabel(mode)}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleExportLayer} disabled={isExporting}>
+                {exportLayerMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Download className="size-3.5" />
+                )}
+                {exportLayerMutation.isPending ? 'Wird exportiert…' : 'Layer exportieren'}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleExportSelection}
+                disabled={!canExportSelection || isExporting}
               >
-                {availableClipModes(layer.geometryType).map((mode) => (
-                  <DropdownMenuRadioItem key={mode ?? 'none'} value={mode}>
-                    {clipModeLabel(mode)}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleExportLayer} disabled={isExporting}>
-            {exportLayerMutation.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Download className="size-3.5" />
-            )}
-            {exportLayerMutation.isPending ? 'Wird exportiert…' : 'Layer exportieren'}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={handleExportSelection}
-            disabled={!canExportSelection || isExporting}
-          >
-            {exportSelectionMutation.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <FileDown className="size-3.5" />
-            )}
-            {exportSelectionMutation.isPending ? 'Wird exportiert…' : 'Auswahl exportieren'}
-          </DropdownMenuItem>
+                {exportSelectionMutation.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <FileDown className="size-3.5" />
+                )}
+                {exportSelectionMutation.isPending ? 'Wird exportiert…' : 'Auswahl exportieren'}
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={onMoveUp} disabled={!canMoveUp}>
             <ChevronUp className="size-3.5" />

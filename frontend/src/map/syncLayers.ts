@@ -2,13 +2,15 @@ import type {
   AddLayerObject,
   LayerSpecification,
   Map as MapLibreMap,
+  RasterSourceSpecification,
   Source,
   VectorSourceSpecification,
 } from 'maplibre-gl'
-import type { LayerSummary } from '@/api/layers'
+import { isMapImageLayer, isVectorLayer, type LayerSummary } from '@/api/layers'
 import { styleToMapLibre } from '@/styling/styleToMapLibre'
 import { buildTileUrl, sourceIdFor } from './layerSpecs'
 import { raiseOverlays } from './overlays'
+import { buildWmsGetMapUrl, wmsLayerSpec, wmsSourceSpec } from './wmsTiles'
 
 /**
  * The subset of maplibregl.Map this module touches. Kept narrow and structural on
@@ -71,17 +73,41 @@ function removeFromMap(map: MapLike, layerId: string, specs: LayerSpecification[
   if (map.getSource(sourceId)) map.removeSource(sourceId)
 }
 
+/**
+ * A Kartenbild gets a raster source (`map/wmsTiles.ts`'s `{bbox-epsg-3857}` address),
+ * every other layer the vector MVT source it always had. `isMapImageLayer` is what
+ * decides -- and, since it is a type guard, is what lets `wmsSourceSpec` see a
+ * `MapImageLayerSummary` rather than the bare `LayerSummary`.
+ */
+function sourceSpecFor(layer: LayerSummary, tileUrl: string): VectorSourceSpecification | RasterSourceSpecification {
+  if (isMapImageLayer(layer)) return wmsSourceSpec(layer, tileUrl)
+  return { type: 'vector', tiles: [tileUrl], minzoom: layer.minZoom, maxzoom: layer.maxZoom }
+}
+
 function addToMap(map: MapLike, layer: LayerSummary, tileUrl: string, specs: LayerSpecification[]): void {
-  const source: VectorSourceSpecification = {
-    type: 'vector',
-    tiles: [tileUrl],
-    minzoom: layer.minZoom,
-    maxzoom: layer.maxZoom,
-  }
-  map.addSource(sourceIdFor(layer.id), source)
+  map.addSource(sourceIdFor(layer.id), sourceSpecFor(layer, tileUrl))
   for (const spec of specs) {
     map.addLayer(spec as AddLayerObject)
   }
+}
+
+/**
+ * The tile/GetMap address and the MapLibre layer objects for one catalog layer --
+ * split out of the main loop below because each of the two kinds needs its own pair of
+ * builders, and `isMapImageLayer`/`isVectorLayer` only narrow the branch they gate.
+ */
+function specsFor(layer: LayerSummary, sourceId: string): { tileUrl: string; specs: LayerSpecification[] } {
+  if (isMapImageLayer(layer)) {
+    return { tileUrl: buildWmsGetMapUrl(layer.wms), specs: [wmsLayerSpec(layer, sourceId)] }
+  }
+  if (isVectorLayer(layer)) {
+    return { tileUrl: buildTileUrl(layer), specs: styleToMapLibre(layer.style ?? null, layer, sourceId) }
+  }
+  // Unreachable: `isMapImageLayer`/`isVectorLayer` are exact complements of `kind`.
+  // Kept rather than asserted past, so a third `kind` the backend might one day add
+  // fails loudly here instead of falling through to whichever branch happened to be
+  // written last.
+  throw new Error(`Unbekannte Layerart: ${layer.kind}`)
 }
 
 /**
@@ -169,6 +195,11 @@ function isSameValue(a: unknown, b: unknown): boolean {
  * `applied` is mutated in place -- it is the caller's bookkeeping of the previous
  * run, normally a `useRef(new Map())` held for the lifetime of the map instance.
  *
+ * A Kartenbild (`kind: 'WMS'`) takes the same path end to end, just with a different
+ * source and a single raster layer -- `specsFor`/`sourceSpecFor` (`isMapImageLayer`)
+ * are the only places that branch on it; everything below, reorder included, treats
+ * the result the same as a vector layer's.
+ *
  * Handles, per layer:
  *  - new layer -> addSource + addLayer(s)
  *  - removed layer (deleted, or dropped from this project) -> removeLayer(s) + removeSource
@@ -202,9 +233,8 @@ export function syncMapLayers(map: MapLike, layers: LayerSummary[], applied: Map
   }
 
   for (const layer of layers) {
-    const tileUrl = buildTileUrl(layer)
     const sourceId = sourceIdFor(layer.id)
-    const specs = styleToMapLibre(layer.style ?? null, layer, sourceId)
+    const { tileUrl, specs } = specsFor(layer, sourceId)
     const existing = applied.get(layer.id)
 
     if (!existing) {

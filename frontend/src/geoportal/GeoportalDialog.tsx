@@ -58,6 +58,7 @@ import {
 } from './collections'
 import { formatFieldValues, isImportable } from './fields'
 import { buildGeoportalImportBody } from './importBody'
+import { MapImageSection } from './MapImageSection'
 import {
   defaultGeoportalFilters,
   distinctAgencies,
@@ -92,6 +93,9 @@ interface GeoportalDialogProps {
   projectId: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Fired after a Kartenbild was added, so the caller can select it in the tree --
+   *  the same role `CreateLayerDialog`'s `onCreated` plays. */
+  onLayerAdded?: (layerId: string) => void
 }
 
 /**
@@ -100,7 +104,7 @@ interface GeoportalDialogProps {
  * on purpose -- a catalog of several hundred entries needs a list and a detail pane side
  * by side, not a single stacked form.
  */
-export function GeoportalDialog({ projectId, open, onOpenChange }: GeoportalDialogProps) {
+export function GeoportalDialog({ projectId, open, onOpenChange, onLayerAdded }: GeoportalDialogProps) {
   const catalog = useGeoportalCatalog()
   const refreshCatalog = useRefreshGeoportalCatalog()
   const startImport = useStartGeoportalImport(projectId)
@@ -249,6 +253,16 @@ export function GeoportalDialog({ projectId, open, onOpenChange }: GeoportalDial
     onOpenChange(next)
   }
 
+  /**
+   * A Kartenbild is created synchronously, unlike a Geoportal object import -- there is
+   * no job to watch, so the dialog just closes and hands the new layer's id to the
+   * caller, the same way `CreateLayerDialog.onCreated` does.
+   */
+  function handleMapImageAdded(layerId: string) {
+    onLayerAdded?.(layerId)
+    handleOpenChange(false)
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex h-[min(85dvh,44rem)] max-h-[calc(100dvh-2rem)] flex-col gap-3 overflow-hidden sm:max-w-5xl">
@@ -288,6 +302,9 @@ export function GeoportalDialog({ projectId, open, onOpenChange }: GeoportalDial
                 onSelect={handleSelect}
               />
               <DatasetDetailPane
+                projectId={projectId}
+                datasetId={datasetId}
+                onMapImageAdded={handleMapImageAdded}
                 summary={summary}
                 wmsOnly={wmsOnly}
                 detail={detail}
@@ -604,6 +621,12 @@ function DatasetRow({
 }
 
 interface DatasetDetailPaneProps {
+  projectId: string
+  /** What `MapImageSection` sends as `datasetId` -- the chosen collection if there is
+   *  one, otherwise the entry itself (same rule `handleImport` uses for a FEATURES
+   *  import, `activeDatasetId`). */
+  datasetId: string | null
+  onMapImageAdded: (layerId: string) => void
   summary: GeoportalDatasetSummary | null
   wmsOnly: boolean
   detail: ReturnType<typeof useGeoportalDataset>
@@ -632,6 +655,9 @@ interface DatasetDetailPaneProps {
 }
 
 function DatasetDetailPane({
+  projectId,
+  datasetId,
+  onMapImageAdded,
   summary,
   wmsOnly,
   detail,
@@ -701,16 +727,31 @@ function DatasetDetailPane({
           )}
         </div>
 
-        {wmsOnly && (
-          <Alert>
-            <ImageIcon />
-            <AlertTitle>Nur als Kartenbild verfügbar</AlertTitle>
-            <AlertDescription>
-              Dieser Datensatz liefert keine Objekte, nur ein fertiges Kartenbild. Er lässt
-              sich erst mit dem Bildweg (Stufe 2) als Hintergrundkarte nutzen – ein Import
-              ist hier noch nicht möglich.
-            </AlertDescription>
-          </Alert>
+        {/* A `WMS`/`BOTH` entry names its service address here (CONTRACT.md section 5),
+            so its layers can be read and offered as a Kartenbild -- what used to be a
+            flat rejection for `wmsOnly` is now the primary way in for it. A missing
+            `wmsUrl` on an entry the catalog still calls `WMS`/`BOTH` is the one case
+            genuinely worth a word: the catalog said this dataset serves a map image,
+            and there is nothing here to build one from. */}
+        {summary.wmsUrl ? (
+          <MapImageSection
+            key={summary.wmsUrl}
+            projectId={projectId}
+            wmsUrl={summary.wmsUrl}
+            datasetId={datasetId ?? summary.id}
+            onAdded={onMapImageAdded}
+          />
+        ) : (
+          wmsOnly && (
+            <Alert>
+              <ImageIcon />
+              <AlertTitle>Kein Kartenbild verfügbar</AlertTitle>
+              <AlertDescription>
+                Der Katalog nennt für diesen Dienst keine WMS-Adresse. Das Programm kann
+                daraus kein Kartenbild anlegen.
+              </AlertDescription>
+            </Alert>
+          )
         )}
 
         {detail.isPending && <p className="text-xs text-muted-foreground">Einzelheiten werden geladen…</p>}

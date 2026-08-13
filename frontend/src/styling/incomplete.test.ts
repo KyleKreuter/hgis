@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LayerSpecification } from 'maplibre-gl'
-import type { GeometryType, LayerSummary } from '@/api/layers'
+import type { GeometryType, VectorLayerSummary } from '@/api/layers'
 import { styleToMapLibre } from './styleToMapLibre'
 import type { LayerStyle } from './types'
 
@@ -20,7 +20,7 @@ import type { LayerStyle } from './types'
 
 const GEOMETRY_TYPES: GeometryType[] = ['MULTIPOINT', 'MULTILINESTRING', 'MULTIPOLYGON', 'GEOMETRY']
 
-function makeLayer(geometryType: GeometryType): LayerSummary {
+function makeLayer(geometryType: GeometryType): VectorLayerSummary {
   return {
     id: 'layer-1',
     name: 'Gebäude',

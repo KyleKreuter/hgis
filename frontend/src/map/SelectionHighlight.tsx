@@ -6,7 +6,7 @@ import type {
   LineLayerSpecification,
 } from 'maplibre-gl'
 
-import { layerListQuery, type LayerSummary } from '@/api/layers'
+import { isVectorLayer, layerListQuery, type VectorLayerSummary } from '@/api/layers'
 import { useSelection } from '@/state/selection'
 import { useMap } from './MapContext'
 import { sourceIdFor } from './layerSpecs'
@@ -37,7 +37,7 @@ function highlightFilter(fids: number[]): HighlightSpec['filter'] {
   return ['in', ['id'], ['literal', fids]]
 }
 
-function highlightSpecs(layer: LayerSummary, fids: number[]): HighlightSpec[] {
+function highlightSpecs(layer: VectorLayerSummary, fids: number[]): HighlightSpec[] {
   const source = sourceIdFor(layer.id)
   const common = {
     source,
@@ -95,7 +95,10 @@ export function SelectionHighlight({ projectId }: { projectId: string }) {
 
     const fids = [...selected]
     const layer = layers?.find((entry) => entry.id === selectedLayerId)
-    const specs = layer && fids.length > 0 ? highlightSpecs(layer, fids) : []
+    // A Kartenbild is never selectable in the first place (Identify and the rectangle
+    // tool both stand down for it), but this stays defensive rather than assuming that
+    // holds forever.
+    const specs = layer && isVectorLayer(layer) && fids.length > 0 ? highlightSpecs(layer, fids) : []
     const wanted = new Set(specs.map((spec) => spec.id))
 
     // Remove highlights that no longer apply -- including the previous layer's, when the

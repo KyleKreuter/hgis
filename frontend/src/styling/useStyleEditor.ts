@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { layerKeys, useUpdateLayerStyle, type LayerSummary } from '@/api/layers'
+import { layerKeys, useUpdateLayerStyle, type LayerSummary, type VectorLayerSummary } from '@/api/layers'
 import { isPersistable } from './persistable'
 import { createStyleWriteQueue } from './styleWriteQueue'
 import type { LayerStyle } from './types'
@@ -32,7 +32,7 @@ export interface StyleEditor {
  * that now. The write carries its own layer (`styleWriteQueue`, and `useUpdateLayerStyle`
  * takes it as a variable), and the layer effect below flushes before the panel moves on.
  */
-export function useStyleEditor(layer: LayerSummary, projectId: string): StyleEditor {
+export function useStyleEditor(layer: VectorLayerSummary, projectId: string): StyleEditor {
   const queryClient = useQueryClient()
   const save = useUpdateLayerStyle(projectId)
 

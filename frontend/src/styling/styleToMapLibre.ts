@@ -6,7 +6,7 @@ import type {
   LineLayerSpecification,
   SymbolLayerSpecification,
 } from 'maplibre-gl'
-import type { LayerSummary } from '@/api/layers'
+import type { VectorLayerSummary } from '@/api/layers'
 import { GEOMETRY_FILTERS, TILE_SOURCE_LAYER, layerIdsFor, layerSpecsFor } from '@/map/layerSpecs'
 import {
   DEFAULT_FILL,
@@ -38,7 +38,7 @@ import type {
  */
 export function styleToMapLibre(
   style: LayerStyle | null,
-  layer: LayerSummary,
+  layer: VectorLayerSummary,
   sourceId: string,
 ): LayerSpecification[] {
   // The unstyled path is the literal one from `layerSpecs`, not a re-derivation: every
@@ -95,7 +95,7 @@ type Common = {
   layout: { visibility: 'visible' | 'none' }
 }
 
-function geometrySpec(id: string, layer: LayerSummary, style: LayerStyle, opacity: number, common: Common): LayerSpecification {
+function geometrySpec(id: string, layer: VectorLayerSummary, style: LayerStyle, opacity: number, common: Common): LayerSpecification {
   const role = roleFor(layer.geometryType)
   if (role === 'point') {
     return { id, type: 'circle', paint: circlePaint(style, opacity), ...common } satisfies CircleLayerSpecification
@@ -112,7 +112,7 @@ function activeLabels(style: LayerStyle): LabelStyle | null {
   return labels && labels.enabled && labels.field ? labels : null
 }
 
-function zoomRange(layer: LayerSummary, style: LayerStyle): [number, number] {
+function zoomRange(layer: VectorLayerSummary, style: LayerStyle): [number, number] {
   const min = Math.max(numberOr(layer.minZoom, 0), numberOr(style.minZoom, 0))
   // The style can only narrow the layer's range, never widen it past what the source
   // actually serves. Never below `min`, which MapLibre would reject outright.
@@ -179,7 +179,7 @@ function circlePaint(style: LayerStyle, opacity: number): CircleLayerSpecificati
   })
 }
 
-function labelLayout(labels: LabelStyle, layer: LayerSummary): SymbolLayerSpecification['layout'] {
+function labelLayout(labels: LabelStyle, layer: VectorLayerSummary): SymbolLayerSpecification['layout'] {
   return defined<NonNullable<SymbolLayerSpecification['layout']>>({
     'text-field': ['get', labels.field],
     'text-font': LABEL_FONT,

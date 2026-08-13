@@ -27,6 +27,13 @@ export interface GeoportalDatasetSummary {
    * a collection has to be chosen before an import can start.
    */
   collectionCount: number
+  /**
+   * The service address from the catalog's "WMS-Adresse" column, or `null` when the
+   * entry names none (wms-api-vertrag.md section 5). Present for a `WMS` or `BOTH`
+   * entry; what lets the detail pane fetch `/api/wms/capabilities` for it instead of
+   * turning the entry away the way it used to.
+   */
+  wmsUrl: string | null
 }
 
 /** `GET /api/geoportal/datasets` and the answer to a refresh -- same shape (CONTRACT.md 11.2/11.3). */

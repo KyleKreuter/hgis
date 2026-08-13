@@ -31,6 +31,7 @@ const FLAT: GeoportalDatasetSummary = {
   featureCount: 100,
   bbox: null,
   collectionCount: 1,
+  wmsUrl: null,
 }
 
 /** A service listed as one row: no collection named, so nothing to import from yet. */
@@ -44,6 +45,7 @@ const SERVICE: GeoportalDatasetSummary = {
   featureCount: null,
   bbox: null,
   collectionCount: 247,
+  wmsUrl: null,
 }
 
 const CATALOG: GeoportalCatalog = {
@@ -231,5 +233,54 @@ describe('GeoportalDialog collection choice', () => {
     await user.click(screen.getByRole('button', { name: /XPlanung/ }))
     expect(await screen.findByRole('button', { name: 'Bebauungsplan' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Importieren' })).toBeDisabled()
+  })
+})
+
+const WMS_ONLY: GeoportalDatasetSummary = {
+  id: 'ds-wms',
+  title: 'Internetstadtplan Hamburg',
+  description: null,
+  kind: 'WMS',
+  agency: 'LGV',
+  topic: 'Basiskarten',
+  featureCount: null,
+  bbox: null,
+  collectionCount: 1,
+  wmsUrl: 'https://geodienste.hamburg.de/HH_WMS_Cache_Stadtplan',
+}
+
+const WMS_CAPABILITIES = {
+  serviceUrl: 'https://geodienste.hamburg.de/HH_WMS_Cache_Stadtplan',
+  title: 'WMS Stadtplan',
+  version: '1.3.0',
+  imageFormats: ['image/png'],
+  layers: [
+    { name: 'stadtplan', title: 'Stadtplan', depth: 0, queryable: true, legendUrl: null, minScale: null, maxScale: null, bbox: null },
+  ],
+}
+
+/**
+ * Section 5 of the contract: a `WMS`/`BOTH` entry names its own service address, and
+ * the dialog reads the service's layers from it instead of turning the entry away --
+ * the behaviour the old "Nur als Kartenbild verfügbar" rejection replaced.
+ */
+describe('GeoportalDialog Kartenbild-Weg', () => {
+  test('bietet für einen WMS-Datensatz die Layerliste des Dienstes an, statt abzuweisen', async () => {
+    stubElementSize()
+    stubFetch([
+      { match: '/api/wms/capabilities', body: WMS_CAPABILITIES },
+      { match: '/api/geoportal/datasets/ds-wms', body: { ...WMS_ONLY, ...LICENCE, sourceFeatureIdField: null, fields: [], collections: [] } },
+      { match: '/api/geoportal/datasets', body: { fetchedAt: '2026-01-01T00:00:00Z', datasets: [WMS_ONLY] } },
+    ])
+    renderWithQueryClient(<GeoportalDialog projectId="p-1" open onOpenChange={() => {}} />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: /Internetstadtplan Hamburg/ }))
+
+    // The heading and the submit button both read "Als Kartenbild hinzufügen" -- the
+    // button is the more specific target and proves the picker actually mounted.
+    expect(await screen.findByRole('button', { name: 'Als Kartenbild hinzufügen' })).toBeInTheDocument()
+    expect(await screen.findByText('Stadtplan')).toBeInTheDocument()
+    expect(screen.queryByText('Nur als Kartenbild verfügbar')).not.toBeInTheDocument()
   })
 })

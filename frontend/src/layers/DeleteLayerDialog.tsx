@@ -10,7 +10,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { formatCount } from '@/lib/format'
-import { useDeleteLayer, type LayerSummary } from '@/api/layers'
+import { isMapImageLayer, useDeleteLayer, type LayerSummary } from '@/api/layers'
 import { useEditing } from '@/state/editing'
 import { useTableEditing } from '@/table/useTableEditing'
 
@@ -69,7 +69,15 @@ export function DeleteLayerDialog({
                 löschen. Speichern oder verwerfen Sie zuerst die laufende Bearbeitung.
               </>
             )}
-            {layer && !deleteLocked && (
+            {/* A Kartenbild has no objects to count -- "mit 0 Objekten" would read as an
+                empty layer rather than as a picture, which has no such count at all. */}
+            {layer && !deleteLocked && isMapImageLayer(layer) && (
+              <>
+                Das Programm löscht „{layer.name}" endgültig. Sie können das Kartenbild
+                danach nicht wiederherstellen.
+              </>
+            )}
+            {layer && !deleteLocked && !isMapImageLayer(layer) && (
               <>
                 Das Programm löscht „{layer.name}" mit{' '}
                 <span className="tabular-nums">{formatCount(layer.featureCount)}</span>{' '}

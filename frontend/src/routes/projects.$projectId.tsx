@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, Link, useBlocker, useNavigate, useRouter } from '@tanstack/react-router'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowLeft, Globe, Plus, Upload } from 'lucide-react'
+import { ArrowLeft, Globe, Image as ImageIcon, Plus, Upload } from 'lucide-react'
 import { WorkspaceLayout } from '@/layout/WorkspaceLayout'
 import { Separator } from '@/components/ui/separator'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -15,7 +15,7 @@ import {
   totalUnsavedChanges,
   unsavedChangesVerb,
 } from '@/state/unsavedChanges'
-import { GeoportalDialog } from '@/geoportal'
+import { AddMapImageDialog, GeoportalDialog } from '@/geoportal'
 import { CreateLayerDialog, ImportDialog, LayerProperties, LayerTree } from '@/layers'
 import { ProjectMap, type ZoomRequest } from '@/map'
 import { SymbologyPanel } from '@/styling'
@@ -39,7 +39,7 @@ import {
   useIsDrawingSplitLine,
 } from '@/editing'
 import { MeasurementOverlay, MeasurementToolbar, useIsMeasuring } from '@/measurement'
-import { layerDetailQuery, layerListQuery } from '@/api/layers'
+import { isVectorLayer, layerDetailQuery, layerListQuery } from '@/api/layers'
 import { featureDetailQuery } from '@/api/features'
 import { useSelection } from '@/state/selection'
 import { useViewStateWriter } from '@/state/useViewState'
@@ -82,6 +82,7 @@ function Workspace() {
   const [importOpen, setImportOpen] = useState(false)
   const [createLayerOpen, setCreateLayerOpen] = useState(false)
   const [geoportalOpen, setGeoportalOpen] = useState(false)
+  const [addMapImageOpen, setAddMapImageOpen] = useState(false)
   // A counter, not a timestamp: zooming to the same layer twice has to produce a new
   // request object, and a counter does that without depending on the clock.
   const [zoomTo, setZoomTo] = useState<ZoomRequest | null>(null)
@@ -109,6 +110,11 @@ function Workspace() {
   })
 
   const activeLayer = layers?.find((layer) => layer.id === activeLayerId) ?? null
+  // Narrowed once, here: a Kartenbild has no geometry, so editing, structural tools,
+  // the rectangle select and the symbology panel all key off this rather than off
+  // `activeLayer` directly (plan Stufe 4, "Bearbeiten und Rechteckauswahl dürfen für
+  // ein Kartenbild nicht angeboten werden").
+  const activeVectorLayer = activeLayer && isVectorLayer(activeLayer) ? activeLayer : null
 
   // Restores the last active layer exactly once per visit -- CONTRACT.md rule 4: the
   // address always wins, this only fills in when it says nothing (`activeLayerId` is
@@ -244,7 +250,18 @@ function Workspace() {
         onOpenChange={setCreateLayerOpen}
         onCreated={(layerId) => selectLayer(layerId)}
       />
-      <GeoportalDialog projectId={projectId} open={geoportalOpen} onOpenChange={setGeoportalOpen} />
+      <GeoportalDialog
+        projectId={projectId}
+        open={geoportalOpen}
+        onOpenChange={setGeoportalOpen}
+        onLayerAdded={(layerId) => selectLayer(layerId)}
+      />
+      <AddMapImageDialog
+        projectId={projectId}
+        open={addMapImageOpen}
+        onOpenChange={setAddMapImageOpen}
+        onCreated={(layerId) => selectLayer(layerId)}
+      />
       <InvalidGeometryDialog
         message={editing.invalidGeometry}
         onRepair={() => void editing.save(true)}
@@ -292,24 +309,25 @@ function Workspace() {
               <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
               <RectangleSelectToolbar
                 disabled={editing.active || splittingLine}
-                canUse={Boolean(activeLayer)}
+                canUse={Boolean(activeVectorLayer)}
                 clipVersion={activeLayer?.clipVersion}
               />
               <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
               {/* Structural editing works on the saved state and on the ordinary
                   selection, so it stands next to the drawing tools rather than inside
                   them -- and locks itself while either buffer holds anything. Brings its
-                  own trailing separator: on a point layer it renders nothing at all, and
-                  a separator left behind here would leave two of them side by side. */}
+                  own trailing separator: on a point layer -- or a Kartenbild, which
+                  reports no geometryType at all -- it renders nothing, and a separator
+                  left behind here would leave two of them side by side. */}
               <StructureToolbar
                 layerId={activeLayerId ?? null}
-                geometryType={activeLayer?.geometryType}
+                geometryType={activeVectorLayer?.geometryType}
                 pendingChanges={unsavedChangesCount}
                 drawingActive={editing.active}
               />
               <EditToolbar
                 active={editing.active}
-                geometryType={activeLayer?.geometryType}
+                geometryType={activeVectorLayer?.geometryType}
                 tool={editing.tool}
                 onToolChange={editing.setTool}
                 onStart={requestStartMapEditing}
@@ -319,7 +337,7 @@ function Workspace() {
                 onDelete={editing.deleteSelected}
                 canDelete={editing.selectedFid !== null}
                 isSaving={editing.isSaving}
-                canEdit={Boolean(activeLayer)}
+                canEdit={Boolean(activeVectorLayer)}
                 snapEnabled={editing.snapEnabled}
                 onToggleSnap={editing.toggleSnap}
                 snapUnavailableReason={editing.snapUnavailableReason ?? undefined}
@@ -343,6 +361,10 @@ function Workspace() {
                     <Globe className="size-3.5" />
                     Daten aus dem Geoportal Hamburg
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => setAddMapImageOpen(true)}>
+                    <ImageIcon className="size-3.5" />
+                    Eigener WMS-Dienst
+                  </Button>
                 </>
               )}
             </div>
@@ -359,6 +381,7 @@ function Workspace() {
                 onImportClick={() => setImportOpen(true)}
                 onCreateLayerClick={() => setCreateLayerOpen(true)}
                 onGeoportalClick={() => setGeoportalOpen(true)}
+                onAddMapImageClick={() => setAddMapImageOpen(true)}
                 snapSources={editing.active ? editing.snapSourceLayerIds : null}
                 onToggleSnapSource={editing.toggleSnapSource}
               />
@@ -379,7 +402,9 @@ function Workspace() {
             {!editing.active && activeLayer && (
               <div className="max-h-[55%] shrink-0 overflow-auto border-t">
                 <LayerProperties layer={activeLayer} projectId={projectId} />
-                <SymbologyPanel layer={activeLayer} projectId={projectId} />
+                {/* No symbology for a Kartenbild (contract: "style fehlt") -- the panel
+                    itself only ever takes a `VectorLayerSummary`. */}
+                {activeVectorLayer && <SymbologyPanel layer={activeVectorLayer} projectId={projectId} />}
               </div>
             )}
           </div>
@@ -393,11 +418,11 @@ function Workspace() {
             // tools need.
             identifyEnabled={!editing.active && !measuring && !rectSelecting && !splittingLine}
           >
-            {editing.active && activeLayer && (
+            {editing.active && activeVectorLayer && (
               <>
                 <DrawController
-                  layerId={activeLayer.id}
-                  geometryType={activeLayer.geometryType}
+                  layerId={activeVectorLayer.id}
+                  geometryType={activeVectorLayer.geometryType}
                   tool={editing.tool}
                   onSelectFeature={editing.selectFeature}
                   reloadNonce={editing.reloadNonce}
@@ -407,16 +432,18 @@ function Workspace() {
                   snapSourceLayerIds={editing.snapSourceLayerIds}
                 />
                 <SnapMarker target={editing.snapTarget} />
-                <EditingTileFilter layerId={activeLayer.id} />
+                <EditingTileFilter layerId={activeVectorLayer.id} />
               </>
             )}
             {measuring && <MeasurementOverlay />}
-            {rectSelecting && activeLayer && <RectangleSelectTool layerId={activeLayer.id} />}
+            {rectSelecting && activeVectorLayer && <RectangleSelectTool layerId={activeVectorLayer.id} />}
             {/* Renders nothing until one of the two tools is running; the toolbar above
-                decides that, and this is only where the map-side half of it lives. */}
-            {activeLayer && (
+                decides that, and this is only where the map-side half of it lives. A
+                Kartenbild never gets here: `StructureToolbar` above already renders
+                nothing without a `geometryType`, so `phase` can never leave `idle`. */}
+            {activeVectorLayer && (
               <StructureOverlay
-                layerId={activeLayer.id}
+                layerId={activeVectorLayer.id}
                 projectId={projectId}
                 fields={activeLayerDetail?.fields ?? []}
               />
@@ -427,6 +454,7 @@ function Workspace() {
           <AttributeTable
             layerId={activeLayerId ?? null}
             layerName={activeLayer?.name}
+            layerKind={activeLayer?.kind}
             layerFeatureCount={activeLayer?.featureCount}
             projectId={projectId}
             viewState={viewState}
