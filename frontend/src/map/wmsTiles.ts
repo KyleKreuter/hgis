@@ -59,11 +59,11 @@ export function wmsSourceSpec(
  * vector layer's up-to-four sublayers (`layerSpecsFor`) -- a WMS image has no
  * geometry-type split to draw.
  *
- * Deckkraft is `raster-opacity`, not `fill-opacity` (plan Stufe 4). There is no
- * symbology panel for a Kartenbild yet (contract: "style fehlt"), so `layer.style` is
- * normally absent and this reads MapLibre's own default of full opacity -- `style.opacity`
- * is still honoured if a later stage starts writing one, the same defaulting
- * `styleToMapLibre` uses for a vector layer's own opacity.
+ * Deckkraft is `raster-opacity`, not `fill-opacity` (plan Stufe 4). There is still no
+ * symbology panel for a Kartenbild -- `layer.style` only ever holds `{ opacity }`
+ * (`MapImageStyle`, opacity update addendum), written by the Deckkraft slider in
+ * `LayerProperties.tsx` -- and defaults to fully opaque when absent, the same
+ * defaulting `styleToMapLibre` uses for a vector layer's own opacity.
  */
 export function wmsLayerSpec(layer: MapImageLayerSummary, sourceId: string): RasterLayerSpecification {
   return {

@@ -432,6 +432,31 @@ describe('syncMapLayers mit Symbologie', () => {
     ])
     expect(map.removeSource).not.toHaveBeenCalled()
   })
+
+  /**
+   * The Deckkraft slider in `LayerProperties.tsx` writes `layer.style.opacity` without
+   * bumping `dataVersion`/`styleVersion` -- the opacity update addendum is explicit that
+   * the tiles do not change. If `syncMapLayers` treated that as a reason to rebuild, the
+   * raster layer would flicker (removed and re-added) on every step of the slider
+   * instead of just repainting, which is what `isRebuildRequired` exists to prevent.
+   */
+  it('wendet eine geänderte Deckkraft als reine Farbänderung an, ohne den Layer neu aufzubauen', () => {
+    const { map } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+    syncMapLayers(map, [makeWmsLayer()], applied)
+    ;(map.addLayer as ReturnType<typeof vi.fn>).mockClear()
+    ;(map.removeLayer as ReturnType<typeof vi.fn>).mockClear()
+    ;(map.addSource as ReturnType<typeof vi.fn>).mockClear()
+    ;(map.removeSource as ReturnType<typeof vi.fn>).mockClear()
+
+    syncMapLayers(map, [makeWmsLayer({ style: { opacity: 0.5 } })], applied)
+
+    expect(map.setPaintProperty).toHaveBeenCalledWith('hgis-layer-img-1-render', 'raster-opacity', 0.5)
+    expect(map.addLayer).not.toHaveBeenCalled()
+    expect(map.removeLayer).not.toHaveBeenCalled()
+    expect(map.addSource).not.toHaveBeenCalled()
+    expect(map.removeSource).not.toHaveBeenCalled()
+  })
 })
 
 function makeWmsLayer(overrides: Partial<MapImageLayerSummary> = {}): MapImageLayerSummary {

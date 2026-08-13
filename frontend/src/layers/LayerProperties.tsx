@@ -1,6 +1,8 @@
 import { isMapImageLayer, useUpdateLayer, type LayerSummary } from '@/api/layers'
+import { Slider } from '@/components/ui/slider'
 import { formatCount, formatRelative } from '@/lib/format'
 import { NumberInput, Row, Section } from '@/styling/controls'
+import { useMapImageOpacityEditor } from './useMapImageOpacityEditor'
 import { LAYER_ZOOM_MAX, LAYER_ZOOM_MIN, withMaxZoom, withMinZoom } from './zoomRange'
 
 interface LayerPropertiesProps {
@@ -16,6 +18,9 @@ interface LayerPropertiesProps {
  */
 export function LayerProperties({ layer, projectId }: LayerPropertiesProps) {
   const updateLayer = useUpdateLayer(layer.id, projectId)
+  // Called unconditionally regardless of layer kind -- Rules of Hooks -- see the hook's
+  // own doc comment for why that is safe here.
+  const opacityEditor = useMapImageOpacityEditor(layer, projectId)
 
   return (
     <div>
@@ -41,6 +46,25 @@ export function LayerProperties({ layer, projectId }: LayerPropertiesProps) {
           </Row>
           <Row label="Layer">
             <span className="text-xs">{layer.wms.layers.join(', ')}</span>
+          </Row>
+          {/* No symbology for a Kartenbild -- opacity is the one paint property it has,
+              so it lives here rather than behind a symbology panel it does not get
+              (contract addendum: `style` for a WMS layer holds nothing else). */}
+          <Row label="Deckkraft">
+            <Slider
+              value={opacityEditor.opacity}
+              min={0}
+              max={1}
+              step={0.05}
+              // Continuous while dragging, written once on release -- same rule
+              // `SymbologyPanel`'s own Deckkraft slider follows.
+              onValueChange={(opacity) => opacityEditor.apply(opacity, { defer: true })}
+              onValueCommitted={(opacity) => opacityEditor.apply(opacity)}
+              aria-label="Deckkraft des Kartenbilds"
+            />
+            <span className="w-9 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
+              {Math.round(opacityEditor.opacity * 100)} %
+            </span>
           </Row>
         </Section>
       ) : (

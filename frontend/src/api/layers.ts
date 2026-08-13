@@ -45,6 +45,18 @@ export interface LayerWms {
   queryable: boolean
 }
 
+/**
+ * A Kartenbild's `style` -- deliberately not `LayerStyle`, which is a vector renderer a
+ * WMS image has no use for. The backend accepts and returns *exactly* this shape for
+ * `kind: 'WMS'` (opacity update contract addendum: "ein style, das ausschließlich
+ * opacity enthält"); any other member is a `400`. `styleVersion` does not move when
+ * this changes -- the GetMap address does not depend on it (`map/wmsTiles.ts`), so there
+ * is nothing to invalidate on the tile side.
+ */
+export interface MapImageStyle {
+  opacity: number
+}
+
 export interface LayerSummary {
   id: string
   name: string
@@ -69,14 +81,18 @@ export interface LayerSummary {
   /** [minLng, minLat, maxLng, maxLat] in EPSG:4326, or null. */
   extent: [number, number, number, number] | null
   /**
-   * Symbology, or null for the default monochrome rendering (plan section C).
+   * Symbology (a vector layer) or just an opacity (a Kartenbild, {@link MapImageStyle}),
+   * or null for the default rendering (plan section C / plan Stufe 4). `VectorLayerSummary`
+   * and `MapImageLayerSummary` each narrow this to the one shape that actually applies to
+   * their kind -- reading it off the bare `LayerSummary` is the same "kind decides the
+   * shape" trap `geometryType`/`srid` are guarded against.
    *
    * Part of the summary, not just the detail: `MapLayerSync` diffs the map against the
    * layer *list*, so a style that only came with the detail would cost one request per
    * layer before the map could draw anything. Optional in the type because an older
    * server simply omits the field, which then reads as "no style" like it should.
    */
-  style?: LayerStyle | null
+  style?: LayerStyle | MapImageStyle | null
   /**
    * The layer's own background map; `null` means it follows the project's (CONTRACT.md
    * phase 18). Part of the summary for the same reason `style` is: the map resolves the
@@ -140,22 +156,30 @@ export interface LayerSummary {
 /**
  * `LayerSummary` narrowed to a Kartenbild -- `kind`, `wms`, `geometryType` and `srid`
  * all agree once this is checked. See {@link isMapImageLayer}.
+ *
+ * `style` is redeclared via `Omit` rather than plain intersection: `LayerStyle` and
+ * `MapImageStyle` are both ordinary object types with no field that conflicts between
+ * them, so `LayerSummary['style'] & MapImageStyle` would not drop `LayerStyle` the way
+ * `GeometryType | null & null` drops `GeometryType` -- it would just demand an object
+ * satisfying both. `Omit` replaces the property outright instead of intersecting it.
  */
-export type MapImageLayerSummary = LayerSummary & {
+export type MapImageLayerSummary = Omit<LayerSummary, 'style'> & {
   kind: 'WMS'
   geometryType: null
   srid: null
   wms: LayerWms
+  style?: MapImageStyle | null
 }
 
 /**
  * `LayerSummary` narrowed to an ordinary layer -- everything that reads `geometryType`
  * or `srid` as non-null needs this, not the bare `LayerSummary`. See {@link isVectorLayer}.
  */
-export type VectorLayerSummary = LayerSummary & {
+export type VectorLayerSummary = Omit<LayerSummary, 'style'> & {
   kind?: 'VECTOR'
   geometryType: GeometryType
   srid: number
+  style?: LayerStyle | null
 }
 
 /**
@@ -451,6 +475,42 @@ export function useUpdateLayerStyle(projectId: string) {
     },
     // A rejected style means the cache holds something the server does not have; only a
     // refetch can say what is actually stored.
+    onError: (_error, { layerId }) => {
+      queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
+      queryClient.invalidateQueries({ queryKey: layerKeys.detail(layerId) })
+    },
+  })
+}
+
+export interface MapImageOpacityUpdate {
+  layerId: string
+  opacity: number
+}
+
+/**
+ * Writes a Kartenbild's Deckkraft. A sibling of `useUpdateLayerStyle`, not a call into
+ * it: the two send different shapes to the very same endpoint (`style` here is *only*
+ * ever `{ opacity }` -- the backend rejects anything else with a `400`), and mixing them
+ * behind one type would let a vector-only field leak into a Kartenbild's request.
+ *
+ * Same cache rule as `useUpdateLayerStyle` and for the same reason: the panel already
+ * wrote the previewed opacity into the list cache the moment the slider moved
+ * (`useMapImageOpacityEditor`), so the response must not put its own `style` back over
+ * a value the user has since moved past while this request was still in flight.
+ */
+export function useUpdateMapImageOpacity(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ layerId, opacity }: MapImageOpacityUpdate) =>
+      api.patch<LayerDetail>(`/api/layers/${layerId}`, { style: { opacity } }),
+    onSuccess: (updated, { layerId }) => {
+      queryClient.setQueryData(layerKeys.detail(layerId), updated)
+      queryClient.setQueryData<LayerSummary[]>(layerKeys.list(projectId), (current) =>
+        current?.map((layer) =>
+          layer.id === layerId ? { ...layer, ...updated, style: layer.style } : layer,
+        ),
+      )
+    },
     onError: (_error, { layerId }) => {
       queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
       queryClient.invalidateQueries({ queryKey: layerKeys.detail(layerId) })

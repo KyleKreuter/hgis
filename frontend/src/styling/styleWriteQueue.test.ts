@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createStyleWriteQueue, DEFER_MS, type StyleWrite } from './styleWriteQueue'
+import { createStyleWriteQueue, createWriteQueue, DEFER_MS, type StyleWrite } from './styleWriteQueue'
 import type { LayerStyle } from './types'
 
 function styleOf(color: string): LayerStyle {
@@ -152,3 +152,31 @@ describe('createStyleWriteQueue', () => {
 interface StyleWriteQueueUnderTest {
   current: ReturnType<typeof createStyleWriteQueue> | null
 }
+
+/**
+ * `createStyleWriteQueue` is now a thin wrapper around this -- every timing rule above
+ * is already proven against it. This is only the reuse itself: the same debounce works
+ * for a payload that is not a `LayerStyle`, which is what `useMapImageOpacityEditor`
+ * (a Kartenbild's Deckkraft slider) actually needs.
+ */
+describe('createWriteQueue', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('fasst mehrere Deckkraft-Werte während des Ziehens zu einem Schreibvorgang zusammen', () => {
+    const written: number[] = []
+    const queue = createWriteQueue<number>((write) => written.push(write.style))
+
+    queue.queue({ layerId: 'img-1', style: 0.9 }, { defer: true })
+    queue.queue({ layerId: 'img-1', style: 0.7 }, { defer: true })
+    queue.queue({ layerId: 'img-1', style: 0.5 }, { defer: true })
+    vi.advanceTimersByTime(DEFER_MS)
+
+    expect(written).toEqual([0.5])
+  })
+})

@@ -346,7 +346,9 @@ function LayerRow({
   // icon instead of a lookup that would otherwise need a null key (GEOMETRY_ICONS ab
   // Zeile 74 is the pattern this follows).
   const Icon = isVector ? GEOMETRY_ICONS[layer.geometryType] : ImageIcon
-  const previewColor = previewColorOf(layer.style)
+  // A Kartenbild has no fill/line/marker colour to preview -- null reads as the neutral
+  // muted-foreground icon, the same as a vector layer that has never been styled.
+  const previewColor = isVector ? previewColorOf(layer.style) : null
   const clipMaskLocked = isVector ? clipMaskLockedReason(layer.geometryType) : null
   const ClipModeIcon = layer.clipMode != null ? CLIP_MODE_ICONS[layer.clipMode] : null
 
