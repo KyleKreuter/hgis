@@ -18,6 +18,7 @@ import { buildFurniture } from './furniture'
 import { exportZoom } from './exportView'
 import { describeImageSize, type ImageSize } from './pageFormat'
 import { maxCanvasSizeFor } from './renderLimit'
+import { sharpenRasterSources } from './sharpenRaster'
 import { releaseWebGl } from '../releaseWebGl'
 
 /**
@@ -150,7 +151,10 @@ export async function renderMapImage(options: MapImageOptions): Promise<MapImage
   try {
     exportMap = new MapLibreMap({
       container,
-      style: source.getStyle(),
+      // Raster basemaps do not follow `pixelRatio` on their own -- their tiles are
+      // finished images, and more pixels only stretch them. Without this the export puts
+      // sharp vector data on a blurry map.
+      style: sharpenRasterSources(source.getStyle(), size.pixelRatio),
       center,
       zoom,
       bearing,
