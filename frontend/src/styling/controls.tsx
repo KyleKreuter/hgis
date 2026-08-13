@@ -86,7 +86,11 @@ interface NumberInputProps {
 export function NumberInput({ value, onChange, label, min, max, step = 1, className }: NumberInputProps) {
   const id = useId()
   return (
-    <div className={cn('flex min-w-0 items-center gap-1.5', className)}>
+    // Wraps for the same reason `Row` does, and it has to do so itself: its label is a
+    // single word and stops shrinking at that word's width, so in the narrowest dock the
+    // number was pushed the last 7px past the panel's edge however far it gave way. On
+    // its own line it has the whole width of the row to shrink into.
+    <div className={cn('flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5', className)}>
       <Label htmlFor={id} className="text-xs font-normal text-muted-foreground">
         {label}
       </Label>

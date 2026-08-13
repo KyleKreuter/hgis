@@ -809,15 +809,19 @@ function Panel({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-muted/40 px-2">
         {/*
-         * Gives way before anything else in the strip does. Held at its full width it
-         * pushed the save button, the change counter and the whole search field out over
-         * the panel's edge -- and out of reach, because the panel then scrolled sideways
-         * and carried this title along with it. The name is the one part of the row that
-         * is also written in the layer tree and in the title attribute, so it is the one
-         * that can be cut. min-w-16 keeps a readable stub rather than nothing.
+         * Gives way before anything else in the strip does, and all the way down to
+         * nothing. Held at its full width it pushed the save button, the change counter
+         * and the whole search field out over the panel's edge -- and out of reach,
+         * because the panel then scrolled sideways and carried this title along with it.
+         *
+         * Nothing here holds it open, unlike the layer name in the tree: this is a
+         * caption, not the only place a layer is named. The same layer stands in the tree
+         * a panel away, in this title attribute, and over the table's own columns. The
+         * search field next to it is a control that has to stay operable, so the last
+         * pixels of the strip belong to it and not here.
          */}
         <span
-          className="min-w-16 truncate text-xs font-medium tracking-wide uppercase text-muted-foreground"
+          className="truncate text-xs font-medium tracking-wide uppercase text-muted-foreground"
           title={title}
         >
           {title}

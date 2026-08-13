@@ -86,7 +86,18 @@ export function FilterBar({
   }
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1">
+    // min-w-24 is a floor, not a width: the bar takes the strip's leftover space as
+    // before, but stops giving it back once the input would be too narrow to read what
+    // was typed into it. Without one it was the first thing to disappear -- it grows from
+    // a zero basis, so it only ever holds what the rest of the strip leaves over, and in
+    // a narrow dock that was 8px while the panel title still stood at its full width.
+    // The title is what yields instead; see `Panel` in `AttributeTable.tsx`.
+    //
+    // 6rem and not less because the mode icon and the clear button sit on this line too
+    // and neither gives way: with their gaps they take 42px of it between them, so a
+    // smaller floor is spent entirely on those two the moment something is typed, and the
+    // input is back at the 8px this is meant to prevent.
+    <div className="flex min-w-24 flex-1 items-center gap-1">
       <Tooltip>
         <TooltipTrigger
           render={

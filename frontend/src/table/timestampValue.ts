@@ -75,10 +75,13 @@ function offsetMinutesAt(instant: Date, timeZone: string | undefined): number {
     clock.minute,
     clock.second,
   )
-  // The wall clock carries no milliseconds, so the instant must not either, or a value
-  // with milliseconds would come out a fraction of a minute off and round the wrong way.
-  const wholeSeconds = Math.floor(instant.getTime() / 1000) * 1000
-  return Math.round((asIfUtc - wholeSeconds) / 60_000)
+  // Rounded rather than divided exactly, as a guard and not because anything here needs
+  // it: both callers below build their instant from a wall clock, so it always lands on a
+  // whole second and the division comes out whole. An instant carrying milliseconds would
+  // leave a remainder -- 999ms is a sixtieth of a minute, far short of the half that could
+  // change the result -- and so would a zone whose offset is not a whole number of
+  // minutes, which no zone this runtime reports is.
+  return Math.round((asIfUtc - instant.getTime()) / 60_000)
 }
 
 /**
