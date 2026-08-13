@@ -328,6 +328,10 @@ public class FeatureQueryService {
 	 * reachable: {@code time} is one of the nine types a field can be created with, the
 	 * other two come out of an import.
 	 *
+	 * <p>{@code numeric} is here for a third reason: it is exact, and JSON has no number
+	 * that is. {@link FeatureCursor} therefore sends its digits as text, and this is where
+	 * they become a number again -- comparing them as text would put "10" before "9".
+	 *
 	 * <p>The type comes from our own TypeMapper, never from the client.
 	 */
 	private String castedCursorValue(LayerField sortField) {
@@ -336,7 +340,7 @@ public class FeatureQueryService {
 			return "CAST(:cursorValue AS timestamptz)";
 		}
 		return switch (type) {
-			case "date", "time", "uuid", "bytea" -> "CAST(:cursorValue AS " + type + ")";
+			case "date", "time", "uuid", "bytea", "numeric" -> "CAST(:cursorValue AS " + type + ")";
 			default -> ":cursorValue";
 		};
 	}

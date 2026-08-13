@@ -185,7 +185,8 @@ public class ImportService {
 					compensation);
 			try {
 				transactions.failBeforeTableExists(jobId, reason
-						+ " Das Aufräumen danach ist ebenfalls fehlgeschlagen, die Tabelle des Layers blieb zurück.");
+						+ " Das Aufräumen danach ist ebenfalls fehlgeschlagen."
+						+ " Die Tabelle des Layers blieb zurück.");
 			} catch (Exception report) {
 				log.error("Import {} could not even be marked as failed and stays RUNNING", jobId, report);
 			}

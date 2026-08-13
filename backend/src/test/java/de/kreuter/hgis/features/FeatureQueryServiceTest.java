@@ -14,6 +14,7 @@ import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.features.dto.FeatureDtos;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
@@ -375,19 +376,42 @@ class FeatureQueryServiceTest {
 	private Layer typeLayer;
 	private String typeTableName;
 
-	/** The three bigint values, all past 2^53 and one apart -- see {@link #pagesByABigintColumn}. */
+	/**
+	 * The three bigint values, in the order they are inserted -- see
+	 * {@link #pagesByABigintColumn}.
+	 *
+	 * <p>All past 2^53, where doubles count in twos: the middle one is exactly halfway
+	 * between its neighbours and rounds up onto the largest, while the other two survive a
+	 * double unchanged. Inserted largest first, so their ascending order is the reverse of
+	 * their fid order -- without that the fid tie-breaker quietly absorbs the rounding and
+	 * the walk comes out right for the wrong reason.
+	 */
 	private static final List<Long> HUGE_NUMBERS =
-			List.of(9_007_199_254_740_993L, 9_007_199_254_740_994L, 9_007_199_254_740_995L);
+			List.of(9_007_199_254_740_996L, 9_007_199_254_740_995L, 9_007_199_254_740_994L);
+
+	/**
+	 * The three numeric values, in the order they are inserted -- see
+	 * {@link #pagesByANumericColumn}.
+	 *
+	 * <p>Twenty significant digits, of which a double holds fifteen: all three round to one
+	 * and the same double. Inserted largest first, so their ascending order is the reverse
+	 * of their fid order -- which is what turns the rounding into missing rows rather than
+	 * into a tie the fid quietly breaks.
+	 */
+	private static final List<BigDecimal> EXACT_NUMBERS = List.of(
+			new BigDecimal("1234567890.1234567893"),
+			new BigDecimal("1234567890.1234567892"),
+			new BigDecimal("1234567890.1234567891"));
 
 	/**
 	 * A layer built out of the column types the query service used to break on.
 	 *
 	 * <p>Three of them had no cast when a cursor or a filter value was bound, and PostgreSQL
 	 * has no operator between them and the {@code varchar} a bound string arrives as, so
-	 * sorting or filtering by such a column answered 500 rather than rows. The fourth,
-	 * {@code bigint}, failed more quietly: a cursor carried its value as a JSON double, which
-	 * holds 53 of the 64 bits, so paging jumped over whatever sat between the rounded value
-	 * and the real one.
+	 * sorting or filtering by such a column answered 500 rather than rows. The other two
+	 * failed more quietly, both because a cursor carried its value as a JSON double:
+	 * {@code bigint} has 64 bits where a double holds 53, and {@code numeric} is exact where
+	 * no JSON number is.
 	 *
 	 * <p>Only three rows, and one page size of one throughout: what is being tested is
 	 * whether a page boundary lands correctly, and every row here is a boundary.
@@ -408,22 +432,29 @@ class FeatureQueryServiceTest {
 				    zeit      time,
 				    kennung   uuid,
 				    rohdaten  bytea,
-				    grosszahl bigint
+				    grosszahl bigint,
+				    messwert  numeric(30,10)
 				)
 				""".formatted(table)).update();
 
 		jdbc.sql("""
-				INSERT INTO %s (geom, zeit, kennung, rohdaten, grosszahl) VALUES
+				INSERT INTO %s (geom, zeit, kennung, rohdaten, grosszahl, messwert) VALUES
 				(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), '08:15:00',
-				 '00000000-0000-0000-0000-000000000001', '\\x01', :first),
-				(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), '12:30:45',
-				 '00000000-0000-0000-0000-000000000002', '\\x02', :second),
+				 '00000000-0000-0000-0000-000000000001', '\\x01', :first, :firstExact),
+				-- With milliseconds on purpose: a time whose cursor is written without them
+				-- lands before the row it was taken from, and the next page starts by
+				-- repeating that row instead of moving past it.
+				(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), '12:30:45.123',
+				 '00000000-0000-0000-0000-000000000002', '\\x02', :second, :secondExact),
 				(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), '18:45:30',
-				 '00000000-0000-0000-0000-000000000003', '\\x03', :third)
+				 '00000000-0000-0000-0000-000000000003', '\\x03', :third, :thirdExact)
 				""".formatted(table))
 				.param("first", HUGE_NUMBERS.get(0))
 				.param("second", HUGE_NUMBERS.get(1))
 				.param("third", HUGE_NUMBERS.get(2))
+				.param("firstExact", EXACT_NUMBERS.get(0))
+				.param("secondExact", EXACT_NUMBERS.get(1))
+				.param("thirdExact", EXACT_NUMBERS.get(2))
 				.update();
 
 		Layer newLayer = new Layer(layerId, typeProject, "Typen", typeTableName, "MULTIPOINT", 4326);
@@ -434,6 +465,7 @@ class FeatureQueryServiceTest {
 		fieldRepository.saveAndFlush(new LayerField(typeLayer, "Kennung", "kennung", "uuid", 1));
 		fieldRepository.saveAndFlush(new LayerField(typeLayer, "Rohdaten", "rohdaten", "bytea", 2));
 		fieldRepository.saveAndFlush(new LayerField(typeLayer, "Großzahl", "grosszahl", "bigint", 3));
+		fieldRepository.saveAndFlush(new LayerField(typeLayer, "Messwert", "messwert", "numeric", 4));
 	}
 
 	@AfterAll
@@ -658,6 +690,75 @@ class FeatureQueryServiceTest {
 		assertThat(page.features()).isEmpty();
 	}
 
+	/**
+	 * The rows a wide bbox drops when only its four corners are projected.
+	 *
+	 * <p>A rectangle in lng/lat has straight edges; its image in a projected CRS does not.
+	 * In UTM32 a parallel bends away from the central meridian, so the southern edge of a
+	 * bbox sits at its lowest where the meridian crosses it -- in the middle, between the
+	 * corners. The box around the four transformed corners therefore has its floor some
+	 * twenty kilometres too high, and everything in that strip is outside a bbox the user
+	 * drew around it.
+	 *
+	 * <p>Four objects along the same edge make the difference visible: the ones near the
+	 * corners are found either way, and the one on the central meridian is the one that used
+	 * to vanish. A bbox wide enough for this is nothing unusual -- this one is a view of
+	 * Europe.
+	 */
+	@Test
+	@DisplayName("a wide bbox finds the objects along its edge, not only those near its corners")
+	void filtersByAWideBoundingBoxWithoutLosingItsMiddle() {
+		// Just inside the southern edge of the bbox below, spread from one corner to the
+		// other. 9° east is UTM32's central meridian and the point of the whole test.
+		List<Double> longitudes = List.of(0.5, 9.0, 20.0, 44.5);
+		Layer edgeLayer = createPointLayer(25832, 41.05, longitudes);
+
+		try {
+			FeatureDtos.Page page = service.list(edgeLayer.getId(), new FeatureQueryService.Query(
+					null, false, null, null, new double[] { 0, 41, 45, 66 }, null, false, null, 100));
+
+			assertThat(page.features())
+					.extracting(feature -> feature.properties().get("laenge"))
+					.containsExactlyInAnyOrderElementsOf(longitudes);
+		}
+		finally {
+			dropPointLayer(edgeLayer);
+		}
+	}
+
+	/** One point per longitude at {@code latitude}, stored in {@code srid}, labelled by its longitude. */
+	private Layer createPointLayer(int srid, double latitude, List<Double> longitudes) {
+		UUID layerId = UUID.randomUUID();
+		String name = SqlIdentifier.tableName(layerId);
+		String table = SqlIdentifier.quoteLayerTable(name);
+
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom   geometry(MultiPoint, %d) NOT NULL,
+				    laenge double precision
+				)
+				""".formatted(table, srid)).update();
+		for (Double longitude : longitudes) {
+			jdbc.sql("INSERT INTO " + table + " (geom, laenge) VALUES (ST_Multi(ST_Transform("
+							+ "ST_SetSRID(ST_MakePoint(:lng, :lat), 4326), :srid)), :lng)")
+					.param("lng", longitude)
+					.param("lat", latitude)
+					.param("srid", srid)
+					.update();
+		}
+
+		Layer edgeLayer = layerRepository.saveAndFlush(
+				new Layer(layerId, project, "Kante", name, "MULTIPOINT", srid));
+		fieldRepository.saveAndFlush(new LayerField(edgeLayer, "Länge", "laenge", "double precision", 0));
+		return edgeLayer;
+	}
+
+	private void dropPointLayer(Layer edgeLayer) {
+		jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(edgeLayer.getTableName())).update();
+		layerRepository.deleteById(edgeLayer.getId());
+	}
+
 	@Test
 	@DisplayName("the exact selection modes survive a bbox spanning the whole world too")
 	void selectsByModeAcrossAWorldSpanningBoundingBox() {
@@ -812,16 +913,36 @@ class FeatureQueryServiceTest {
 	}
 
 	/**
-	 * The one that fails without saying so. All three values sit past 2^53, where a double
-	 * can no longer tell neighbours apart: a cursor carrying the first one comes back as the
-	 * even number below it, "everything after that" includes the row it was taken from, and
-	 * the same page repeats until the guard stops the walk.
+	 * The one that fails without saying so. A cursor holding the middle value comes back
+	 * rounded up onto the largest one, so "everything after that" excludes the largest --
+	 * and the fid tie-breaker, which would otherwise catch it, is looking for a larger fid
+	 * than the row it belongs to has. The walk ends one row early and reports two objects
+	 * where the layer holds three.
 	 */
 	@Test
 	@DisplayName("paging by a bigint past 2^53 keeps every digit of the cursor")
 	void pagesByABigintColumn() {
 		assertThat(pageThroughTypeLayer("Großzahl", "grosszahl"))
-				.containsExactlyElementsOf(HUGE_NUMBERS);
+				.containsExactlyElementsOf(HUGE_NUMBERS.reversed());
+	}
+
+	/**
+	 * The same failure as the bigint one, from the other end: {@code numeric} is exact and a
+	 * JSON number is not, so a cursor rounded to a double no longer names any row in the
+	 * table. Here the rounded value sits below all three, and the keyset's tie-breaker looks
+	 * for a *larger* fid -- while the rows still to come were inserted earlier and carry
+	 * smaller ones. The walk ends after the first row and quietly reports the other two as
+	 * not existing.
+	 */
+	@Test
+	@DisplayName("paging by a numeric keeps every digit of the cursor")
+	void pagesByANumericColumn() {
+		// Compared with compareTo, not equals: 1.10 and 1.1 are the same number and two
+		// different BigDecimals, and the scale a column reports back is its own business.
+		assertThat(pageThroughTypeLayer("Messwert", "messwert"))
+				.map(BigDecimal.class::cast)
+				.usingElementComparator(BigDecimal::compareTo)
+				.containsExactlyElementsOf(EXACT_NUMBERS.reversed());
 	}
 
 	@Test

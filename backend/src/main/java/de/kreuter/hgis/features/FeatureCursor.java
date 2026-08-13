@@ -1,6 +1,7 @@
 package de.kreuter.hgis.features;
 
 import de.kreuter.hgis.common.BadRequestException;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalTime;
@@ -32,6 +33,12 @@ record FeatureCursor(Object sortValue, long fid) {
 		node.put("f", fid);
 		switch (sortValue) {
 			case null -> node.putNull("v");
+			// numeric arrives as a BigDecimal, and it is the one number no JSON number can
+			// carry: the column keeps whatever precision it was declared with, while a JSON
+			// double holds 15 digits and re-reading one gives a double back regardless of
+			// how it was written. So it travels as its own decimal text and is read back in
+			// SQL -- the route date, time, uuid and bytea already take.
+			case BigDecimal decimal -> node.put("v", decimal.toPlainString());
 			case Number number -> putNumber(node, number);
 			case Boolean bool -> node.put("v", bool);
 			// The driver hands a bytea column back as a byte array, whose toString() is its

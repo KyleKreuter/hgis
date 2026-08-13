@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -49,11 +50,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ImportOverloadTest {
-
-	/** Everything the pool accepts: what runs at full stretch, plus what waits. */
-	private static final int CAPACITY = 4 + 50;
-
-	private static final int POOL_SIZE = 4;
 
 	private static final int DRAIN_TIMEOUT_SECONDS = 20;
 
@@ -93,9 +89,7 @@ class ImportOverloadTest {
 	@Test
 	@DisplayName("one import past the pool and the queue is a 503, and the job says so")
 	void refusesAnImportWhenThePoolIsFull() throws Exception {
-		CountDownLatch running = new CountDownLatch(POOL_SIZE);
 		CountDownLatch release = new CountDownLatch(1);
-		CountDownLatch finished = new CountDownLatch(CAPACITY);
 
 		// An import from another test may still be finishing in this pool. Saturating a pool
 		// that is not empty to begin with fills it one task short and proves nothing.
@@ -103,7 +97,7 @@ class ImportOverloadTest {
 
 		MockHttpServletResponse response;
 		try {
-			saturate(running, release, finished);
+			saturate(release);
 
 			response = mockMvc.perform(multipart("/api/projects/{id}/imports", project.getId())
 							.file(new MockMultipartFile("file", "adressen.csv", "text/csv",
@@ -117,9 +111,7 @@ class ImportOverloadTest {
 			release.countDown();
 		}
 		// Leaving blocked tasks behind would fail every test that comes after.
-		assertThat(finished.await(DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS))
-				.as("the pool drains again once the tasks are let go")
-				.isTrue();
+		awaitIdlePool();
 
 		assertThat(response.getStatus()).isEqualTo(503);
 		assertThat(response.getContentType()).startsWith("application/problem+json");
@@ -138,48 +130,34 @@ class ImportOverloadTest {
 	}
 
 	/**
-	 * Fills threads and queue in that order, and waits in between.
+	 * Blocks every thread and every waiting place, and stops at the first task the pool
+	 * refuses.
 	 *
-	 * <p>Submitting everything in one burst would be a race: a task sits in the queue until a
-	 * worker picks it up, so fifty-four in quick succession can be fifty-five in the queue
-	 * for a moment. Filling the threads first, and only then the queue, leaves nothing that
-	 * can drain -- every thread is blocked on {@code release}.
+	 * <p>Submitting a fixed number would be the obvious way, and this pool does not allow
+	 * it. Its core size is smaller than its maximum, and the JDK grows a pool past its core
+	 * only for a task it cannot queue -- so whether a submission takes a thread or a place
+	 * in the queue depends on how many threads an earlier test happened to leave alive, and
+	 * a count that is right for an empty pool is one or two short for a warm one.
+	 *
+	 * <p>Submitting until the refusal needs none of that arithmetic. Nothing submitted here
+	 * can finish before {@code release}, so every accepted task is still holding either a
+	 * thread or a place in the queue, and the refusal is itself the proof that neither is
+	 * left. The bound only keeps a pool that refuses nothing from looping forever.
 	 */
-	private void saturate(CountDownLatch running, CountDownLatch release, CountDownLatch finished)
-			throws InterruptedException {
-		for (int i = 0; i < POOL_SIZE; i++) {
-			importExecutor.execute(() -> {
-				running.countDown();
-				awaitQuietly(release);
-				finished.countDown();
-			});
-			// One at a time: below its maximum this pool only grows a thread when the queue
-			// is full, so a burst would queue the tasks instead of occupying threads with
-			// them.
-			assertThat(running.await(DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS)).isTrue();
-			fillQueueUpTo(i + 1, release, finished);
+	private void saturate(CountDownLatch release) {
+		int capacity = importExecutor.getMaxPoolSize() + importExecutor.getQueueCapacity();
+
+		for (int submitted = 0; submitted <= capacity; submitted++) {
+			try {
+				importExecutor.execute(() -> awaitQuietly(release));
+			}
+			catch (TaskRejectedException full) {
+				return;
+			}
 		}
 
-		assertThat(importExecutor.getThreadPoolExecutor().getQueue().remainingCapacity())
-				.as("the pool has to be genuinely full for this to test anything")
-				.isZero();
-	}
-
-	/**
-	 * Keeps the queue full while the pool is still growing.
-	 *
-	 * <p>The JDK's pool only starts a thread beyond its core size for a task it cannot
-	 * queue, so the queue has to be full before each of those. It is refilled here after
-	 * every new thread, which takes exactly one task out of it.
-	 */
-	private void fillQueueUpTo(int threadsRunning, CountDownLatch release, CountDownLatch finished) {
-		ThreadPoolExecutor pool = importExecutor.getThreadPoolExecutor();
-		while (pool.getQueue().remainingCapacity() > 0 && threadsRunning < POOL_SIZE + 1) {
-			importExecutor.execute(() -> {
-				awaitQuietly(release);
-				finished.countDown();
-			});
-		}
+		throw new AssertionError(
+				"the import pool accepted more than " + capacity + " tasks that never finish");
 	}
 
 	private void awaitIdlePool() throws InterruptedException {

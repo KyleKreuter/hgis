@@ -215,6 +215,61 @@ class MvtServiceTest {
 		}
 	}
 
+	/**
+	 * The features a tile drops when only its four corners are projected.
+	 *
+	 * <p>This tile still lies inside what EPSG:25832 can describe, so it takes the projected
+	 * envelope and its index -- and that is where the second half of the same problem sits.
+	 * {@code ST_Transform} moves vertices and leaves the edges between them to be guessed
+	 * straight, but in UTM32 a parallel bends away from the central meridian. The southern
+	 * edge of a zoom-3 tile is therefore some twenty kilometres lower in the middle than the
+	 * box around its corners admits, and every feature in that strip fails {@code &&} and
+	 * never reaches {@code ST_AsMVTGeom}.
+	 *
+	 * <p>Two points along that edge tell the two apart: one beside a corner, one on the
+	 * central meridian. The tile has to carry both.
+	 */
+	@Test
+	@DisplayName("a wide tile carries the features along its edge, not only those near its corners")
+	void rendersFeaturesAlongTheCurvedEdgeOfAWideTile() {
+		// z=3/x=4/y=2 spans 0° to 45° east and 40,98° to 66,51° north -- well within what
+		// UTM32 projects, so this is the transformed envelope, not the fallback.
+		String tableName = createEdgeLayer(41.05, List.of(1.0, 9.0));
+		try {
+			byte[] mvt = mvtService.renderTile(tableName, 25832, List.of(), List.of(), 3, 4, 2);
+
+			assertThat(mvt).isNotNull();
+			assertThat(MvtTileDecoder.decode(mvt).get(0).featureIds())
+					.as("the point on the central meridian sits lowest and is the one that used to drop")
+					.hasSize(2);
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(tableName)).update();
+		}
+	}
+
+	/** One point per longitude at {@code latitude}, stored in EPSG:25832. */
+	private String createEdgeLayer(double latitude, List<Double> longitudes) {
+		String tableName = SqlIdentifier.tableName(java.util.UUID.randomUUID());
+		String table = SqlIdentifier.quoteLayerTable(tableName);
+
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom geometry(MultiPoint, 25832) NOT NULL
+				)
+				""".formatted(table)).update();
+		jdbc.sql("CREATE INDEX ON %s USING GIST (geom)".formatted(table)).update();
+		for (Double longitude : longitudes) {
+			jdbc.sql("INSERT INTO " + table + " (geom) VALUES (ST_Multi(ST_Transform("
+							+ "ST_SetSRID(ST_MakePoint(:lng, :lat), 4326), 25832)))")
+					.param("lng", longitude)
+					.param("lat", latitude)
+					.update();
+		}
+		return tableName;
+	}
+
 	/** One 200 km square around 9°..12° east, big enough to survive a zoom-2 tile grid. */
 	private String createCoarseLayer() {
 		String tableName = SqlIdentifier.tableName(java.util.UUID.randomUUID());
