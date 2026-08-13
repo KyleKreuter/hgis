@@ -1,5 +1,6 @@
 import { createContext, use, type RefObject } from 'react'
 import type { Map as MapLibreMap } from 'maplibre-gl'
+import type { AttributionPart } from './basemap'
 
 export interface MapContextValue {
   /**
@@ -14,6 +15,15 @@ export interface MapContextValue {
    * throws if the style is not done loading yet.
    */
   isLoaded: boolean
+  /**
+   * The licence notice the map is currently showing -- the background map's own, plus one
+   * run per visible Geoportal layer, already combined by `MapCanvas`.
+   *
+   * Here rather than assembled a second time by whoever needs it: the notice on the image
+   * export has to be the same notice the screen carries, and two copies of that rule
+   * would be two chances to credit the wrong provider.
+   */
+  attribution: readonly AttributionPart[]
 }
 
 export const MapContext = createContext<MapContextValue | null>(null)

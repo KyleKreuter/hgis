@@ -151,7 +151,7 @@ export function MapCanvas({
   const attributionParts = combinedAttributionParts(basemap.attribution, geoportalAttributions)
 
   return (
-    <MapContext value={{ mapRef, isLoaded }}>
+    <MapContext value={{ mapRef, isLoaded, attribution: attributionParts }}>
       {/* A container, so the overlays can react to the width of the map panel rather
           than to the width of the window -- the map is one resizable pane among three,
           and a viewport breakpoint says nothing about how much room it actually has. */}
