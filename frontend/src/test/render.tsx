@@ -33,6 +33,21 @@ export function renderWithQueryClient(ui: ReactElement, client = testQueryClient
   return { client, ...rtlRender(ui, { wrapper }) }
 }
 
+/**
+ * Gives every element a fixed offset size.
+ *
+ * jsdom runs no layout, so `offsetWidth` and `offsetHeight` are zero everywhere. A
+ * virtualised list measures its scroller with exactly those two properties and renders
+ * *no* rows at all for a height of zero -- there is no window to fill, and the list ends
+ * up empty rather than short. A test that clicks a row in such a list therefore needs a
+ * height to exist first. Unlike the stubs in `setup.ts`, this one is opt-in and its
+ * value does matter: the box has to be tall enough to hold the rows the test looks for.
+ */
+export function stubElementSize({ width = 400, height = 600 } = {}) {
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(width)
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(height)
+}
+
 /** One route the fetch stub answers: a substring of the URL, and the body to return. */
 export interface StubRoute {
   /** Matched with `String.includes` against the request URL, first match wins. */
@@ -50,9 +65,12 @@ export interface StubRoute {
  */
 export function stubFetch(routes: StubRoute[]) {
   const calls: string[] = []
-  const fetchStub = vi.fn((input: RequestInfo | URL) => {
+  /** Url and init of every request, for the tests that assert on what was sent. */
+  const requests: { url: string; init?: RequestInit }[] = []
+  const fetchStub = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     calls.push(url)
+    requests.push({ url, init })
     const route = routes.find((candidate) => url.includes(candidate.match))
     if (!route) {
       return Promise.reject(new Error(`No stub route for ${url}`))
@@ -65,5 +83,5 @@ export function stubFetch(routes: StubRoute[]) {
     } as Response)
   })
   vi.stubGlobal('fetch', fetchStub)
-  return { calls, fetchStub }
+  return { calls, requests, fetchStub }
 }

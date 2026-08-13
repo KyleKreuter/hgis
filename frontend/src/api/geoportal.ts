@@ -20,6 +20,13 @@ export interface GeoportalDatasetSummary {
   featureCount: number | null
   /** [minLng, minLat, maxLng, maxLat] in EPSG:4326, or null when the upstream catalog carries none. */
   bbox: [number, number, number, number] | null
+  /**
+   * How many collections this entry stands for (CONTRACT.md 11.9). `1` for the flat
+   * majority, where the entry *is* the collection. Above 1 the entry stands for a whole
+   * service and names no collection yet -- the only signal the client needs to know that
+   * a collection has to be chosen before an import can start.
+   */
+  collectionCount: number
 }
 
 /** `GET /api/geoportal/datasets` and the answer to a refresh -- same shape (CONTRACT.md 11.2/11.3). */
@@ -39,6 +46,14 @@ export interface GeoportalField {
   values: string[]
 }
 
+/** One collection of a service listed as a single catalog entry (CONTRACT.md 11.9). */
+export interface GeoportalCollection {
+  /** A dataset id in its own right: what the detail call and the import both take. */
+  id: string
+  /** The collection's own title, not the service's. */
+  title: string
+}
+
 export interface GeoportalDatasetDetail extends GeoportalDatasetSummary {
   attribution: string
   licenseName: string
@@ -49,6 +64,13 @@ export interface GeoportalDatasetDetail extends GeoportalDatasetSummary {
   /** The field carrying `x-ogc-role: id`, null when the service names none (decision E6). */
   sourceFeatureIdField: string | null
   fields: GeoportalField[]
+  /**
+   * Filled only for a service with `collectionCount > 1`; empty, never null, for a flat
+   * entry (CONTRACT.md 11.9). While it is filled, `fields`, `featureCount` and
+   * `sourceFeatureIdField` describe nothing yet -- they belong to one collection, and
+   * none is chosen. The client asks for the detail again with a collection's id.
+   */
+  collections: GeoportalCollection[]
 }
 
 export interface GeoportalCount {
