@@ -1,8 +1,8 @@
 import {
   Check,
+  Circle,
   Magnet,
   MousePointer2,
-  Minus,
   Pencil,
   Redo2,
   Spline,
@@ -20,9 +20,19 @@ import type { GeometryType } from '@/api/layers'
 import { countChanges, useEditing } from '@/state/editing'
 import { toolsFor, type DrawTool } from './drawTools'
 
-const TOOL_LABELS: Record<DrawTool, { label: string; icon: typeof Square }> = {
+interface ToolAppearance {
+  label: string
+  icon: typeof Square
+  /** Overrides the shared icon size; only the point needs it, see below. */
+  iconClassName?: string
+}
+
+const TOOL_LABELS: Record<DrawTool, ToolAppearance> = {
   select: { label: 'Auswählen und Stützpunkte verschieben', icon: MousePointer2 },
-  point: { label: 'Punkt zeichnen', icon: Minus },
+  // Filled and smaller than the outline icons beside it, which is what makes it read as a
+  // point rather than as a circle -- `Circle` at the shared size is the shape the layer
+  // tree uses for a point *layer*, and the tool draws one point, not a ring.
+  point: { label: 'Punkt zeichnen', icon: Circle, iconClassName: 'size-2.5 fill-current' },
   linestring: { label: 'Linie zeichnen', icon: Spline },
   polygon: { label: 'Fläche zeichnen', icon: Square },
 }
@@ -37,6 +47,12 @@ interface EditToolbarProps {
   onStart: () => void
   onSave: () => void
   onDiscard: () => void
+  /**
+   * Leaves the drawing mode. Left to the caller (the workspace route) because a session
+   * that still holds unsaved changes has to be confirmed first, and the wording of that
+   * question lives with the other discard prompts -- same reasoning as `onStart`.
+   */
+  onLeave: () => void
   /** Deletes the currently selected feature; no-op when nothing is selected. */
   onDelete: () => void
   /** Whether a feature is selected and can be deleted. */
@@ -57,6 +73,7 @@ export function EditToolbar({
   onStart,
   onSave,
   onDiscard,
+  onLeave,
   onDelete,
   canDelete,
   isSaving,
@@ -95,7 +112,7 @@ export function EditToolbar({
   return (
     <div className="flex items-center gap-1">
       {ALL_TOOLS.map((entry) => {
-        const { label, icon: Icon } = TOOL_LABELS[entry]
+        const { label, icon: Icon, iconClassName } = TOOL_LABELS[entry]
         const usable = allowed.includes(entry)
         return (
           <Tooltip key={entry}>
@@ -110,7 +127,7 @@ export function EditToolbar({
                   aria-pressed={tool === entry}
                   onClick={() => onToolChange(entry)}
                 >
-                  <Icon className="size-3.5" />
+                  <Icon className={cn('size-3.5', iconClassName)} />
                 </Button>
               }
             />
@@ -204,14 +221,44 @@ export function EditToolbar({
         {pending === 0 ? 'keine Änderungen' : `${formatCount(pending)} ungespeichert`}
       </span>
 
-      <Button variant="ghost" size="sm" onClick={onDiscard} disabled={isSaving}>
-        <X className="size-3.5" />
+      {/* Disabled with an empty buffer, matching the table's toolbar: an enabled button
+          that does nothing visible is what made this one look like the way out of the
+          mode, which it never was. Leaving is the X beside it. */}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onDiscard}
+        disabled={pending === 0 || isSaving}
+      >
         Verwerfen
       </Button>
       <Button size="sm" onClick={onSave} disabled={pending === 0 || isSaving}>
         <Check className="size-3.5" />
         {isSaving ? 'Wird gespeichert…' : 'Speichern'}
       </Button>
+
+      <Separator orientation="vertical" className="mx-1 h-4 data-vertical:self-center" />
+
+      {/* The way out, same button in the same place as in the table's toolbar and the
+          measurement toolbar. Without it the drawing mode could only be left by saving,
+          by switching layers, or by leaving the page. */}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
+              disabled={isSaving}
+              aria-label="Zeichenmodus verlassen"
+              onClick={onLeave}
+            >
+              <X className="size-3.5" />
+            </Button>
+          }
+        />
+        <TooltipContent>Zeichenmodus verlassen</TooltipContent>
+      </Tooltip>
     </div>
   )
 }

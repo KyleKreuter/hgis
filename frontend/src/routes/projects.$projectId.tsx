@@ -100,6 +100,8 @@ function Workspace() {
   const tableLayerId = useTableEditing((state) => state.layerId)
   // Which dirty session a mode switch would discard -- null means neither is blocked.
   const [pendingSwitch, setPendingSwitch] = useState<'toTable' | 'toMap' | null>(null)
+  // Set while the drawing mode is being left with unsaved changes still in the buffer.
+  const [confirmLeaveMap, setConfirmLeaveMap] = useState(false)
   // Only the detail carries the field list the attribute form is generated from.
   const { data: activeLayerDetail } = useQuery({
     ...layerDetailQuery(activeLayerId ?? ''),
@@ -165,6 +167,19 @@ function Workspace() {
     }
     if (tableActive) useTableEditing.getState().end()
     editing.start()
+  }
+
+  /**
+   * The X in the drawing toolbar. Ends the session outright when nothing is pending --
+   * asking about zero changes is noise -- and otherwise puts the same question every
+   * other exit from a dirty buffer asks.
+   */
+  function requestLeaveMapEditing() {
+    if (editing.pending > 0) {
+      setConfirmLeaveMap(true)
+      return
+    }
+    editing.stop()
   }
 
   function requestStartTableEditing() {
@@ -300,6 +315,7 @@ function Workspace() {
                 onStart={requestStartMapEditing}
                 onSave={() => void editing.save()}
                 onDiscard={editing.discard}
+                onLeave={requestLeaveMapEditing}
                 onDelete={editing.deleteSelected}
                 canDelete={editing.selectedFid !== null}
                 isSaving={editing.isSaving}
@@ -443,6 +459,17 @@ function Workspace() {
           setPendingSwitch(null)
         }}
         onCancel={() => setPendingSwitch(null)}
+      />
+      <DiscardEditsDialog
+        open={confirmLeaveMap}
+        title="Zeichenmodus verlassen?"
+        description={`Sie haben ${describeUnsavedChanges(editing.pending)} im Zeichenmodus. Diese ${unsavedChangesVerb(editing.pending)} verloren.`}
+        confirmLabel="Änderungen verwerfen"
+        onConfirm={() => {
+          editing.stop()
+          setConfirmLeaveMap(false)
+        }}
+        onCancel={() => setConfirmLeaveMap(false)}
       />
       <DiscardEditsDialog
         open={leaveGuard.status === 'blocked'}
