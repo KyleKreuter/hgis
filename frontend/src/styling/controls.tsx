@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
@@ -30,8 +30,13 @@ export function Section({ title, children }: { title: string; children: ReactNod
 
 interface ColorInputProps {
   value: string
-  /** Fires while the picker is still open, so the caller should defer the request. */
-  onChange: (color: string) => void
+  /**
+   * Fires with `{ defer: true }` while the picker is still open and without it once the
+   * picker is closed. Callers have to pass `options` straight on to `useStyleEditor`'s
+   * `apply`: deferring the closing value too would leave the request waiting for the
+   * full defer window after the user is already done choosing.
+   */
+  onChange: (color: string, options?: { defer?: boolean }) => void
   ariaLabel: string
   className?: string
 }
@@ -39,13 +44,33 @@ interface ColorInputProps {
 /**
  * The native colour input. No shadcn equivalent exists in this project, and the OS
  * picker is both familiar and the only one that offers an eyedropper.
+ *
+ * It is the one control here that has no React-visible "done" event: React maps its
+ * `onChange` to the DOM's `input` event, which fires continuously while the picker is
+ * open. The DOM's own `change` event is what says the picker was closed, and it is
+ * subscribed by hand below -- without it every colour change stayed queued for the whole
+ * defer window after the picker was already gone.
  */
 export function ColorInput({ value, onChange, ariaLabel, className }: ColorInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  // Read at event time so the listener, registered once, never calls a stale handler.
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+
+  useEffect(() => {
+    const input = inputRef.current
+    if (!input) return
+    const commit = () => onChangeRef.current(input.value)
+    input.addEventListener('change', commit)
+    return () => input.removeEventListener('change', commit)
+  }, [])
+
   return (
     <input
+      ref={inputRef}
       type="color"
       value={value}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={(event) => onChange(event.target.value, { defer: true })}
       aria-label={ariaLabel}
       title={value}
       className={cn(

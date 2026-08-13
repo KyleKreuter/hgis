@@ -330,22 +330,37 @@ export function useUpdateLayer(layerId: string, projectId: string) {
 }
 
 /**
- * Writes the symbology. Separate from `useUpdateLayer` because its cache rules are
+ * One symbology write. Mirrors `styling/styleWriteQueue`'s `StyleWrite`, which is what
+ * the panel queues -- the two are the same pair of values seen from either end.
+ */
+export interface LayerStyleUpdate {
+  layerId: string
+  style: LayerStyle | null
+}
+
+/**
+ * Writes one layer's symbology. Separate from `useUpdateLayer` because its cache rules are
  * the opposite ones.
  *
  * The list cache already carries what the user sees -- the symbology panel writes every
  * change into it so the map follows the colour picker without waiting for a round trip.
- * So the response must NOT put its `style` back: while a debounced request is in flight
+ * So the response must NOT put its `style` back: while a deferred request is in flight
  * the user has usually moved on, and the answer to the older request would drag the map
  * back for one frame. Everything else from the response is taken, `styleVersion` above
  * all: that one decides whether the tiles have to be fetched again.
+ *
+ * The layer is a mutation variable rather than an argument of this hook on purpose: the
+ * panel holds a write back while a colour is still being dragged (`useStyleEditor`), and
+ * by the time it goes out the panel may already be showing a different layer. A hook-bound
+ * layer id is the *new* one by then -- react-query hands every `mutate` call the options
+ * of the latest render -- so the style of one layer would be written onto another.
  */
-export function useUpdateLayerStyle(layerId: string, projectId: string) {
+export function useUpdateLayerStyle(projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (style: LayerStyle | null) =>
+    mutationFn: ({ layerId, style }: LayerStyleUpdate) =>
       api.patch<LayerDetail>(`/api/layers/${layerId}`, { style }),
-    onSuccess: (updated) => {
+    onSuccess: (updated, { layerId }) => {
       queryClient.setQueryData(layerKeys.detail(layerId), updated)
       queryClient.setQueryData<LayerSummary[]>(layerKeys.list(projectId), (current) =>
         current?.map((layer) =>
@@ -355,7 +370,7 @@ export function useUpdateLayerStyle(layerId: string, projectId: string) {
     },
     // A rejected style means the cache holds something the server does not have; only a
     // refetch can say what is actually stored.
-    onError: () => {
+    onError: (_error, { layerId }) => {
       queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
       queryClient.invalidateQueries({ queryKey: layerKeys.detail(layerId) })
     },

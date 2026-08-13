@@ -63,7 +63,7 @@ export function LabelEditor({ labels, fields, onChange }: LabelEditorProps) {
           <Row label="Schrift">
             <ColorInput
               value={current.color}
-              onChange={(color) => onChange({ ...current, color }, { defer: true })}
+              onChange={(color, options) => onChange({ ...current, color }, options)}
               ariaLabel="Schriftfarbe"
             />
             <NumberInput
@@ -78,7 +78,7 @@ export function LabelEditor({ labels, fields, onChange }: LabelEditorProps) {
           <Row label="Kontur">
             <ColorInput
               value={current.haloColor}
-              onChange={(haloColor) => onChange({ ...current, haloColor }, { defer: true })}
+              onChange={(haloColor, options) => onChange({ ...current, haloColor }, options)}
               ariaLabel="Konturfarbe"
             />
             <NumberInput

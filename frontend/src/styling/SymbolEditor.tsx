@@ -32,7 +32,7 @@ export function SymbolEditor({ symbol, onChange, hideColor = false }: SymbolEdit
           {!hideColor && (
             <ColorInput
               value={symbol.fillColor}
-              onChange={(fillColor) => onChange({ ...symbol, fillColor }, { defer: true })}
+              onChange={(fillColor, options) => onChange({ ...symbol, fillColor }, options)}
               ariaLabel="Füllfarbe"
             />
           )}
@@ -55,7 +55,7 @@ export function SymbolEditor({ symbol, onChange, hideColor = false }: SymbolEdit
           <Row label="Umriss">
             <ColorInput
               value={symbol.outlineColor}
-              onChange={(outlineColor) => onChange({ ...symbol, outlineColor }, { defer: true })}
+              onChange={(outlineColor, options) => onChange({ ...symbol, outlineColor }, options)}
               ariaLabel="Umrissfarbe"
             />
             {/* MapLibre draws a fill outline as a hairline and offers no width for it. */}
@@ -73,7 +73,7 @@ export function SymbolEditor({ symbol, onChange, hideColor = false }: SymbolEdit
           {!hideColor && (
             <ColorInput
               value={symbol.color}
-              onChange={(color) => onChange({ ...symbol, color }, { defer: true })}
+              onChange={(color, options) => onChange({ ...symbol, color }, options)}
               ariaLabel="Linienfarbe"
             />
           )}
@@ -117,7 +117,7 @@ export function SymbolEditor({ symbol, onChange, hideColor = false }: SymbolEdit
         {!hideColor && (
           <ColorInput
             value={symbol.fillColor}
-            onChange={(fillColor) => onChange({ ...symbol, fillColor }, { defer: true })}
+            onChange={(fillColor, options) => onChange({ ...symbol, fillColor }, options)}
             ariaLabel="Punktfarbe"
           />
         )}
@@ -135,7 +135,7 @@ export function SymbolEditor({ symbol, onChange, hideColor = false }: SymbolEdit
         {!hideColor && (
           <ColorInput
             value={symbol.strokeColor}
-            onChange={(strokeColor) => onChange({ ...symbol, strokeColor }, { defer: true })}
+            onChange={(strokeColor, options) => onChange({ ...symbol, strokeColor }, options)}
             ariaLabel="Randfarbe"
           />
         )}
