@@ -80,7 +80,7 @@ export function ProjectMap({
         <BasemapControl projectId={project.id} project={project} activeLayer={activeLayer} />
       </div>
       {children}
-      <MapControls />
+      <MapControls extent={project.extent} />
     </MapCanvas>
   )
 }
