@@ -74,6 +74,10 @@ export function SnapMarker({ target }: { target: SnapTarget | null }) {
 
   useEffect(() => {
     return () => {
+      // The rule guards against a ref to a React-rendered node, which can be gone by
+      // cleanup time. This one holds the MapLibre instance, and the current one is
+      // exactly what has to be cleaned up.
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
       const map = mapRef.current
       if (!map) return
       // Guarded: the map may already be torn down when the editing session ends.

@@ -1,5 +1,6 @@
 export { AttributeForm } from './AttributeForm'
-export { DrawController, toolsFor, type DrawTool } from './DrawController'
+export { DrawController } from './DrawController'
+export { toolsFor, type DrawTool } from './drawTools'
 export { EditToolbar } from './EditToolbar'
 export { EditingTileFilter } from './EditingTileFilter'
 export { InvalidGeometryDialog } from './InvalidGeometryDialog'

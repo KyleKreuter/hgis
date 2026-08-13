@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
 import { formatCount } from '@/lib/format'
 import type { GeometryType } from '@/api/layers'
 import { countChanges, useEditing } from '@/state/editing'
-import { toolsFor, type DrawTool } from './DrawController'
+import { toolsFor, type DrawTool } from './drawTools'
 
 const TOOL_LABELS: Record<DrawTool, { label: string; icon: typeof Square }> = {
   select: { label: 'Auswählen und Stützpunkte verschieben', icon: MousePointer2 },

@@ -4,7 +4,7 @@ import { ApiError } from '@/api/client'
 import { useApplyEdits, type EditRequest } from '@/api/edits'
 import { countChanges, useEditing, type DraftFeature } from '@/state/editing'
 import { endMeasurement } from '@/measurement/store'
-import type { DrawTool } from './DrawController'
+import type { DrawTool } from './drawTools'
 import type { SnapTarget } from './snapping'
 
 interface EditSessionOptions {

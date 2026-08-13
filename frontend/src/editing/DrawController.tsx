@@ -10,6 +10,7 @@ import {
 } from 'terra-draw'
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter'
 import type { GeometryType } from '@/api/layers'
+import type { DrawTool } from './drawTools'
 import { api } from '@/api/client'
 import type { FeaturePage } from '@/api/features'
 import { useMap } from '@/map/MapContext'
@@ -32,21 +33,6 @@ import {
  */
 const MAX_EDITABLE = 2000
 
-export type DrawTool = 'select' | 'point' | 'linestring' | 'polygon'
-
-/** Which drawing tools a layer can accept. A typed column cannot hold another kind. */
-export function toolsFor(geometryType: GeometryType): DrawTool[] {
-  switch (geometryType) {
-    case 'MULTIPOINT':
-      return ['select', 'point']
-    case 'MULTILINESTRING':
-      return ['select', 'linestring']
-    case 'MULTIPOLYGON':
-      return ['select', 'polygon']
-    default:
-      return ['select', 'point', 'linestring', 'polygon']
-  }
-}
 
 interface DrawControllerProps {
   layerId: string
