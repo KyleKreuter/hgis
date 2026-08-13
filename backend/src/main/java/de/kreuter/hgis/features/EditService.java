@@ -6,7 +6,6 @@ import de.kreuter.hgis.catalog.LayerFieldRepository;
 import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.ConflictException;
-import de.kreuter.hgis.common.ExtentCalculator;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.features.dto.EditDtos;
@@ -45,14 +44,14 @@ public class EditService {
 	private final LayerRepository layerRepository;
 	private final LayerFieldRepository fieldRepository;
 	private final JdbcClient jdbc;
-	private final ExtentCalculator extentCalculator;
+	private final LayerBookkeeping bookkeeping;
 
 	EditService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
-			JdbcClient jdbc, ExtentCalculator extentCalculator) {
+			JdbcClient jdbc, LayerBookkeeping bookkeeping) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.jdbc = jdbc;
-		this.extentCalculator = extentCalculator;
+		this.bookkeeping = bookkeeping;
 	}
 
 	@Transactional
@@ -481,19 +480,10 @@ public class EditService {
 
 	// --- bookkeeping ------------------------------------------------------------------
 
-	/**
-	 * Updates what the layer says about itself after a write: the tile cache buster, the
-	 * feature count and the extent. Without the version bump the map would keep serving
-	 * the cached tiles that still show the old geometry.
-	 */
+	/** @see LayerBookkeeping */
 	private EditDtos.Response finish(Layer layer, String table, Map<Long, Long> createdFids,
 			int updated, int deleted) {
-		long featureCount = jdbc.sql("SELECT COUNT(*) FROM " + table).query(Long.class).single();
-
-		layer.setFeatureCount(featureCount);
-		layer.bumpDataVersion();
-		layer.setExtent(extentCalculator.forLayer(layer.getTableName(), layer.getSrid()));
-		layerRepository.flush();
+		long featureCount = bookkeeping.recount(layer, table);
 
 		return new EditDtos.Response(createdFids, updated, deleted,
 				layer.getDataVersion(), featureCount);
