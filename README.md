@@ -16,7 +16,7 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Leere Layer anlegen und direkt hineinzeichnen, ohne den Umweg über eine Datei
 - Shapefiles, GeoPackages, GeoJSON- und CSV-Dateien importieren
 - Koordinatenbezug und Zeichenkodierung vor dem Import prüfen
-- Über 500 amtliche Datensätze aus dem Geoportal Hamburg direkt laden, ohne den Umweg über
+- Rund 1100 amtliche Datensätze aus dem Geoportal Hamburg direkt laden, ohne den Umweg über
   eine Datei, wahlweise nur den aktuellen Kartenausschnitt und nur ausgewählte Felder
 - Layer ordnen, umbenennen, ein- und ausblenden sowie löschen
 - Sichtbarkeit abhängig vom Kartenmaßstab festlegen
@@ -98,13 +98,19 @@ lässt, und eine halb umgestellte Spalte hinterlassen.
 
 Hamburg stellt seine amtlichen Geodaten offen bereit. hGIS holt sie direkt vom Dienst, ohne
 dass Sie vorher eine Datei herunterladen. „Daten aus dem Geoportal Hamburg“ öffnet einen
-Dialog mit über 500 Datensätzen, von denen sich rund 460 als Objekte laden lassen:
-Straßenbaumkataster, Spielplätze, Baudenkmale, Schutzgebiete, Verwaltungsgrenzen,
-Elektro-Ladestandorte, Bevölkerungsdaten zu Stadtteilen und vieles mehr.
+Dialog mit rund 1100 Einträgen: Straßenbaumkataster, Spielplätze, Baudenkmale,
+Schutzgebiete, Verwaltungsgrenzen, Elektro-Ladestandorte, Bevölkerungsdaten zu Stadtteilen
+und vieles mehr.
 
 Die Suche greift auf Namen und Behörde zu und findet auch Wortteile. Drei Filter engen die
 Liste weiter ein: die Art des Datensatzes, das Thema und die herausgebende Behörde. Sie
 tippen „baum“ und sehen sofort das Straßenbaumkataster.
+
+Acht große Dienste stehen als ein Eintrag in der Liste. Sie führen viele Sammlungen, der
+Dienst „xplan“ allein 247. Ein solcher Eintrag trägt die Zahl seiner Sammlungen neben dem
+Namen. Wählen Sie ihn aus, dann zeigt hGIS rechts die Liste seiner Sammlungen mit einem
+eigenen Suchfeld. Wählen Sie dort eine Sammlung. Danach sehen Sie deren Felder und
+Objektzahl und können sie importieren.
 
 Zu jedem Datensatz zeigt der Dialog vor dem Laden, was Sie bekommen: die Beschreibung der
 Behörde, die Zahl der Objekte, alle Felder mit ihrem Typ und, wo der Dienst sie nennt, die
