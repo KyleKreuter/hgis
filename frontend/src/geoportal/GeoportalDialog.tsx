@@ -83,7 +83,7 @@ const KIND_ICONS: Record<GeoportalDatasetKind, typeof Globe> = {
 const KIND_TITLES: Record<GeoportalDatasetKind, string> = {
   FEATURES: 'Objekte',
   BOTH: 'Objekte und Kartenbild',
-  WMS: 'Nur Kartenbild',
+  WMS: 'Kartenbild',
 }
 
 /** Row height in pixels. Must match the class on the row, or the virtualiser drifts. */
@@ -441,7 +441,7 @@ function CatalogToolbar({
           </label>
           <label className="flex items-center gap-1.5 text-xs">
             <Checkbox checked={filters.kinds.has('imageOnly')} onCheckedChange={() => toggleKind('imageOnly')} />
-            Nur Kartenbild
+            Kartenbild
           </label>
 
           <Select

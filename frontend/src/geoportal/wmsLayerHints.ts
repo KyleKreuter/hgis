@@ -21,3 +21,45 @@ export function formatWmsScaleLimits(minScale: number | null, maxScale: number |
   if (minScale !== null) return `ab ${denominator(minScale)}`
   return `bis ${denominator(maxScale as number)}`
 }
+
+/** In this order, because transparency decides it -- see `preferredImageFormat`. */
+const FORMAT_PREFERENCE = ['image/png', 'image/png32', 'image/png24', 'image/png8', 'image/webp', 'image/jpeg']
+
+/**
+ * Which GetMap format to ask a service for.
+ *
+ * Not simply the first one it offers. Hamburg's `HH_WMS_Fachdaten_ALKIS` lists
+ * `image/bmp` ahead of `image/jpeg`, `image/tiff` and finally `image/png` -- and a
+ * bitmap tile comes back `200 OK` while MapLibre draws nothing at all, because a raster
+ * tile has to pass the browser's image decoder. The map stays white, no error anywhere.
+ * The backend already drops the formats no browser can draw; this picks among what is
+ * left, and prefers PNG because a map image is usually an overlay and JPEG carries no
+ * transparency.
+ *
+ * Falls back to `image/png` for an empty list -- unreachable through the API (the
+ * backend rejects such a service with 422), but a caller with a stale response must not
+ * end up sending an empty `FORMAT`.
+ */
+export function preferredImageFormat(offered: readonly string[]): string {
+  return FORMAT_PREFERENCE.find((candidate) => offered.includes(candidate)) ?? offered[0] ?? 'image/png'
+}
+
+/**
+ * What to add to the "hinzugefügt" toast when the layer will not be on screen yet, or
+ * null when it will be.
+ *
+ * A service's own scale limits become the layer's zoom window, and a detail layer's
+ * window can start well past where the user is standing: Hamburg's ALKIS-Festlegungen
+ * start at zoom 16, and a project opens at 9.8. The layer is then added correctly,
+ * charged to the layer tree, and draws nothing -- which is indistinguishable from an
+ * import that failed. Saying it outright costs one sentence.
+ *
+ * Silent when the map has not reported a zoom yet (`null`): a guess about what the user
+ * can see is worse than no sentence at all.
+ */
+export function zoomWindowHint(minZoom: number, maxZoom: number, currentZoom: number | null): string | null {
+  if (currentZoom === null) return null
+  if (currentZoom < minZoom) return `Sichtbar ab Zoom ${minZoom} — Sie sind bei ${Math.round(currentZoom)}.`
+  if (currentZoom > maxZoom) return `Sichtbar bis Zoom ${maxZoom} — Sie sind bei ${Math.round(currentZoom)}.`
+  return null
+}

@@ -5,7 +5,14 @@ export type Bbox = [number, number, number, number]
 
 interface MapViewportState {
   bbox: Bbox | null
-  setBbox: (bbox: Bbox) => void
+  /**
+   * The map's current zoom, or null before it has ever reported. Read by the map image
+   * picker to tell the user when a service's own scale limits put the layer it just
+   * added outside what is on screen -- a Kartenbild whose window starts at zoom 16 draws
+   * nothing at zoom 9, and without a word it looks like a broken import.
+   */
+  zoom: number | null
+  setViewport: (bbox: Bbox, zoom: number) => void
 }
 
 /**
@@ -22,5 +29,6 @@ interface MapViewportState {
  */
 export const useMapViewport = create<MapViewportState>((set) => ({
   bbox: null,
-  setBbox: (bbox) => set({ bbox }),
+  zoom: null,
+  setViewport: (bbox, zoom) => set({ bbox, zoom }),
 }))

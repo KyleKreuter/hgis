@@ -57,7 +57,7 @@ const CAPABILITIES_WITH_GROUP: WmsCapabilities = {
  * the moment the component stops asking for what the contract actually promises.
  */
 describe('MapImageSection', () => {
-  test('listet die Layer flach mit Einrückung und zeigt, was der Dienst dazu sagt', async () => {
+  test('listet die Layer flach mit Einrückung und zeigt das Maßstabsfenster', async () => {
     stubFetch([{ match: '/api/wms/capabilities', body: CAPABILITIES }])
     renderWithQueryClient(
       <MapImageSection projectId="p-1" wmsUrl="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten" onAdded={vi.fn()} />,
@@ -65,8 +65,20 @@ describe('MapImageSection', () => {
 
     expect(await screen.findByText('Geobasiskarten (farbig)')).toBeInTheDocument()
     expect(screen.getByText('M2500 (farbig)')).toBeInTheDocument()
-    expect(screen.getByText('nicht abfragbar')).toBeInTheDocument()
     expect(screen.getByText('bis 1:3.000')).toBeInTheDocument()
+  })
+
+  test('sagt nichts über die Abfragbarkeit, solange es keine Objektinfo gibt', async () => {
+    // Beide Layer der Fixtur sind nicht abfragbar. Der frühere Hinweis warnte vor dem
+    // Verlust einer Fähigkeit, die hGIS gar nicht anbietet (Objektinfo ist Stufe 5) --
+    // und las sich, als stimme etwas mit dem Layer nicht.
+    stubFetch([{ match: '/api/wms/capabilities', body: CAPABILITIES }])
+    renderWithQueryClient(
+      <MapImageSection projectId="p-1" wmsUrl="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten" onAdded={vi.fn()} />,
+    )
+
+    await screen.findByText('Geobasiskarten (farbig)')
+    expect(screen.queryByText(/abfragbar/i)).toBeNull()
   })
 
   test('legt das Kartenbild mit den gewählten Layern in der Dienstreihenfolge an', async () => {

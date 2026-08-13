@@ -206,12 +206,16 @@ public class MapLayerService {
 	 * the {@code layer_zoom_range} CHECK constraint outright, and a real, if narrow,
 	 * layer is a better answer than none.
 	 */
-	private static int[] zoomRangeOf(WmsDtos.Layer layer) {
+	// Package-private, not private: this is the arithmetic that decides whether a layer is
+	// ever seen at all, and it needs a test of its own that does not stand up a service --
+	// the same reasoning `resolveSelectedFeature` follows on the frontend side.
+	static int[] zoomRangeOf(WmsDtos.Layer layer) {
 		if (layer.minScale() == null && layer.maxScale() == null) {
 			return null;
 		}
-		int minZoom = layer.maxScale() == null ? MIN_ZOOM : zoomOf(layer.maxScale());
-		int maxZoom = layer.minScale() == null ? MAX_ZOOM : zoomOf(layer.minScale());
+		double latitude = centreLatitudeOf(layer.bbox());
+		int minZoom = layer.maxScale() == null ? MIN_ZOOM : zoomAtOrBelow(layer.maxScale(), latitude);
+		int maxZoom = layer.minScale() == null ? MAX_ZOOM : zoomAtOrAbove(layer.minScale(), latitude);
 		if (minZoom > maxZoom) {
 			int collapsed = (minZoom + maxZoom) / 2;
 			return new int[] { collapsed, collapsed };
@@ -219,8 +223,47 @@ public class MapLayerService {
 		return new int[] { minZoom, maxZoom };
 	}
 
-	private static int zoomOf(double scaleDenominator) {
-		double zoom = Math.log(SCALE_DENOMINATOR_AT_ZOOM_0 / scaleDenominator) / Math.log(2);
-		return Math.clamp(Math.round(zoom), MIN_ZOOM, MAX_ZOOM);
+	/**
+	 * The middle latitude of a layer's own bounding box, or 0 when it declares none.
+	 *
+	 * <p>Needed because {@link #SCALE_DENOMINATOR_AT_ZOOM_0} holds at the equator only. A
+	 * Web Mercator pixel covers {@code cos(latitude)} times less ground the further from
+	 * it one goes, so the same zoom level is a finer scale in Hamburg than in Nairobi.
+	 * Ignoring that cost roughly one zoom level at Hamburg's 53.5° -- measured on
+	 * {@code m2500_farbig}, whose {@code MaxScaleDenominator} of 3000 came out as zoom 18
+	 * instead of 16, hiding the layer across two whole levels where the service does draw.
+	 */
+	private static double centreLatitudeOf(double[] bbox) {
+		if (bbox == null || bbox.length < 4) {
+			return 0;
+		}
+		return (bbox[1] + bbox[3]) / 2;
+	}
+
+	/** The scale denominator one Web Mercator pixel spans at this zoom and latitude. */
+	private static double scaleDenominatorAt(double zoom, double latitude) {
+		return SCALE_DENOMINATOR_AT_ZOOM_0 * Math.cos(Math.toRadians(latitude)) / Math.pow(2, zoom);
+	}
+
+	/**
+	 * The lowest zoom level whose scale is still within {@code maxScale} -- rounded
+	 * <em>down</em>, deliberately.
+	 *
+	 * <p>Rounding to nearest, as the first cut did, hides the layer on the level where the
+	 * service has already started drawing: at Hamburg's latitude a
+	 * {@code MaxScaleDenominator} of 3000 lands on zoom 16.76, and rounding that to 17
+	 * leaves the whole band from 16.0 to 17.0 blank even though the service answers there.
+	 * A tile fetched a level too early costs one transparent image; a hidden layer looks
+	 * like a broken import, which is exactly how this surfaced.
+	 */
+	private static int zoomAtOrBelow(double maxScale, double latitude) {
+		double zoom = Math.log(scaleDenominatorAt(0, latitude) / maxScale) / Math.log(2);
+		return Math.clamp((int) Math.floor(zoom), MIN_ZOOM, MAX_ZOOM);
+	}
+
+	/** The highest zoom level still within {@code minScale} -- rounded up, mirroring {@link #zoomAtOrBelow}. */
+	private static int zoomAtOrAbove(double minScale, double latitude) {
+		double zoom = Math.log(scaleDenominatorAt(0, latitude) / minScale) / Math.log(2);
+		return Math.clamp((int) Math.ceil(zoom), MIN_ZOOM, MAX_ZOOM);
 	}
 }

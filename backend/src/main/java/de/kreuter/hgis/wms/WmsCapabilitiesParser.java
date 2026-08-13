@@ -125,6 +125,13 @@ final class WmsCapabilitiesParser {
 		}
 
 		List<String> imageFormats = mapFormatsOf(capabilityEl);
+		if (imageFormats.isEmpty()) {
+			// Rejected here rather than at import: a service whose every format is bmp,
+			// tiff or svg would otherwise be added successfully and then draw nothing --
+			// see DRAWABLE_FORMATS for the failure this whole filter exists to prevent.
+			throw new UnprocessableEntityException("Dieser Dienst liefert kein Bildformat, das ein Browser "
+					+ "zeichnen kann. hGIS kann ihn nicht anzeigen.");
+		}
 		List<WmsDtos.Layer> layers = extractLayers(rootLayerEl);
 
 		return new WmsDtos.CapabilitiesResponse(serviceUrl, title, version, imageFormats, layers);
@@ -257,6 +264,29 @@ final class WmsCapabilitiesParser {
 		return result;
 	}
 
+	/**
+	 * The service's GetMap formats, narrowed to what a browser can actually draw as a map
+	 * tile and put in preference order.
+	 *
+	 * <p>Both parts are load-bearing, and the reason is a measured failure: Hamburg's
+	 * {@code HH_WMS_Fachdaten_ALKIS} lists {@code image/bmp} first, before
+	 * {@code image/jpeg}, {@code image/tiff} and only then {@code image/png}. A client that
+	 * takes the first entry gets tiles that come back {@code 200 OK} with 262 KB of valid
+	 * bitmap -- and MapLibre silently draws nothing, because a raster tile has to go
+	 * through the browser's image decoder. No console error, no failed request, just a
+	 * white map. That is exactly the kind of failure this project's plan calls the
+	 * expensive one: it looks like it worked.
+	 *
+	 * <p>PNG leads the order rather than JPEG because a map image is very often an overlay,
+	 * and JPEG cannot carry transparency -- a JPEG overlay hides everything beneath it.
+	 * The {@code png8}/{@code png24}/{@code png32} spellings are ESRI's; they deliver PNG
+	 * and are kept, just behind plain {@code image/png}. Dropped entirely: {@code bmp} and
+	 * {@code tiff} (no tile decoder), {@code svg+xml} (not an image the tile path accepts).
+	 */
+	private static final List<String> DRAWABLE_FORMATS = List.of(
+			"image/png", "image/png32", "image/png24", "image/png8",
+			"image/webp", "image/jpeg", "image/gif");
+
 	private static List<String> mapFormatsOf(Element capabilityEl) {
 		Element request = child(capabilityEl, "Request");
 		if (request == null) {
@@ -266,11 +296,17 @@ final class WmsCapabilitiesParser {
 		if (getMap == null) {
 			return List.of();
 		}
-		List<String> formats = new ArrayList<>();
+		Set<String> offered = new LinkedHashSet<>();
 		for (Element format : childElements(getMap, "Format")) {
 			String text = textOf(format);
 			if (text != null) {
-				formats.add(text);
+				offered.add(text.toLowerCase(Locale.ROOT));
+			}
+		}
+		List<String> formats = new ArrayList<>();
+		for (String candidate : DRAWABLE_FORMATS) {
+			if (offered.contains(candidate)) {
+				formats.add(candidate);
 			}
 		}
 		return formats;

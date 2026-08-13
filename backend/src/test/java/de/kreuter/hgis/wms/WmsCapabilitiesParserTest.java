@@ -54,8 +54,10 @@ class WmsCapabilitiesParserTest {
 		assertThat(response.serviceUrl()).isEqualTo("https://geodienste.hamburg.de/HH_WMS_Cache_Stadtplan");
 		assertThat(response.title()).isEqualTo("WMS Cache Stadtplan Hamburg");
 		assertThat(response.version()).isEqualTo("1.3.0");
-		assertThat(response.imageFormats()).containsExactly(
-				"image/png", "image/jpeg", "image/gif", "image/GeoTIFF", "image/tiff");
+		// Narrowed to what a browser can decode as a tile: the service also offers
+		// image/GeoTIFF and image/tiff, and neither ever reaches the map -- see
+		// WmsCapabilitiesParser#DRAWABLE_FORMATS.
+		assertThat(response.imageFormats()).containsExactly("image/png", "image/jpeg", "image/gif");
 
 		assertThat(response.layers()).hasSize(1);
 		WmsDtos.Layer layer = response.layers().get(0);
@@ -293,5 +295,41 @@ class WmsCapabilitiesParserTest {
 				WmsCapabilitiesParser.parse(doc.getBytes(StandardCharsets.UTF_8), "https://example.test/wms");
 
 		assertThat(response.layers()).hasSize(1);
+	}
+
+	@Test
+	@DisplayName("a service that lists image/bmp first still gets PNG first, and bmp/tiff/svg are dropped")
+	void undrawableFormatsAreDroppedAndPngLeads() {
+		// The measured failure this filter exists for: HH_WMS_Fachdaten_ALKIS declares
+		// image/bmp ahead of jpeg, tiff and png. A client taking the first entry gets
+		// 200 OK with a valid bitmap that MapLibre never draws -- a white map with no
+		// error anywhere.
+		WmsDtos.CapabilitiesResponse response = WmsCapabilitiesParser.parse(
+				fixture("HH_WMS_Fachdaten_ALKIS.xml"), "https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS");
+
+		assertThat(response.imageFormats())
+				.startsWith("image/png")
+				.doesNotContain("image/bmp", "image/tiff", "image/svg+xml",
+						"application/vnd.ogc.wms_xml", "text/xml");
+	}
+
+	@Test
+	@DisplayName("a service offering nothing a browser can draw is rejected with 422")
+	void aServiceWithoutDrawableFormatsIsRejected() {
+		String doc = """
+				<?xml version="1.0"?>
+				<WMS_Capabilities version="1.3.0">
+				  <Service><Title>Nur Bitmap</Title></Service>
+				  <Capability>
+				    <Request><GetMap><Format>image/bmp</Format><Format>image/tiff</Format></GetMap></Request>
+				    <Layer><Name>x</Name><CRS>EPSG:3857</CRS></Layer>
+				  </Capability>
+				</WMS_Capabilities>
+				""";
+
+		assertThatThrownBy(() -> WmsCapabilitiesParser.parse(doc.getBytes(StandardCharsets.UTF_8),
+				"https://example.test/wms"))
+				.isInstanceOf(UnprocessableEntityException.class)
+				.hasMessageContaining("Bildformat");
 	}
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Image as ImageIcon, TriangleAlert } from 'lucide-react'
+import { Image as ImageIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label'
 import { ApiError } from '@/api/client'
 import { useCreateMapImageLayer } from '@/api/layers'
 import { useWmsCapabilities, type WmsCapabilityLayer } from '@/api/wms'
-import { formatWmsScaleLimits } from './wmsLayerHints'
+import { useMapViewport } from '@/map/mapViewportStore'
+import { formatWmsScaleLimits, preferredImageFormat, zoomWindowHint } from './wmsLayerHints'
 
 interface MapImageSectionProps {
   projectId: string
@@ -36,6 +37,8 @@ interface MapImageSectionProps {
  */
 export function MapImageSection({ projectId, wmsUrl, datasetId, onAdded }: MapImageSectionProps) {
   const capabilities = useWmsCapabilities(wmsUrl)
+  // Only to phrase the toast, never to decide anything -- see `zoomWindowHint`.
+  const currentZoom = useMapViewport((state) => state.zoom)
   const createLayer = useCreateMapImageLayer(projectId)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [name, setName] = useState('')
@@ -69,11 +72,12 @@ export function MapImageSection({ projectId, wmsUrl, datasetId, onAdded }: MapIm
       const created = await createLayer.mutateAsync({
         serviceUrl: capabilities.data.serviceUrl,
         layers: orderedSelection,
-        imageFormat: capabilities.data.imageFormats[0] ?? 'image/png',
+        imageFormat: preferredImageFormat(capabilities.data.imageFormats),
         name: name.trim() === '' ? undefined : name.trim(),
         datasetId,
       })
-      toast.success(`Kartenbild „${created.name}" hinzugefügt`)
+      const hint = zoomWindowHint(created.minZoom, created.maxZoom, currentZoom)
+      toast.success(`Kartenbild „${created.name}" hinzugefügt`, hint ? { description: hint } : undefined)
       onAdded(created.id)
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Das Programm konnte das Kartenbild nicht anlegen')
@@ -193,20 +197,13 @@ function WmsLayerRow({
         <Checkbox checked={checked} onCheckedChange={onToggle} className="mt-0.5" />
         <span className="min-w-0 flex-1">
           <span className="block truncate">{layer.title}</span>
-          {(!layer.queryable || scaleLimits) && (
-            <span className="flex flex-wrap gap-x-2 text-muted-foreground">
-              {/* Told plainly, not hidden behind a click: the user should know before
-                  choosing, not after (plan Stufe 4, "Angaben, die der Nutzer vor der
-                  Wahl sehen sollte"). Objektinfo itself is a later stage (Stufe 5). */}
-              {!layer.queryable && (
-                <span className="flex items-center gap-1">
-                  <TriangleAlert className="size-3" />
-                  nicht abfragbar
-                </span>
-              )}
-              {scaleLimits && <span>{scaleLimits}</span>}
-            </span>
-          )}
+          {/* Only the scale window is shown here. The service also reports whether a
+              layer answers GetFeatureInfo, and this used to warn when it does not --
+              taken out again: hGIS asks no service for object info yet (that is Stufe 5),
+              so the warning pointed at a capability the program does not offer, and read
+              as if something were wrong with the layer. `queryable` is still carried
+              through and stored; only the badge is gone. */}
+          {scaleLimits && <span className="block text-muted-foreground">{scaleLimits}</span>}
         </span>
       </label>
     </li>

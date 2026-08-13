@@ -13,7 +13,7 @@ import { useMapViewport } from './mapViewportStore'
  */
 export function MapViewportTracker() {
   const { mapRef, isLoaded } = useMap()
-  const setBbox = useMapViewport((state) => state.setBbox)
+  const setViewport = useMapViewport((state) => state.setViewport)
 
   useEffect(() => {
     const map = mapRef.current
@@ -23,15 +23,20 @@ export function MapViewportTracker() {
       const target = mapRef.current
       if (!target) return
       const bounds = target.getBounds()
-      setBbox([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()])
+      setViewport(
+        [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
+        target.getZoom(),
+      )
     }
 
     report()
+    // `zoomend` is not enough on its own -- a zoom always ends in a `moveend` too, but a
+    // pure pan never fires `zoomend`, and the bbox has to follow both.
     map.on('moveend', report)
     return () => {
       map.off('moveend', report)
     }
-  }, [mapRef, isLoaded, setBbox])
+  }, [mapRef, isLoaded, setViewport])
 
   return null
 }
