@@ -43,6 +43,32 @@ export interface EditResponse {
 }
 
 /**
+ * What a write to a layer's rows makes stale, in one place.
+ *
+ * Every endpoint that changes features owes the same four invalidations -- the batch of
+ * this section, and split and merge of section 12, which write straight through instead
+ * of joining the batch. Shared rather than copied: the `LIST_ONLY` reasoning below is
+ * exactly the kind of decision that goes wrong when a second caller re-derives it.
+ */
+export function invalidateAfterFeatureWrite(
+  queryClient: QueryClient,
+  layerId: string,
+  projectId: string,
+): void {
+  queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
+  queryClient.invalidateQueries({ queryKey: layerKeys.detail(layerId) })
+  // Feature pages and single features are both stale now; the key prefix covers both.
+  queryClient.invalidateQueries({ queryKey: ['layers', layerId, 'features'] })
+  // The browser's feature count and extent, and nothing else about the project.
+  // `projectKeys.all` would have covered the open project's own detail and its
+  // working state too: the detail refetches with `?open=true`, which stamps a fresh
+  // `lastOpenedAt` and reorders the project list; an optimistic `basemap` value can
+  // fall back to the server's older answer; and the working state reloads between two
+  // of its own deferred writes. `LIST_ONLY` carries the reasoning in full.
+  queryClient.invalidateQueries(LIST_ONLY)
+}
+
+/**
  * Sends the whole edit buffer as one request.
  *
  * On success everything the layer said about itself has changed -- feature count, extent
@@ -61,19 +87,7 @@ export function applyEditsOptions(
   return {
     mutationFn: (request: EditRequest) =>
       api.post<EditResponse>(`/api/layers/${layerId}/edits`, request),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
-      queryClient.invalidateQueries({ queryKey: layerKeys.detail(layerId) })
-      // Feature pages and single features are both stale now; the key prefix covers both.
-      queryClient.invalidateQueries({ queryKey: ['layers', layerId, 'features'] })
-      // The browser's feature count and extent, and nothing else about the project.
-      // `projectKeys.all` would have covered the open project's own detail and its
-      // working state too: the detail refetches with `?open=true`, which stamps a fresh
-      // `lastOpenedAt` and reorders the project list; an optimistic `basemap` value can
-      // fall back to the server's older answer; and the working state reloads between two
-      // of its own deferred writes. `LIST_ONLY` carries the reasoning in full.
-      queryClient.invalidateQueries(LIST_ONLY)
-    },
+    onSuccess: () => invalidateAfterFeatureWrite(queryClient, layerId, projectId),
   }
 }
 

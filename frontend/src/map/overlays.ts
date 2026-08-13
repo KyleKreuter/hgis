@@ -27,17 +27,24 @@ export const MEASUREMENT_LAYER_PREFIX = 'hgis-measurement'
 /** Id namespace of the rectangle select sketch layers -- see `RectangleSelectTool`. */
 export const RECTANGLE_SELECT_LAYER_PREFIX = 'hgis-rectangle-select'
 
+/** Id namespace of the split line sketch layers -- see `SplitLineTool`. */
+export const SPLIT_LINE_LAYER_PREFIX = 'hgis-split-line'
+
 /**
  * Bottom to top. The selection belongs above the data it points at; the measurement
- * sketch and the rectangle being dragged belong above everything, because each is the
- * one thing being drawn right now and a vertex or a corner hidden under a highlight
- * cannot be placed with any confidence. Measurement and the rectangle tool are mutually
- * exclusive (starting one ends the other), so their relative order never actually shows.
+ * sketch, the rectangle being dragged and the split line belong above everything,
+ * because each is the one thing being drawn right now and a vertex or a corner hidden
+ * under a highlight cannot be placed with any confidence.
+ *
+ * The split line is the one that has to be highest: it is drawn over an object that is
+ * selected at the same time -- the selection is what said which object gets cut -- so
+ * unlike the other three it genuinely overlaps the highlight, every time.
  */
 const TIERS: readonly ((layerId: string) => boolean)[] = [
   (layerId) => layerId.includes(SELECTION_LAYER_SUFFIX),
   (layerId) => layerId.startsWith(MEASUREMENT_LAYER_PREFIX),
   (layerId) => layerId.startsWith(RECTANGLE_SELECT_LAYER_PREFIX),
+  (layerId) => layerId.startsWith(SPLIT_LINE_LAYER_PREFIX),
 ]
 
 /** The tier a layer belongs to, or -1 when it is not an overlay at all. */
