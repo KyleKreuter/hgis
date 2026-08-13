@@ -157,6 +157,9 @@ class SplitMergeControllerTest {
 		assertThat(body.get("fids").size()).isEqualTo(2);
 		assertThat(body.get("fids").get(0).asLong()).isEqualTo(fid);
 		assertThat(body.get("dataVersion").asLong()).isGreaterThan(versionBefore);
+		assertThat(body.get("featureCount").asLong())
+				.as("one feature became two, and the answer carries the new count")
+				.isEqualTo(2);
 	}
 
 	@Test
@@ -214,6 +217,9 @@ class SplitMergeControllerTest {
 		assertThat(body.get("fid").asLong()).isEqualTo(lead);
 		assertThat(body.get("dataVersion").asLong())
 				.isEqualTo(layerRepository.findById(layer.getId()).orElseThrow().getDataVersion());
+		assertThat(body.get("featureCount").asLong())
+				.as("two features became one, and the answer carries the new count")
+				.isEqualTo(1);
 	}
 
 	@Test

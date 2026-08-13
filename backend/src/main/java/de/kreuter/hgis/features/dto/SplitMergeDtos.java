@@ -36,8 +36,11 @@ public final class SplitMergeDtos {
 	 *             in ascending fid order
 	 * @param dataVersion the layer's new tile cache buster; the client rebuilds its tile
 	 *                    URL from it, which is what makes the change visible on the map
+	 * @param featureCount the layer's recounted size, like {@link EditDtos.Response}
+	 *                     carries -- a client should not have to re-read the catalog to
+	 *                     learn a number this write already computed
 	 */
-	public record SplitResponse(List<Long> fids, long dataVersion) {
+	public record SplitResponse(List<Long> fids, long dataVersion, long featureCount) {
 	}
 
 	/**
@@ -65,7 +68,8 @@ public final class SplitMergeDtos {
 	/**
 	 * @param fid the lead's fid, unchanged -- anything holding it stays valid
 	 * @param dataVersion see {@link SplitResponse#dataVersion()}
+	 * @param featureCount see {@link SplitResponse#featureCount()}
 	 */
-	public record MergeResponse(long fid, long dataVersion) {
+	public record MergeResponse(long fid, long dataVersion, long featureCount) {
 	}
 }

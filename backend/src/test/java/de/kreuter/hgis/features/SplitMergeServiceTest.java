@@ -480,6 +480,9 @@ class SplitMergeServiceTest {
 				.as("the tile URL is built from this; without a bump the map keeps the old tiles")
 				.isGreaterThan(versionBefore);
 		assertThat(response.dataVersion()).isEqualTo(after.getDataVersion());
+		assertThat(response.featureCount())
+				.as("the write computed this; a client must not have to re-read the catalog for it")
+				.isEqualTo(after.getFeatureCount());
 		assertThat(after.getExtent()).isNotNull();
 	}
 
@@ -708,6 +711,9 @@ class SplitMergeServiceTest {
 		assertThat(after.getFeatureCount()).isEqualTo(1);
 		assertThat(after.getDataVersion()).isGreaterThan(versionBefore);
 		assertThat(response.dataVersion()).isEqualTo(after.getDataVersion());
+		assertThat(response.featureCount())
+				.as("two features went in, one came out -- the answer says so")
+				.isEqualTo(1);
 		assertThat(after.getExtent()).isNotNull();
 	}
 

@@ -120,8 +120,8 @@ public class SplitMergeService {
 			fids.add(copyRow(table, columns, fid, part.wkb()));
 		}
 
-		bookkeeping.recount(layer, table);
-		return new SplitMergeDtos.SplitResponse(fids, layer.getDataVersion());
+		long featureCount = bookkeeping.recount(layer, table);
+		return new SplitMergeDtos.SplitResponse(fids, layer.getDataVersion(), featureCount);
 	}
 
 	/**
@@ -253,8 +253,8 @@ public class SplitMergeService {
 				.param("fids", others)
 				.update();
 
-		bookkeeping.recount(layer, table);
-		return new SplitMergeDtos.MergeResponse(leadFid, layer.getDataVersion());
+		long featureCount = bookkeeping.recount(layer, table);
+		return new SplitMergeDtos.MergeResponse(leadFid, layer.getDataVersion(), featureCount);
 	}
 
 	/**
