@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CircleLayerSpecification, FillLayerSpecification, LineLayerSpecification } from 'maplibre-gl'
-import type { GeometryType, LayerSummary } from '@/api/layers'
+import type { GeometryType, VectorLayerSummary } from '@/api/layers'
 import { CIRCLE_PAINT, FILL_PAINT, LINE_PAINT } from '@/map/layerSpecs'
 import { defaultStyleFor } from './defaults'
 import { styleToMapLibre } from './styleToMapLibre'
@@ -8,7 +8,7 @@ import type { LayerStyle } from './types'
 
 const SOURCE_ID = 'hgis-layer-layer-1'
 
-function makeLayer(overrides: Partial<LayerSummary> = {}): LayerSummary {
+function makeLayer(overrides: Partial<VectorLayerSummary> = {}): VectorLayerSummary {
   return {
     id: 'layer-1',
     name: 'Gebäude',

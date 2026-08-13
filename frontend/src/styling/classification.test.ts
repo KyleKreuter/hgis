@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CircleLayerSpecification, FillLayerSpecification, SymbolLayerSpecification } from 'maplibre-gl'
-import type { LayerField, LayerSummary } from '@/api/layers'
+import type { LayerField, VectorLayerSummary } from '@/api/layers'
 import {
   buildCategories,
   buildClasses,
@@ -24,7 +24,7 @@ const FIELDS: LayerField[] = [
   { id: 'f2', sourceName: 'Höhe', columnName: 'hoehe', dataType: 'double precision' },
 ]
 
-function makeLayer(overrides: Partial<LayerSummary> = {}): LayerSummary {
+function makeLayer(overrides: Partial<VectorLayerSummary> = {}): VectorLayerSummary {
   return {
     id: 'layer-1',
     name: 'Gebäude',

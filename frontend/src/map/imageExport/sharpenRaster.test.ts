@@ -89,6 +89,37 @@ describe('sharpenRasterSources', () => {
     expect((out.sources.q as { tileSize: number }).tileSize).toBe(256)
   })
 
+  /**
+   * A Kartenbild's GetMap address bakes `WIDTH=256&HEIGHT=256` in literally
+   * (`map/wmsTiles.ts`) and declares the very same number as the source's `tileSize`.
+   * This is what makes the generic mechanism above sharpen a Kartenbild correctly
+   * without any WMS-specific code here: MapLibre fetches a *deeper, geographically
+   * smaller* tile once `tileSize` drops, but the URL still asks the service to render
+   * that smaller area at the unchanged 256x256 pixels -- more detail per pixel, exactly
+   * the supersampling this function already does for an ordinary XYZ raster basemap.
+   * A `WIDTH`/`HEIGHT` that did not match the declared `tileSize` would break that: the
+   * server would render at a resolution that no longer matches what MapLibre expects
+   * to stretch onto the tile, which is what shows up as a blurred or skewed image.
+   */
+  test('sharpenRasterSources() genügt für ein Kartenbild -- WIDTH/HEIGHT in der Adresse bleiben unverändert stehen', () => {
+    const wmsSource = {
+      type: 'raster' as const,
+      tiles: [
+        'https://geodienste.hamburg.de/HH_WMS_Cache_Stadtplan?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap' +
+          '&LAYERS=stadtplan&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}' +
+          '&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE',
+      ],
+      tileSize: 256,
+    }
+
+    const out = sharpenRasterSources(styleWith({ img: wmsSource }), 2)
+
+    expect((out.sources.img as { tileSize: number }).tileSize).toBe(128)
+    // The address itself is untouched -- `WIDTH`/`HEIGHT` still say 256, the number the
+    // shrunk `tileSize` is measured against.
+    expect((out.sources.img as { tiles: string[] }).tiles).toEqual(wmsSource.tiles)
+  })
+
   test('verändert den übergebenen Stil nicht', () => {
     // Der Stil gehoert der sichtbaren Karte. Waere er veraendert, wuerde ein Export die
     // Bildschirmkarte auf die vierfache Kachelzahl umstellen.

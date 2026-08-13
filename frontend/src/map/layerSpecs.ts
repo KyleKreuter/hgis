@@ -1,5 +1,5 @@
 import type { FilterSpecification, LayerSpecification } from 'maplibre-gl'
-import type { GeometryType, LayerSummary } from '@/api/layers'
+import type { GeometryType, LayerSummary, VectorLayerSummary } from '@/api/layers'
 
 /**
  * Prefix for every MapLibre source/layer id this module manages, so `syncLayers`
@@ -103,8 +103,12 @@ export const GEOMETRY_FILTERS: Record<'point' | 'line' | 'polygon', FilterSpecif
  * This is the default rendering the whole styling feature falls back to, which is why
  * it stays a separate literal path: `styleToMapLibre(null, …)` returns exactly this,
  * and no layer that has never been styled may look any different than it did before.
+ *
+ * Takes a `VectorLayerSummary`, not the bare `LayerSummary`: a Kartenbild has no
+ * geometry to switch on and is drawn through `map/wmsTiles.ts` instead, never through
+ * here (`syncLayers.ts` picks the path by `isVectorLayer`/`isMapImageLayer`).
  */
-export function layerSpecsFor(layer: LayerSummary, sourceId: string): LayerSpecification[] {
+export function layerSpecsFor(layer: VectorLayerSummary, sourceId: string): LayerSpecification[] {
   const visibility = layer.visible ? 'visible' : 'none'
   const common = {
     source: sourceId,

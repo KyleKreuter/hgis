@@ -170,4 +170,29 @@ describe('AttributeTable', () => {
     // reading "Alpha" tells the user their search is active when it is not.
     expect(await screen.findByRole('textbox')).toHaveValue('')
   })
+
+  /**
+   * A Kartenbild has no fields and no features (plan Stufe 4). `stubFetch` with an empty
+   * route list is the actual assertion here: any call the component made that this test
+   * does not expect would reject and fail it, so a plain "the sentence shows up" render
+   * would not have caught a lingering feature or field-detail request.
+   */
+  test('zeigt für ein Kartenbild einen Satz statt einer leeren Tabelle und fragt keine Objekte ab', async () => {
+    const { calls } = stubFetch([])
+    renderWithQueryClient(
+      <AttributeTable
+        layerId="img-1"
+        layerName="Stadtplan"
+        layerKind="WMS"
+        projectId="p-1"
+        viewState={fakeViewState()}
+        onZoomToFeature={vi.fn()}
+        onRequestEdit={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText('Ein Kartenbild hat keine Attribute.')).toBeInTheDocument()
+    expect(screen.getByText('Attribute - Stadtplan')).toBeInTheDocument()
+    expect(calls).toEqual([])
+  })
 })

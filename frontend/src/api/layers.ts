@@ -19,11 +19,46 @@ export type GeometryType = 'MULTIPOINT' | 'MULTILINESTRING' | 'MULTIPOLYGON' | '
 /** The four clip modes a mask layer can take (CONTRACT.md phase 21); `null` means no mask. */
 export type ClipMode = 'insideWhole' | 'insideClipped' | 'outsideWhole' | 'outsideClipped'
 
+/**
+ * `VECTOR` for an ordinary layer, `WMS` for a Kartenbild -- a WMS service drawn as a
+ * raster (wms-api-vertrag.md section 1). Optional on the wire: a server that omits the
+ * field predates this feature and means `VECTOR`, which is why every reader goes
+ * through {@link isMapImageLayer}/{@link isVectorLayer} rather than comparing `kind`
+ * directly -- the default has to live in one place.
+ */
+export type LayerKind = 'VECTOR' | 'WMS'
+
+/**
+ * What a Kartenbild is drawn from (wms-api-vertrag.md section 1), present only for
+ * `kind: 'WMS'`. `serviceUrl` never carries a query string -- the backend strips it on
+ * import -- so `map/wmsTiles.ts` can append `?…` unconditionally when it builds the
+ * GetMap address.
+ */
+export interface LayerWms {
+  serviceUrl: string
+  /** Bottom-to-top drawing order within this one Kartenbild, per the service's own rule. */
+  layers: string[]
+  imageFormat: string
+  /** `GetLegendGraphic` address, or null when the service names none. */
+  legendUrl: string | null
+  /** Whether the service answers `GetFeatureInfo` for this selection of layers. */
+  queryable: boolean
+}
+
 export interface LayerSummary {
   id: string
   name: string
-  geometryType: GeometryType
-  srid: number
+  /**
+   * Present only for `kind: 'WMS'`, `null` for a `VECTOR` layer (wms-api-vertrag.md
+   * section 1) -- never read directly. Every place that needs the geometry narrows
+   * through {@link isVectorLayer} first, which is what actually enforces "das Frontend
+   * darf sie dort nicht mehr blind lesen".
+   */
+  kind?: LayerKind
+  /** `null` for a Kartenbild, which has no geometry at all. */
+  geometryType: GeometryType | null
+  /** `null` for a Kartenbild -- a WMS image is drawn in EPSG:3857, not stored in any SRID. */
+  srid: number | null
   featureCount: number
   visible: boolean
   zIndex: number
@@ -98,6 +133,44 @@ export interface LayerSummary {
    * anything.
    */
   source?: LayerSource | null
+  /** Present only for `kind: 'WMS'` (wms-api-vertrag.md section 1); absent otherwise. */
+  wms?: LayerWms | null
+}
+
+/**
+ * `LayerSummary` narrowed to a Kartenbild -- `kind`, `wms`, `geometryType` and `srid`
+ * all agree once this is checked. See {@link isMapImageLayer}.
+ */
+export type MapImageLayerSummary = LayerSummary & {
+  kind: 'WMS'
+  geometryType: null
+  srid: null
+  wms: LayerWms
+}
+
+/**
+ * `LayerSummary` narrowed to an ordinary layer -- everything that reads `geometryType`
+ * or `srid` as non-null needs this, not the bare `LayerSummary`. See {@link isVectorLayer}.
+ */
+export type VectorLayerSummary = LayerSummary & {
+  kind?: 'VECTOR'
+  geometryType: GeometryType
+  srid: number
+}
+
+/**
+ * The one place that knows a missing `kind` means `VECTOR` (wms-api-vertrag.md section
+ * 1: "Ein Server ohne das Feld bedeutet VECTOR"). Every other reader narrows through
+ * this or {@link isVectorLayer} instead of comparing `layer.kind` itself, so that
+ * default cannot drift out of step between call sites.
+ */
+export function isMapImageLayer(layer: LayerSummary): layer is MapImageLayerSummary {
+  return layer.kind === 'WMS'
+}
+
+/** The complement of {@link isMapImageLayer} -- narrows `geometryType`/`srid` to non-null. */
+export function isVectorLayer(layer: LayerSummary): layer is VectorLayerSummary {
+  return layer.kind !== 'WMS'
 }
 
 export interface LayerField {
@@ -472,6 +545,39 @@ export function useCreateLayer(projectId: string) {
       queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
       // The project browser shows feature and layer totals per project (like after an
       // import, see useRefreshAfterImport in api/imports.ts).
+      queryClient.invalidateQueries({ queryKey: projectKeys.all })
+    },
+  })
+}
+
+export interface CreateMapImageLayerInput {
+  /** The bare service address, without a query string (wms-api-vertrag.md section 3). */
+  serviceUrl: string
+  /** Bottom-to-top drawing order; the layers the user chose from the capabilities. */
+  layers: string[]
+  imageFormat: string
+  /** Falls back to the first chosen layer's title server-side when omitted. */
+  name?: string
+  /** Absent for "eigene WMS-Adresse" -- present when the entry came from the Geoportal catalog. */
+  datasetId?: string
+}
+
+/**
+ * Adds a Kartenbild (contract "Kartenbild anlegen"). Unlike a Geoportal object import,
+ * this is not a background job: nothing is downloaded, the service is only re-checked,
+ * so the answer is the finished `LayerSummary` and this can reuse `useCreateLayer`'s
+ * cache trick directly instead of going through `useJob`.
+ */
+export function useCreateMapImageLayer(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CreateMapImageLayerInput) =>
+      api.post<LayerSummary>(`/api/projects/${projectId}/map-layers`, input),
+    onSuccess: (created) => {
+      queryClient.setQueryData<LayerSummary[]>(layerKeys.list(projectId), (current) =>
+        current ? [...current, created] : [created],
+      )
+      queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
       queryClient.invalidateQueries({ queryKey: projectKeys.all })
     },
   })

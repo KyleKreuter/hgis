@@ -1,4 +1,4 @@
-import { useUpdateLayer, type LayerSummary } from '@/api/layers'
+import { isMapImageLayer, useUpdateLayer, type LayerSummary } from '@/api/layers'
 import { formatCount, formatRelative } from '@/lib/format'
 import { NumberInput, Row, Section } from '@/styling/controls'
 import { LAYER_ZOOM_MAX, LAYER_ZOOM_MIN, withMaxZoom, withMinZoom } from './zoomRange'
@@ -23,14 +23,36 @@ export function LayerProperties({ layer, projectId }: LayerPropertiesProps) {
         Eigenschaften
       </div>
 
-      <Section title="Layer">
-        <Row label="Objekte">
-          <span className="text-xs tabular-nums">{formatCount(layer.featureCount)}</span>
-        </Row>
-        <Row label="CRS">
-          <span className="text-xs tabular-nums">EPSG:{layer.srid}</span>
-        </Row>
-      </Section>
+      {/* A Kartenbild has no objects and no storage SRID (contract: "geometryType und
+          srid sind null", "featureCount ist 0 und wird nicht angezeigt") -- the service
+          address and the layers drawn from it stand in their place. */}
+      {isMapImageLayer(layer) ? (
+        <Section title="Kartenbild">
+          <Row label="Dienst">
+            <a
+              href={layer.wms.serviceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs underline underline-offset-2 hover:text-foreground"
+              title={layer.wms.serviceUrl}
+            >
+              {layer.wms.serviceUrl}
+            </a>
+          </Row>
+          <Row label="Layer">
+            <span className="text-xs">{layer.wms.layers.join(', ')}</span>
+          </Row>
+        </Section>
+      ) : (
+        <Section title="Layer">
+          <Row label="Objekte">
+            <span className="text-xs tabular-nums">{formatCount(layer.featureCount)}</span>
+          </Row>
+          <Row label="CRS">
+            <span className="text-xs tabular-nums">EPSG:{layer.srid}</span>
+          </Row>
+        </Section>
+      )}
 
       {/* Only for a layer imported from the Geoportal Hamburg (CONTRACT.md phase 23,
           section 11.7) -- the licence's clause 2 requires attribution, licence name and

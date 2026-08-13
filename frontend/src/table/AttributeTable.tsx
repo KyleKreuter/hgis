@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatAttributeNumber, formatCount } from '@/lib/format'
-import { layerDetailQuery, type LayerField } from '@/api/layers'
+import { layerDetailQuery, type LayerField, type LayerKind } from '@/api/layers'
 import { featurePagesQuery, fetchFeatureFids, type Feature } from '@/api/features'
 import { useSelection } from '@/state/selection'
 import type { ViewStateWriter } from '@/state/useViewState'
@@ -44,6 +44,12 @@ const PREFETCH_ROWS = 40
 interface AttributeTableProps {
   layerId: string | null
   layerName?: string
+  /**
+   * Missing or `'VECTOR'` for an ordinary layer; `'WMS'` for a Kartenbild, which has no
+   * attributes at all -- the table shows one sentence instead of querying features that
+   * do not exist (plan Stufe 4, "ein klarer Satz statt einer leeren Tabelle").
+   */
+  layerKind?: LayerKind
   /** The layer's unrestricted feature count -- what a restored filter is compared against
    *  to say how much it hides (CONTRACT.md phase 17, "Ein gespeicherter Filter versteckt
    *  Daten"). `undefined` while the layer list is still loading. */
@@ -69,12 +75,17 @@ interface AttributeTableProps {
 export function AttributeTable({
   layerId,
   layerName,
+  layerKind,
   layerFeatureCount,
   projectId,
   viewState,
   onZoomToFeature,
   onRequestEdit,
 }: AttributeTableProps) {
+  // A Kartenbild has no fields and no features to page through -- `layerId` alone
+  // cannot say that (it names the layer regardless of kind), so every query below is
+  // also gated on this.
+  const isMapImage = layerKind === 'WMS'
   // Keyed by columnName, not the display name shown in the header -- columnName never
   // changes when a field is renamed (ManageFieldsDialog, CONTRACT.md), so a rename of
   // the currently sorted field can never leave this pointed at a name the server no
@@ -112,7 +123,7 @@ export function AttributeTable({
 
   const { data: layer } = useQuery({
     ...layerDetailQuery(layerId ?? ''),
-    enabled: Boolean(layerId),
+    enabled: Boolean(layerId) && !isMapImage,
   })
 
   const query = useInfiniteQuery({
@@ -123,7 +134,7 @@ export function AttributeTable({
       filter,
       search,
     }),
-    enabled: Boolean(layerId),
+    enabled: Boolean(layerId) && !isMapImage,
   })
 
   const rows = query.data?.rows ?? []
@@ -468,6 +479,16 @@ export function AttributeTable({
     return (
       <Panel title="Attribute">
         <Hint>Kein Layer ausgewählt. Klicken Sie im Layerbaum auf einen Layer.</Hint>
+      </Panel>
+    )
+  }
+
+  // A Kartenbild is a picture, not a table -- there are no fields and no rows to page
+  // through, so this stops before any of the feature/edit machinery below runs.
+  if (isMapImage) {
+    return (
+      <Panel title={`Attribute${layerName ? ` - ${layerName}` : ''}`}>
+        <Hint>Ein Kartenbild hat keine Attribute.</Hint>
       </Panel>
     )
   }
