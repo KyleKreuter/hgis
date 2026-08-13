@@ -175,4 +175,28 @@ class ProjectDeletionServiceTest {
 
 		assertThat(projectRepository.count()).isEqualTo(before);
 	}
+
+	/**
+	 * A map image (kind WMS) has {@code table_name = NULL} (V9__map_image_layer.sql).
+	 * Deletion reads {@code table_name} straight off {@code gis_meta.layer} to know what
+	 * to drop -- without excluding NULL rows first, {@code tableName.matches(...)} in
+	 * {@link ProjectDeletionService#deleteProject} would throw a NullPointerException on
+	 * exactly this row, and every vector layer's table would be dropped before that
+	 * happened, since the loop processes rows in whatever order the query returned them.
+	 */
+	@Test
+	@DisplayName("a project with a map image layer alongside vector layers still deletes cleanly")
+	void deletesAProjectThatAlsoHasAMapImageLayer() {
+		Layer mapImage = layerRepository.saveAndFlush(new Layer(UUID.randomUUID(), project, "Kartenbild",
+				"https://geodienste.hamburg.de/HH_WMS_Cache_Stadtplan", List.of("stadtplan"), "image/png", null,
+				true));
+
+		deletionService.deleteProject(project.getId());
+
+		assertThat(projectRepository.findById(project.getId())).isEmpty();
+		assertThat(layerRepository.findById(mapImage.getId())).isEmpty();
+		assertThat(tableNames)
+				.as("the three vector tables must still be dropped despite the map image's NULL table_name")
+				.noneMatch(this::tableExists);
+	}
 }

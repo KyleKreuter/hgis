@@ -240,6 +240,8 @@ class CatalogLoaderTest {
 							.isEqualTo("https://registry.gdi-de.org/id/de.hh/27e4611d-85ff-4cad-a6b3-89a37a475ba6");
 					// The row carries a WMS address as well as an object service.
 					assertThat(entry.kind()).isEqualTo("BOTH");
+					assertThat(entry.wmsUrl())
+							.isEqualTo("https://geodienste.hamburg.de/wms_biotopverbund_feuchtlebensraeume?SERVICE=WMS");
 				});
 	}
 
@@ -263,6 +265,7 @@ class CatalogLoaderTest {
 		assertThat(entry.hasOgcFeatures()).as("importable all the same -- the directory says how").isTrue();
 		assertThat(entry.datasetUri())
 				.isEqualTo("https://registry.gdi-de.org/id/de.hh/948321ba-e9b2-4290-88c3-8dda2912defa");
+		assertThat(entry.wmsUrl()).as("no row means no WMS-Adresse either").isNull();
 	}
 
 	@Test
@@ -285,6 +288,7 @@ class CatalogLoaderTest {
 		assertThat(entry.kind()).isEqualTo("WMS");
 		assertThat(entry.hasOgcFeatures()).isFalse();
 		assertThat(entry.collectionCount()).isEqualTo(1);
+		assertThat(entry.wmsUrl()).isEqualTo("https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS?SERVICE=WMS");
 	}
 
 	/**

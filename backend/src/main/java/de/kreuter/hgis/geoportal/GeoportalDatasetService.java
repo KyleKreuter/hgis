@@ -1,11 +1,13 @@
 package de.kreuter.hgis.geoportal;
 
 import de.kreuter.hgis.common.BadRequestException;
+import de.kreuter.hgis.common.LayerProvenance;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.TypeMapper;
 import de.kreuter.hgis.geoportal.GeoportalCatalogService.Snapshot;
 import de.kreuter.hgis.geoportal.dto.GeoportalDtos;
 import de.kreuter.hgis.ingest.reader.QueryablesSchema;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -13,9 +15,16 @@ import org.springframework.stereotype.Service;
  * Answers CONTRACT.md 11.2 through 11.5: the catalog listing straight from the held
  * snapshot, and everything that needs a live call to the dataset's own OGC API Features
  * collection -- 11.4's field list and object count, and 11.5's bbox-filtered count.
+ *
+ * <p>Public since the plan "Kartenbilder aus dem Geoportal Hamburg" (stage 3): a map
+ * image layer created from a Geoportal dataset needs this same catalog's provenance --
+ * see {@link #provenanceFor} -- from {@code de.kreuter.hgis.wms.MapLayerService}, in
+ * another package. {@link GeoportalCatalogEntry} itself stays package-private; nothing
+ * outside {@code geoportal} needs the whole entry, only the six fields {@link
+ * LayerProvenance} already carries across that same boundary for a vector import.
  */
 @Service
-class GeoportalDatasetService {
+public class GeoportalDatasetService {
 
 	private final GeoportalCatalogService catalogService;
 	private final OgcFeaturesClient ogcFeaturesClient;
@@ -54,7 +63,7 @@ class GeoportalDatasetService {
 					null, null,
 					entry.attribution(), GeoportalLicense.NAME, GeoportalLicense.URL,
 					entry.datasetUri(), entry.metadataUrl(), null, null, List.of(),
-					entry.collectionCount(), toCollectionRefs(entry));
+					entry.collectionCount(), toCollectionRefs(entry), entry.wmsUrl());
 		}
 
 		OgcFeaturesClient.CollectionInfo collectionInfo = ogcFeaturesClient.fetchCollection(entry.apiUrl(), entry.collection());
@@ -77,7 +86,7 @@ class GeoportalDatasetService {
 				collectionInfo.itemCount(), collectionInfo.bboxWgs84(),
 				entry.attribution(), GeoportalLicense.NAME, GeoportalLicense.URL,
 				entry.datasetUri(), entry.metadataUrl(), collectionInfo.storageSrid(), sourceFeatureIdField, fields,
-				entry.collectionCount(), List.of());
+				entry.collectionCount(), List.of(), entry.wmsUrl());
 	}
 
 	/** CONTRACT.md 11.9: what a service listed as one row offers to pick from; empty for everything else. */
@@ -94,6 +103,22 @@ class GeoportalDatasetService {
 			return new GeoportalDtos.CountResponse(null);
 		}
 		return new GeoportalDtos.CountResponse(ogcFeaturesClient.countMatching(entry.apiUrl(), entry.collection(), bbox4326));
+	}
+
+	/**
+	 * The provenance a map image layer created from this dataset writes onto itself
+	 * (plan "Kartenbilder aus dem Geoportal Hamburg", stage 3) -- the same six fields
+	 * {@link GeoportalImportController} already writes for a vector import, from the
+	 * same catalog entry. {@code featureIdField} is always null here: a map image has
+	 * no attribute table, so there is no stable feature id column for CONTRACT.md
+	 * 23.7's decision E6 to name.
+	 *
+	 * @throws NotFoundException when {@code datasetId} names no catalog entry
+	 */
+	public LayerProvenance provenanceFor(String datasetId) {
+		GeoportalCatalogEntry entry = require(datasetId);
+		return new LayerProvenance(entry.attribution(), GeoportalLicense.NAME, GeoportalLicense.URL,
+				entry.datasetUri(), entry.metadataUrl(), entry.id(), null, Instant.now());
 	}
 
 	GeoportalCatalogEntry require(String id) {
@@ -144,6 +169,6 @@ class GeoportalDatasetService {
 	private static GeoportalDtos.DatasetSummary toSummary(GeoportalCatalogEntry entry) {
 		return new GeoportalDtos.DatasetSummary(
 				entry.id(), entry.title(), null, entry.kind(), entry.agency(), entry.topic(), null, null,
-				entry.collectionCount());
+				entry.collectionCount(), entry.wmsUrl());
 	}
 }

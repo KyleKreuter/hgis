@@ -27,8 +27,20 @@ public final class LayerDtos {
 	public record Summary(
 			UUID id,
 			String name,
+
+			/**
+			 * {@code VECTOR} or {@code WMS} (plan "Kartenbilder aus dem Geoportal Hamburg",
+			 * stage 1). A server without this field means {@code VECTOR} -- the frontend
+			 * reads it with that default so an older server never breaks.
+			 */
+			String kind,
+
+			/** Null for a {@code WMS} layer -- see {@link #kind()}. */
 			String geometryType,
-			int srid,
+
+			/** Null for a {@code WMS} layer -- see {@link #kind()}. */
+			Integer srid,
+
 			long featureCount,
 			boolean visible,
 			int zIndex,
@@ -107,11 +119,36 @@ public final class LayerDtos {
 			 * a project to build its bottom-right notice, which would otherwise cost one
 			 * detail request per layer.
 			 */
-			Source source) {
+			Source source,
+
+			/**
+			 * Filled exactly for {@code kind == "WMS"}, absent otherwise -- present here,
+			 * not only on {@link Detail}, for the same reason as {@link #style()}: the map
+			 * has to build a raster source for every layer as soon as the project opens,
+			 * without one detail request per layer.
+			 */
+			@JsonInclude(JsonInclude.Include.NON_NULL)
+			Wms wms) {
 	}
 
 	/** One entry of {@code LayerDetail.fields}. */
 	public record Field(UUID id, String sourceName, String columnName, String dataType) {
+	}
+
+	/**
+	 * A map image layer's service binding (plan "Kartenbilder aus dem Geoportal
+	 * Hamburg", stage 1).
+	 *
+	 * @param serviceUrl  the service's own address, without any query parameters -- the
+	 *                    client builds the GetMap request from this itself
+	 * @param layers      the chosen layers, bottom first -- the order the service draws
+	 *                    them in
+	 * @param imageFormat GetMap {@code FORMAT}, e.g. {@code image/png}
+	 * @param legendUrl   GetLegendGraphic address, or null when the service names none
+	 * @param queryable   whether GetFeatureInfo works for the chosen layers (stage 5)
+	 */
+	public record Wms(String serviceUrl, List<String> layers, String imageFormat, String legendUrl,
+			boolean queryable) {
 	}
 
 	/**
@@ -140,8 +177,16 @@ public final class LayerDtos {
 	public record Detail(
 			UUID id,
 			String name,
+
+			/** @see Summary#kind() */
+			String kind,
+
+			/** Null for a {@code WMS} layer -- see {@link #kind()}. */
 			String geometryType,
-			int srid,
+
+			/** Null for a {@code WMS} layer -- see {@link #kind()}. */
+			Integer srid,
+
 			long featureCount,
 			boolean visible,
 			int zIndex,
@@ -173,6 +218,10 @@ public final class LayerDtos {
 
 			/** @see Summary#source() */
 			Source source,
+
+			/** @see Summary#wms() */
+			@JsonInclude(JsonInclude.Include.NON_NULL)
+			Wms wms,
 
 			List<Field> fields,
 			Instant createdAt,

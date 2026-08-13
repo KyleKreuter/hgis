@@ -69,6 +69,32 @@ class ProjectDuplicateTransactions {
 				.orElseThrow(() -> new IllegalStateException("Quelllayer ist nicht mehr vorhanden"));
 		Project target = projectRepository.getReferenceById(targetProjectId);
 		UUID targetLayerId = Uuid7.generate();
+
+		// A map image (kind WMS) has no payload table -- it is copied as a catalog row
+		// alone, its service binding carried straight across. Everything below the two
+		// branches (attributes, feature_count rollup, progress) is identical either way.
+		Layer copy = source.isVectorLayer()
+				? copyVectorLayer(source, target, targetLayerId)
+				: copyWmsLayer(source, target, targetLayerId);
+
+		copy.setCopyMetadata(source.getFeatureCount(), source.isVisible(), source.getZIndex(),
+				source.getMinZoom(), source.getMaxZoom(), source.getStyle(),
+				source.getBasemap(), source.getBasemapOpacity(), source.getClipMode(), source.getExtent(),
+				source.getProvenance());
+		copy = layerRepository.save(copy);
+		for (LayerField field : fieldRepository.findByLayerIdOrderByOrdinalAsc(sourceLayerId)) {
+			fieldRepository.save(new LayerField(copy, field.getSourceName(), field.getColumnName(),
+					field.getDataType(), field.getOrdinal()));
+		}
+		long processed = jdbc.sql("""
+				SELECT COALESCE(SUM(feature_count), 0)
+				FROM gis_meta.layer WHERE project_id = :projectId
+				""").param("projectId", targetProjectId).query(Long.class).single();
+		jobService.updateProgress(jobId, processed, totalFeatures, 0);
+	}
+
+	/** Copies the payload table, its indexes and the catalog row -- the original behaviour, unchanged. */
+	private Layer copyVectorLayer(Layer source, Project target, UUID targetLayerId) {
 		String targetTable = SqlIdentifier.tableName(targetLayerId);
 
 		// INCLUDING ALL would copy the source's index definitions and their schema-wide
@@ -91,22 +117,15 @@ class ProjectDuplicateTransactions {
 		jdbc.sql("ALTER TABLE " + SqlIdentifier.quoteLayerTable(targetTable)
 				+ " ALTER COLUMN fid RESTART WITH " + nextFid).update();
 
-		Layer copy = new Layer(targetLayerId, target, source.getName(), targetTable,
+		return new Layer(targetLayerId, target, source.getName(), targetTable,
 				source.getGeometryType(), source.getSrid());
-		copy.setCopyMetadata(source.getFeatureCount(), source.isVisible(), source.getZIndex(),
-				source.getMinZoom(), source.getMaxZoom(), source.getStyle(),
-				source.getBasemap(), source.getBasemapOpacity(), source.getClipMode(), source.getExtent(),
-				source.getProvenance());
-		copy = layerRepository.save(copy);
-		for (LayerField field : fieldRepository.findByLayerIdOrderByOrdinalAsc(sourceLayerId)) {
-			fieldRepository.save(new LayerField(copy, field.getSourceName(), field.getColumnName(),
-					field.getDataType(), field.getOrdinal()));
-		}
-		long processed = jdbc.sql("""
-				SELECT COALESCE(SUM(feature_count), 0)
-				FROM gis_meta.layer WHERE project_id = :projectId
-				""").param("projectId", targetProjectId).query(Long.class).single();
-		jobService.updateProgress(jobId, processed, totalFeatures, 0);
+	}
+
+	/** Nothing to copy but the catalog row -- a map image has no table, so no DDL runs at all. */
+	private static Layer copyWmsLayer(Layer source, Project target, UUID targetLayerId) {
+		return new Layer(targetLayerId, target, source.getName(), source.getWmsServiceUrl(),
+				source.getWmsLayers(), source.getWmsImageFormat(), source.getWmsLegendUrl(),
+				Boolean.TRUE.equals(source.getWmsQueryable()));
 	}
 
 	/**

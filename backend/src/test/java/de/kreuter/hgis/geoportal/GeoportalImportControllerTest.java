@@ -156,7 +156,7 @@ class GeoportalImportControllerTest {
 				DATASET_ID, "Straßenbaumkataster Hamburg", "FEATURES", "BUKEA",
 				"Freie und Hansestadt Hamburg, Behörde für Umwelt, Klima, Energie und Agrarwirtschaft",
 				"Umwelt", "https://metaver.de/trefferanzeige?docuuid=x", "https://registry.gdi-de.org/id/de.hh/x",
-				API_URL, COLLECTION, Map.of("kronendurchmesser_z", "Kronendurchmesser"));
+				API_URL, COLLECTION, Map.of("kronendurchmesser_z", "Kronendurchmesser"), null);
 		given(datasetService.requireImportable(DATASET_ID)).willReturn(entry);
 		expectSuccessfulSchemaAndItemsFetch();
 
@@ -238,7 +238,7 @@ class GeoportalImportControllerTest {
 		GeoportalCatalogEntry entry = new GeoportalCatalogEntry(
 				datasetId, "Grundwassermessstellen Hamburg", "FEATURES",
 				null, null, "Umwelt", "https://metaver.de/trefferanzeige?docuuid=y",
-				"https://registry.gdi-de.org/id/de.hh/y", API_URL, COLLECTION, Map.of());
+				"https://registry.gdi-de.org/id/de.hh/y", API_URL, COLLECTION, Map.of(), null);
 		given(datasetService.requireImportable(datasetId)).willReturn(entry);
 		expectSuccessfulSchemaAndItemsFetch();
 

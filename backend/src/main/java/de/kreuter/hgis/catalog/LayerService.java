@@ -80,6 +80,20 @@ public class LayerService {
 	}
 
 	/**
+	 * One layer's summary row, the exact shape {@link #listByProject} gives each of its
+	 * entries. Used by {@code de.kreuter.hgis.wms.MapLayerService} (plan "Kartenbilder
+	 * aus dem Geoportal Hamburg", stage 3) to answer its 201 without a second, duplicate
+	 * implementation of {@link #toSummary} for a layer kind this class did not itself
+	 * create.
+	 */
+	@Transactional(readOnly = true)
+	public LayerDtos.Summary getSummary(UUID layerId) {
+		Layer layer = require(layerId);
+		List<Layer> masks = layerRepository.findClipMasks(layer.getProject().getId());
+		return toSummary(layer, masks);
+	}
+
+	/**
 	 * Creates a brand-new, empty layer -- name, geometry type and optional attribute
 	 * fields, nothing else. What makes it usable right away is {@link TableCreator}: the
 	 * same DDL an import runs, so an {@code EditService.apply} create against the fresh
@@ -207,13 +221,16 @@ public class LayerService {
 	public void delete(UUID layerId) {
 		Layer layer = require(layerId);
 
-		// The physical table has to go while its name is still known -- deleting the
-		// catalog row first would leave an orphan behind that nothing can name any more.
-		// Same reasoning as ProjectDeletionService, just for a single layer. Both
-		// statements run in one transaction; DDL is transactional in PostgreSQL, so a
-		// failure here rolls back cleanly.
-		jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(layer.getTableName()))
-				.update();
+		// A map image (kind WMS) has no payload table -- nothing to drop, unlike a
+		// vector layer. The physical table has to go while its name is still known --
+		// deleting the catalog row first would leave an orphan behind that nothing can
+		// name any more. Same reasoning as ProjectDeletionService, just for a single
+		// layer. Both statements run in one transaction; DDL is transactional in
+		// PostgreSQL, so a failure here rolls back cleanly.
+		if (layer.isVectorLayer()) {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(layer.getTableName()))
+					.update();
+		}
 		layerRepository.delete(layer);
 	}
 
@@ -289,6 +306,9 @@ public class LayerService {
 	 * picker into a full reload of the visible map on every pixel of travel.
 	 */
 	private void applyStyle(Layer layer, JsonNode style) {
+		// A map image has no symbology (contract: "style fehlt"), and no layer_field rows
+		// to validate a renderer's field reference against either.
+		layer.requireVector();
 		List<LayerField> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layer.getId());
 		String canonical = styleService.validateAndSerialize(style, fields);
 
@@ -385,14 +405,14 @@ public class LayerService {
 
 	private static LayerDtos.Summary toSummary(Layer layer, List<Layer> projectMasks) {
 		return new LayerDtos.Summary(
-				layer.getId(), layer.getName(), layer.getGeometryType(), layer.getSrid(),
+				layer.getId(), layer.getName(), layer.getKind(), layer.getGeometryType(), layer.getSrid(),
 				layer.getFeatureCount(), layer.isVisible(), layer.getZIndex(),
 				layer.getMinZoom(), layer.getMaxZoom(),
 				layer.getDataVersion(), layer.getStyleVersion(),
 				toBbox(layer.getExtent()), layer.getStyle(),
 				layer.getBasemap(), layer.getBasemapOpacity(),
 				layer.getClipMode(), layer.clipVersion(projectMasks), TileRenderVersion.CURRENT,
-				toSource(layer));
+				toSource(layer), toWms(layer));
 	}
 
 	private LayerDtos.Detail toDetail(Layer layer, List<Layer> projectMasks) {
@@ -401,14 +421,23 @@ public class LayerService {
 				.toList();
 
 		return new LayerDtos.Detail(
-				layer.getId(), layer.getName(), layer.getGeometryType(), layer.getSrid(),
+				layer.getId(), layer.getName(), layer.getKind(), layer.getGeometryType(), layer.getSrid(),
 				layer.getFeatureCount(), layer.isVisible(), layer.getZIndex(),
 				layer.getMinZoom(), layer.getMaxZoom(),
 				layer.getDataVersion(), layer.getStyleVersion(),
 				toBbox(layer.getExtent()), layer.getStyle(),
 				layer.getBasemap(), layer.getBasemapOpacity(),
 				layer.getClipMode(), layer.clipVersion(projectMasks), TileRenderVersion.CURRENT,
-				toSource(layer), fields, layer.getCreatedAt(), layer.getUpdatedAt());
+				toSource(layer), toWms(layer), fields, layer.getCreatedAt(), layer.getUpdatedAt());
+	}
+
+	/** Null for a {@code VECTOR} layer -- see {@link LayerDtos.Summary#wms()}. */
+	private static LayerDtos.Wms toWms(Layer layer) {
+		if (layer.isVectorLayer()) {
+			return null;
+		}
+		return new LayerDtos.Wms(layer.getWmsServiceUrl(), layer.getWmsLayers(), layer.getWmsImageFormat(),
+				layer.getWmsLegendUrl(), Boolean.TRUE.equals(layer.getWmsQueryable()));
 	}
 
 	/**

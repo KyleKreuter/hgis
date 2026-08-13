@@ -50,7 +50,7 @@ class GeoportalCatalogServiceTest {
 			}
 			running.decrementAndGet();
 			return List.of(new GeoportalCatalogEntry("lauf-" + number, "Datensatz " + number, "FEATURES",
-					"BUKEA", null, "Umwelt", null, null, null, null, Map.of()));
+					"BUKEA", null, "Umwelt", null, null, null, null, Map.of(), null));
 		}
 	}
 

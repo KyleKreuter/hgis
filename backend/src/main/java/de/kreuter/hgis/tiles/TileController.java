@@ -78,6 +78,7 @@ public class TileController {
 
 		Layer layer = layerRepository.findById(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
+		layer.requireVector();
 
 		if (z < layer.getMinZoom() || z > layer.getMaxZoom()) {
 			return outsideZoomRange();

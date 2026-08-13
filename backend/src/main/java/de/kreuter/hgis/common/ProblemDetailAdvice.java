@@ -46,6 +46,12 @@ public class ProblemDetailAdvice {
 		return problem;
 	}
 
+	/** The resource exists and answered, but its content cannot be used as asked. */
+	@ExceptionHandler(UnprocessableEntityException.class)
+	public ProblemDetail handleUnprocessable(UnprocessableEntityException ex) {
+		return problem(HttpStatus.UNPROCESSABLE_ENTITY, "Nicht verarbeitbar", ex.getMessage());
+	}
+
 	/** Bean validation failures, reported per field so the form can highlight them. */
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {

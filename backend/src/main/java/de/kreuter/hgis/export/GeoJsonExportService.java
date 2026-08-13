@@ -101,6 +101,7 @@ public class GeoJsonExportService {
 	public Export prepare(UUID layerId, FidSelection selection) {
 		Layer layer = layerRepository.findById(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
+		layer.requireVector();
 
 		List<ExportField> fields =
 				PropertyNaming.resolve(fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId));

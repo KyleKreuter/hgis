@@ -36,7 +36,14 @@ public final class GeoportalDtos {
 			String topic,
 			Long featureCount,
 			double[] bbox,
-			int collectionCount) {
+			int collectionCount,
+
+			/**
+			 * The CSV's {@code WMS-Adresse} column, or null (plan "Kartenbilder aus dem
+			 * Geoportal Hamburg", stage 2): lets the map-image dialog fetch this dataset's
+			 * WMS capabilities for a {@code kind} of {@code WMS} or {@code BOTH}.
+			 */
+			String wmsUrl) {
 	}
 
 	/**
@@ -72,7 +79,10 @@ public final class GeoportalDtos {
 			String sourceFeatureIdField,
 			List<Field> fields,
 			int collectionCount,
-			List<CollectionRef> collections) {
+			List<CollectionRef> collections,
+
+			/** @see DatasetSummary#wmsUrl() */
+			String wmsUrl) {
 	}
 
 	/** One entry of {@link DatasetDetail#fields()}. */

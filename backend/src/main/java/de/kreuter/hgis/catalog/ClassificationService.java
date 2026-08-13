@@ -235,9 +235,12 @@ public class ClassificationService {
 		return resolved;
 	}
 
+	/** Both aggregates read the payload table, so a map image (kind WMS) is rejected up front. */
 	private Layer require(UUID layerId) {
-		return layerRepository.findById(layerId)
+		Layer layer = layerRepository.findById(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
+		layer.requireVector();
+		return layer;
 	}
 
 	private static Double nullableDouble(ResultSet rs, String column) throws SQLException {

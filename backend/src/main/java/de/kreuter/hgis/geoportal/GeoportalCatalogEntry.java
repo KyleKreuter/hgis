@@ -56,6 +56,11 @@ import java.util.Map;
  *                      none for this collection (plan section 3.5: a {@code showAll} entry),
  *                      for a service listed as one row (its labels are per collection) and
  *                      for a dataset with no binding
+ * @param wmsUrl        the CSV's {@code WMS-Adresse} column (plan "Kartenbilder aus dem
+ *                      Geoportal Hamburg", stage 2), or null when the dataset names no map
+ *                      image service; lets the map-image dialog fetch this dataset's WMS
+ *                      capabilities for a {@code kind} of {@code WMS} or {@code BOTH}
+ *                      without the client having to already know the address
  * @param collections   this service's collections, each a complete entry of its own, held
  *                      for the detail pane and for the lookup a later import does by the
  *                      chosen collection's id; empty, never null, for everything but a
@@ -73,6 +78,7 @@ record GeoportalCatalogEntry(
 		String apiUrl,
 		String collection,
 		Map<String, String> gfiAttributes,
+		String wmsUrl,
 		List<GeoportalCatalogEntry> collections) {
 
 	GeoportalCatalogEntry {
@@ -86,9 +92,9 @@ record GeoportalCatalogEntry(
 	 */
 	GeoportalCatalogEntry(String id, String title, String kind, String agency, String attribution, String topic,
 			String metadataUrl, String datasetUri, String apiUrl, String collection,
-			Map<String, String> gfiAttributes) {
+			Map<String, String> gfiAttributes, String wmsUrl) {
 		this(id, title, kind, agency, attribution, topic, metadataUrl, datasetUri, apiUrl, collection,
-				gfiAttributes, List.of());
+				gfiAttributes, wmsUrl, List.of());
 	}
 
 	boolean hasOgcFeatures() {
@@ -111,6 +117,6 @@ record GeoportalCatalogEntry(
 
 	GeoportalCatalogEntry withTitle(String newTitle) {
 		return new GeoportalCatalogEntry(id, newTitle, kind, agency, attribution, topic, metadataUrl, datasetUri,
-				apiUrl, collection, gfiAttributes, collections);
+				apiUrl, collection, gfiAttributes, wmsUrl, collections);
 	}
 }
