@@ -614,10 +614,16 @@ function DatasetDetailPane({
 
         {detail.data && (
           <div className="grid gap-1 text-xs">
-            <p>
-              <span className="text-muted-foreground">Quellenvermerk </span>
-              {detail.data.attribution}
-            </p>
+            {/* Only where the service directory names an agency: some datasets leave it
+                blank, and the caption on its own reads as a value that failed to load
+                rather than one that does not exist (CONTRACT.md 11.7). The licence below
+                applies either way, so only this line goes. */}
+            {detail.data.attribution && (
+              <p>
+                <span className="text-muted-foreground">Quellenvermerk </span>
+                {detail.data.attribution}
+              </p>
+            )}
             <p>
               <a
                 href={detail.data.licenseUrl}

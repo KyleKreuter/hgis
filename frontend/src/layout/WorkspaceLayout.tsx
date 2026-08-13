@@ -44,7 +44,20 @@ export function WorkspaceLayout({
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
-      <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-card px-2">
+      {/*
+        Wraps onto a second line rather than cutting its end off. The layout root clips,
+        so whatever did not fit was simply gone: at 900px with the measuring tool switched
+        on that was the last 83px, and the "Daten aus dem Geoportal Hamburg" button with
+        it. The toolbar's own groups wrap too, see the project route.
+
+        min-h-10, not h-10: 40px while one line is enough, which is the usual case and the
+        only case at 1600px, and as many lines as the tools need below that. Growing costs
+        the panels underneath a few pixels of height -- they take what is left of the
+        viewport -- which is the cheapest of the three currencies here. Sideways scrolling
+        was the other candidate and is worse than it sounds: the scrollbar is 16 of the
+        40px, leaving the buttons 24 and clipping every one of them.
+      */}
+      <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b bg-card px-2 py-1">
         {toolbar}
       </header>
 

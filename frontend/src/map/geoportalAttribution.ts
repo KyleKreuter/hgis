@@ -21,13 +21,19 @@ export interface GeoportalAttributionEntry {
  * name the same agency twice just because two of its layers are both on screen. Sorted
  * alphabetically for a stable, predictable order rather than the layer list's own
  * (creation-order-ish) sequence.
+ *
+ * A layer whose `source` names no agency is skipped: there is nothing to write on the
+ * line. `source` and `attribution` are two questions, not one (CONTRACT.md 11.7) --
+ * `Grundwassermessstellen Hamburg` is imported from the Geoportal and has no
+ * "Bezeichnung des Bereitstellers", and a missing name must not take the other agencies'
+ * credits down with it.
  */
 export function distinctVisibleAttributions(
   layers: readonly LayerSummary[],
 ): GeoportalAttributionEntry[] {
   const byAttribution = new Map<string, GeoportalAttributionEntry>()
   for (const layer of layers) {
-    if (!layer.visible || !layer.source) continue
+    if (!layer.visible || !layer.source?.attribution) continue
     if (!byAttribution.has(layer.source.attribution)) {
       byAttribution.set(layer.source.attribution, {
         attribution: layer.source.attribution,

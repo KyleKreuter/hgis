@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { initialDraftFromChar, kindOf, toInputValue } from './fieldKind'
+import { initialDraftFromChar, kindOf, toInputValue, toWireValue } from './fieldKind'
 
 describe('kindOf', () => {
   it('erkennt Zeitstempel an ihrem Präfix', () => {
@@ -44,8 +44,17 @@ describe('kindOf', () => {
 })
 
 describe('toInputValue', () => {
-  it('kürzt einen Zeitstempel auf datetime-local-Länge', () => {
-    expect(toInputValue('2024-03-01T08:15:30.000Z', 'timestamp')).toBe('2024-03-01T08:15')
+  /**
+   * This used to assert the trim to sixteen characters, which was the bug: the field
+   * means local time, so the UTC text put it an hour off in Berlin and dropped the
+   * seconds. Written without naming a zone, so it holds wherever the tests run --
+   * `timestampValue.test.ts` names the zones and pins the exact hours.
+   */
+  it('rechnet einen Zeitstempel in die Ortszeit des Browsers um', () => {
+    const shown = toInputValue('2024-03-01T08:15:30.000Z', 'timestamp')
+    expect(shown).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)
+    // Read as local time -- which is what datetime-local means -- it is the same instant.
+    expect(new Date(shown).getTime()).toBe(Date.parse('2024-03-01T08:15:30.000Z'))
   })
 
   it('lässt ein reines Datum unverändert', () => {
@@ -58,6 +67,24 @@ describe('toInputValue', () => {
 
   it('wandelt Zahlen in Text um', () => {
     expect(toInputValue(12.75, 'decimal')).toBe('12.75')
+  })
+})
+
+describe('toWireValue', () => {
+  /**
+   * The reported bug: the cell editor sent the `datetime-local` value as it stood.
+   * The server parses `ISO_OFFSET_DATE_TIME` and answered 400 -- and because one save is
+   * one transaction, every other pending change in the batch was lost with it.
+   */
+  it('ergänzt bei einem Zeitstempel die Zeitverschiebung', () => {
+    const sent = toWireValue('2024-03-01T09:15:30', 'timestamp')
+    expect(sent).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/)
+  })
+
+  it('lässt Datum, Uhrzeit und Text unverändert -- die stehen schon im Format des Servers', () => {
+    expect(toWireValue('2024-03-01', 'date')).toBe('2024-03-01')
+    expect(toWireValue('08:15:30', 'time')).toBe('08:15:30')
+    expect(toWireValue('Schmidt', 'text')).toBe('Schmidt')
   })
 })
 

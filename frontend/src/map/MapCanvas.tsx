@@ -174,7 +174,18 @@ export function MapCanvas({
             it still pans the map; only the links themselves take clicks, which is the
             minimum a licence asking to be linked can be given. */}
         {attributionParts.length > 0 && (
-          <p className="pointer-events-none absolute right-1.5 bottom-1 z-10 max-w-[80%] rounded bg-background/70 px-1 text-right text-[0.625rem] leading-4 text-muted-foreground">
+          /*
+           * The width cap keeps the notice clear of the scale bar and the coordinate
+           * readout, which sit on the same bottom edge at the other end (`MapControls`).
+           * At 80% it ran straight over them as soon as the map was narrow -- and on a
+           * map with a Geoportal layer the text is long enough for that to be the normal
+           * case, not an edge one. 17rem is what those two controls need at their widest:
+           * a 100px scale bar and a full lat/lng pair, each in its own padded box, plus
+           * the 1.5 they are inset by. Wrapping to another line costs nothing here -- the
+           * box grows upwards, into the map, where there is always room. On a wide map
+           * the cap is the same 80% it was before, so nothing moves there.
+           */
+          <p className="pointer-events-none absolute right-1.5 bottom-1 z-10 max-w-[calc(100%-17rem)] rounded bg-background/70 px-1 text-right text-[0.625rem] leading-4 text-muted-foreground">
             {attributionParts.map((part, index) =>
               part.href ? (
                 <a

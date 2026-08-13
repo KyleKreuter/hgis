@@ -676,20 +676,21 @@ function Row({
       // Absolutely positioned by the virtualiser: only the visible rows exist in the
       // DOM, and their offset is what puts them in the right place inside the spacer.
       className={cn(
-        'absolute inset-x-0 grid h-[26px] items-stretch border-b border-border/50 text-xs',
+        'absolute inset-x-0 grid h-[26px] items-stretch text-xs',
         isSelected ? 'bg-accent' : 'hover:bg-accent/40',
       )}
       style={{ top, gridTemplateColumns: gridTemplate(fields) }}
       onClick={() => toggle(layerId, feature.fid)}
     >
       {/*
-       * bg-inherit on every cell, here and in EditableCell: the row is positioned
-       * inset-x-0 and is therefore exactly as wide as the scroller, while its columns
-       * overflow that width. Selection and hover painted on the row alone stopped at the
-       * old viewport edge, leaving the columns further right unmarked. The cells span the
-       * full scroll width, so letting them inherit the row's colour carries it across.
+       * bg-inherit and border-b on every cell, here and in EditableCell: the row is
+       * positioned inset-x-0 and is therefore exactly as wide as the scroller, while its
+       * columns overflow that width. Selection, hover and the dividing line painted on
+       * the row alone stopped at the old viewport edge, leaving the columns further right
+       * unmarked and undivided. The cells span the full scroll width, so putting both on
+       * them carries them across -- the same reasoning HeaderCell already follows.
        */}
-      <span className="flex items-center justify-end truncate bg-inherit px-2 text-right text-muted-foreground tabular-nums">
+      <span className="flex items-center justify-end truncate border-b border-border/50 bg-inherit px-2 text-right text-muted-foreground tabular-nums">
         {feature.fid}
       </span>
       {fields.map((field, columnIndex) => (
@@ -704,7 +705,7 @@ function Row({
           onFocusCell={onFocusCell}
         />
       ))}
-      <span className="flex items-center justify-center bg-inherit">
+      <span className="flex items-center justify-center border-b border-border/50 bg-inherit">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -774,7 +775,11 @@ function EditableCell({
 
   if (isEditing) {
     return (
-      <span ref={editorRef} className="flex items-center bg-inherit px-1" onClick={(event) => event.stopPropagation()}>
+      <span
+        ref={editorRef}
+        className="flex items-center border-b border-border/50 bg-inherit px-1"
+        onClick={(event) => event.stopPropagation()}
+      >
         <FieldInput
           kind={kind}
           value={draft}
@@ -790,11 +795,11 @@ function EditableCell({
   return (
     <span
       className={cn(
-        // bg-inherit: see the fid cell in Row. The edited-value tint sits on top as an
-        // overlay rather than as a background of its own, which would replace the
-        // inherited one -- a cell that is both edited and in a selected row has to show
-        // both, exactly as it did when the tint was layered over the row's colour.
-        'relative flex min-w-0 items-center bg-inherit px-2',
+        // bg-inherit and border-b: see the fid cell in Row. The edited-value tint sits on
+        // top as an overlay rather than as a background of its own, which would replace
+        // the inherited one -- a cell that is both edited and in a selected row has to
+        // show both, exactly as it did when the tint was layered over the row's colour.
+        'relative flex min-w-0 items-center border-b border-border/50 bg-inherit px-2',
         numeric && 'justify-end text-right tabular-nums',
         canEdit && 'cursor-text',
         isFocused && 'ring-1 ring-inset ring-ring',
@@ -860,7 +865,22 @@ function Panel({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-muted/40 px-2">
-        <span className="shrink-0 text-xs font-medium tracking-wide uppercase text-muted-foreground">
+        {/*
+         * Gives way before anything else in the strip does, and all the way down to
+         * nothing. Held at its full width it pushed the save button, the change counter
+         * and the whole search field out over the panel's edge -- and out of reach,
+         * because the panel then scrolled sideways and carried this title along with it.
+         *
+         * Nothing here holds it open, unlike the layer name in the tree: this is a
+         * caption, not the only place a layer is named. The same layer stands in the tree
+         * a panel away, in this title attribute, and over the table's own columns. The
+         * search field next to it is a control that has to stay operable, so the last
+         * pixels of the strip belong to it and not here.
+         */}
+        <span
+          className="truncate text-xs font-medium tracking-wide uppercase text-muted-foreground"
+          title={title}
+        >
           {title}
         </span>
         {toolbar}

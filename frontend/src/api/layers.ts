@@ -114,9 +114,17 @@ export interface LayerField {
  * in the UI yet.
  */
 export interface LayerSource {
-  /** The licence's "Bezeichnung des Bereitstellers", set by the agency itself -- differs
-   *  between agencies, so it is stored and shown per layer, never as one fixed text. */
-  attribution: string
+  /**
+   * The licence's "Bezeichnung des Bereitstellers", set by the agency itself -- differs
+   * between agencies, so it is stored and shown per layer, never as one fixed text.
+   *
+   * `null` where the service directory leaves the agency blank, which is a dataset like
+   * any other and not a sign that the layer came from somewhere else (CONTRACT.md 11.7):
+   * `source` is present for every layer imported from the Geoportal, `datasetId` is the
+   * marker, and this field is a separate question. Every reader has to skip a layer
+   * without one instead of stumbling over it.
+   */
+  attribution: string | null
   licenseName: string
   licenseUrl: string
   datasetUri: string | null

@@ -11,6 +11,8 @@
  * CONTRACT.md. All eleven types round-trip through GET/POST unchanged.
  */
 
+import { fromDateTimeLocalInput, toDateTimeLocalInput } from './timestampValue'
+
 export type FieldKind =
   | 'text'
   | 'integer'
@@ -36,15 +38,32 @@ export function kindOf(dataType: string): FieldKind {
 }
 
 /**
- * `datetime-local` wants "YYYY-MM-DDTHH:mm"; the API delivers a full ISO timestamp.
+ * `datetime-local` holds a wall clock in the browser's own zone; the API delivers an
+ * instant in UTC. The two need converting into one another, not trimming: cutting the
+ * ISO text to sixteen characters showed the UTC hour in a field that means local time --
+ * an hour off in Berlin, two in summer -- and dropped the seconds along the way. See
+ * `timestampValue.ts`; `toWireValue` is the way back.
  *
  * `date` and `time` already arrive in exactly the shape their input wants -- the old
- * ten-character trim here was worked around a timestamp bug in `date` that no longer
- * exists (CONTRACT.md), so only `timestamp` still needs trimming.
+ * ten-character trim here worked around a timestamp bug in `date` that no longer
+ * exists (CONTRACT.md).
  */
 export function toInputValue(value: unknown, kind: FieldKind): string {
   const text = String(value)
-  if (kind === 'timestamp') return text.slice(0, 16)
+  if (kind === 'timestamp') return toDateTimeLocalInput(text)
+  return text
+}
+
+/**
+ * What the API is sent for a value the user typed into the input of `kind`.
+ *
+ * Only `timestamp` is not already in the wire format: the server parses it as
+ * `ISO_OFFSET_DATE_TIME` and answers a value without an offset with 400 -- which fails
+ * the whole batch, because one save is one transaction, so a single timestamp took every
+ * other pending change down with it.
+ */
+export function toWireValue(text: string, kind: FieldKind): string {
+  if (kind === 'timestamp') return fromDateTimeLocalInput(text)
   return text
 }
 

@@ -241,10 +241,17 @@ function Workspace() {
             >
               <ArrowLeft className="size-3.5" />
             </Link>
-            {/* Truncates instead of wrapping: a long name broke onto three lines in a
-                narrow window and pushed itself out of the toolbar's fixed height, over
-                the map below. The title attribute keeps the full name reachable. */}
-            <span className="min-w-0 truncate font-medium" title={project.name}>
+            {/* Truncates instead of wrapping its own text: a long name broke onto three
+                lines in a narrow window and pushed itself out of the toolbar's fixed
+                height, over the map below. The title attribute keeps the full name
+                reachable, and max-w-80 keeps a very long one from taking the whole line.
+
+                Nothing here holds it open, and nothing needs to: it used to be squeezed
+                to nothing by the buttons long before they ran out of room themselves,
+                which is what left a project called "Test" as an empty gap. Now the header
+                wraps rather than press on its contents (see `WorkspaceLayout`), so the
+                name only ever gives way when a line of its own is too narrow for it. */}
+            <span className="max-w-80 truncate font-medium" title={project.name}>
               {project.name}
             </span>
             {/* The variant must match the primitive's data-vertical:self-stretch --
@@ -253,7 +260,11 @@ function Workspace() {
             <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
             <span className="text-xs text-muted-foreground">EPSG:{project.srid}</span>
 
-            <div className="ml-auto flex items-center gap-2">
+            {/* Wraps within itself once a whole line is no longer enough for it, so the
+                header grows by a line instead of pushing its last buttons off the edge --
+                see the header in `WorkspaceLayout`. justify-end keeps every line of it
+                against the right edge, which is where ml-auto puts the first one. */}
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
               {/* Measuring answers a question about the map and writes nothing, so it
                   stands before the editing tools rather than inside them. */}
               <MeasurementToolbar disabled={editing.active} />

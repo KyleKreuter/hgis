@@ -50,6 +50,24 @@ describe('distinctVisibleAttributions', () => {
     expect(distinctVisibleAttributions([layer({ visible: false })])).toEqual([])
   })
 
+  /**
+   * CONTRACT.md 11.7: `source` steht für jede Ebene aus dem Geoportal, `attribution`
+   * darf darin fehlen. `Grundwassermessstellen Hamburg` ist genau dieser Fall.
+   */
+  it('lässt eine Ebene ohne Quellenvermerk aus, statt an ihr zu scheitern', () => {
+    expect(distinctVisibleAttributions([layer({ source: source({ attribution: null }) })])).toEqual(
+      [],
+    )
+  })
+
+  it('nennt die übrigen Behörden weiter, wenn eine Ebene keinen Vermerk hat', () => {
+    const ohne = layer({ id: 'a', source: source({ attribution: null }) })
+    const mit = layer({ id: 'b', source: source({ attribution: 'Freie und Hansestadt Hamburg, LGV' }) })
+    expect(distinctVisibleAttributions([ohne, mit])).toEqual([
+      { attribution: 'Freie und Hansestadt Hamburg, LGV', licenseUrl: source().licenseUrl },
+    ])
+  })
+
   it('nennt denselben Bereitsteller nur einmal, auch bei mehreren Layern', () => {
     const result = distinctVisibleAttributions([
       layer({ id: 'a' }),
