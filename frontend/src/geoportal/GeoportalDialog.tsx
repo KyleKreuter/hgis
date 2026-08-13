@@ -384,12 +384,12 @@ function CatalogToolbar({
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           {/* Focus lands here on open (plan 6.5, Schritt 2) -- the search is the fastest
-              way into a catalog of several hundred entries. The placeholder promises
-              only name and agency: the service directory carries no description for
-              any of the 509 datasets, so naming a field that is always empty would be
-              misleading. `matchesQuery` (search.ts) still checks description too --
-              harmless while it stays empty, and free the moment the backend can fill
-              it in for the detail view. */}
+              way into a catalog of about 1100 entries. The placeholder promises only
+              name and agency: the service directory carries no description for any
+              catalog entry, so naming a field that is always empty would be misleading.
+              `matchesQuery` (search.ts) still checks description too -- harmless while
+              it stays empty, and free the moment the backend can fill it in for the
+              detail view. */}
           <Input
             autoFocus
             value={filters.query}
@@ -509,11 +509,12 @@ function DatasetList({
         <p className="p-2 text-xs text-muted-foreground">Kein Datensatz gefunden.</p>
       )}
       {/*
-       * Only the rows in view exist in the DOM. Measured before it was written: with all
-       * 1100 entries rendered, a keystroke that widens the list back to the whole catalog
-       * cost 78 ms in a production build on fast hardware -- five frames, on every press
-       * of the backspace key. Of that, 10 ms was the filtering and sorting itself; the
-       * rest was building and laying out 1100 rows nobody can see at once.
+       * Only the rows in view exist in the DOM. Measured before it was written, in a
+       * production build on fast hardware: with all 1100 entries rendered, a keystroke
+       * that widens the list back to the whole catalog cost 77 ms -- five frames, on
+       * every press of the backspace key. Of that, 10 ms was the filtering and sorting
+       * itself; the rest was building and laying out 1100 rows nobody can see at once.
+       * Rendering a window of them instead brings the same keystroke to 3 ms.
        */}
       <ul
         aria-label="Datensätze im Geoportal-Katalog"
@@ -726,8 +727,10 @@ function DatasetDetailPane({
 
         {/* The choice this entry still owes, before anything that describes one
             collection. Nothing below says a word about fields or objects until it is
-            made -- the detail carries none while no collection is chosen (11.9). */}
-        {needsCollection && detail.data && (
+            made -- the detail carries none while no collection is chosen (11.9). Not
+            for a service that only serves a map image: there is nothing to import from
+            any of its collections, so there is nothing to choose between. */}
+        {needsCollection && !wmsOnly && detail.data && (
           <CollectionPicker
             collections={collections}
             query={collectionQuery}
@@ -868,8 +871,9 @@ function DatasetDetailPane({
  *
  * With a search field, not without: `xplan` alone holds 247 collections, and a list of
  * that length with no way to narrow it is a list nobody reads to the end. Not
- * virtualised, unlike the catalog beside it -- 247 rows re-render in about 6 ms, well
- * inside a frame, and the measurement is what decides that, not the row count.
+ * virtualised, unlike the catalog beside it -- a keystroke that shows all 247 again was
+ * measured at 4 ms, well inside a frame. The measurement is what decides that, not the
+ * row count.
  */
 function CollectionPicker({
   collections,
@@ -901,7 +905,7 @@ function CollectionPicker({
         </span>
         <p className="text-xs text-muted-foreground">
           Dieser Dienst enthält {formatCount(collections.length)} Sammlungen. Wählen Sie eine
-          Sammlung aus. Danach können Sie sie importieren.
+          Sammlung. Danach können Sie die Sammlung importieren.
         </p>
       </div>
 
