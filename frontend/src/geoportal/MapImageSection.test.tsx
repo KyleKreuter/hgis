@@ -35,6 +35,23 @@ const CAPABILITIES: WmsCapabilities = {
 }
 
 /**
+ * The case measured on `HH_WMS_Fachdaten_ALKIS` (contract addendum): a group with no
+ * name of its own, whose title is the only thing that explains what the nested layer
+ * means -- "Nacht-Schutzzone" reads as nothing without "Laermschutzbereiche" above it.
+ */
+const CAPABILITIES_WITH_GROUP: WmsCapabilities = {
+  serviceUrl: 'https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS',
+  title: 'WMS Fachdaten ALKIS',
+  version: '1.3.0',
+  imageFormats: ['image/png'],
+  layers: [
+    { name: null, title: 'Laermschutzbereiche', depth: 0, queryable: false, legendUrl: null, minScale: null, maxScale: null, bbox: null },
+    { name: 'nacht_schutzzone', title: 'Nacht-Schutzzone', depth: 1, queryable: true, legendUrl: null, minScale: null, maxScale: null, bbox: null },
+    { name: 'tag_schutzzone_2', title: 'Tag-Schutzzone 2', depth: 1, queryable: true, legendUrl: null, minScale: null, maxScale: null, bbox: null },
+  ],
+}
+
+/**
  * Driven through the real `useWmsCapabilities`/`useCreateMapImageLayer` hooks with only
  * `fetch` stubbed -- the same rule the Geoportal dialog's own tests follow, so this fails
  * the moment the component stops asking for what the contract actually promises.
@@ -105,5 +122,32 @@ describe('MapImageSection', () => {
     const createRequest = requests.find((request) => request.url.includes('/map-layers'))!
     const body = JSON.parse(createRequest.init!.body as string)
     expect(body).not.toHaveProperty('datasetId')
+  })
+
+  test('zeigt eine Gruppe (name: null) als Überschrift ohne Kontrollkästchen', async () => {
+    stubFetch([{ match: '/api/wms/capabilities', body: CAPABILITIES_WITH_GROUP }])
+    renderWithQueryClient(
+      <MapImageSection projectId="p-1" wmsUrl="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS" onAdded={vi.fn()} />,
+    )
+
+    expect(await screen.findByText('Laermschutzbereiche')).toBeInTheDocument()
+    // Die Gruppe selbst bekommt kein Kontrollkästchen -- nur die beiden Layer darunter.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+    expect(screen.queryByRole('checkbox', { name: /Laermschutzbereiche/ })).not.toBeInTheDocument()
+  })
+
+  test('ändert die Auswahl nicht, wenn auf die Gruppenüberschrift geklickt wird', async () => {
+    stubFetch([{ match: '/api/wms/capabilities', body: CAPABILITIES_WITH_GROUP }])
+    renderWithQueryClient(
+      <MapImageSection projectId="p-1" wmsUrl="https://geodienste.hamburg.de/HH_WMS_Fachdaten_ALKIS" onAdded={vi.fn()} />,
+    )
+    const user = userEvent.setup()
+    const heading = await screen.findByText('Laermschutzbereiche')
+
+    await user.click(heading)
+
+    // Kein Name-Feld erschienen -- das erscheint nur, sobald etwas ausgewählt ist.
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Als Kartenbild hinzufügen' })).toBeDisabled()
   })
 })

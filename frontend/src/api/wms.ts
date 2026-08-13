@@ -2,13 +2,19 @@ import { queryOptions, useQuery } from '@tanstack/react-query'
 import { api } from './client'
 
 /**
- * One layer a WMS service offers, flattened out of its group tree (wms-api-vertrag.md
- * section 2: "Die Liste ist flach, die Schachtelung steckt in depth"). A group with no
- * name of its own is not abrufbar and never appears here -- there is nothing this
- * client could ask for on its behalf.
+ * One entry of a WMS service's flattened group tree (wms-api-vertrag.md section 2: "Die
+ * Liste ist flach, die Schachtelung steckt in depth").
+ *
+ * `name: null` marks a *group* -- unlike a named layer, it cannot be requested
+ * (`queryable: false`, `legendUrl: null` always) and exists only to explain what is
+ * nested under it (contract addendum: measured on `HH_WMS_Fachdaten_ALKIS`, where
+ * "Nacht-Schutzzone" means nothing without the "Laermschutzbereiche" group title above
+ * it). Every reader that turns a selection into the `layers` array on the create
+ * endpoint has to exclude these -- `name: string` there would make that impossible to
+ * forget, but the field really can be absent on the wire, so the type has to say so.
  */
 export interface WmsCapabilityLayer {
-  name: string
+  name: string | null
   title: string
   /** Indentation level for the flat list -- 0 is a top-level layer. */
   depth: number

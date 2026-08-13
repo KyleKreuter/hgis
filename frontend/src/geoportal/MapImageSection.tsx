@@ -51,9 +51,15 @@ export function MapImageSection({ projectId, wmsUrl, datasetId, onAdded }: MapIm
 
   // Bottom-to-top in the service's own order, not the order the user clicked in --
   // `layers` on the create endpoint *is* the drawing order (wms-api-vertrag.md
-  // section 1: "layers ist die Reihenfolge, in der der Dienst zeichnet").
+  // section 1: "layers ist die Reihenfolge, in der der Dienst zeichnet"). The type
+  // predicate is what makes a group (`name: null`) impossible to send by accident --
+  // without it, `.map((layer) => layer.name)` would type as `(string | null)[]` and the
+  // mistake would only surface as a `400` from the backend, not here.
   const orderedSelection = useMemo(
-    () => (capabilities.data?.layers ?? []).filter((layer) => selected.has(layer.name)).map((layer) => layer.name),
+    () =>
+      (capabilities.data?.layers ?? [])
+        .filter((layer): layer is WmsCapabilityLayer & { name: string } => layer.name !== null && selected.has(layer.name))
+        .map((layer) => layer.name),
     [capabilities.data, selected],
   )
 
@@ -102,12 +108,16 @@ export function MapImageSection({ projectId, wmsUrl, datasetId, onAdded }: MapIm
       {capabilities.data && (
         <>
           <ul aria-label="Layer des Dienstes" className="max-h-48 overflow-y-auto rounded-md border p-1">
-            {capabilities.data.layers.map((layer) => (
+            {capabilities.data.layers.map((layer, index) => (
               <WmsLayerRow
-                key={layer.name}
+                // A group has no name to key by -- position is stable within one
+                // capabilities response, which is all a key needs to be.
+                key={layer.name ?? `group-${index}`}
                 layer={layer}
-                checked={selected.has(layer.name)}
-                onToggle={() => toggle(layer.name)}
+                checked={layer.name !== null && selected.has(layer.name)}
+                onToggle={() => {
+                  if (layer.name !== null) toggle(layer.name)
+                }}
               />
             ))}
           </ul>
@@ -120,8 +130,8 @@ export function MapImageSection({ projectId, wmsUrl, datasetId, onAdded }: MapIm
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder={
-                  capabilities.data.layers.find((layer) => selected.has(layer.name))?.title ??
-                  capabilities.data.title
+                  capabilities.data.layers.find((layer) => layer.name !== null && selected.has(layer.name))
+                    ?.title ?? capabilities.data.title
                 }
               />
             </div>
@@ -142,6 +152,13 @@ export function MapImageSection({ projectId, wmsUrl, datasetId, onAdded }: MapIm
   )
 }
 
+/** Indentation for one entry -- shared by a group heading and an ordinary layer row. */
+function indentStyle(depth: number): { paddingLeft: string } {
+  // 1.25rem per depth level -- enough to read as nesting without eating the row's
+  // width at the deepest levels the Hamburg catalog actually uses (max 3-4).
+  return { paddingLeft: `${0.5 + depth * 1.25}rem` }
+}
+
 function WmsLayerRow({
   layer,
   checked,
@@ -151,14 +168,26 @@ function WmsLayerRow({
   checked: boolean
   onToggle: () => void
 }) {
+  // A group (`name: null`) cannot be requested from the service -- it is a heading
+  // that explains the layers nested under it, nothing more (contract addendum). No
+  // checkbox, not a `<label>`/`<button>`, and it never reaches `onToggle`.
+  if (layer.name === null) {
+    return (
+      <li
+        style={indentStyle(layer.depth)}
+        className="px-2 py-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase"
+      >
+        {layer.title}
+      </li>
+    )
+  }
+
   const scaleLimits = formatWmsScaleLimits(layer.minScale, layer.maxScale)
 
   return (
     <li>
       <label
-        // 1.25rem per depth level -- enough to read as nesting without eating the row's
-        // width at the deepest levels the Hamburg catalog actually uses (max 3-4).
-        style={{ paddingLeft: `${0.5 + layer.depth * 1.25}rem` }}
+        style={indentStyle(layer.depth)}
         className="flex items-start gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent/50"
       >
         <Checkbox checked={checked} onCheckedChange={onToggle} className="mt-0.5" />
