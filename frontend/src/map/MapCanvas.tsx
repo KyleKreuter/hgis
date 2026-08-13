@@ -6,6 +6,7 @@ import { MapContext } from './MapContext'
 import { buildBasemapStyle, resolveBasemap } from './basemap'
 import { applyBasemap, applyBasemapOpacity } from './applyBasemap'
 import { combinedAttributionParts, type GeoportalAttributionEntry } from './geoportalAttribution'
+import { releaseWebGl } from './releaseWebGl'
 
 export type InitialView =
   | { center: [number, number]; zoom: number }
@@ -121,6 +122,14 @@ export function MapCanvas({
       }
       catch (error) {
         console.debug('[hgis] map.remove() during teardown:', error)
+        // remove() gave up before it released the drawing buffer, so the context is
+        // still alive with nothing left to draw it. A browser keeps only a handful --
+        // Firefox around 16 -- and refuses the next one rather than freeing an old one,
+        // which surfaces as MapLibre's "WebGL2 is required to display this map" on a
+        // machine that supports it perfectly well. In dev this path runs on every
+        // StrictMode cycle and every hot reload, so the count is spent in reloads, not
+        // in days. Losing it by hand is the only way back.
+        releaseWebGl(container)
       }
       mapRef.current = null
       setIsLoaded(false)
