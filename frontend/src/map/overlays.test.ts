@@ -15,6 +15,7 @@ const SELECTION_OUTLINE = 'hgis-layer-gebaeude-selected-outline'
 const SKETCH_FILL = 'hgis-measurement-fill'
 const SKETCH_VERTEX = 'hgis-measurement-vertex'
 const RECT_FILL = 'hgis-rectangle-select-fill'
+const SPLIT_LINE = 'hgis-split-line-line'
 
 /**
  * Ein Stellvertreter für maplibregl.Map, der nur die Reihenfolge führt -- `moveLayer`
@@ -45,6 +46,7 @@ describe('overlayTier', () => {
     expect(overlayTier(SELECTION)).toBe(0)
     expect(overlayTier(SKETCH_FILL)).toBe(1)
     expect(overlayTier(RECT_FILL)).toBe(2)
+    expect(overlayTier(SPLIT_LINE)).toBe(3)
     expect(overlayTier(DATA)).toBe(-1)
     expect(overlayTier('basemap:osm')).toBe(-1)
     expect(isOverlayLayer(LABEL)).toBe(false)
@@ -62,6 +64,13 @@ describe('overlayOrder', () => {
       SKETCH_FILL,
       RECT_FILL,
     ])
+  })
+
+  it('stellt die Teilen-Linie über die Auswahlhervorhebung', () => {
+    // Der einzige Overlay, der die Hervorhebung sicher überdeckt: die Linie wird über
+    // ein Objekt gezogen, das gleichzeitig ausgewählt ist -- die Auswahl hat ja gesagt,
+    // welches Objekt geteilt wird.
+    expect(overlayOrder([SELECTION, SPLIT_LINE, DATA])).toEqual([SELECTION, SPLIT_LINE])
   })
 
   it('behält innerhalb einer Stufe die bestehende Reihenfolge', () => {

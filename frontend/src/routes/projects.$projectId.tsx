@@ -33,7 +33,10 @@ import {
   EditingTileFilter,
   InvalidGeometryDialog,
   SnapMarker,
+  StructureOverlay,
+  StructureToolbar,
   useEditSession,
+  useIsDrawingSplitLine,
 } from '@/editing'
 import { MeasurementOverlay, MeasurementToolbar, useIsMeasuring } from '@/measurement'
 import { layerDetailQuery, layerListQuery } from '@/api/layers'
@@ -89,6 +92,9 @@ function Workspace() {
   // mouse move, and re-rendering the whole workspace for that would be absurd.
   const measuring = useIsMeasuring()
   const rectSelecting = useIsRectangleSelecting()
+  // Same reason as the two above: the split line is being drawn on the map, so every
+  // other tool that wants the same click has to stand down while it is.
+  const splittingLine = useIsDrawingSplitLine()
   const tableActive = useIsTableEditing()
   const tableChanges = useTableEditing(tableChangeCount)
   const tableLayerId = useTableEditing((state) => state.layerId)
@@ -267,14 +273,25 @@ function Workspace() {
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
               {/* Measuring answers a question about the map and writes nothing, so it
                   stands before the editing tools rather than inside them. */}
-              <MeasurementToolbar disabled={editing.active} />
+              <MeasurementToolbar disabled={editing.active || splittingLine} />
               <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
               <RectangleSelectToolbar
-                disabled={editing.active}
+                disabled={editing.active || splittingLine}
                 canUse={Boolean(activeLayer)}
                 clipVersion={activeLayer?.clipVersion}
               />
               <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
+              {/* Structural editing works on the saved state and on the ordinary
+                  selection, so it stands next to the drawing tools rather than inside
+                  them -- and locks itself while either buffer holds anything. Brings its
+                  own trailing separator: on a point layer it renders nothing at all, and
+                  a separator left behind here would leave two of them side by side. */}
+              <StructureToolbar
+                layerId={activeLayerId ?? null}
+                geometryType={activeLayer?.geometryType}
+                pendingChanges={unsavedChangesCount}
+                drawingActive={editing.active}
+              />
               <EditToolbar
                 active={editing.active}
                 geometryType={activeLayer?.geometryType}
@@ -358,7 +375,7 @@ function Workspace() {
             activeLayer={activeLayer}
             // Identify would consume the same click the measuring and rectangle select
             // tools need.
-            identifyEnabled={!editing.active && !measuring && !rectSelecting}
+            identifyEnabled={!editing.active && !measuring && !rectSelecting && !splittingLine}
           >
             {editing.active && activeLayer && (
               <>
@@ -379,6 +396,15 @@ function Workspace() {
             )}
             {measuring && <MeasurementOverlay />}
             {rectSelecting && activeLayer && <RectangleSelectTool layerId={activeLayer.id} />}
+            {/* Renders nothing until one of the two tools is running; the toolbar above
+                decides that, and this is only where the map-side half of it lives. */}
+            {activeLayer && (
+              <StructureOverlay
+                layerId={activeLayer.id}
+                projectId={projectId}
+                fields={activeLayerDetail?.fields ?? []}
+              />
+            )}
           </ProjectMap>
         }
         attributes={
