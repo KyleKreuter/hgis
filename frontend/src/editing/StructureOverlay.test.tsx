@@ -40,9 +40,9 @@ describe('StructureOverlay', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  test('wählt nach dem Zusammenführen das übrig gebliebene Objekt aus und lädt neu', async () => {
+  test('wählt nach dem Zusammenführen das übrig gebliebene Objekt aus und schreibt die neue Zahl fort', async () => {
     stubFetch([
-      { match: '/features/merge', body: { fid: 42, dataVersion: 13 } },
+      { match: '/features/merge', body: { fid: 42, dataVersion: 13, featureCount: 1336 } },
       { match: '/features/42', body: feature(42, '8241', 'Alte Landstraße') },
       { match: '/features/43', body: feature(43, '8242', 'Neue Landstraße') },
     ])
@@ -54,9 +54,8 @@ describe('StructureOverlay', () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     })
-    // Seeded as freshly loaded, so `isStale()` afterwards says exactly one thing: did
-    // the merge invalidate this entry or not.
-    client.setQueryData(layerKeys.list('p1'), [])
+    // The layer catalog as the workspace holds it, with the counts from before the merge.
+    client.setQueryData(layerKeys.list('p1'), [{ id: 'l1', dataVersion: 12, featureCount: 1337 }])
     renderWithQueryClient(<StructureOverlay layerId="l1" projectId="p1" fields={FIELDS} />, client)
 
     await screen.findByText('Alte Landstraße')
@@ -67,10 +66,11 @@ describe('StructureOverlay', () => {
     // Object 43 no longer exists. A selection still holding it would highlight nothing
     // and would offer a second merge on a row that is gone.
     expect([...useSelection.getState().selected]).toEqual([42])
-    // The tile URL is built from the layer list's `dataVersion`; without this the map
-    // keeps drawing two objects where there is now one.
-    expect(client.getQueryCache().find({ queryKey: layerKeys.list('p1'), exact: true })?.isStale()).toBe(
-      true,
-    )
+    // Straight from the response, not from a second read of the catalog (CONTRACT.md
+    // 12.3). The tile URL is built from `dataVersion`, so the map redraws in the same
+    // frame -- and the layer tree never shows the old count in between.
+    expect(client.getQueryData(layerKeys.list('p1'))).toEqual([
+      { id: 'l1', dataVersion: 13, featureCount: 1336 },
+    ])
   })
 })

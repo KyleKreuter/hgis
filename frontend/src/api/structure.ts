@@ -5,7 +5,7 @@ import {
   type UseMutationOptions,
 } from '@tanstack/react-query'
 import { api } from './client'
-import { invalidateAfterFeatureWrite } from './edits'
+import { applyFeatureWriteResult, type FeatureWriteResult } from './edits'
 
 /**
  * The two structural operations of CONTRACT.md section 12: cutting one feature in two,
@@ -36,13 +36,12 @@ export interface SplitVariables extends SplitRequest {
   fid: number
 }
 
-export interface SplitResponse {
+export interface SplitResponse extends FeatureWriteResult {
   /**
    * The original fid first, then one per further part. The original survives, so a
    * selection or an open attribute form holding it stays valid.
    */
   fids: number[]
-  dataVersion: number
 }
 
 export interface MergeRequest {
@@ -56,10 +55,9 @@ export interface MergeRequest {
   rowVersions: Record<string, string>
 }
 
-export interface MergeResponse {
+export interface MergeResponse extends FeatureWriteResult {
   /** The lead's fid, kept. Every other part is gone. */
   fid: number
-  dataVersion: number
 }
 
 /**
@@ -76,9 +74,10 @@ export function splitFeatureOptions(
   return {
     mutationFn: ({ fid, ...request }: SplitVariables) =>
       api.post<SplitResponse>(`/api/layers/${layerId}/features/${fid}/split`, request),
-    // The same four invalidations an edit batch owes: the parts do not exist in any
-    // cached page yet, and the tile URL is built from the layer list's `dataVersion`.
-    onSuccess: () => invalidateAfterFeatureWrite(queryClient, layerId, projectId),
+    // `dataVersion` and `featureCount` come back with the answer and go straight into the
+    // catalog (CONTRACT.md 12.3). The parts themselves exist in no cached page yet, so
+    // the rows are invalidated as usual.
+    onSuccess: (result) => applyFeatureWriteResult(queryClient, layerId, projectId, result),
   }
 }
 
@@ -96,7 +95,7 @@ export function mergeFeaturesOptions(
   return {
     mutationFn: (request: MergeRequest) =>
       api.post<MergeResponse>(`/api/layers/${layerId}/features/merge`, request),
-    onSuccess: () => invalidateAfterFeatureWrite(queryClient, layerId, projectId),
+    onSuccess: (result) => applyFeatureWriteResult(queryClient, layerId, projectId, result),
   }
 }
 

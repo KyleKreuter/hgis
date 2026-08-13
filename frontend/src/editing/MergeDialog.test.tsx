@@ -93,7 +93,7 @@ describe('MergeDialog', () => {
 
   test('sendet leadFid und die rowVersion jedes Teils', async () => {
     const { stub, onDone } = renderDialog(
-      routesFor([{ match: '/features/merge', body: { fid: 42, dataVersion: 13 } }]),
+      routesFor([{ match: '/features/merge', body: { fid: 42, dataVersion: 13, featureCount: 1336 } }]),
     )
 
     await screen.findByText('Alte Landstraße')
@@ -110,7 +110,7 @@ describe('MergeDialog', () => {
 
   test('sendet das gewählte führende Objekt, nicht das erste der Auswahl', async () => {
     const { stub } = renderDialog(
-      routesFor([{ match: '/features/merge', body: { fid: 43, dataVersion: 13 } }]),
+      routesFor([{ match: '/features/merge', body: { fid: 43, dataVersion: 13, featureCount: 1336 } }]),
     )
 
     await screen.findByText('Alte Landstraße')

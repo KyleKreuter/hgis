@@ -5,7 +5,7 @@ import {
   type UseMutationOptions,
 } from '@tanstack/react-query'
 import { api } from './client'
-import { layerKeys } from './layers'
+import { layerKeys, type LayerDetail, type LayerSummary } from './layers'
 import { LIST_ONLY } from './projects'
 
 export interface EditCreate {
@@ -45,10 +45,13 @@ export interface EditResponse {
 /**
  * What a write to a layer's rows makes stale, in one place.
  *
- * Every endpoint that changes features owes the same four invalidations -- the batch of
- * this section, and split and merge of section 12, which write straight through instead
- * of joining the batch. Shared rather than copied: the `LIST_ONLY` reasoning below is
- * exactly the kind of decision that goes wrong when a second caller re-derives it.
+ * Every endpoint that changes features owes the same four invalidations. Shared rather
+ * than copied: the `LIST_ONLY` reasoning below is exactly the kind of decision that goes
+ * wrong when a second caller re-derives it.
+ *
+ * Split and merge of section 12 use `applyFeatureWriteResult` instead -- their answers
+ * carry the two numbers the layer catalog needs, so for them the first two invalidations
+ * would be a question already answered.
  */
 export function invalidateAfterFeatureWrite(
   queryClient: QueryClient,
@@ -57,6 +60,16 @@ export function invalidateAfterFeatureWrite(
 ): void {
   queryClient.invalidateQueries({ queryKey: layerKeys.list(projectId) })
   queryClient.invalidateQueries({ queryKey: layerKeys.detail(layerId) })
+  invalidateFeatureData(queryClient, layerId)
+}
+
+/**
+ * What no write can answer for itself: the rows it touched, and the project's own totals.
+ *
+ * Split out so `applyFeatureWriteResult` can reuse it without dragging the layer catalog
+ * along -- that part its response already covers.
+ */
+function invalidateFeatureData(queryClient: QueryClient, layerId: string): void {
   // Feature pages and single features are both stale now; the key prefix covers both.
   queryClient.invalidateQueries({ queryKey: ['layers', layerId, 'features'] })
   // The browser's feature count and extent, and nothing else about the project.
@@ -66,6 +79,48 @@ export function invalidateAfterFeatureWrite(
   // fall back to the server's older answer; and the working state reloads between two
   // of its own deferred writes. `LIST_ONLY` carries the reasoning in full.
   queryClient.invalidateQueries(LIST_ONLY)
+}
+
+/** The two numbers a feature write hands back about the layer as a whole. */
+export interface FeatureWriteResult {
+  /** New tile cache buster; the map rebuilds its tile URLs from it. */
+  dataVersion: number
+  featureCount: number
+}
+
+/**
+ * Puts the numbers the server just computed straight into the layer catalog, instead of
+ * asking for them again.
+ *
+ * CONTRACT.md 12.3 makes the point: the write recounts `featureCount` and bumps
+ * `data_version` anyway, and both travel back in the response, so re-reading the catalog
+ * would be a request for an answer already in hand. Written rather than invalidated, the
+ * layer tree shows the new count and the map rebuilds its tile URLs in the same frame the
+ * response arrives, with no gap in which either still shows the old value.
+ *
+ * Nothing else about the layer moves: a split's parts cover exactly the shape they came
+ * from, and a merge's union covers exactly its parts, so the extent is the same either
+ * way. The layer's rows are another matter -- those are invalidated as usual.
+ *
+ * Only the layer that was written to is touched, and only if the catalog is loaded at
+ * all: `setQueryData` with an updater returning `undefined` sets nothing, so a layer list
+ * nobody has asked for stays unloaded rather than springing into existence.
+ */
+export function applyFeatureWriteResult(
+  queryClient: QueryClient,
+  layerId: string,
+  projectId: string,
+  { dataVersion, featureCount }: FeatureWriteResult,
+): void {
+  queryClient.setQueryData<LayerSummary[]>(layerKeys.list(projectId), (layers) =>
+    layers?.map((layer) =>
+      layer.id === layerId ? { ...layer, dataVersion, featureCount } : layer,
+    ),
+  )
+  queryClient.setQueryData<LayerDetail>(layerKeys.detail(layerId), (detail) =>
+    detail ? { ...detail, dataVersion, featureCount } : detail,
+  )
+  invalidateFeatureData(queryClient, layerId)
 }
 
 /**

@@ -55,7 +55,7 @@ describe('SplitConfirmDialog', () => {
 
   test('sendet die gezeichnete Linie und die rowVersion', async () => {
     const { stub, onDone } = renderDialog([
-      { match: '/split', body: { fids: [7, 1001], dataVersion: 12 } },
+      { match: '/split', body: { fids: [7, 1001], dataVersion: 12, featureCount: 1338 } },
     ])
 
     await userEvent.click(confirmButton())
