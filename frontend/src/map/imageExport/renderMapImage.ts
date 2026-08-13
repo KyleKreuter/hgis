@@ -142,28 +142,38 @@ export async function renderMapImage(options: MapImageOptions): Promise<MapImage
 
   const warnings: string[] = []
   const container = createHiddenContainer(size)
-  const exportMap = new MapLibreMap({
-    container,
-    style: source.getStyle(),
-    center,
-    zoom,
-    bearing,
-    pitch,
-    // The whole reason this second map exists: it renders at the page's resolution while
-    // laying the map out at the page's CSS size, so labels and line widths keep their
-    // physical size instead of shrinking with the pixel count.
-    pixelRatio: size.pixelRatio,
-    // MapLibre caps the canvas at 4096 px by default and enforces the cap by lowering the
-    // pixel ratio without a word. Raising it to what the hardware really allows is what
-    // keeps A3 at 300 dpi from coming out quietly softer than asked for.
-    maxCanvasSize: maxCanvasSizeFor(size, options.maxRenderbufferSize),
-    canvasContextAttributes: { preserveDrawingBuffer: true },
-    attributionControl: false,
-    interactive: false,
-    // Label fades are for a map in motion. On a single still frame they can only mean
-    // half-drawn labels, so they are switched off rather than waited out.
-    fadeDuration: 0,
-  })
+  // The `finally` below only covers what happens after the map exists. Creating it can
+  // fail on its own -- a style that is not loaded yet, a WebGL context the browser
+  // refuses -- and the container must not stay behind in the document for that.
+  let exportMap: MapLibreMap
+  try {
+    exportMap = new MapLibreMap({
+      container,
+      style: source.getStyle(),
+      center,
+      zoom,
+      bearing,
+      pitch,
+      // The whole reason this second map exists: it renders at the page's resolution
+      // while laying the map out at the page's CSS size, so labels and line widths keep
+      // their physical size instead of shrinking with the pixel count.
+      pixelRatio: size.pixelRatio,
+      // MapLibre caps the canvas at 4096 px by default and enforces the cap by lowering
+      // the pixel ratio without a word. Raising it to what the hardware really allows is
+      // what keeps A3 at 300 dpi from coming out quietly softer than asked for.
+      maxCanvasSize: maxCanvasSizeFor(size, options.maxRenderbufferSize),
+      canvasContextAttributes: { preserveDrawingBuffer: true },
+      attributionControl: false,
+      interactive: false,
+      // Label fades are for a map in motion. On a single still frame they can only mean
+      // half-drawn labels, so they are switched off rather than waited out.
+      fadeDuration: 0,
+    })
+  }
+  catch (caught) {
+    container.remove()
+    throw caught
+  }
 
   try {
     await waitForIdle(exportMap, warnings)
