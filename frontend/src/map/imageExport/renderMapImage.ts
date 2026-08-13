@@ -18,6 +18,7 @@ import { buildFurniture } from './furniture'
 import { exportZoom } from './exportView'
 import { describeImageSize, type ImageSize } from './pageFormat'
 import { maxCanvasSizeFor } from './renderLimit'
+import { releaseWebGl } from '../releaseWebGl'
 
 /**
  * A guard against a map that never finishes, not a substitute for `idle`: it can only
@@ -171,6 +172,9 @@ export async function renderMapImage(options: MapImageOptions): Promise<MapImage
     })
   }
   catch (caught) {
+    // The constructor can fail after it has already taken a context -- it is the setup
+    // that follows which throws. Dropping the container alone would strand that context.
+    releaseWebGl(container)
     container.remove()
     throw caught
   }
@@ -237,9 +241,20 @@ export async function renderMapImage(options: MapImageOptions): Promise<MapImage
 
     return { blob: await canvasToBlob(out), warnings }
   } finally {
-    // Both, always: a map left behind holds a WebGL context, and a browser drops the
-    // oldest context once a handful are live -- which would be the visible map's.
-    exportMap.remove()
+    // Both, always: a map left behind holds a WebGL context, and a browser refuses the
+    // next context once a handful are live -- which would be the visible map's.
+    //
+    // remove() throws when it runs before WebGL finished initialising, which is exactly
+    // what an export that fails early does. Unguarded, that throw would skip
+    // `container.remove()` below and leave both the context and the hidden box behind --
+    // the very leak this block exists to prevent.
+    try {
+      exportMap.remove()
+    }
+    catch (error) {
+      console.debug('[hgis] removing the export map:', error)
+      releaseWebGl(container)
+    }
     container.remove()
   }
 }
