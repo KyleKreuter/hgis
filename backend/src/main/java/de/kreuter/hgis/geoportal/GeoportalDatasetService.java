@@ -43,11 +43,18 @@ class GeoportalDatasetService {
 	GeoportalDtos.DatasetDetail detail(String id) {
 		GeoportalCatalogEntry entry = require(id);
 		if (!entry.hasOgcFeatures()) {
+			// Two entries end up here and neither has one collection to ask about: a service
+			// listed as one row (CONTRACT.md 11.9), whose collections it answers with instead,
+			// and a dataset with no OGC API Features access at all, which has nothing live to
+			// be asked. Both carry DatasetSummary's fields with everything else null, exactly
+			// what CONTRACT.md 11.4 already allows for a field "the upstream catalog carries
+			// none" of.
 			return new GeoportalDtos.DatasetDetail(
 					entry.id(), entry.title(), null, entry.kind(), entry.agency(), entry.topic(),
 					null, null,
 					entry.attribution(), GeoportalLicense.NAME, GeoportalLicense.URL,
-					entry.datasetUri(), entry.metadataUrl(), null, null, List.of());
+					entry.datasetUri(), entry.metadataUrl(), null, null, List.of(),
+					entry.collectionCount(), toCollectionRefs(entry));
 		}
 
 		OgcFeaturesClient.CollectionInfo collectionInfo = ogcFeaturesClient.fetchCollection(entry.apiUrl(), entry.collection());
@@ -69,7 +76,15 @@ class GeoportalDatasetService {
 				entry.id(), entry.title(), description, entry.kind(), entry.agency(), entry.topic(),
 				collectionInfo.itemCount(), collectionInfo.bboxWgs84(),
 				entry.attribution(), GeoportalLicense.NAME, GeoportalLicense.URL,
-				entry.datasetUri(), entry.metadataUrl(), collectionInfo.storageSrid(), sourceFeatureIdField, fields);
+				entry.datasetUri(), entry.metadataUrl(), collectionInfo.storageSrid(), sourceFeatureIdField, fields,
+				entry.collectionCount(), List.of());
+	}
+
+	/** CONTRACT.md 11.9: what a service listed as one row offers to pick from; empty for everything else. */
+	private static List<GeoportalDtos.CollectionRef> toCollectionRefs(GeoportalCatalogEntry entry) {
+		return entry.collections().stream()
+				.map(collection -> new GeoportalDtos.CollectionRef(collection.id(), collection.title()))
+				.toList();
 	}
 
 	/** CONTRACT.md 11.5. */
@@ -86,9 +101,22 @@ class GeoportalDatasetService {
 				.orElseThrow(() -> new NotFoundException("Geoportal-Datensatz " + id + " existiert nicht"));
 	}
 
-	/** Also used by {@link GeoportalImportController}: an import request against a WMS-only entry is a 400, not a 404. */
+	/**
+	 * Also used by {@link GeoportalImportController}: an import request that names nothing
+	 * importable is a 400, not a 404 -- the id exists, it just does not name one collection.
+	 *
+	 * <p>The two reasons are told apart on purpose (CONTRACT.md 11.9). A service listed as
+	 * one row holds collections the user can import right away and only has to pick one of;
+	 * a dataset without OGC API Features access holds none this stage could read at all. One
+	 * message for both would send the first user looking for a way out that the second one
+	 * does not have.
+	 */
 	GeoportalCatalogEntry requireImportable(String id) {
 		GeoportalCatalogEntry entry = require(id);
+		if (entry.isService()) {
+			throw new BadRequestException("Der Dienst '" + entry.title() + "' führt " + entry.collectionCount()
+					+ " Sammlungen. Wählen Sie eine Sammlung aus und importieren Sie diese.");
+		}
 		if (!entry.hasOgcFeatures()) {
 			throw new BadRequestException("Der Datensatz '" + entry.title()
 					+ "' bietet keinen Objektzugang über OGC API Features und kann in dieser Stufe nicht importiert werden");
@@ -115,6 +143,7 @@ class GeoportalDatasetService {
 	 */
 	private static GeoportalDtos.DatasetSummary toSummary(GeoportalCatalogEntry entry) {
 		return new GeoportalDtos.DatasetSummary(
-				entry.id(), entry.title(), null, entry.kind(), entry.agency(), entry.topic(), null, null);
+				entry.id(), entry.title(), null, entry.kind(), entry.agency(), entry.topic(), null, null,
+				entry.collectionCount());
 	}
 }

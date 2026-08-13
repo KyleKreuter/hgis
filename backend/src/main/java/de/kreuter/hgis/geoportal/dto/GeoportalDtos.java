@@ -18,7 +18,15 @@ public final class GeoportalDtos {
 	public record CatalogResponse(Instant fetchedAt, List<DatasetSummary> datasets) {
 	}
 
-	/** One row of the catalog list (CONTRACT.md 11.2). */
+	/**
+	 * One row of the catalog list (CONTRACT.md 11.2).
+	 *
+	 * @param collectionCount CONTRACT.md 11.9: {@code 1} for a row that is one collection --
+	 *                        the overwhelming majority -- and the real count for a service
+	 *                        listed as one row. Greater than {@code 1} is the client's only
+	 *                        signal, and its whole signal, for "pick a collection before
+	 *                        importing".
+	 */
 	public record DatasetSummary(
 			String id,
 			String title,
@@ -27,13 +35,24 @@ public final class GeoportalDtos {
 			String agency,
 			String topic,
 			Long featureCount,
-			double[] bbox) {
+			double[] bbox,
+			int collectionCount) {
 	}
 
 	/**
 	 * Answer to 11.4: {@link DatasetSummary} plus what only the live service can say.
 	 * Kept as its own record rather than {@code DatasetSummary} plus an extra object, to
 	 * match the CONTRACT.md shape exactly -- the frontend reads one flat object either way.
+	 *
+	 * @param collectionCount as on {@link DatasetSummary}, since 11.4 is "everything from
+	 *                        11.2 plus" -- a detail fetched on its own is otherwise unable to
+	 *                        say what it is
+	 * @param collections     CONTRACT.md 11.9: filled only for a service with
+	 *                        {@code collectionCount > 1}; empty, never null, otherwise. For
+	 *                        such a service {@code fields}, {@code featureCount} and
+	 *                        {@code sourceFeatureIdField} stay empty -- they describe one
+	 *                        collection, and none is chosen yet. The client asks for the
+	 *                        detail again with the chosen collection's id to get them.
 	 */
 	public record DatasetDetail(
 			String id,
@@ -51,11 +70,20 @@ public final class GeoportalDtos {
 			String metadataUrl,
 			Integer storageSrid,
 			String sourceFeatureIdField,
-			List<Field> fields) {
+			List<Field> fields,
+			int collectionCount,
+			List<CollectionRef> collections) {
 	}
 
 	/** One entry of {@link DatasetDetail#fields()}. */
 	public record Field(String name, String title, String dataType, List<String> values) {
+	}
+
+	/**
+	 * One collection to pick from a service listed as one row (CONTRACT.md 11.9). {@code id}
+	 * is a dataset id like any other: it is what a detail or an import call names.
+	 */
+	public record CollectionRef(String id, String title) {
 	}
 
 	/** Answer to 11.5. */
