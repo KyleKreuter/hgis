@@ -304,11 +304,19 @@ public class LayerService {
 	 * set of attributes, and pointless otherwise: a new colour is applied by the client on
 	 * the tiles it already has. Bumping on every style write would turn dragging a colour
 	 * picker into a full reload of the visible map on every pixel of travel.
+	 *
+	 * <p>A map image (kind WMS) has no symbology to classify or colour by, but it does
+	 * have an opacity slider (orchestrator amendment to the plan) -- it takes the
+	 * separate, minimal path in {@link #applyWmsOpacityStyle}, never this one: it has no
+	 * {@code layer_field} rows for {@link LayerStyleService} to validate a renderer's
+	 * field reference against, and {@code style.renderer} is mandatory in
+	 * {@link LayerStyleService#validate}, which a map image can never supply.
 	 */
 	private void applyStyle(Layer layer, JsonNode style) {
-		// A map image has no symbology (contract: "style fehlt"), and no layer_field rows
-		// to validate a renderer's field reference against either.
-		layer.requireVector();
+		if (!layer.isVectorLayer()) {
+			applyWmsOpacityStyle(layer, style);
+			return;
+		}
 		List<LayerField> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layer.getId());
 		String canonical = styleService.validateAndSerialize(style, fields);
 
@@ -319,6 +327,48 @@ public class LayerService {
 		if (!before.equals(after)) {
 			layer.bumpStyleVersion();
 		}
+	}
+
+	/**
+	 * A map image's only style member: {@code opacity}, nothing else -- it has no
+	 * symbology to classify or colour by, only the one slider a raster overlay needs to
+	 * stay usable next to the data underneath it. Any other member is a 400.
+	 *
+	 * <p>{@code style_version} deliberately never moves here, unlike
+	 * {@link #applyStyle}'s vector path: opacity is applied by the client on tiles it
+	 * already has (well, a raster tile it fetches itself, but the same rule), the same
+	 * way a pure colour change never bumps it for a vector layer either -- see
+	 * V1__catalog.sql's own comment on {@code style_version} for why a rendering-only
+	 * change must not discard a cache keyed on data.
+	 *
+	 * @param node the {@code style} member of the request; a JSON null resets the layer
+	 *             to full opacity
+	 */
+	private void applyWmsOpacityStyle(Layer layer, JsonNode node) {
+		if (node.isNull()) {
+			layer.setStyle(null);
+			return;
+		}
+		if (!node.isObject()) {
+			throw new BadRequestException("Der Style muss ein JSON-Objekt sein");
+		}
+		for (Map.Entry<String, JsonNode> entry : node.properties()) {
+			if (!"opacity".equals(entry.getKey())) {
+				throw new BadRequestException("Für ein Kartenbild ist im Style nur 'opacity' erlaubt. "
+						+ "Unbekanntes Feld: '" + entry.getKey() + "'.");
+			}
+		}
+		JsonNode opacity = node.get("opacity");
+		if (opacity != null) {
+			if (!opacity.isNumber()) {
+				throw new BadRequestException("opacity muss eine Zahl sein");
+			}
+			double value = opacity.doubleValue();
+			if (value < 0 || value > 1) {
+				throw new BadRequestException("opacity muss zwischen 0 und 1 liegen. Wert war " + value + ".");
+			}
+		}
+		layer.setStyle(node.toString());
 	}
 
 	/**

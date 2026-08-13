@@ -143,16 +143,6 @@ class RequireVectorGuardTest {
 		expectConflict(get("/api/layers/{id}/export.geojson", wmsLayer.getId()));
 	}
 
-	@Test
-	@DisplayName("setting a style on a map image is a 409 -- CONTRACT.md: a map image has no symbology")
-	void styleUpdateIsConflict() throws Exception {
-		expectConflict(patch("/api/layers/{id}", wmsLayer.getId())
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-						{"style": {}}
-						"""));
-	}
-
 	// --- a real 404 stays a 404, not a 409, for the same endpoints ----------------------
 
 	@Test
