@@ -1,0 +1,58 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<wfs:FeatureCollection xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:wfs="http://www.opengis.net/wfs/2.0" xmlns:gml="http://www.opengis.net/gml/3.2" timeStamp="2026-08-15T16:15:15Z" numberMatched="unknown" numberReturned="0">
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612898">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Akeleiweg (OT 0217, OT 0220), Hamburg (22549, 22607)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612898_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>557486.556 5936878.112 557486.556 5937460.577 557583.662 5937460.577 557583.662 5936878.112 557486.556 5936878.112</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612898_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612898_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>557535.109 5937169.344</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612898_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612898_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>557502.257 5936996.545</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;2;05;217;0217;A0580</dog:strassenschluessel>
+      <dog:strassenschluessel>02;2;08;220;0220;A0580</dog:strassenschluessel>
+      <dog:strassenname>Akeleiweg</dog:strassenname>
+      <dog:strassenname_normalisiert>AKELEIWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A242</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Akeleiweg</dog:strassenname_kurz>
+      <dog:ortsteilname>Bahrenfeld,OT 0217</dog:ortsteilname>
+      <dog:ortsteilname>Lurup,OT 0220</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0217</dog:ortsteilname_normalisiert>
+      <dog:ortsteilname_normalisiert>OT0220</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0217</dog:gemeindename_normalisiert>
+      <dog:gemeindename_normalisiert>OT0220</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22607</dog:postleitzahl>
+      <dog:postleitzahl>22549</dog:postleitzahl>
+      <dog:postOrtsteil>Bahrenfeld</dog:postOrtsteil>
+      <dog:postOrtsteil>Lurup</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BAHRENFELD</dog:postOrtsteil_normalisiert>
+      <dog:postOrtsteil_normalisiert>LURUP</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22607</dog:postleitzahl>
+      <dog:postleitzahl>22549</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+</wfs:FeatureCollection>

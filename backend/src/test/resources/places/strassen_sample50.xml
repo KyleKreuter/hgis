@@ -1,0 +1,2380 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<wfs:FeatureCollection xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd http://www.adv-online.de/namespaces/adv/dog https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;OUTPUTFORMAT=text%2Fxml%3B+subtype%3Dgml%2F3.2.1&amp;TYPENAME=dog:Strassen&amp;NAMESPACES=xmlns(dog,http%3A%2F%2Fwww.adv-online.de%2Fnamespaces%2Fadv%2Fdog)" xmlns:wfs="http://www.opengis.net/wfs/2.0" timeStamp="2026-08-15T16:22:27Z" xmlns:gml="http://www.opengis.net/gml/3.2" numberMatched="unknown" numberReturned="0">
+  <!--NOTE: numberReturned attribute should be 'unknown' as well, but this would not validate against the current version of the WFS 2.0 schema (change upcoming). See change request (CR 144): https://portal.opengeospatial.org/files?artifact_id=43925.-->
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612860">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achterdwars (OT 0602), Hamburg (21035)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612860_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>579622.015 5927010.926 579622.015 5927170.130 579747.090 5927170.130 579747.090 5927010.926 579622.015 5927010.926</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612860_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612860_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>579684.552 5927090.528</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612860_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612860_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>579684.553 5927041.310</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;6;02;602;0602;A0140</dog:strassenschluessel>
+      <dog:strassenname>Achterdwars</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERDWARS</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achterdwars</dog:strassenname_kurz>
+      <dog:ortsteilname>Bergedorf,OT 0602</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0602</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0602</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>21035</dog:postleitzahl>
+      <dog:postOrtsteil>Bergedorf</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BERGEDORF</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>21035</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612861">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achter Lüttmoor (OT 0227), Hamburg (22559)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612861_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>549601.102 5936674.736 549601.102 5936958.079 549925.113 5936958.079 549925.113 5936674.736 549601.102 5936674.736</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612861_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612861_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>549763.107 5936816.407</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612861_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612861_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>549741.538 5936845.328</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;2;14;227;0227;A0130</dog:strassenschluessel>
+      <dog:strassenname>Achter Lüttmoor</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERLUTMOR</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achter Lüttmoor</dog:strassenname_kurz>
+      <dog:ortsteilname>Rissen,OT 0227</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0227</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0227</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22559</dog:postleitzahl>
+      <dog:postOrtsteil>Rissen</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>RISEN</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22559</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612862">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achterkamp (OT 0706), Hamburg (21079)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612862_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>566967.109 5921460.020 566967.109 5921671.095 567184.786 5921671.095 567184.786 5921460.020 566967.109 5921460.020</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612862_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612862_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567075.948 5921565.558</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612862_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612862_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567159.538 5921565.560</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;7;05;706;0706;A0150</dog:strassenschluessel>
+      <dog:strassenname>Achterkamp</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERKAMP</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achterkamp</dog:strassenname_kurz>
+      <dog:ortsteilname>Rönneburg,OT 0706</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0706</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0706</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>21079</dog:postleitzahl>
+      <dog:postOrtsteil>Rönneburg</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>RONEBURG</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>21079</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612863">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Aalort (OT 0518), Hamburg (22393)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612863_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>574165.593 5945555.304 574165.593 5945663.206 574338.039 5945663.206 574338.039 5945555.304 574165.593 5945555.304</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612863_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612863_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>574251.816 5945609.255</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612863_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612863_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>574247.734 5945607.176</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;10;518;0518;A0030</dog:strassenschluessel>
+      <dog:strassenname>Aalort</dog:strassenname>
+      <dog:strassenname_normalisiert>ALORT</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A463</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Aalort</dog:strassenname_kurz>
+      <dog:ortsteilname>Sasel,OT 0518</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0518</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0518</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22393</dog:postleitzahl>
+      <dog:postOrtsteil>Sasel</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>SASEL</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22393</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612864">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Aalheitengraben (OT 0525), Hamburg (22359)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612864_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>577789.434 5945153.429 577789.434 5945273.255 577923.126 5945273.255 577923.126 5945153.429 577789.434 5945153.429</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612864_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612864_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>577856.280 5945213.342</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612864_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612864_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>577851.680 5945220.488</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;17;525;0525;A0010</dog:strassenschluessel>
+      <dog:strassenname>Aalheitengraben</dog:strassenname>
+      <dog:strassenname_normalisiert>ALHEITENGRABEN</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A435</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Aalheitengraben</dog:strassenname_kurz>
+      <dog:ortsteilname>Volksdorf,OT 0525</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0525</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0525</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22359</dog:postleitzahl>
+      <dog:postOrtsteil>Volksdorf</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>VOLKSDORF</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22359</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612865">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">-Parkanlagen (OT 0432), Hamburg (22419)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612865_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>565858.442 5945726.918 565858.442 5945894.724 565953.835 5945894.724 565953.835 5945726.918 565858.442 5945726.918</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612865_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612865_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565906.139 5945810.821</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612865_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612865_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565906.139 5945785.412</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;4;13;432;0432;00200</dog:strassenschluessel>
+      <dog:strassenname>-Parkanlagen</dog:strassenname>
+      <dog:strassenname_normalisiert>PARKANLAGEN</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>P625</dog:strassenname_soundex>
+      <dog:strassenname_kurz>-Parkanlagen</dog:strassenname_kurz>
+      <dog:ortsteilname>Langenhorn,OT 0432</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0432</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0432</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22419</dog:postleitzahl>
+      <dog:postOrtsteil>Langenhorn</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>LANGENHORN</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22419</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612866">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Abbestraße (OT 0213), Hamburg (22765)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612866_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>561605.299 5934284.971 561605.299 5934435.526 561653.803 5934435.526 561653.803 5934284.971 561605.299 5934284.971</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612866_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612866_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>561629.551 5934360.249</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612866_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612866_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>561628.587 5934359.460</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;2;04;213;0213;A0050</dog:strassenschluessel>
+      <dog:strassenname>Abbestraße</dog:strassenname>
+      <dog:strassenname_normalisiert>ABESTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A123</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Abbestraße</dog:strassenname_kurz>
+      <dog:ortsteilname>Ottensen,OT 0213</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0213</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0213</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22765</dog:postleitzahl>
+      <dog:postOrtsteil>Ottensen</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>OTENSEN</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22765</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612867">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">ABC-Straße (OT 0108), Hamburg (20354)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612867_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>565242.787 5934342.942 565242.787 5934441.160 565456.720 5934441.160 565456.720 5934342.942 565242.787 5934342.942</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612867_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612867_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565349.753 5934392.051</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612867_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612867_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565406.681 5934397.018</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;1;03;108;0108;A0060</dog:strassenschluessel>
+      <dog:strassenname>ABC-Straße</dog:strassenname>
+      <dog:strassenname_normalisiert>ABCSTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A122</dog:strassenname_soundex>
+      <dog:strassenname_kurz>ABC-Straße</dog:strassenname_kurz>
+      <dog:ortsteilname>Neustadt,OT 0108</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0108</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0108</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>20354</dog:postleitzahl>
+      <dog:postOrtsteil>Neustadt</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>NEUSTADT</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>20354</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612868">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Abteistraße (OT 0314), Hamburg (20149)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612868_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>565465.640 5937180.400 565465.640 5937538.621 565808.310 5937538.621 565808.310 5937180.400 565465.640 5937180.400</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612868_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612868_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565636.975 5937359.511</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612868_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612868_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565636.975 5937337.133</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;3;03;314;0314;A0090</dog:strassenschluessel>
+      <dog:strassenname>Abteistraße</dog:strassenname>
+      <dog:strassenname_normalisiert>ABTEISTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A132</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Abteistraße</dog:strassenname_kurz>
+      <dog:ortsteilname>Harvestehude,OT 0314</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0314</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0314</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>20149</dog:postleitzahl>
+      <dog:postOrtsteil>Harvestehude</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>HARVESTEHUDE</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>20149</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612869">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Ahlbecker Weg (OT 0526), Hamburg (22147)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612869_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>575585.647 5941169.111 575585.647 5941330.072 575668.015 5941330.072 575668.015 5941169.111 575585.647 5941169.111</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612869_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612869_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>575626.831 5941249.591</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612869_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612869_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>575605.130 5941247.056</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;18;526;0526;A0450</dog:strassenschluessel>
+      <dog:strassenname>Ahlbecker Weg</dog:strassenname>
+      <dog:strassenname_normalisiert>AHLBECKERWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A412</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Ahlbecker Weg</dog:strassenname_kurz>
+      <dog:ortsteilname>Rahlstedt,OT 0526</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0526</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0526</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22147</dog:postleitzahl>
+      <dog:postOrtsteil>Rahlstedt</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>RAHLSTEDT</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22147</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612870">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Abendrothsweg (OT 0401, OT 0402), Hamburg (20251)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612870_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>564257.199 5937572.430 564257.199 5937882.585 564851.374 5937882.585 564851.374 5937572.430 564257.199 5937572.430</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612870_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612870_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>564554.286 5937727.508</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612870_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612870_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>564543.782 5937727.505</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;4;01;402;0402;A0070</dog:strassenschluessel>
+      <dog:strassenschluessel>02;4;01;401;0401;A0070</dog:strassenschluessel>
+      <dog:strassenname>Abendrothsweg</dog:strassenname>
+      <dog:strassenname_normalisiert>ABENDROTSWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A153</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Abendrothsweg</dog:strassenname_kurz>
+      <dog:ortsteilname>Hoheluft-Ost,OT 0402</dog:ortsteilname>
+      <dog:ortsteilname>Hoheluft-Ost,OT 0401</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0402</dog:ortsteilname_normalisiert>
+      <dog:ortsteilname_normalisiert>OT0401</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0402</dog:gemeindename_normalisiert>
+      <dog:gemeindename_normalisiert>OT0401</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>20251</dog:postleitzahl>
+      <dog:postOrtsteil>Hoheluft-Ost</dog:postOrtsteil>
+      <dog:postOrtsteil>Hoheluft-Ost</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>HOHELUFTOST</dog:postOrtsteil_normalisiert>
+      <dog:postOrtsteil_normalisiert>HOHELUFTOST</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>20251</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612871">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achter Billing (OT 0519), Hamburg (22399)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612871_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>571318.700 5946700.630 571318.700 5946848.950 571672.260 5946848.950 571672.260 5946700.630 571318.700 5946700.630</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612871_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612871_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>571495.480 5946774.790</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612871_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612871_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>571456.819 5946764.002</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;11;519;0519;A0100</dog:strassenschluessel>
+      <dog:strassenname>Achter Billing</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERBILING</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achter Billing</dog:strassenname_kurz>
+      <dog:ortsteilname>Poppenbüttel,OT 0519</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0519</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0519</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22399</dog:postleitzahl>
+      <dog:postOrtsteil>Poppenbüttel</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>POPENBUTEL</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22399</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612872">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Abelskamp (OT 0522), Hamburg (22397)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612872_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>572962.582 5950786.372 572962.582 5950900.248 573022.718 5950900.248 573022.718 5950786.372 572962.582 5950786.372</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612872_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612872_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>572992.650 5950843.310</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612872_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612872_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>572984.698 5950843.310</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;14;522;0522;A6640</dog:strassenschluessel>
+      <dog:strassenname>Abelskamp</dog:strassenname>
+      <dog:strassenname_normalisiert>ABELSKAMP</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A142</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Abelskamp</dog:strassenname_kurz>
+      <dog:ortsteilname>Duvenstedt,OT 0522</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0522</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0522</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22397</dog:postleitzahl>
+      <dog:postOrtsteil>Duvenstedt</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>DUVENSTEDT</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22397</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612873">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achter de Höf (OT 0227), Hamburg (22559)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612873_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>549877.877 5936818.585 549877.877 5937014.296 550399.964 5937014.296 550399.964 5936818.585 549877.877 5936818.585</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612873_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612873_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>550138.921 5936916.441</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612873_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612873_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>549951.086 5936932.195</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;2;14;227;0227;A0110</dog:strassenschluessel>
+      <dog:strassenname>Achter de Höf</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERDEHOF</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achter de Höf</dog:strassenname_kurz>
+      <dog:ortsteilname>Rissen,OT 0227</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0227</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0227</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22559</dog:postleitzahl>
+      <dog:postOrtsteil>Rissen</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>RISEN</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22559</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612874">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Aalwischkoppel (OT 0524), Hamburg (22395)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612874_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>574277.127 5946344.527 574277.127 5946654.003 574382.503 5946654.003 574382.503 5946344.527 574277.127 5946344.527</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612874_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612874_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>574329.815 5946499.265</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612874_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612874_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>574324.367 5946472.554</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;16;524;0524;A7060</dog:strassenschluessel>
+      <dog:strassenname>Aalwischkoppel</dog:strassenname>
+      <dog:strassenname_normalisiert>ALWISCHKOPEL</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A422</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Aalwischkoppel</dog:strassenname_kurz>
+      <dog:ortsteilname>Bergstedt,OT 0524</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0524</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0524</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22395</dog:postleitzahl>
+      <dog:postOrtsteil>Bergstedt</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BERGSTEDT</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22395</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612875">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achtern Brack (OT 0716), Hamburg (21129)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612875_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>555942.033 5929021.813 555942.033 5929225.568 556221.240 5929225.568 556221.240 5929021.813 555942.033 5929021.813</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612875_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612875_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>556081.637 5929123.690</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612875_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612875_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>556211.458 5929123.692</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;7;15;716;0716;A0170</dog:strassenschluessel>
+      <dog:strassenname>Achtern Brack</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERNBRACK</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achtern Brack</dog:strassenname_kurz>
+      <dog:ortsteilname>Francop,OT 0716</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0716</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0716</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>21129</dog:postleitzahl>
+      <dog:postOrtsteil>Francop</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>FRANCOP</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>21129</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612876">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">1. Hafenstraße (OT 0711), Hamburg (21079)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612876_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>564481.931 5925046.948 564481.931 5925612.796 564600.380 5925612.796 564600.380 5925046.948 564481.931 5925046.948</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612876_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612876_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>564541.155 5925329.872</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612876_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612876_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>564520.182 5925164.265</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;7;10;711;0711;H0220</dog:strassenschluessel>
+      <dog:strassenname>1. Hafenstraße</dog:strassenname>
+      <dog:strassenname_normalisiert>1HAFENSTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>H152</dog:strassenname_soundex>
+      <dog:strassenname_kurz>1. Hafenstraße</dog:strassenname_kurz>
+      <dog:ortsteilname>Heimfeld,OT 0711</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0711</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0711</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>21079</dog:postleitzahl>
+      <dog:postOrtsteil>Heimfeld</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>HEIMFELD</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>21079</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612877">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achter de Kark (OT 0602), Hamburg (21035)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612877_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>578595.081 5926260.682 578595.081 5926451.019 578723.261 5926451.019 578723.261 5926260.682 578595.081 5926260.682</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612877_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612877_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>578659.171 5926355.850</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612877_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612877_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>578623.931 5926360.660</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;6;02;602;0602;A6040</dog:strassenschluessel>
+      <dog:strassenname>Achter de Kark</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERDEKARK</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achter de Kark</dog:strassenname_kurz>
+      <dog:ortsteilname>Bergedorf,OT 0602</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0602</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0602</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>21035</dog:postleitzahl>
+      <dog:postOrtsteil>Bergedorf</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BERGEDORF</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>21035</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612878">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Aalwisch (OT 0524), Hamburg (22395)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612878_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>574194.751 5946327.499 574194.751 5946684.710 574306.524 5946684.710 574306.524 5946327.499 574194.751 5946327.499</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612878_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612878_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>574250.637 5946506.105</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612878_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612878_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>574254.356 5946510.136</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;16;524;0524;A0040</dog:strassenschluessel>
+      <dog:strassenname>Aalwisch</dog:strassenname>
+      <dog:strassenname_normalisiert>ALWISCH</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A422</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Aalwisch</dog:strassenname_kurz>
+      <dog:ortsteilname>Bergstedt,OT 0524</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0524</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0524</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22395</dog:postleitzahl>
+      <dog:postOrtsteil>Bergstedt</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BERGSTEDT</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22395</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612879">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Allhornstieg (OT 0525), Hamburg (22359)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612879_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>577627.079 5945064.178 577627.079 5945174.931 577769.602 5945174.931 577769.602 5945064.178 577627.079 5945064.178</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612879_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612879_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>577698.340 5945119.555</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612879_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612879_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>577717.119 5945121.124</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;17;525;0525;A0830</dog:strassenschluessel>
+      <dog:strassenname>Allhornstieg</dog:strassenname>
+      <dog:strassenname_normalisiert>ALHORNSTIG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A465</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Allhornstieg</dog:strassenname_kurz>
+      <dog:ortsteilname>Volksdorf,OT 0525</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0525</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0525</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22359</dog:postleitzahl>
+      <dog:postOrtsteil>Volksdorf</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>VOLKSDORF</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22359</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612880">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Abelke-Bleken-Ring (OT 0608), Hamburg (21037)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612880_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>571781.495 5925258.834 571781.495 5925533.115 572025.695 5925533.115 572025.695 5925258.834 571781.495 5925258.834</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612880_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612880_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>571903.595 5925395.975</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612880_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612880_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>571855.523 5925369.582</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;6;07;608;0608;A7410</dog:strassenschluessel>
+      <dog:strassenname>Abelke-Bleken-Ring</dog:strassenname>
+      <dog:strassenname_normalisiert>ABELKEBLEKENRING</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A142</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Abelke-Bleken-Ring</dog:strassenname_kurz>
+      <dog:ortsteilname>Ochsenwerder,OT 0608</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0608</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0608</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>21037</dog:postleitzahl>
+      <dog:postOrtsteil>Ochsenwerder</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>OCHSENWERDER</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>21037</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612881">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Adlerstraße-Parkanlagen (OT 0426), Hamburg (22305)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612881_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>569806.556 5937722.732 569806.556 5938199.844 570302.975 5938199.844 570302.975 5937722.732 569806.556 5937722.732</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612881_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612881_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>570054.765 5937961.288</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612881_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612881_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>570091.461 5937961.288</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;4;10;426;0426;00014</dog:strassenschluessel>
+      <dog:strassenname>Adlerstraße-Parkanlagen</dog:strassenname>
+      <dog:strassenname_normalisiert>ADLERSTRASEPARKANLAGEN</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A346</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Adlerstraße-Parkanlagen</dog:strassenname_kurz>
+      <dog:ortsteilname>Barmbek-Nord,OT 0426</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0426</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0426</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22305</dog:postleitzahl>
+      <dog:postOrtsteil>Barmbek-Nord</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BARMBEKNORD</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22305</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612882">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Ackermannstraße (OT 0416), Hamburg (22087)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612882_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>567428.340 5935141.170 567428.340 5935359.880 567497.074 5935359.880 567497.074 5935141.170 567428.340 5935141.170</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612882_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612882_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567462.707 5935250.525</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612882_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612882_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567460.656 5935263.976</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;4;07;416;0416;A0240</dog:strassenschluessel>
+      <dog:strassenname>Ackermannstraße</dog:strassenname>
+      <dog:strassenname_normalisiert>ACKERMANSTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A226</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Ackermannstraße</dog:strassenname_kurz>
+      <dog:ortsteilname>Hohenfelde,OT 0416</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0416</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0416</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22087</dog:postleitzahl>
+      <dog:postOrtsteil>Hohenfelde</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>HOHENFELDE</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22087</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612883">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Adolf-Wagner-Straße (OT 0710), Hamburg (21073)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612883_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>563844.248 5923422.175 563844.248 5923548.720 563895.004 5923548.720 563895.004 5923422.175 563844.248 5923422.175</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612883_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612883_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>563869.626 5923485.448</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612883_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612883_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>563871.252 5923485.448</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;7;09;710;0710;A0350</dog:strassenschluessel>
+      <dog:strassenname>Adolf-Wagner-Straße</dog:strassenname>
+      <dog:strassenname_normalisiert>ADOLFWAGNERSTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A341</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Adolf-Wagner-Straße</dog:strassenname_kurz>
+      <dog:ortsteilname>Eißendorf,OT 0710</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0710</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0710</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>21073</dog:postleitzahl>
+      <dog:postOrtsteil>Eißendorf</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>EISENDORF</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>21073</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612884">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Adlerhorst (OT 0318), Hamburg (22459)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612884_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>563084.366 5942782.360 563084.366 5943076.881 563263.528 5943076.881 563263.528 5942782.360 563084.366 5942782.360</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612884_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612884_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>563173.947 5942929.620</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612884_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612884_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>563163.207 5942998.207</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;3;06;318;0318;A0310</dog:strassenschluessel>
+      <dog:strassenname>Adlerhorst</dog:strassenname>
+      <dog:strassenname_normalisiert>ADLERHORST</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A346</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Adlerhorst</dog:strassenname_kurz>
+      <dog:ortsteilname>Niendorf,OT 0318</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0318</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0318</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22459</dog:postleitzahl>
+      <dog:postOrtsteil>Niendorf</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>NINDORF</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22459</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612885">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Adickesstraße (OT 0218), Hamburg (22607)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612885_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>558928.726 5934920.284 558928.726 5935191.732 559438.520 5935191.732 559438.520 5934920.284 558928.726 5934920.284</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612885_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612885_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>559183.623 5935056.008</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612885_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612885_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>559140.646 5935051.902</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;2;06;218;0218;A0300</dog:strassenschluessel>
+      <dog:strassenname>Adickesstraße</dog:strassenname>
+      <dog:strassenname_normalisiert>ADICKESTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A322</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Adickesstraße</dog:strassenname_kurz>
+      <dog:ortsteilname>Groß Flottbek,OT 0218</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0218</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0218</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22607</dog:postleitzahl>
+      <dog:postOrtsteil>Groß Flottbek</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>GROSFLOTBEK</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22607</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612886">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Adolph-Schönfelder-Straße (OT 0420), Hamburg (22083)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612886_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>568320.477 5936714.360 568320.477 5937273.465 568561.882 5937273.465 568561.882 5936714.360 568320.477 5936714.360</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612886_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612886_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>568441.180 5936993.912</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612886_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612886_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>568448.977 5936899.718</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;4;08;420;0420;A5450</dog:strassenschluessel>
+      <dog:strassenname>Adolph-Schönfelder-Straße</dog:strassenname>
+      <dog:strassenname_normalisiert>ADOLPHSCHONFELDERSTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A341</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Adolph-Schönfelder-Straße</dog:strassenname_kurz>
+      <dog:ortsteilname>Barmbek-Süd,OT 0420</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0420</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0420</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22083</dog:postleitzahl>
+      <dog:postOrtsteil>Barmbek-Süd</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BARMBEKSUD</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22083</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612887">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Ackerweg (OT 0715), Hamburg (21147)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612887_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>556683.426 5925395.379 556683.426 5925425.298 556926.875 5925425.298 556926.875 5925395.379 556683.426 5925395.379</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612887_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612887_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>556805.150 5925410.339</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612887_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612887_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>556896.883 5925410.341</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;7;14;715;0715;A0260</dog:strassenschluessel>
+      <dog:strassenname>Ackerweg</dog:strassenname>
+      <dog:strassenname_normalisiert>ACKERWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A226</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Ackerweg</dog:strassenname_kurz>
+      <dog:ortsteilname>Neugraben-Fischbek,OT 0715</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0715</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0715</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>21147</dog:postleitzahl>
+      <dog:postOrtsteil>Neugraben-Fischbek</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>NEUGRABENFISCHBEK</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>21147</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612888">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Adolf-Köster-Damm (OT 0615), Hamburg (21035)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612888_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>576056.416 5926663.622 576056.416 5926888.506 576461.742 5926888.506 576461.742 5926663.622 576056.416 5926663.622</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612888_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612888_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>576259.079 5926776.064</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612888_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612888_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>576161.879 5926776.067</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;6;14;615;0615;A6700</dog:strassenschluessel>
+      <dog:strassenname>Adolf-Köster-Damm</dog:strassenname>
+      <dog:strassenname_normalisiert>ADOLFKOSTERDAM</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A341</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Adolf-Köster-Damm</dog:strassenname_kurz>
+      <dog:ortsteilname>Neuallermöhe,OT 0615</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0615</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0615</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>21035</dog:postleitzahl>
+      <dog:postOrtsteil>Neuallermöhe</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>NEUALERMOHE</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>21035</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612889">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achtern Hoff (OT 0525), Hamburg (22359)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612889_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>576955.522 5944557.176 576955.522 5944665.874 577019.216 5944665.874 577019.216 5944557.176 576955.522 5944557.176</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612889_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612889_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>576987.369 5944611.525</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612889_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612889_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>576961.009 5944584.379</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;17;525;0525;A0180</dog:strassenschluessel>
+      <dog:strassenname>Achtern Hoff</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERNHOF</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achtern Hoff</dog:strassenname_kurz>
+      <dog:ortsteilname>Volksdorf,OT 0525</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0525</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0525</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22359</dog:postleitzahl>
+      <dog:postOrtsteil>Volksdorf</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>VOLKSDORF</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22359</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612890">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achtern Hollerbusch (OT 0518), Hamburg (22393)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612890_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>573588.369 5945792.244 573588.369 5946204.571 574506.914 5946204.571 574506.914 5945792.244 573588.369 5945792.244</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612890_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612890_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>574047.641 5945998.408</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612890_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612890_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>574455.939 5946027.179</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;10;518;0518;A0190</dog:strassenschluessel>
+      <dog:strassenname>Achtern Hollerbusch</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERNHOLERBUSCH</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achtern Hollerbusch</dog:strassenname_kurz>
+      <dog:ortsteilname>Sasel,OT 0518</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0518</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0518</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22393</dog:postleitzahl>
+      <dog:postOrtsteil>Sasel</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>SASEL</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22393</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612891">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achtern Sand (OT 0227), Hamburg (22559)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612891_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>550550.202 5937315.306 550550.202 5937573.650 551030.661 5937573.650 551030.661 5937315.306 550550.202 5937315.306</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612891_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612891_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>550790.431 5937444.478</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612891_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612891_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>550879.742 5937444.475</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;2;14;227;0227;A0200</dog:strassenschluessel>
+      <dog:strassenname>Achtern Sand</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERNSAND</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achtern Sand</dog:strassenname_kurz>
+      <dog:ortsteilname>Rissen,OT 0227</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0227</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0227</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22559</dog:postleitzahl>
+      <dog:postOrtsteil>Rissen</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>RISEN</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22559</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612892">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Alte Weiden (OT 0715), Hamburg (21149)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612892_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>556085.594 5924985.349 556085.594 5925202.779 556428.046 5925202.779 556428.046 5924985.349 556085.594 5924985.349</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612892_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612892_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>556256.820 5925094.064</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612892_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612892_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>556362.299 5925110.652</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;7;14;715;0715;A1340</dog:strassenschluessel>
+      <dog:strassenname>Alte Weiden</dog:strassenname>
+      <dog:strassenname_normalisiert>ALTEWEIDEN</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A433</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Alte Weiden</dog:strassenname_kurz>
+      <dog:ortsteilname>Neugraben-Fischbek,OT 0715</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0715</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0715</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>21149</dog:postleitzahl>
+      <dog:postOrtsteil>Neugraben-Fischbek</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>NEUGRABENFISCHBEK</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>21149</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612893">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Adolph-Schomacker-Weg (OT 0130), Hamburg (22111)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612893_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>573297.291 5932753.312 573297.291 5932787.429 573364.204 5932787.429 573364.204 5932753.312 573297.291 5932753.312</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612893_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612893_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>573330.748 5932770.371</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612893_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612893_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>573331.445 5932770.372</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;1;12;130;0130;A6350</dog:strassenschluessel>
+      <dog:strassenname>Adolph-Schomacker-Weg</dog:strassenname>
+      <dog:strassenname_normalisiert>ADOLPHSCHOMACKERWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A341</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Adolph-Schomacker-Weg</dog:strassenname_kurz>
+      <dog:ortsteilname>Billstedt,OT 0130</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0130</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0130</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22111</dog:postleitzahl>
+      <dog:postOrtsteil>Billstedt</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BILSTEDT</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22111</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612894">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Ackerstieg (OT 0220), Hamburg (22547)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612894_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>557240.075 5939048.600 557240.075 5939212.653 557454.150 5939212.653 557454.150 5939048.600 557240.075 5939048.600</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612894_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612894_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>557347.113 5939130.626</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612894_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612894_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>557275.951 5939112.628</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;2;08;220;0220;A0250</dog:strassenschluessel>
+      <dog:strassenname>Ackerstieg</dog:strassenname>
+      <dog:strassenname_normalisiert>ACKERSTIG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A226</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Ackerstieg</dog:strassenname_kurz>
+      <dog:ortsteilname>Lurup,OT 0220</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0220</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0220</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22547</dog:postleitzahl>
+      <dog:postOrtsteil>Lurup</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>LURUP</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22547</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612895">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Adalbert-Stifter-Weg (OT 0526), Hamburg (22149)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612895_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>577085.471 5938886.771 577085.471 5938938.394 577240.870 5938938.394 577240.870 5938886.771 577085.471 5938886.771</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612895_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612895_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>577163.171 5938912.582</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612895_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612895_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>577162.022 5938913.901</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;18;526;0526;A0270</dog:strassenschluessel>
+      <dog:strassenname>Adalbert-Stifter-Weg</dog:strassenname>
+      <dog:strassenname_normalisiert>ADALBERTSTIFTERWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A341</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Adalbert-Stifter-Weg</dog:strassenname_kurz>
+      <dog:ortsteilname>Rahlstedt,OT 0526</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0526</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0526</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22149</dog:postleitzahl>
+      <dog:postOrtsteil>Rahlstedt</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>RAHLSTEDT</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22149</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612896">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Adlerstraße (OT 0426), Hamburg (22305)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612896_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>569923.125 5937849.390 569923.125 5938138.420 570199.292 5938138.420 570199.292 5937849.390 569923.125 5937849.390</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612896_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612896_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>570061.208 5937993.905</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612896_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612896_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>570079.953 5937983.971</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;4;10;426;0426;A0320</dog:strassenschluessel>
+      <dog:strassenname>Adlerstraße</dog:strassenname>
+      <dog:strassenname_normalisiert>ADLERSTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A346</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Adlerstraße</dog:strassenname_kurz>
+      <dog:ortsteilname>Barmbek-Nord,OT 0426</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0426</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0426</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22305</dog:postleitzahl>
+      <dog:postOrtsteil>Barmbek-Nord</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BARMBEKNORD</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22305</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612897">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achtern Moor (OT 0220), Hamburg (22549)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612897_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>556865.593 5938323.580 556865.593 5938444.586 556954.989 5938444.586 556954.989 5938323.580 556865.593 5938323.580</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612897_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612897_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>556910.291 5938384.083</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612897_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612897_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>556903.948 5938411.935</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;2;08;220;0220;A6290</dog:strassenschluessel>
+      <dog:strassenname>Achtern Moor</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERNMOR</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achtern Moor</dog:strassenname_kurz>
+      <dog:ortsteilname>Lurup,OT 0220</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0220</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0220</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22549</dog:postleitzahl>
+      <dog:postOrtsteil>Lurup</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>LURUP</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22549</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612898">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Akeleiweg (OT 0217, OT 0220), Hamburg (22549, 22607)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612898_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>557486.556 5936878.112 557486.556 5937460.577 557583.662 5937460.577 557583.662 5936878.112 557486.556 5936878.112</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612898_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612898_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>557535.109 5937169.344</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612898_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612898_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>557502.257 5936996.545</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;2;05;217;0217;A0580</dog:strassenschluessel>
+      <dog:strassenschluessel>02;2;08;220;0220;A0580</dog:strassenschluessel>
+      <dog:strassenname>Akeleiweg</dog:strassenname>
+      <dog:strassenname_normalisiert>AKELEIWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A242</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Akeleiweg</dog:strassenname_kurz>
+      <dog:ortsteilname>Bahrenfeld,OT 0217</dog:ortsteilname>
+      <dog:ortsteilname>Lurup,OT 0220</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0217</dog:ortsteilname_normalisiert>
+      <dog:ortsteilname_normalisiert>OT0220</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0217</dog:gemeindename_normalisiert>
+      <dog:gemeindename_normalisiert>OT0220</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22607</dog:postleitzahl>
+      <dog:postleitzahl>22549</dog:postleitzahl>
+      <dog:postOrtsteil>Bahrenfeld</dog:postOrtsteil>
+      <dog:postOrtsteil>Lurup</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BAHRENFELD</dog:postOrtsteil_normalisiert>
+      <dog:postOrtsteil_normalisiert>LURUP</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22607</dog:postleitzahl>
+      <dog:postleitzahl>22549</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612899">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Admiralitätstraße (OT 0105, OT 0107), Hamburg (20459)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612899_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>565110.201 5933443.806 565110.201 5933820.830 565278.262 5933820.830 565278.262 5933443.806 565110.201 5933443.806</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612899_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612899_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565194.231 5933632.318</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612899_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612899_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565194.515 5933628.827</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;1;03;105;0105;A0330</dog:strassenschluessel>
+      <dog:strassenschluessel>02;1;03;107;0107;A0330</dog:strassenschluessel>
+      <dog:strassenname>Admiralitätstraße</dog:strassenname>
+      <dog:strassenname_normalisiert>ADMIRALITATSTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A356</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Admiralitätstraße</dog:strassenname_kurz>
+      <dog:ortsteilname>Neustadt,OT 0105</dog:ortsteilname>
+      <dog:ortsteilname>Neustadt,OT 0107</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0105</dog:ortsteilname_normalisiert>
+      <dog:ortsteilname_normalisiert>OT0107</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0105</dog:gemeindename_normalisiert>
+      <dog:gemeindename_normalisiert>OT0107</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>20459</dog:postleitzahl>
+      <dog:postOrtsteil>Neustadt</dog:postOrtsteil>
+      <dog:postOrtsteil>Neustadt</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>NEUSTADT</dog:postOrtsteil_normalisiert>
+      <dog:postOrtsteil_normalisiert>NEUSTADT</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>20459</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612900">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Achtern Styg (OT 0217, OT 0220), Hamburg (22549)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612900_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>557385.546 5937244.413 557385.546 5937508.246 558352.470 5937508.246 558352.470 5937244.413 557385.546 5937244.413</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612900_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612900_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>557869.008 5937376.329</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612900_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612900_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>558073.346 5937402.596</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;2;05;217;0217;A0210</dog:strassenschluessel>
+      <dog:strassenschluessel>02;2;08;220;0220;A0210</dog:strassenschluessel>
+      <dog:strassenname>Achtern Styg</dog:strassenname>
+      <dog:strassenname_normalisiert>ACHTERNSTYG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A236</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Achtern Styg</dog:strassenname_kurz>
+      <dog:ortsteilname>Bahrenfeld,OT 0217</dog:ortsteilname>
+      <dog:ortsteilname>Lurup,OT 0220</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0217</dog:ortsteilname_normalisiert>
+      <dog:ortsteilname_normalisiert>OT0220</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0217</dog:gemeindename_normalisiert>
+      <dog:gemeindename_normalisiert>OT0220</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22549</dog:postleitzahl>
+      <dog:postOrtsteil>Bahrenfeld</dog:postOrtsteil>
+      <dog:postOrtsteil>Lurup</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BAHRENFELD</dog:postOrtsteil_normalisiert>
+      <dog:postOrtsteil_normalisiert>LURUP</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22549</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612901">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Ahrensburger Weg (OT 0525), Hamburg (22359)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612901_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>577220.840 5945443.962 577220.840 5946397.406 578433.493 5946397.406 578433.493 5945443.962 577220.840 5945443.962</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612901_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612901_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>577827.166 5945920.684</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612901_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612901_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>577839.754 5945918.110</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;17;525;0525;A0540</dog:strassenschluessel>
+      <dog:strassenname>Ahrensburger Weg</dog:strassenname>
+      <dog:strassenname_normalisiert>AHRENSBURGERWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A652</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Ahrensburger Weg</dog:strassenname_kurz>
+      <dog:ortsteilname>Volksdorf,OT 0525</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0525</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0525</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22359</dog:postleitzahl>
+      <dog:postOrtsteil>Volksdorf</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>VOLKSDORF</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22359</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612902">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Ahornallee (OT 0317), Hamburg (22529)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612902_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>563791.372 5939440.419 563791.372 5939847.117 563971.798 5939847.117 563971.798 5939440.419 563791.372 5939440.419</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612902_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612902_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>563881.585 5939643.768</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612902_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612902_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>563911.470 5939444.628</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;3;05;317;0317;A0470</dog:strassenschluessel>
+      <dog:strassenname>Ahornallee</dog:strassenname>
+      <dog:strassenname_normalisiert>AHORNALE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A654</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Ahornallee</dog:strassenname_kurz>
+      <dog:ortsteilname>Lokstedt,OT 0317</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0317</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0317</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22529</dog:postleitzahl>
+      <dog:postOrtsteil>Lokstedt</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>LOKSTEDT</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22529</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612903">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Agnes-Gierck-Weg (OT 0432), Hamburg (22419)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612903_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>566025.116 5947593.920 566025.116 5947823.151 566122.654 5947823.151 566122.654 5947593.920 566025.116 5947593.920</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612903_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612903_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>566073.885 5947708.535</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612903_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612903_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>566088.432 5947683.556</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;4;13;432;0432;A6760</dog:strassenschluessel>
+      <dog:strassenname>Agnes-Gierck-Weg</dog:strassenname>
+      <dog:strassenname_normalisiert>AGNESGIRCKWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A252</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Agnes-Gierck-Weg</dog:strassenname_kurz>
+      <dog:ortsteilname>Langenhorn,OT 0432</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0432</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0432</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22419</dog:postleitzahl>
+      <dog:postOrtsteil>Langenhorn</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>LANGENHORN</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22419</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612904">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Agathenstraße (OT 0309), Hamburg (20357)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612904_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>563912.544 5935779.186 563912.544 5935862.627 564030.494 5935862.627 564030.494 5935779.186 563912.544 5935779.186</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612904_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612904_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>563971.519 5935820.907</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612904_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612904_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>563992.584 5935820.906</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;3;01;309;0309;A0430</dog:strassenschluessel>
+      <dog:strassenname>Agathenstraße</dog:strassenname>
+      <dog:strassenname_normalisiert>AGATENSTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A235</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Agathenstraße</dog:strassenname_kurz>
+      <dog:ortsteilname>Eimsbüttel,OT 0309</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0309</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0309</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>20357</dog:postleitzahl>
+      <dog:postOrtsteil>Eimsbüttel</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>EIMSBUTEL</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>20357</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612905">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Adolph-Schönfelder-Straße-Parkanlagen (OT 0420), Hamburg (22083)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612905_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>568371.289 5936777.806 568371.289 5937258.930 568591.297 5937258.930 568591.297 5936777.806 568371.289 5936777.806</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612905_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612905_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>568481.293 5937018.368</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612905_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612905_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>568481.293 5936931.075</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;4;08;420;0420;00395</dog:strassenschluessel>
+      <dog:strassenname>Adolph-Schönfelder-Straße-Parkanlagen</dog:strassenname>
+      <dog:strassenname_normalisiert>ADOLPHSCHONFELDERSTRASEPARKANLAGEN</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A341</dog:strassenname_soundex>
+      <dog:strassenname_kurz>-</dog:strassenname_kurz>
+      <dog:ortsteilname>Barmbek-Süd,OT 0420</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0420</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0420</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22083</dog:postleitzahl>
+      <dog:postOrtsteil>Barmbek-Süd</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BARMBEKSUD</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22083</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612906">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Ahlfeld (OT 0432), Hamburg (22415)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612906_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>567362.669 5944078.104 567362.669 5944767.930 567638.490 5944767.930 567638.490 5944078.104 567362.669 5944078.104</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612906_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612906_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567500.579 5944423.017</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612906_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612906_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567436.105 5944285.986</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;4;13;432;0432;A0460</dog:strassenschluessel>
+      <dog:strassenname>Ahlfeld</dog:strassenname>
+      <dog:strassenname_normalisiert>AHLFELD</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A414</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Ahlfeld</dog:strassenname_kurz>
+      <dog:ortsteilname>Langenhorn,OT 0432</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0432</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0432</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22415</dog:postleitzahl>
+      <dog:postOrtsteil>Langenhorn</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>LANGENHORN</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22415</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612907">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Ahornkamp (OT 0430), Hamburg (22335)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612907_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>567525.163 5942137.473 567525.163 5942289.730 567867.055 5942289.730 567867.055 5942137.473 567525.163 5942137.473</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612907_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612907_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567696.109 5942213.602</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612907_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612907_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567775.167 5942163.585</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;4;11;430;0430;A0480</dog:strassenschluessel>
+      <dog:strassenname>Ahornkamp</dog:strassenname>
+      <dog:strassenname_normalisiert>AHORNKAMP</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A652</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Ahornkamp</dog:strassenname_kurz>
+      <dog:ortsteilname>Ohlsdorf,OT 0430</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0430</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0430</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22335</dog:postleitzahl>
+      <dog:postOrtsteil>Ohlsdorf</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>OHLSDORF</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22335</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612908">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Afrikastraße (OT 0138), Hamburg (20457)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612908_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>565597.822 5931408.964 565597.822 5931812.084 565672.287 5931812.084 565672.287 5931408.964 565597.822 5931408.964</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612908_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612908_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565635.055 5931610.524</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612908_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612908_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565632.215 5931610.524</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;1;17;138;0138;A0420</dog:strassenschluessel>
+      <dog:strassenname>Afrikastraße</dog:strassenname>
+      <dog:strassenname_normalisiert>AFRIKASTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A162</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Afrikastraße</dog:strassenname_kurz>
+      <dog:ortsteilname>Kleiner Grasbrook,OT 0138</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0138</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0138</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>20457</dog:postleitzahl>
+      <dog:postOrtsteil>Kleiner Grasbrook</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>KLEINERGRASBROK</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>20457</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30612909">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Ahornweg (OT 0524), Hamburg (22395)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30612909_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>574843.467 5946224.578 574843.467 5946548.170 574930.875 5946548.170 574930.875 5946224.578 574843.467 5946224.578</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612909_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30612909_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>574887.171 5946386.374</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30612909_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30612909_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>574881.811 5946386.374</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;16;524;0524;A0500</dog:strassenschluessel>
+      <dog:strassenname>Ahornweg</dog:strassenname>
+      <dog:strassenname_normalisiert>AHORNWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>A652</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Ahornweg</dog:strassenname_kurz>
+      <dog:ortsteilname>Bergstedt,OT 0524</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0524</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0524</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22395</dog:postleitzahl>
+      <dog:postOrtsteil>Bergstedt</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BERGSTEDT</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22395</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+</wfs:FeatureCollection>

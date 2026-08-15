@@ -1,0 +1,79 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<wfs:FeatureCollection xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:wfs="http://www.opengis.net/wfs/2.0" xmlns:gml="http://www.opengis.net/gml/3.2" timeStamp="2026-08-15T16:15:15Z" numberMatched="unknown" numberReturned="0">
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30615700">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Herulerweg (OT ), Hamburg ()</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30615700_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>562743.299 5945012.663 562743.299 5945178.974 562983.745 5945178.974 562983.745 5945012.663 562743.299 5945012.663</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30615700_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30615700_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>562863.522 5945095.819</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30615700_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30615700_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>562927.731 5945095.816</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenname>Herulerweg</dog:strassenname>
+      <dog:strassenname_normalisiert>HERULERWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>H646</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Herulerweg</dog:strassenname_kurz>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30618188">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Rahlstedter Heideweg (OT ), Hamburg ()</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30618188_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>577149.117 5937682.057 577149.117 5937894.463 578601.318 5937894.463 578601.318 5937682.057 577149.117 5937682.057</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30618188_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30618188_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>577875.217 5937788.260</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30618188_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30618188_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>577876.388 5937788.260</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenname>Rahlstedter Heideweg</dog:strassenname>
+      <dog:strassenname_normalisiert>RAHLSTEDTERHEIDEWEG</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>R423</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Rahlstedter Heideweg</dog:strassenname_kurz>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+    </dog:Strassen>
+  </wfs:member>
+</wfs:FeatureCollection>

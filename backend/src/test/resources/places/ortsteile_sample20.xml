@@ -1,0 +1,724 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<wfs:FeatureCollection xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd http://www.adv-online.de/namespaces/adv/dog https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;OUTPUTFORMAT=text%2Fxml%3B+subtype%3Dgml%2F3.2.1&amp;TYPENAME=dog:Ortsteile&amp;NAMESPACES=xmlns(dog,http%3A%2F%2Fwww.adv-online.de%2Fnamespaces%2Fadv%2Fdog)" xmlns:wfs="http://www.opengis.net/wfs/2.0" timeStamp="2026-08-15T16:22:28Z" xmlns:gml="http://www.opengis.net/gml/3.2" numberMatched="unknown" numberReturned="0">
+  <!--NOTE: numberReturned attribute should be 'unknown' as well, but this would not validate against the current version of the WFS 2.0 schema (change upcoming). See change request (CR 144): https://portal.opengeospatial.org/files?artifact_id=43925.-->
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596411">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Hamburg-Altstadt,OT 0101 (Hamburg-Altstadt)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596411_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>565910.284 5933530.978 565910.284 5934656.683 566730.517 5934656.683 566730.517 5933530.978 565910.284 5933530.978</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596411_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596411_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>566320.400 5934093.830</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Hamburg-Altstadt</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>01</dog:kreis>
+      <dog:gemeinde>101</dog:gemeinde>
+      <dog:ortsteil>0101</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;01;101;0101</dog:ortsteilschluessel>
+      <dog:ortsteilname>Hamburg-Altstadt,OT 0101</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0101</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>HAMBURGALTSTADT</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596412">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Hamburg-Altstadt,OT 0102 (Hamburg-Altstadt)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596412_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>565177.257 5933321.192 565177.257 5934164.087 566066.751 5934164.087 566066.751 5933321.192 565177.257 5933321.192</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596412_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596412_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565622.004 5933742.640</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Hamburg-Altstadt</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>01</dog:kreis>
+      <dog:gemeinde>102</dog:gemeinde>
+      <dog:ortsteil>0102</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;01;102;0102</dog:ortsteilschluessel>
+      <dog:ortsteilname>Hamburg-Altstadt,OT 0102</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0102</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>HAMBURGALTSTADT</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596413">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">HafenCity,OT 0103 (HafenCity)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596413_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>565120.410 5932667.099 565120.410 5933533.780 566543.621 5933533.780 566543.621 5932667.099 565120.410 5932667.099</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596413_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596413_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565832.016 5933100.440</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">HafenCity</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>02</dog:kreis>
+      <dog:gemeinde>103</dog:gemeinde>
+      <dog:ortsteil>0103</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;02;103;0103</dog:ortsteilschluessel>
+      <dog:ortsteilname>HafenCity,OT 0103</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0103</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>HAFENCITY</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596414">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">HafenCity,OT 0104 (HafenCity)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596414_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>566249.801 5931936.882 566249.801 5933329.700 568096.336 5933329.700 568096.336 5931936.882 566249.801 5931936.882</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596414_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596414_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567173.069 5932633.291</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">HafenCity</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>02</dog:kreis>
+      <dog:gemeinde>104</dog:gemeinde>
+      <dog:ortsteil>0104</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;02;104;0104</dog:ortsteilschluessel>
+      <dog:ortsteilname>HafenCity,OT 0104</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0104</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>HAFENCITY</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596415">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Neustadt,OT 0105 (Neustadt)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596415_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>564310.435 5933216.591 564310.435 5933672.353 565202.274 5933672.353 565202.274 5933216.591 564310.435 5933216.591</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596415_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596415_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>564756.355 5933444.472</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Neustadt</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>03</dog:kreis>
+      <dog:gemeinde>105</dog:gemeinde>
+      <dog:ortsteil>0105</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;03;105;0105</dog:ortsteilschluessel>
+      <dog:ortsteilname>Neustadt,OT 0105</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0105</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>NEUSTADT</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596416">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Neustadt,OT 0106 (Neustadt)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596416_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>564274.645 5933636.120 564274.645 5934923.743 565101.941 5934923.743 565101.941 5933636.120 564274.645 5933636.120</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596416_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596416_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>564688.293 5934279.931</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Neustadt</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>03</dog:kreis>
+      <dog:gemeinde>106</dog:gemeinde>
+      <dog:ortsteil>0106</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;03;106;0106</dog:ortsteilschluessel>
+      <dog:ortsteilname>Neustadt,OT 0106</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0106</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>NEUSTADT</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596417">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Neustadt,OT 0107 (Neustadt)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596417_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>564802.883 5933656.181 564802.883 5934459.701 565308.328 5934459.701 565308.328 5933656.181 564802.883 5933656.181</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596417_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596417_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565055.605 5934057.941</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Neustadt</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>03</dog:kreis>
+      <dog:gemeinde>107</dog:gemeinde>
+      <dog:ortsteil>0107</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;03;107;0107</dog:ortsteilschluessel>
+      <dog:ortsteilname>Neustadt,OT 0107</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0107</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>NEUSTADT</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596418">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Neustadt,OT 0108 (Neustadt)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596418_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>564927.608 5933881.184 564927.608 5935054.171 565946.902 5935054.171 565946.902 5933881.184 564927.608 5933881.184</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596418_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596418_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>565437.255 5934467.678</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Neustadt</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>03</dog:kreis>
+      <dog:gemeinde>108</dog:gemeinde>
+      <dog:ortsteil>0108</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;03;108;0108</dog:ortsteilschluessel>
+      <dog:ortsteilname>Neustadt,OT 0108</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0108</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>NEUSTADT</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596419">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">St. Pauli,OT 0109 (St. Pauli)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596419_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>563985.715 5934639.429 563985.715 5935407.403 565525.810 5935407.403 565525.810 5934639.429 563985.715 5934639.429</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596419_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596419_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>564755.763 5935023.416</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">St. Pauli</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>04</dog:kreis>
+      <dog:gemeinde>109</dog:gemeinde>
+      <dog:ortsteil>0109</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;04;109;0109</dog:ortsteilschluessel>
+      <dog:ortsteilname>St. Pauli,OT 0109</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0109</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>STPAULI</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596420">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">St. Pauli,OT 0110 (St. Pauli)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596420_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>563337.003 5933847.513 563337.003 5934981.516 563798.662 5934981.516 563798.662 5933847.513 563337.003 5933847.513</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596420_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596420_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>563567.833 5934414.514</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">St. Pauli</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>04</dog:kreis>
+      <dog:gemeinde>110</dog:gemeinde>
+      <dog:ortsteil>0110</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;04;110;0110</dog:ortsteilschluessel>
+      <dog:ortsteilname>St. Pauli,OT 0110</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0110</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>STPAULI</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596421">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">St. Pauli,OT 0111 (St. Pauli)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596421_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>563422.284 5933835.660 563422.284 5934790.527 564465.107 5934790.527 564465.107 5933835.660 563422.284 5933835.660</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596421_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596421_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>563943.696 5934313.093</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">St. Pauli</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>04</dog:kreis>
+      <dog:gemeinde>111</dog:gemeinde>
+      <dog:ortsteil>0111</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;04;111;0111</dog:ortsteilschluessel>
+      <dog:ortsteilname>St. Pauli,OT 0111</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0111</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>STPAULI</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596422">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">St. Pauli,OT 0112 (St. Pauli)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596422_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>563300.554 5933368.021 563300.554 5933864.422 564399.083 5933864.422 564399.083 5933368.021 563300.554 5933368.021</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596422_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596422_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>563849.819 5933616.222</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">St. Pauli</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>04</dog:kreis>
+      <dog:gemeinde>112</dog:gemeinde>
+      <dog:ortsteil>0112</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;04;112;0112</dog:ortsteilschluessel>
+      <dog:ortsteilname>St. Pauli,OT 0112</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0112</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>STPAULI</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596423">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">St. Georg,OT 0113 (St. Georg)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596423_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>566737.485 5934092.222 566737.485 5935245.395 567920.387 5935245.395 567920.387 5934092.222 566737.485 5934092.222</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596423_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596423_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567328.936 5934668.808</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">St. Georg</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>05</dog:kreis>
+      <dog:gemeinde>113</dog:gemeinde>
+      <dog:ortsteil>0113</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;05;113;0113</dog:ortsteilschluessel>
+      <dog:ortsteilname>St. Georg,OT 0113</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0113</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>STGEORG</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596424">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">St. Georg,OT 0114 (St. Georg)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596424_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>566439.327 5933928.049 566439.327 5934898.523 567550.562 5934898.523 567550.562 5933928.049 566439.327 5933928.049</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596424_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596424_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>566994.944 5934413.286</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">St. Georg</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>05</dog:kreis>
+      <dog:gemeinde>114</dog:gemeinde>
+      <dog:ortsteil>0114</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;05;114;0114</dog:ortsteilschluessel>
+      <dog:ortsteilname>St. Georg,OT 0114</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0114</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>STGEORG</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596425">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Hammerbrook,OT 0115 (Hammerbrook)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596425_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>566688.327 5932904.809 566688.327 5933978.996 567943.940 5933978.996 567943.940 5932904.809 566688.327 5932904.809</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596425_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596425_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567316.133 5933441.902</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Hammerbrook</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>06</dog:kreis>
+      <dog:gemeinde>115</dog:gemeinde>
+      <dog:ortsteil>0115</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;06;115;0115</dog:ortsteilschluessel>
+      <dog:ortsteilname>Hammerbrook,OT 0115</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0115</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>HAMERBROK</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596426">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Hammerbrook,OT 0116 (Hammerbrook)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596426_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>567433.458 5933185.361 567433.458 5933983.156 567949.925 5933983.156 567949.925 5933185.361 567433.458 5933185.361</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596426_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596426_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>567691.691 5933584.259</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Hammerbrook</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>06</dog:kreis>
+      <dog:gemeinde>116</dog:gemeinde>
+      <dog:ortsteil>0116</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;06;116;0116</dog:ortsteilschluessel>
+      <dog:ortsteilname>Hammerbrook,OT 0116</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0116</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>HAMERBROK</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596427">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Hammerbrook,OT 0117 (Hammerbrook)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596427_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>567652.809 5933106.568 567652.809 5934151.179 568579.884 5934151.179 568579.884 5933106.568 567652.809 5933106.568</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596427_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596427_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>568116.347 5933628.874</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Hammerbrook</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>06</dog:kreis>
+      <dog:gemeinde>117</dog:gemeinde>
+      <dog:ortsteil>0117</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;06;117;0117</dog:ortsteilschluessel>
+      <dog:ortsteilname>Hammerbrook,OT 0117</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0117</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>HAMERBROK</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596428">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Hammerbrook,OT 0118 (Hammerbrook)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596428_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>568384.321 5933155.215 568384.321 5934125.858 569194.144 5934125.858 569194.144 5933155.215 568384.321 5933155.215</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596428_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596428_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>568789.233 5933640.536</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Hammerbrook</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>06</dog:kreis>
+      <dog:gemeinde>118</dog:gemeinde>
+      <dog:ortsteil>0118</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;06;118;0118</dog:ortsteilschluessel>
+      <dog:ortsteilname>Hammerbrook,OT 0118</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0118</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>HAMERBROK</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596429">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Francop,OT 0716 (Francop)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596429_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>555411.187 5927738.795 555411.187 5929256.039 558833.765 5929256.039 558833.765 5927738.795 555411.187 5927738.795</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596429_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596429_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>557122.476 5928497.417</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Francop</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>7</dog:regierungsbezirk>
+      <dog:kreis>15</dog:kreis>
+      <dog:gemeinde>716</dog:gemeinde>
+      <dog:ortsteil>0716</dog:ortsteil>
+      <dog:ortsteilschluessel>02;7;15;716;0716</dog:ortsteilschluessel>
+      <dog:ortsteilname>Francop,OT 0716</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0716</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>FRANCOP</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+  <wfs:member>
+    <dog:Ortsteile xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_OT_596430">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Borgfelde,OT 0119 (Borgfelde)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_OT_596430_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>567919.294 5934001.447 567919.294 5934543.048 568948.377 5934543.048 568948.377 5934001.447 567919.294 5934001.447</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_OT_596430_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_OT_596430_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>568433.836 5934272.248</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_4#HH_SILC_4"/>
+      <iso19112:parent xmlns:iso19112="http://www.opengis.net/iso19112">Borgfelde</iso19112:parent>
+      <dog:land>02</dog:land>
+      <dog:regierungsbezirk>1</dog:regierungsbezirk>
+      <dog:kreis>07</dog:kreis>
+      <dog:gemeinde>119</dog:gemeinde>
+      <dog:ortsteil>0119</dog:ortsteil>
+      <dog:ortsteilschluessel>02;1;07;119;0119</dog:ortsteilschluessel>
+      <dog:ortsteilname>Borgfelde,OT 0119</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0119</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>BORGFELDE</dog:gemeindename_normalisiert>
+    </dog:Ortsteile>
+  </wfs:member>
+</wfs:FeatureCollection>
