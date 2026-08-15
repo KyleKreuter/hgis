@@ -4,7 +4,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { ApiError } from '@/api/client'
 import { MIN_QUERY_LENGTH, usePlaceSearch, type Place, type PlaceKind } from '@/api/places'
 import { moveHighlight } from './placeSearchNav'
 
@@ -92,11 +91,15 @@ export function PlaceSearchControl({ onSelect, onClear }: PlaceSearchControlProp
   const places = search.data?.places ?? []
   const showPanel = open && trimmedQuery.length >= MIN_QUERY_LENGTH
   const loading = debouncePending || search.isFetching
-  const errorMessage = search.isError
-    ? search.error instanceof ApiError
-      ? search.error.message
-      : 'Das Programm konnte keine Orte laden.'
-    : null
+  // Deliberately not `search.error.message`: unlike a curated field-validation message
+  // (`table/FilterBar`, the edit form), nothing this endpoint can fail with is meant for
+  // a user to read. The one business error the contract defines (`q` under two
+  // characters) never reaches the network -- `MIN_QUERY_LENGTH` above is stricter than
+  // that. Everything else is a technical failure, and the technical text can be exactly
+  // that technical: with the endpoint not deployed yet, a 404 answered
+  // "Die Ressource 'api/places' existiert nicht" -- accurate, and unusable in a search
+  // box, since it names an internal path and reads like a crash rather than an outage.
+  const errorMessage = search.isError ? 'Die Ortssuche ist gerade nicht erreichbar.' : null
 
   // The previous highlight belonged to the previous result set -- row 4 of nine
   // pointing at whatever row 4 of a fresh three-row answer happens to be would move
@@ -169,7 +172,18 @@ export function PlaceSearchControl({ onSelect, onClear }: PlaceSearchControlProp
   }
 
   return (
-    <div className="absolute top-2 left-1/2 z-10 w-72 max-w-[calc(100cqw-1rem)] -translate-x-1/2 @max-xs:w-56">
+    <div
+      // z-20, not the z-10 every other top control uses: `MeasurementReadout` sits at
+      // top left with a generous max-width (`calc(100cqw-6rem)`) that was sized against
+      // the top-right button stack, not against a top-centre control that did not exist
+      // yet. Measured on screen: its own hint text ("Klicken Sie, um Punkte zu
+      // setzen...") already reaches to about the middle of an ordinary map panel, well
+      // into where this field sits. Same fix `MapCanvas` already applies to the
+      // attribution notice versus the scale bar for exactly the same reason -- the
+      // element the user is actively reading or typing into wins the overlap, the
+      // passive status readout underneath it gives way.
+      className="absolute top-2 left-1/2 z-20 w-72 max-w-[calc(100cqw-1rem)] -translate-x-1/2 @max-xs:w-56"
+    >
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input

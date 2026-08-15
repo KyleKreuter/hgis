@@ -136,4 +136,25 @@ describe('PlaceSearchControl', () => {
 
     expect(await screen.findByText('Kein Ort gefunden.')).toBeInTheDocument()
   })
+
+  // Measured against the real backend (endpoint not deployed yet): a 404 answers RFC
+  // 7807 with `detail: "Die Ressource 'api/places' existiert nicht"` -- an internal path
+  // name, phrased like a crash. A search box must never repeat that to the user.
+  test('zeigt bei einem Fehler eine allgemeine Meldung, nie den rohen Server-Text', async () => {
+    stubFetch([
+      {
+        match: '/api/places',
+        status: 404,
+        body: { title: 'Nicht gefunden', status: 404, detail: "Die Ressource 'api/places' existiert nicht" },
+      },
+    ])
+    renderWithQueryClient(<PlaceSearchControl onSelect={vi.fn()} onClear={vi.fn()} />)
+    const user = userEvent.setup()
+
+    await user.type(screen.getByRole('combobox', { name: NAME }), 'Xyz')
+
+    expect(await screen.findByText('Die Ortssuche ist gerade nicht erreichbar.')).toBeInTheDocument()
+    expect(screen.queryByText(/existiert nicht/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/api\/places/)).not.toBeInTheDocument()
+  })
 })
