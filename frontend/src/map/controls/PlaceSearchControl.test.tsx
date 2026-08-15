@@ -233,4 +233,45 @@ describe('PlaceSearchControl', () => {
     expect(screen.queryByText(/existiert nicht/)).not.toBeInTheDocument()
     expect(screen.queryByText(/api\/places/)).not.toBeInTheDocument()
   })
+
+  /**
+   * The spinner used to take the clear button's place while a search was running, and the
+   * two are not the same shape -- measured in the browser, the X sits at x=1078 and is
+   * 24px wide, the spinner sat at x=1082 and was 14px. Every keystroke therefore shifted
+   * the icon sideways, shrank it and set it spinning, then restored the X: a flicker that
+   * runs for as long as someone keeps typing. The spinner now replaces the magnifier on
+   * the left instead, so nothing on the right ever moves.
+   *
+   * The button's continued presence is the testable half of that. Where it sits is not:
+   * jsdom computes no layout, so `getBoundingClientRect` returns zeroes and a position
+   * assertion here would pass no matter which side the spinner is on.
+   */
+  test('behält den Löschknopf, während gesucht wird', async () => {
+    let antwort: (value: unknown) => void = () => {}
+    const fetchStub = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          antwort = () =>
+            resolve({
+              ok: true,
+              status: 200,
+              headers: new Headers({ 'content-type': 'application/json' }),
+              json: async () => ({ places: PLACES }),
+            })
+        }),
+    )
+    vi.stubGlobal('fetch', fetchStub)
+    renderWithQueryClient(<PlaceSearchControl onSelect={vi.fn()} onClear={vi.fn()} />)
+    const user = userEvent.setup()
+
+    await user.type(screen.getByRole('combobox', { name: NAME }), 'Eic')
+    await vi.waitFor(() => expect(fetchStub).toHaveBeenCalled())
+
+    // Mitten in der laufenden Suche: der Knopf muss stehen bleiben.
+    expect(screen.getByRole('button', { name: 'Suche löschen' })).toBeInTheDocument()
+
+    antwort(undefined)
+    expect(await screen.findAllByRole('option')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Suche löschen' })).toBeInTheDocument()
+  })
 })

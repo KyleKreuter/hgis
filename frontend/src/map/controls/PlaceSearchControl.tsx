@@ -204,7 +204,20 @@ export function PlaceSearchControl({ onSelect, onClear }: PlaceSearchControlProp
       className="absolute top-2 left-1/2 z-20 w-72 max-w-[calc(100cqw-1rem)] -translate-x-1/2 @max-xs:w-56"
     >
       <div className="relative">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        {/* The spinner replaces the magnifier on the left, not the clear button on the
+            right. It used to sit on the right, where it swapped places with the X on
+            every single keystroke -- and the two were never the same shape: measured in
+            the browser, the X sits at x=1078 and is 24px wide, the spinner sat at
+            x=1082 and was 14px. So each keypress moved the icon 4px sideways, shrank it
+            by 10px and set it spinning, then put the X back. While typing, that flickers
+            continuously. On the left there is nothing to displace: the magnifier is
+            decoration, it and the spinner share position and size, and the swap is a
+            change of glyph rather than a jump. */}
+        {showPanel && loading ? (
+          <Loader2 className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
+        ) : (
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        )}
         <Input
           ref={inputRef}
           role="combobox"
@@ -222,23 +235,19 @@ export function PlaceSearchControl({ onSelect, onClear }: PlaceSearchControlProp
           autoComplete="off"
           className="bg-background pr-8 pl-8 shadow-sm"
         />
-        {showPanel && loading ? (
-          <Loader2 className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
-        ) : (
-          query && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="absolute top-1/2 right-1 size-6 -translate-y-1/2"
-              aria-label="Suche löschen"
-              // Fires before the input's onBlur only in event order, not in effect --
-              // both run, and clearing after closing is harmless either way.
-              onClick={handleClear}
-            >
-              <X className="size-3.5" />
-            </Button>
-          )
+        {query && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="absolute top-1/2 right-1 size-6 -translate-y-1/2"
+            aria-label="Suche löschen"
+            // Fires before the input's onBlur only in event order, not in effect --
+            // both run, and clearing after closing is harmless either way.
+            onClick={handleClear}
+          >
+            <X className="size-3.5" />
+          </Button>
         )}
       </div>
 
