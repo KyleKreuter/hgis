@@ -84,6 +84,34 @@ describe('PlaceSearchControl', () => {
     expect(input).toHaveValue('Eickhoffweg')
   })
 
+  // Regression: a real browser blurs the input on `mousedown` for ANY click target
+  // that is not itself focusable -- moving focus to `document.body`, exactly what
+  // `@testing-library/user-event` v14 reproduces too (unlike a bare `fireEvent.click`,
+  // which skips the pointer/focus sequence entirely). A click on the option row
+  // therefore used to blur the input first, the resulting `onBlur` closed the panel
+  // (`setOpen(false)`), and the `click` event that follows `mouseup` found nothing left
+  // in the DOM to land on -- `onSelect` never ran, only visible in a real browser or
+  // with `user.click`. `getByRole('option')` after this bug is fixed proves the row
+  // still exists to click in the first place.
+  test('wählt einen Treffer per Mausklick aus', async () => {
+    stubFetch([{ match: '/api/places', body: { places: PLACES } }])
+    const onSelect = vi.fn()
+    renderWithQueryClient(<PlaceSearchControl onSelect={onSelect} onClear={vi.fn()} />)
+    const user = userEvent.setup()
+    const input = screen.getByRole('combobox', { name: NAME })
+
+    await user.type(input, 'Eic')
+    const options = await screen.findAllByRole('option')
+    // Clicks the row's own text, not the `<li>` wrapper `options[1]` itself: the click
+    // and mousedown handlers sit on the inner `<div>`, and a click dispatched straight
+    // at an ancestor never bubbles back down into a descendant to reach them -- the
+    // point of clicking here is to land where a user's pointer actually would.
+    await user.click(within(options[1]).getByText('Sudwalde, 27257'))
+
+    expect(onSelect).toHaveBeenCalledWith(PLACES[1])
+    expect(input).toHaveValue('Eickhoffweg')
+  })
+
   test('nimmt bei einer bloßen Eingabetaste den ersten Treffer', async () => {
     stubFetch([{ match: '/api/places', body: { places: PLACES } }])
     const onSelect = vi.fn()

@@ -58,10 +58,20 @@ interface PlaceSearchControlProps {
  * widget, not an open-vocabulary combobox). The result rows are deliberately not
  * separately focusable: focus stays on the input the entire time, the highlighted row
  * is tracked as an index and only ever communicated visually and via
- * `aria-activedescendant`, exactly as the WAI-ARIA combobox pattern describes it. That
- * is also what makes a plain `onBlur` on the input enough to close the dropdown --
- * clicking a non-focusable row never moves focus away from the input in the first
- * place, so nothing closes the list out from under the click.
+ * `aria-activedescendant`, exactly as the WAI-ARIA combobox pattern describes it.
+ *
+ * That does *not* mean a click on a row leaves the input's focus alone on its own --
+ * a real browser blurs whatever is currently focused on `mousedown`, for any new click
+ * target, whether or not that target can itself take focus. A first version of this
+ * component assumed the opposite ("clicking a non-focusable row never moves focus away
+ * from the input") and shipped with the mouse path broken: `onBlur` below closed the
+ * panel before the row's own `click` -- which fires after `mouseup` -- had anything left
+ * to land on, so choosing a hit with the mouse silently did nothing. `PlaceOption`'s
+ * `onMouseDown={(event) => event.preventDefault()}` is what keeps focus on the input
+ * through the click and is why `onBlur` here is still safe to leave unconditional.
+ * jsdom's plain `fireEvent.click` does not reproduce the browser's blur-on-mousedown
+ * behaviour and would have hidden this; `@testing-library/user-event`'s `click()` does,
+ * see the regression test in `PlaceSearchControl.test.tsx`.
  */
 export function PlaceSearchControl({ onSelect, onClear }: PlaceSearchControlProps) {
   const [query, setQuery] = useState('')
@@ -269,11 +279,19 @@ function PlaceOption({
   const Icon = KIND_ICON[place.kind]
   return (
     <li id={id} role="option" aria-selected={highlighted}>
-      {/* A plain div, not a button: it must never take DOM focus away from the input
-          (see the component comment) -- onClick alone is enough for a mouse or touch
-          selection, keyboard selection goes through the input's own onKeyDown. */}
+      {/* A plain div, not a button, so it never becomes a *tab stop* -- keyboard
+          selection goes entirely through the input's own onKeyDown (see the component
+          comment). That does not make it focus-proof on a click, though: a real browser
+          blurs whatever is currently focused on `mousedown` for ANY new click target,
+          focusable or not (focus falls back to `document.body` here). Without
+          `preventDefault` on mousedown, that blur runs the input's `onBlur` and closes
+          the panel before the `click` that follows `mouseup` has a row left to land on
+          -- `onSelect` below would then never fire. jsdom's `fireEvent.click` skips this
+          entirely, which is what let the bug ship; `@testing-library/user-event`'s
+          `click()` reproduces it, see `PlaceSearchControl.test.tsx`. */}
       <div
         onClick={onSelect}
+        onMouseDown={(event) => event.preventDefault()}
         onMouseEnter={onHover}
         className={cn(
           'flex cursor-default items-start gap-2 rounded px-2 py-1.5 text-xs',
