@@ -1,0 +1,48 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<wfs:FeatureCollection xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd http://www.hamburg.de/namespaces/gages https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;OUTPUTFORMAT=text%2Fxml%3B+subtype%3Dgml%2F3.2.1&amp;TYPENAME=gages:Hauskoordinaten&amp;NAMESPACES=xmlns(gages,http%3A%2F%2Fwww.hamburg.de%2Fnamespaces%2Fgages)" xmlns:wfs="http://www.opengis.net/wfs/2.0" timeStamp="2026-08-15T17:44:43Z" xmlns:gml="http://www.opengis.net/gml/3.2" numberMatched="unknown" numberReturned="0">
+  <!--NOTE: numberReturned attribute should be 'unknown' as well, but this would not validate against the current version of the WFS 2.0 schema (change upcoming). See change request (CR 144): https://portal.opengeospatial.org/files?artifact_id=43925.-->
+  <wfs:member>
+    <gages:Hauskoordinaten xmlns:gages="http://www.hamburg.de/namespaces/gages" gml:id="HH_H_402500775">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Eickhoffweg 3, 22041 Hamburg (OT Wandsbek)</iso19112:geographicIdentifier>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_H_402500775_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_H_402500775_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>572362.142 5937105.486</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_1#HH_SILC_1"/>
+    </gages:Hauskoordinaten>
+  </wfs:member><wfs:member>
+    <gages:Hauskoordinaten xmlns:gages="http://www.hamburg.de/namespaces/gages" gml:id="HH_H_402526955">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Eickhoffweg 42a, 22041 Hamburg (OT Wandsbek)</iso19112:geographicIdentifier>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_H_402526955_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_H_402526955_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>572476.723 5936905.712</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_1#HH_SILC_1"/>
+    </gages:Hauskoordinaten>
+  </wfs:member><wfs:member>
+    <gages:Hauskoordinaten xmlns:gages="http://www.hamburg.de/namespaces/gages" gml:id="HH_H_402526966">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Eickhoffweg 1a, 22041 Hamburg (OT Wandsbek)</iso19112:geographicIdentifier>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_H_402526966_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_H_402526966_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>572329.077 5937136.874</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_1#HH_SILC_1"/>
+    </gages:Hauskoordinaten>
+  </wfs:member><wfs:member>
+    <gages:Hauskoordinaten xmlns:gages="http://www.hamburg.de/namespaces/gages" gml:id="HH_H_402526974">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Eickhoffweg 12, 22041 Hamburg (OT Wandsbek)</iso19112:geographicIdentifier>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_H_402526974_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_H_402526974_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>572402.220 5937084.373</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_1#HH_SILC_1"/>
+    </gages:Hauskoordinaten>
+  </wfs:member></wfs:FeatureCollection>

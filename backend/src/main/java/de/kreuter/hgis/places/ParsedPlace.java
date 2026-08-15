@@ -7,9 +7,9 @@ package de.kreuter.hgis.places;
  * happens in PostGIS via {@code ST_Transform}, the same rule {@code ingest.FeatureWriter}
  * follows, never in Java.
  *
- * @param kind {@code "street"} or {@code "district"} -- {@code "place"} is Photon-only and
- *             never written here (V10__place.sql's {@code place_source} check would refuse
- *             it anyway, since only {@code "hamburg"} rows are ever stored)
+ * @param kind {@code "street"}, {@code "district"} or {@code "address"} -- {@code "place"} is
+ *             Photon-only and never written here (V10__place.sql's {@code place_source} check
+ *             would refuse it anyway, since only {@code "hamburg"} rows are ever stored)
  */
 record ParsedPlace(String name, String context, String kind, double x25832, double y25832) {
 }

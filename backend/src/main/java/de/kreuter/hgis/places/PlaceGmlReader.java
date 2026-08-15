@@ -2,7 +2,12 @@ package de.kreuter.hgis.places;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
@@ -12,8 +17,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Streams a Hamburg WFS GetFeature response (dog:Strassen or dog:Ortsteile, GML 3.2 wrapped
- * in a WFS 2.0 FeatureCollection) into {@link ParsedPlace} rows, one member at a time.
+ * Streams a Hamburg WFS GetFeature response (dog:Strassen, dog:Ortsteile or
+ * gages:Hauskoordinaten, GML 3.2 wrapped in a WFS 2.0 FeatureCollection) into
+ * {@link ParsedPlace} rows, one member at a time.
  *
  * <p>StAX rather than the DOM {@code wms.WmsCapabilitiesParser} uses for its few-KB
  * capabilities documents: the full Strassen extract is 32&nbsp;MB (measured live, 9534
@@ -41,17 +47,50 @@ class PlaceGmlReader {
 
 	private static final String STRASSEN = "dog:Strassen";
 	private static final String ORTSTEILE = "dog:Ortsteile";
+	private static final String HAUSKOORDINATEN = "gages:Hauskoordinaten";
 	private static final String STRASSENNAME = "dog:strassenname";
 	private static final String POST_ORTSTEIL = "dog:postOrtsteil";
 	private static final String POSTLEITZAHL = "dog:postleitzahl";
 	private static final String PARENT = "iso19112:parent";
+	private static final String GEOGRAPHIC_IDENTIFIER = "iso19112:geographicIdentifier";
 	private static final String POSITION = "iso19112:position";
 	private static final String POS = "gml:pos";
+	private static final String FEATURE_COLLECTION = "wfs:FeatureCollection";
+	private static final String NUMBER_MATCHED = "numberMatched";
 
-	/** One {@code dog:Strassen} or {@code dog:Ortsteile} member, before it is turned into
-	 *  one or more {@link ParsedPlace} rows. */
+	/**
+	 * The one string a {@code gages:Hauskoordinaten} member carries an address in:
+	 * {@code "Aalheitengraben 4, 22359 Hamburg (OT Volksdorf)"} -> name
+	 * {@code "Aalheitengraben 4"}, context {@code "Volksdorf, 22359"}.
+	 *
+	 * <p>Measured against 30000 real identifiers (three 10000-wide slices of the live
+	 * extract, taken 2026-08-15 at STARTINDEX 0 / 150000 / 292393). Two things that sample
+	 * settles, and that this pattern is shaped around:
+	 *
+	 * <ul>
+	 * <li>The whitespace is not uniform. 29839 read {@code "..., 22359 Hamburg (OT X)"}; the
+	 *     remaining 161 read {@code "..., 21079  Hamburg(OT X)"} -- two spaces after the
+	 *     postal code, none before the bracket. Every {@code \s*} below is there for that,
+	 *     not for tidiness.</li>
+	 * <li>Three identifiers have neither a street name nor a postal code at all
+	 *     ({@code " 33,   Hamburg(OT Allermöhe)"}). Both the postal code and the whole
+	 *     {@code (OT ...)} group are therefore optional, so such a row still parses into
+	 *     something rather than falling through to the raw-identifier fallback.</li>
+	 * </ul>
+	 *
+	 * <p>The leading group is greedy and the city group excludes commas, which together make
+	 * the split happen at the *last* comma whose tail still parses -- so a street name that
+	 * one day contains a comma of its own stays whole instead of being cut at its first one.
+	 * No such name is in the sample; this costs nothing and is the difference between a
+	 * silently wrong name and a right one if one ever appears.
+	 */
+	private static final Pattern ADDRESS_IDENTIFIER = Pattern.compile(
+			"^(.*),\\s*(?:(\\d{5})\\s*)?([^(,]*?)\\s*(?:\\(OT\\s*([^)]*)\\))?\\s*$");
+
+	/** One {@code dog:Strassen}, {@code dog:Ortsteile} or {@code gages:Hauskoordinaten}
+	 *  member, before it is turned into one or more {@link ParsedPlace} rows. */
 	private record RawFeature(String name, List<String> postOrtsteil, List<String> postleitzahl,
-			String parent, double[] pos25832) {
+			String parent, String geographicIdentifier, double[] pos25832) {
 	}
 
 	List<ParsedPlace> readStrassen(InputStream gml) {
@@ -60,6 +99,69 @@ class PlaceGmlReader {
 
 	List<ParsedPlace> readOrtsteile(InputStream gml) {
 		return read(gml, ORTSTEILE, this::toDistrictPlaces);
+	}
+
+	/**
+	 * <p>The {@code contexts} map deduplicates {@code "Ortsteil, Postleitzahl"} strings
+	 * across the whole response. It matters here and nowhere else in this class: one page of
+	 * house numbers is 10000 features but only a handful of distinct contexts -- addresses
+	 * arrive in street order, so a page rarely leaves one part of town -- and the caller
+	 * holds all 302393 resulting rows in memory at once. Names are deliberately not
+	 * deduplicated: they carry the house number, so almost all of them really are distinct
+	 * and a map over them would cost more than it saves.
+	 */
+	List<ParsedPlace> readHauskoordinaten(InputStream gml) {
+		Map<String, String> contexts = new HashMap<>();
+		return read(gml, HAUSKOORDINATEN, raw -> toAddressPlaces(raw, contexts));
+	}
+
+	/**
+	 * Reads {@code numberMatched} off a {@code RESULTTYPE=hits} response -- a
+	 * {@code wfs:FeatureCollection} with no members at all, roughly 400 bytes.
+	 *
+	 * <p>Needed because a paged {@code gages:Hauskoordinaten} request cannot answer that
+	 * question itself: with {@code PROPERTYNAME} in play the service reports
+	 * {@code numberMatched="unknown"} on every page (measured live, all three sample slices),
+	 * so the number of pages to ask for has to come from a separate, cheap hits request.
+	 *
+	 * @return the total, or {@code -1} when the service answered {@code "unknown"} or left
+	 *         the attribute out -- a caller can then still page until a page comes back
+	 *         empty, it just cannot show a total while it does
+	 */
+	long readNumberMatched(InputStream gml) {
+		try {
+			XMLStreamReader reader = createFactory().createXMLStreamReader(gml);
+			try {
+				while (reader.hasNext()) {
+					int event = reader.next();
+					if (event == XMLStreamConstants.START_ELEMENT
+							&& FEATURE_COLLECTION.equals(reader.getLocalName())) {
+						return parseNumberMatched(reader.getAttributeValue(null, NUMBER_MATCHED));
+					}
+				}
+			}
+			finally {
+				reader.close();
+			}
+		}
+		catch (XMLStreamException e) {
+			throw new PlaceRefreshException(
+					"Die Anzahl der Hamburger Hauskoordinaten lässt sich nicht lesen: " + e.getMessage(), e);
+		}
+		return -1;
+	}
+
+	private static long parseNumberMatched(String raw) {
+		if (raw == null) {
+			return -1;
+		}
+		try {
+			return Long.parseLong(raw.trim());
+		}
+		catch (NumberFormatException e) {
+			// "unknown" is a legal WFS 2.0 value for this attribute, not a malformed one.
+			return -1;
+		}
 	}
 
 	private List<ParsedPlace> read(InputStream gml, String featureTag,
@@ -108,6 +210,7 @@ class PlaceGmlReader {
 	private static RawFeature readFeature(XMLStreamReader reader) throws XMLStreamException {
 		String name = null;
 		String parent = null;
+		String geographicIdentifier = null;
 		List<String> postOrtsteil = new ArrayList<>();
 		List<String> postleitzahl = new ArrayList<>();
 		double[] pos = null;
@@ -127,6 +230,11 @@ class PlaceGmlReader {
 					case PARENT -> {
 						if (parent == null) {
 							parent = trimmed(reader.getElementText());
+						}
+					}
+					case GEOGRAPHIC_IDENTIFIER -> {
+						if (geographicIdentifier == null) {
+							geographicIdentifier = trimmed(reader.getElementText());
 						}
 					}
 					case POST_ORTSTEIL -> postOrtsteil.add(trimmed(reader.getElementText()));
@@ -156,7 +264,7 @@ class PlaceGmlReader {
 				depth--;
 			}
 		}
-		return new RawFeature(name, postOrtsteil, postleitzahl, parent, pos);
+		return new RawFeature(name, postOrtsteil, postleitzahl, parent, geographicIdentifier, pos);
 	}
 
 	/**
@@ -193,6 +301,51 @@ class PlaceGmlReader {
 			return List.of();
 		}
 		return List.of(new ParsedPlace(raw.parent(), null, "district", raw.pos25832()[0], raw.pos25832()[1]));
+	}
+
+	/**
+	 * One row per house number, name carrying street and number together
+	 * ({@code "Eickhoffweg 12"}) so V10__place.sql's trigram index matches an address the
+	 * way it is typed, rather than only the street part of it.
+	 *
+	 * <p>An identifier that {@link #ADDRESS_IDENTIFIER} cannot split is kept whole as the
+	 * name with no context at all, rather than dropped: an address that shows up with a
+	 * clumsy label is still a findable address, and Hamburg's identifier format is a
+	 * convention of this one service, not a schema guarantee. Only a feature with no
+	 * position, or with nothing left as a name after splitting, is skipped -- the same two
+	 * reasons {@link #toStreetPlaces} skips a street.
+	 */
+	private List<ParsedPlace> toAddressPlaces(RawFeature raw, Map<String, String> contexts) {
+		if (raw.geographicIdentifier() == null || raw.pos25832() == null) {
+			return List.of();
+		}
+		String identifier = raw.geographicIdentifier();
+
+		Matcher matcher = ADDRESS_IDENTIFIER.matcher(identifier);
+		if (!matcher.matches()) {
+			return List.of(new ParsedPlace(identifier, null, "address", raw.pos25832()[0], raw.pos25832()[1]));
+		}
+
+		String name = trimmed(matcher.group(1));
+		if (name == null) {
+			return List.of();
+		}
+		String context = addressContext(trimmed(matcher.group(4)), trimmed(matcher.group(2)));
+		if (context != null) {
+			context = contexts.computeIfAbsent(context, Function.identity());
+		}
+		return List.of(new ParsedPlace(name, context, "address", raw.pos25832()[0], raw.pos25832()[1]));
+	}
+
+	/** {@code "Ortsteil, Postleitzahl"} -- the streets' own context shape ({@link
+	 *  #toStreetPlaces}). Whichever half is missing is simply left out rather than allowed to
+	 *  produce a dangling comma; with both missing the context is null, the same answer a
+	 *  street with no postal code on file gets. */
+	private static String addressContext(String ortsteil, String postleitzahl) {
+		if (ortsteil != null && postleitzahl != null) {
+			return ortsteil + ", " + postleitzahl;
+		}
+		return ortsteil != null ? ortsteil : postleitzahl;
 	}
 
 	/** {@code "579684.552 5927090.528"} -> easting/northing. Null, not an exception, for

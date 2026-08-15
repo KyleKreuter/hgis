@@ -111,4 +111,92 @@ class PlaceGmlReaderTest {
 		assertThat(places.get(0).context()).isNull();
 		assertThat(places).allSatisfy(p -> assertThat(p.name()).doesNotContain("OT "));
 	}
+
+	// --- gages:Hauskoordinaten -------------------------------------------------------------
+
+	@Test
+	@DisplayName("the house-number contract's own worked example: street and number make up the name, Ortsteil and postal code the context")
+	void anAddressCarriesStreetAndHouseNumberInItsName() {
+		var places = reader.readHauskoordinaten(fixture("hauskoordinaten_eickhoffweg.xml"));
+
+		var twelve = places.stream().filter(p -> p.name().equals("Eickhoffweg 12")).findFirst().orElseThrow();
+		assertThat(twelve.context()).isEqualTo("Wandsbek, 22041");
+		assertThat(twelve.kind()).isEqualTo("address");
+		// Live value for "Eickhoffweg 12, 22041 Hamburg (OT Wandsbek)", from
+		// iso19112:position -- the same element the street reader takes its own from. Close
+		// to, but not the same as, the street Eickhoffweg's own position (572406.785
+		// 5937005.370): a house number sits at the house, not at the middle of the street.
+		assertThat(twelve.x25832()).isCloseTo(572402.220, within(0.001));
+		assertThat(twelve.y25832()).isCloseTo(5937084.373, within(0.001));
+	}
+
+	@Test
+	@DisplayName("a house number with a letter suffix keeps it -- \"Eickhoffweg 1a\" is a different address from \"Eickhoffweg 1\"")
+	void aLetterSuffixIsPartOfTheHouseNumber() {
+		var places = reader.readHauskoordinaten(fixture("hauskoordinaten_eickhoffweg.xml"));
+
+		assertThat(places).extracting("name", "context", "kind")
+				.containsExactlyInAnyOrder(
+						tuple("Eickhoffweg 3", "Wandsbek, 22041", "address"),
+						tuple("Eickhoffweg 12", "Wandsbek, 22041", "address"),
+						tuple("Eickhoffweg 1a", "Wandsbek, 22041", "address"),
+						tuple("Eickhoffweg 42a", "Wandsbek, 22041", "address"));
+	}
+
+	/**
+	 * Every entry in this fixture is verbatim from the live extract and stands for one of
+	 * the shapes the 30000-identifier sample turned up (see {@code PlaceGmlReader}'s own
+	 * {@code ADDRESS_IDENTIFIER} doc for the counts). The point of the test is that the
+	 * identifier format is a convention of one service and not a schema promise: all five
+	 * have to come out as usable rows, not four plus one exception.
+	 */
+	@Test
+	@DisplayName("the identifier's real spelling variants all parse: missing spaces, a missing street name, a missing postal code, a trailing building marker")
+	void theIdentifiersRealVariantsAllParse() {
+		var places = reader.readHauskoordinaten(fixture("hauskoordinaten_varianten.xml"));
+
+		assertThat(places).extracting("name", "context")
+				.containsExactlyInAnyOrder(
+						// the ordinary shape, "..., 22359 Hamburg (OT Volksdorf)"
+						tuple("Aalheitengraben 4", "Volksdorf, 22359"),
+						tuple("Aalheitengraben 8a", "Volksdorf, 22359"),
+						// two spaces after the postal code, none before the bracket
+						tuple("Bahnhofsinsel 42", "Harburg, 21079"),
+						// neither a street name nor a postal code: kept rather than dropped,
+						// with whatever context is left
+						tuple("33", "Allermöhe"),
+						// a building marker after the house number, kept verbatim
+						tuple("Am Frankenberg 27a ng", "Langenbek, 21077"));
+		assertThat(places).allSatisfy(p -> assertThat(p.kind()).isEqualTo("address"));
+	}
+
+	@Test
+	@DisplayName("contexts are shared between the addresses of one page rather than copied per row")
+	void contextsAreSharedWithinOnePage() {
+		var places = reader.readHauskoordinaten(fixture("hauskoordinaten_eickhoffweg.xml"));
+
+		// Not an equality check: this is about the identity of the string instance. All
+		// 302393 addresses are held in memory at once during a refresh, and a page of 10000
+		// carries only a handful of distinct contexts between them.
+		String first = places.get(0).context();
+		assertThat(places).allSatisfy(p -> assertThat(p.context()).isSameAs(first));
+	}
+
+	@Test
+	@DisplayName("a RESULTTYPE=hits answer names how many house numbers Hamburg has")
+	void hitsAnswerCarriesTheTotal() {
+		assertThat(reader.readNumberMatched(fixture("hauskoordinaten_hits.xml"))).isEqualTo(302_393L);
+	}
+
+	@Test
+	@DisplayName("a paged answer says numberMatched=\"unknown\" -- read as -1, not as a parse failure")
+	void anUnknownTotalIsMinusOneRatherThanAnError() {
+		assertThat(reader.readNumberMatched(fixture("hauskoordinaten_eickhoffweg.xml"))).isEqualTo(-1L);
+	}
+
+	@Test
+	@DisplayName("a page past the end of the extract is empty, which is what stops the paging loop")
+	void aPagePastTheEndIsEmpty() {
+		assertThat(reader.readHauskoordinaten(fixture("hauskoordinaten_leer.xml"))).isEmpty();
+	}
 }

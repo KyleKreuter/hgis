@@ -110,7 +110,101 @@ class PlaceMigrationTest {
 		migrateTo("10");
 
 		assertThatInsertFails("'street'", "'photon'"); // source must be 'hamburg' only
-		assertThatInsertFails("'address'", "'hamburg'"); // kind must be one of the three
+		assertThatInsertFails("'address'", "'hamburg'"); // 'address' only arrives with V11
+		assertThatInsertFails("'stadtteil'", "'hamburg'"); // kind must be one of the known tokens
+	}
+
+	// --- V11__place_address.sql --------------------------------------------------------------
+
+	/**
+	 * The case the house-number contract names: the migration runs against a database that
+	 * already holds a full street extract -- 9936 rows live, a smaller stand-in here -- and
+	 * has to leave every one of them exactly as it found it. A CHECK constraint is
+	 * revalidated against the whole table when it is added, so a row that the new constraint
+	 * did not admit would fail the migration outright rather than be dropped silently; this
+	 * proves the rows survive it, and that they survive it unchanged.
+	 */
+	@Test
+	@DisplayName("V11 widens place_kind without touching a single row of an existing street extract")
+	void v11LeavesAnExistingExtractUntouched() {
+		migrateTo("10");
+		insertPlace("Billstedter Hauptstraße", "Billstedt, 22111", "street");
+		insertPlace("Akeleiweg", "Lurup, 22549", "street");
+		insertPlace("Hamburg-Altstadt", null, "district");
+
+		migrateTo("11");
+
+		List<String> names = probeJdbc.sql("SELECT name FROM gis_meta.place ORDER BY name")
+				.query(String.class).list();
+		assertThat(names).containsExactly("Akeleiweg", "Billstedter Hauptstraße", "Hamburg-Altstadt");
+		String context = probeJdbc.sql("SELECT context FROM gis_meta.place WHERE name = 'Akeleiweg'")
+				.query(String.class).single();
+		assertThat(context).isEqualTo("Lurup, 22549");
+	}
+
+	@Test
+	@DisplayName("V11 admits kind='address' -- and still refuses an unknown kind and a Photon source")
+	void v11AdmitsAddressAndNothingElseNew() {
+		migrateTo("11");
+
+		insertPlace("Eickhoffweg 12", "Wandsbek, 22041", "address");
+		assertThat(probeJdbc.sql("SELECT count(*) FROM gis_meta.place WHERE kind = 'address'")
+				.query(Integer.class).single()).isEqualTo(1);
+
+		assertThatInsertFails("'hausnummer'", "'hamburg'");
+		// CONTRACT.md's rule that Photon hits are never stored is untouched by V11.
+		assertThatInsertFails("'address'", "'photon'");
+	}
+
+	/**
+	 * Holds {@link HamburgPlaceQuery}'s own statement -- the real constant, not a copy -- and
+	 * V11's partial index together. Postgres only uses a partial index for a query whose
+	 * WHERE clause it can prove implies the index predicate; a clause that loses that
+	 * property keeps every other test in this project green while quietly costing 513&nbsp;ms
+	 * instead of 30&nbsp;ms on the shortest terms the API accepts (measured on a copy of the
+	 * development database at the full 312329 rows). Nothing but a response time would show
+	 * it otherwise.
+	 *
+	 * <p>Postgres' proof is semantic rather than textual, and it is good at it: rewriting the
+	 * clause as {@code kind IN ('street', 'district', 'place')} still uses the index (checked
+	 * by hand). So this test is a floor, not a fence -- it catches the clause disappearing or
+	 * turning into something unprovable, not every rewrite of it.
+	 *
+	 * <p>{@code enable_seqscan = off} because a probe database holds three rows, and for
+	 * three rows a sequential scan is genuinely the better plan: what is under test is
+	 * whether the planner *can* use the index for this clause, not whether it chooses to at
+	 * a size at which it should not.
+	 */
+	@Test
+	@DisplayName("the no-address query can use V11's partial index -- what keeps a two-character term at 30 ms instead of 513")
+	void theQueryWithoutAddressesCanUseThePartialIndex() {
+		migrateTo("11");
+		insertPlace("Billstedter Hauptstraße", "Billstedt, 22111", "street");
+		insertPlace("Billstedter Hauptstraße 1", "Billstedt, 22111", "address");
+		insertPlace("Hamburg-Altstadt", null, "district");
+
+		String explainable = HamburgPlaceQuery.SQL_WITHOUT_ADDRESSES
+				.replace(":term", "'Hauptstra'")
+				.replace(":pattern", "'%Hauptstra%'")
+				.replace(":limit", "10");
+		probeJdbc.sql("SET enable_seqscan = off").update();
+		String plan = String.join("\n", probeJdbc.sql("EXPLAIN " + explainable).query(String.class).list());
+
+		assertThat(plan).contains("place_name_trgm_no_address_idx");
+	}
+
+	@Test
+	@DisplayName("V11 leaves V10's own index in place -- a search that does include addresses still has one")
+	void v11KeepsTheFullIndexAsWell() {
+		migrateTo("11");
+
+		List<String> indexes = probeJdbc.sql("""
+				SELECT indexname FROM pg_indexes
+				WHERE schemaname = 'gis_meta' AND tablename = 'place'
+				ORDER BY indexname
+				""").query(String.class).list();
+
+		assertThat(indexes).contains("place_name_trgm_idx", "place_name_trgm_no_address_idx");
 	}
 
 	private void assertThatInsertFails(String kind, String source) {
