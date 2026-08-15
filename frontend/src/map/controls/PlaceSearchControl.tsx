@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
-import { LandPlot, Loader2, MapPin, Route, Search, X } from 'lucide-react'
+import { House, LandPlot, Loader2, MapPin, Route, Search, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,16 +20,25 @@ const SOURCE_LABEL: Record<Place['source'], string> = {
   photon: 'OpenStreetMap',
 }
 
+/**
+ * `House` for an address, not a second pin: `MapPin` already stands for "a place
+ * somewhere" and `Route` for the street the address sits on -- the one thing a user has
+ * to read off a hit at a glance is whether they got the whole street or the single
+ * building, and two pin-shaped icons would put exactly that distinction into the label
+ * only. A house outline shares no silhouette with any of the three.
+ */
 const KIND_ICON: Record<PlaceKind, typeof MapPin> = {
   street: Route,
   district: LandPlot,
   place: MapPin,
+  address: House,
 }
 
 const KIND_LABEL: Record<PlaceKind, string> = {
   street: 'Straße',
   district: 'Ortsteil',
   place: 'Ort',
+  address: 'Adresse',
 }
 
 function optionId(listboxId: string, index: number): string {

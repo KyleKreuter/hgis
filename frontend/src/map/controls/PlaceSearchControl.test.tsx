@@ -28,6 +28,30 @@ const PLACES: Place[] = [
   },
 ]
 
+/**
+ * The same street once as a street and once as a house number -- what the backend answers
+ * with for `Eickhoffweg 12` (API-Contract "Hausnummern in der Ortssuche"): `name` carries
+ * street and number together, `context` keeps the street format `Ortsteil, Postleitzahl`.
+ */
+const ADDRESS_PLACES: Place[] = [
+  {
+    name: 'Eickhoffweg 12',
+    context: 'Wandsbek, 22041',
+    lng: 10.0936,
+    lat: 53.5769,
+    source: 'hamburg',
+    kind: 'address',
+  },
+  {
+    name: 'Eickhoffweg',
+    context: 'Wandsbek, 22041',
+    lng: 10.0512,
+    lat: 53.5871,
+    source: 'hamburg',
+    kind: 'street',
+  },
+]
+
 const NAME = 'Straße oder Ort suchen'
 
 /**
@@ -66,6 +90,30 @@ describe('PlaceSearchControl', () => {
     expect(context.className).not.toContain('truncate')
     expect(within(options[1]).getByText('OpenStreetMap')).toBeInTheDocument()
     expect(within(options[1]).getByText('Sudwalde, 27257')).toBeInTheDocument()
+  })
+
+  // A house number is a fourth `kind`, not a street with a suffix: it has to be readable
+  // as an address from the row itself, both in the label and in the icon. The two icons
+  // are compared against each other rather than matched against a class name, because the
+  // failure worth catching is "address reuses the street icon", which a class-name check
+  // would only notice by accident.
+  test('weist einen Hausnummer-Treffer als Adresse aus', async () => {
+    stubFetch([{ match: '/api/places', body: { places: ADDRESS_PLACES } }])
+    renderWithQueryClient(<PlaceSearchControl onSelect={vi.fn()} onClear={vi.fn()} />)
+    const user = userEvent.setup()
+
+    await user.type(screen.getByRole('combobox', { name: NAME }), 'Eickhoffweg 12')
+
+    const options = await screen.findAllByRole('option')
+    expect(within(options[0]).getByText('Eickhoffweg 12')).toBeInTheDocument()
+    expect(within(options[0]).getByTitle('Adresse')).toBeInTheDocument()
+    expect(within(options[0]).getByText('Wandsbek, 22041')).toBeInTheDocument()
+    expect(within(options[1]).getByTitle('Straße')).toBeInTheDocument()
+
+    const addressIcon = options[0].querySelector('svg')
+    const streetIcon = options[1].querySelector('svg')
+    expect(addressIcon).not.toBeNull()
+    expect(addressIcon?.innerHTML).not.toEqual(streetIcon?.innerHTML)
   })
 
   test('wählt einen Treffer per Pfeiltasten und Eingabetaste', async () => {
