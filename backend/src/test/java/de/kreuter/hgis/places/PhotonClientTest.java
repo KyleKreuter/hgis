@@ -1,6 +1,7 @@
 package de.kreuter.hgis.places;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
@@ -111,12 +112,14 @@ class PhotonClientTest {
 	}
 
 	@Test
-	@DisplayName("results without a name are dropped -- CONTRACT.md's name field is required")
-	void unnamedFeaturesAreDropped() {
+	@DisplayName("results with neither a name nor an address are dropped -- CONTRACT.md's name field is required")
+	void featuresWithNeitherANameNorAnAddressAreDropped() {
 		Harness h = harness(true);
 		String body = """
 				{"type":"FeatureCollection","features":[
 				  {"type":"Feature","properties":{"osm_key":"highway"},"geometry":{"type":"Point","coordinates":[10.0,53.5]}},
+				  {"type":"Feature","properties":{"street":"Testweg","osm_key":"building"},"geometry":{"type":"Point","coordinates":[10.0,53.5]}},
+				  {"type":"Feature","properties":{"housenumber":"12","osm_key":"building"},"geometry":{"type":"Point","coordinates":[10.0,53.5]}},
 				  {"type":"Feature","properties":{"name":"Testweg","osm_key":"highway"},"geometry":{"type":"Point","coordinates":[10.0,53.5]}}
 				]}
 				""";
@@ -125,6 +128,56 @@ class PhotonClientTest {
 
 		List<PlaceDtos.Result> results = h.client().search("Testweg", 5);
 
+		// Street without a number and number without a street are both still unusable: only
+		// the two of them together make a name.
 		assertThat(results).extracting(PlaceDtos.Result::name).containsExactly("Testweg");
+	}
+
+	/**
+	 * A real answer to {@code q=Eickhoffweg 12} (photon.komoot.io, 2026-08-15). Both hits
+	 * are addresses with no name of their own -- exactly the hits this client used to drop,
+	 * which is why the house-number search found nothing outside Hamburg before.
+	 */
+	@Test
+	@DisplayName("an unnamed hit with street and housenumber becomes a kind=address with both of them in its name")
+	void anAddressGetsItsNameFromStreetAndHouseNumber() {
+		Harness h = harness(true);
+		h.server().expect(requestTo(containsString("q=Eickhoffweg%2012")))
+				.andRespond(withSuccess(fixture("photon_eickhoffweg12.json"), MediaType.APPLICATION_JSON));
+
+		List<PlaceDtos.Result> results = h.client().search("Eickhoffweg 12", 5);
+
+		assertThat(results).extracting(PlaceDtos.Result::name, PlaceDtos.Result::context,
+						PlaceDtos.Result::kind, PlaceDtos.Result::source)
+				.containsExactly(
+						tuple("Eickhoffweg 12", "Hamburg, 22041", "address", "photon"),
+						tuple("Eickhoffweg 12", "Ense, 59469", "address", "photon"));
+
+		// The hit outside Hamburg is the one that matters here: inside Hamburg the local
+		// table answers first and Photon is never even asked (PlaceSearchService).
+		PlaceDtos.Result ense = results.get(1);
+		assertThat(ense.lng()).isCloseTo(7.9578867, within(0.0000001));
+		assertThat(ense.lat()).isCloseTo(51.5077141, within(0.0000001));
+		h.server().verify();
+	}
+
+	@Test
+	@DisplayName("a hit that brought its own name keeps it, and stays a place, even when it also carries a house number")
+	void aNamedHitWithAHouseNumberIsStillAPlace() {
+		Harness h = harness(true);
+		String body = """
+				{"type":"FeatureCollection","features":[
+				  {"type":"Feature",
+				   "properties":{"name":"Rathaus","street":"Rathausmarkt","housenumber":"1","osm_key":"amenity"},
+				   "geometry":{"type":"Point","coordinates":[10.0,53.5]}}
+				]}
+				""";
+		h.server().expect(requestTo(containsString("q=Rathaus")))
+				.andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+		List<PlaceDtos.Result> results = h.client().search("Rathaus", 5);
+
+		assertThat(results).extracting(PlaceDtos.Result::name, PlaceDtos.Result::kind)
+				.containsExactly(tuple("Rathaus", "place"));
 	}
 }

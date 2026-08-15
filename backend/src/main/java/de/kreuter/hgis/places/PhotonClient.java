@@ -106,10 +106,23 @@ class PhotonClient {
 	private static PlaceDtos.Result toResult(JsonNode feature) {
 		JsonNode properties = feature.path("properties");
 		String name = blankToNull(properties.path("name").asString(null));
+
+		// OpenStreetMap gives a house number no name of its own -- it has street and
+		// housenumber instead, and nothing else. Measured live for q="Eickhoffweg 12"
+		// (2026-08-15): both hits read name=null, street="Eickhoffweg", housenumber="12",
+		// osm_key="building". Joining the two is what makes an address outside Hamburg
+		// findable at all; the whole hit used to be dropped here for want of a name.
+		boolean isAddress = false;
 		if (name == null) {
-			// Photon returns unnamed address/house-number results too; without a name
-			// there is nothing to show under CONTRACT.md's "name" field.
-			return null;
+			String street = blankToNull(properties.path("street").asString(null));
+			String houseNumber = blankToNull(properties.path("housenumber").asString(null));
+			if (street == null || houseNumber == null) {
+				// Neither a name nor an address: there is still nothing to show under
+				// CONTRACT.md's "name" field, so this hit is still dropped.
+				return null;
+			}
+			name = street + " " + houseNumber;
+			isAddress = true;
 		}
 
 		JsonNode coordinates = feature.path("geometry").path("coordinates");
@@ -119,10 +132,23 @@ class PhotonClient {
 		double lng = coordinates.get(0).asDouble();
 		double lat = coordinates.get(1).asDouble();
 
-		String kind = HIGHWAY_KEY.equals(properties.path("osm_key").asString(null)) ? "street" : "place";
+		String kind = kind(properties, isAddress);
 		String context = context(properties);
 
 		return new PlaceDtos.Result(name, context, lng, lat, "photon", kind);
+	}
+
+	/**
+	 * {@code "address"} only for a hit whose name this class had to build out of street and
+	 * house number. A hit that brought its own name keeps the existing street/place split,
+	 * even when it also carries a house number -- a named building at number 12 is a place
+	 * one looks up by its name, not an address one looks up by its number.
+	 */
+	private static String kind(JsonNode properties, boolean isAddress) {
+		if (isAddress) {
+			return "address";
+		}
+		return HIGHWAY_KEY.equals(properties.path("osm_key").asString(null)) ? "street" : "place";
 	}
 
 	/**

@@ -11,10 +11,16 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 /**
- * Runs {@code POST /api/places/refresh}: fetches Hamburg's streets and districts, parses
- * them and replaces the whole {@code place} table -- CONTRACT.md, measured at 47 seconds
- * for the streets alone, which is why this is a job rather than something the request
- * thread waits on.
+ * Runs {@code POST /api/places/refresh}: fetches Hamburg's streets, districts and house
+ * numbers, parses them and replaces the whole {@code place} table -- CONTRACT.md, measured
+ * at 47 seconds for the streets alone, which is why this is a job rather than something the
+ * request thread waits on.
+ *
+ * <p>The house numbers dominate that runtime: 302393 of them (measured 2026-08-15) arrive
+ * over 31 requests of roughly 10.5&nbsp;MB each, about four minutes in total against under
+ * one for streets and districts together. That is why every page updates the job's progress
+ * as it lands -- a job that shows nothing moving for four minutes is indistinguishable, to
+ * whoever is watching it, from one that has hung.
  *
  * <p>Fetch-and-parse happens before {@link PlaceWriter#replaceAll} is ever called, so the
  * one database transaction CONTRACT.md asks for ("erst leeren, dann schreiben, in einer
@@ -61,16 +67,30 @@ public class PlaceRefreshService {
 			List<ParsedPlace> streets = fetcher.fetchStrassen();
 			List<ParsedPlace> districts = fetcher.fetchOrtsteile();
 
-			List<ParsedPlace> all = new ArrayList<>(streets.size() + districts.size());
+			// Asked for before the first page rather than after the last: it is what turns
+			// the progress the pages below report into a fraction of something, and it costs
+			// one request of a few hundred bytes.
+			long addressTotal = fetcher.countHauskoordinaten();
+			Long total = addressTotal < 0 ? null : streets.size() + districts.size() + addressTotal;
+
+			List<ParsedPlace> all = new ArrayList<>(streets.size() + districts.size()
+					+ (addressTotal < 0 ? 0 : (int) addressTotal));
 			all.addAll(streets);
 			all.addAll(districts);
-			jobService.updateProgress(jobId, 0, (long) all.size(), 0);
+			jobService.updateProgress(jobId, all.size(), total, 0);
+
+			fetcher.fetchHauskoordinaten(addressTotal, page -> {
+				all.addAll(page);
+				jobService.updateProgress(jobId, all.size(), total, 0);
+			});
+			int addresses = all.size() - streets.size() - districts.size();
 
 			int written = writer.replaceAll(all);
 			jobService.updateProgress(jobId, written, (long) all.size(), 0);
 
 			jobService.markSucceeded(jobId, written + " Orte aktualisiert ("
-					+ streets.size() + " Straßen, " + districts.size() + " Ortsteile)");
+					+ streets.size() + " Straßen, " + districts.size() + " Ortsteile, "
+					+ addresses + " Adressen)");
 		}
 		catch (Exception e) {
 			log.error("Place refresh {} failed", jobId, e);

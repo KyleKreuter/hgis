@@ -1,7 +1,10 @@
 package de.kreuter.hgis.places;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -14,6 +17,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -173,6 +177,70 @@ class PlaceControllerTest {
 				.andExpect(jsonPath("$.places.length()").value(25));
 	}
 
+	// --- the digit rule --------------------------------------------------------------------
+
+	@Test
+	@DisplayName("a term with a digit finds the address -- the house-number contract's own acceptance case")
+	void aTermWithADigitFindsTheAddress() throws Exception {
+		seedPlace("Eickhoffweg", "Wandsbek, 22041", "street", 10.0937, 53.5769);
+		seedPlace("Eickhoffweg 12", "Wandsbek, 22041", "address", 10.0936, 53.5769);
+
+		mvc.perform(get("/api/places").param("q", "Eickhoffweg 12"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.places.length()").value(1))
+				.andExpect(jsonPath("$.places[0].name").value("Eickhoffweg 12"))
+				.andExpect(jsonPath("$.places[0].context").value("Wandsbek, 22041"))
+				.andExpect(jsonPath("$.places[0].kind").value("address"))
+				.andExpect(jsonPath("$.places[0].source").value("hamburg"))
+				.andExpect(jsonPath("$.places[0].lng").value(10.0936))
+				.andExpect(jsonPath("$.places[0].lat").value(53.5769));
+	}
+
+	@Test
+	@DisplayName("an address with a letter suffix is found by typing it -- \"Eickhoffweg 1a\" is not \"Eickhoffweg 1\"")
+	void anAddressWithALetterSuffixIsFound() throws Exception {
+		seedPlace("Eickhoffweg 1", "Wandsbek, 22041", "address", 10.09, 53.57);
+		seedPlace("Eickhoffweg 1a", "Wandsbek, 22041", "address", 10.093, 53.577);
+
+		mvc.perform(get("/api/places").param("q", "Eickhoffweg 1a"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.places.length()").value(1))
+				.andExpect(jsonPath("$.places[0].name").value("Eickhoffweg 1a"));
+	}
+
+	/**
+	 * The case the whole digit rule exists for. Without it, 302393 addresses share one table
+	 * with 9936 streets, so a street name typed without a number answers with house numbers
+	 * in that street instead of the street -- and there is no {@code limit} large enough to
+	 * make that useful. The three addresses seeded here would fill the answer entirely;
+	 * "Hauptstra" has to come back with the two streets and nothing else.
+	 */
+	@Test
+	@DisplayName("a term without a digit finds streets only -- the house numbers in them stay out of the way")
+	void aTermWithoutADigitFindsNoAddresses() throws Exception {
+		seedPlace("Billstedter Hauptstraße", "Billstedt, 22111", "street", 10.1, 53.55);
+		seedPlace("Hummelsbüttler Hauptstraße", "Hummelsbüttel, 22339", "street", 10.05, 53.64);
+		seedPlace("Billstedter Hauptstraße 1", "Billstedt, 22111", "address", 10.1, 53.55);
+		seedPlace("Billstedter Hauptstraße 2", "Billstedt, 22111", "address", 10.1, 53.55);
+		seedPlace("Billstedter Hauptstraße 3", "Billstedt, 22111", "address", 10.1, 53.55);
+
+		mvc.perform(get("/api/places").param("q", "Hauptstra"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.places.length()").value(2))
+				.andExpect(jsonPath("$.places[*].kind").value(everyItem(is("street"))));
+	}
+
+	@Test
+	@DisplayName("a district is still found without a digit -- the rule keeps addresses out, not everything else")
+	void aDistrictIsStillFoundWithoutADigit() throws Exception {
+		seedPlace("Hamburg-Altstadt", null, "district", 10.0, 53.55);
+
+		mvc.perform(get("/api/places").param("q", "Altstadt"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.places.length()").value(1))
+				.andExpect(jsonPath("$.places[0].kind").value("district"));
+	}
+
 	// --- POST /api/places/refresh ------------------------------------------------------------
 
 	@Test
@@ -191,7 +259,8 @@ class PlaceControllerTest {
 		Integer count = jdbc.sql("SELECT count(*) FROM gis_meta.place").query(Integer.class).single();
 		// strassen_akeleiweg.xml: one street, two postal-code segments.
 		// ortsteile_sample20.xml: twenty districts.
-		assertThat(count).isEqualTo(22);
+		// hauskoordinaten_eickhoffweg.xml: four house numbers.
+		assertThat(count).isEqualTo(26);
 
 		mockHamburgWfsServer.verify();
 	}
@@ -210,11 +279,92 @@ class PlaceControllerTest {
 		assertThat(stale).isZero();
 	}
 
+	@Test
+	@DisplayName("refresh: the house numbers land as kind=address and are then findable through the search, end to end")
+	void refreshWritesAddressesThatAreThenFindable() throws Exception {
+		expectSuccessfulWfsFetch();
+
+		String body = mvc.perform(post("/api/places/refresh"))
+				.andExpect(status().isAccepted())
+				.andReturn().getResponse().getContentAsString();
+		awaitSucceeded(mapper.readTree(body).get("id").asString());
+
+		Integer addresses = jdbc.sql("SELECT count(*) FROM gis_meta.place WHERE kind = 'address'")
+				.query(Integer.class).single();
+		assertThat(addresses).isEqualTo(4); // hauskoordinaten_eickhoffweg.xml
+
+		mvc.perform(get("/api/places").param("q", "Eickhoffweg 12"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.places[0].name").value("Eickhoffweg 12"))
+				.andExpect(jsonPath("$.places[0].context").value("Wandsbek, 22041"))
+				.andExpect(jsonPath("$.places[0].kind").value("address"));
+
+		mockHamburgWfsServer.verify();
+	}
+
+	/**
+	 * The count Hamburg answers is taken before the first page and is only ever a starting
+	 * point -- a paged request cannot report one of its own (it says {@code
+	 * numberMatched="unknown"}), so the paging loop has to be able to run without it and
+	 * stop at the first empty page instead. This drives that path: the count is "unknown",
+	 * one page of four addresses arrives, the next page is empty.
+	 */
+	@Test
+	@DisplayName("refresh: with no count from Hamburg, paging runs until a page comes back empty")
+	void refreshPagesUntilAnEmptyPageWhenTheCountIsUnknown() throws Exception {
+		mockHamburgWfsServer.expect(requestTo(containsString("TYPENAMES=dog:Strassen")))
+				.andRespond(withSuccess(fixture("strassen_akeleiweg.xml"), MediaType.TEXT_XML));
+		mockHamburgWfsServer.expect(requestTo(containsString("TYPENAMES=dog:Ortsteile")))
+				.andRespond(withSuccess(fixture("ortsteile_sample20.xml"), MediaType.TEXT_XML));
+		mockHamburgWfsServer.expect(requestTo(containsString("RESULTTYPE=hits")))
+				.andRespond(withSuccess(fixture("hauskoordinaten_hits_unbekannt.xml"), MediaType.TEXT_XML));
+		mockHamburgWfsServer.expect(requestTo(containsString("STARTINDEX=0")))
+				.andRespond(withSuccess(fixture("hauskoordinaten_eickhoffweg.xml"), MediaType.TEXT_XML));
+		mockHamburgWfsServer.expect(requestTo(containsString("STARTINDEX=10000")))
+				.andRespond(withSuccess(fixture("hauskoordinaten_leer.xml"), MediaType.TEXT_XML));
+
+		String body = mvc.perform(post("/api/places/refresh")).andReturn().getResponse().getContentAsString();
+		awaitSucceeded(mapper.readTree(body).get("id").asString());
+
+		Integer count = jdbc.sql("SELECT count(*) FROM gis_meta.place").query(Integer.class).single();
+		assertThat(count).isEqualTo(26); // 2 street segments + 20 districts + 4 addresses
+		mockHamburgWfsServer.verify();
+	}
+
+	@Test
+	@DisplayName("refresh: the job reports what it wrote, broken down by kind, and its progress counts the addresses too")
+	void refreshReportsItsProgressAndWhatItWrote() throws Exception {
+		expectSuccessfulWfsFetch();
+
+		String body = mvc.perform(post("/api/places/refresh")).andReturn().getResponse().getContentAsString();
+		String jobId = mapper.readTree(body).get("id").asString();
+		awaitSucceeded(jobId);
+
+		Map<String, Object> job = jdbc.sql("""
+				SELECT message, processed_count, total_count FROM gis_meta.job WHERE id = :id
+				""").param("id", java.util.UUID.fromString(jobId)).query().singleRow();
+
+		assertThat((String) job.get("message")).isEqualTo("26 Orte aktualisiert (2 Straßen, 20 Ortsteile, 4 Adressen)");
+		assertThat(((Number) job.get("processed_count")).longValue()).isEqualTo(26L);
+		assertThat(((Number) job.get("total_count")).longValue()).isEqualTo(26L);
+	}
+
 	private void expectSuccessfulWfsFetch() {
 		mockHamburgWfsServer.expect(requestTo(containsString("TYPENAMES=dog:Strassen")))
 				.andRespond(withSuccess(fixture("strassen_akeleiweg.xml"), MediaType.TEXT_XML));
 		mockHamburgWfsServer.expect(requestTo(containsString("TYPENAMES=dog:Ortsteile")))
 				.andRespond(withSuccess(fixture("ortsteile_sample20.xml"), MediaType.TEXT_XML));
+		mockHamburgWfsServer.expect(requestTo(containsString("RESULTTYPE=hits")))
+				.andRespond(withSuccess(fixture("hauskoordinaten_hits_vier.xml"), MediaType.TEXT_XML));
+		// PROPERTYNAME asserted literally, not just as "some parameter": without it every
+		// address also carries its boundary polygon and the extract grows from roughly
+		// 318 MB to roughly 2.1 GB (measured 2026-08-15). It is not an optimisation that
+		// may quietly fall away.
+		mockHamburgWfsServer.expect(requestTo(allOf(
+						containsString("TYPENAMES=gages:Hauskoordinaten"),
+						containsString("STARTINDEX=0"),
+						containsString("PROPERTYNAME=iso19112:geographicIdentifier,gages:position"))))
+				.andRespond(withSuccess(fixture("hauskoordinaten_eickhoffweg.xml"), MediaType.TEXT_XML));
 	}
 
 	private void awaitSucceeded(String jobId) throws InterruptedException {
