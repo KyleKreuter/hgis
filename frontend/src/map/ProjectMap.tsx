@@ -64,7 +64,7 @@ export function ProjectMap({
   function handlePlaceSelect(place: Place) {
     setSelectedPlace([place.lng, place.lat])
     setPlaceZoomTo((previous) => ({
-      extent: placeExtent(place.lng, place.lat),
+      extent: placeExtent(place.lng, place.lat, place.kind),
       nonce: (previous?.nonce ?? 0) + 1,
     }))
   }

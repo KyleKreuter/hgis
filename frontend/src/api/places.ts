@@ -9,8 +9,18 @@ import { api } from './client'
  */
 export type PlaceSource = 'hamburg' | 'photon'
 
-/** `street` a road, `district` a Hamburg Ortsteil, `place` everything else Photon returns. */
-export type PlaceKind = 'street' | 'district' | 'place'
+/**
+ * `street` a road, `district` a Hamburg Ortsteil, `place` everything else Photon returns,
+ * `address` a single house number.
+ *
+ * An `address` hit carries street *and* house number in `name` ("Eickhoffweg 12") -- it is
+ * one hit, not a street hit with an extra field, and nothing here has to take it apart
+ * again. The backend only searches addresses at all once the query contains a digit, so
+ * `Eickhoffweg` still answers with streets and `Eickhoffweg 12` with addresses; that rule
+ * lives entirely on the server and costs the client no second request and no second
+ * endpoint.
+ */
+export type PlaceKind = 'street' | 'district' | 'place' | 'address'
 
 export interface Place {
   /** The name alone, without whatever disambiguates it -- that lives in `context`. */
