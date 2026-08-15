@@ -169,6 +169,47 @@ class PlaceMigrationTest {
 		assertThat(matches).isTrue();
 	}
 
+	/**
+	 * ß -&gt; ss is not covered by Unicode decomposition the way ä/ö/ü are (ß has none), so
+	 * whether it folds at all depends entirely on whether the bundled {@code unaccent.rules}
+	 * happens to list it -- a property of the PostgreSQL/PostGIS build, not of {@code
+	 * place_search_key}'s own SQL, and not guaranteed by any standard. Measured directly
+	 * against this project's own image ({@code imresamu/postgis:17-3.5}, the same one
+	 * {@code docker-compose.yml} and {@code TestcontainersConfiguration} use):
+	 * {@code /usr/share/postgresql/17/tsearch_data/unaccent.rules} line 43 reads {@code ß ss}.
+	 * No code change followed from that -- adding a manual {@code replace(..., 'ß', 'ss')}
+	 * would duplicate what the extension already does and read, to the next person, as a
+	 * sign that {@code unaccent} were somehow broken here.
+	 *
+	 * <p>This test exists to hold that property in place rather than to prove it once: {@code
+	 * docker-compose.yml} reads its image from {@code ${HGIS_DB_IMAGE:-...}}, swappable from
+	 * outside, and the ß rule only entered {@code unaccent.rules} with PostgreSQL 12. A future
+	 * image or version change that drops the rule must fail this test loudly -- a search that
+	 * silently stops finding "Hauptstraße" for someone who types "Hauptstrasse" is exactly the
+	 * kind of regression nobody notices until a user reports "the search doesn't work".
+	 */
+	@Test
+	@DisplayName("place_search_key folds ß and ss onto each other in both directions -- pinned by this project's own PostGIS image, not guaranteed by unaccent in general")
+	void searchKeyFoldsSharfesSInBothDirections() {
+		migrateTo("10");
+		insertPlace("Billstedter Hauptstraße", "Billstedt, 22111", "street"); // stored with ß
+		insertPlace("Musterstrasse", null, "street"); // stored with ss
+
+		List<String> foundByTypingSs = probeJdbc.sql("""
+				SELECT name FROM gis_meta.place
+				WHERE gis_meta.place_search_key(name) ILIKE gis_meta.place_search_key('%hauptstrasse%')
+				""").query(String.class).list();
+		assertThat(foundByTypingSs).as("\"Hauptstrasse\" (typed with ss) must find \"Hauptstraße\" (stored with ß)")
+				.containsExactly("Billstedter Hauptstraße");
+
+		List<String> foundByTypingSharfesS = probeJdbc.sql("""
+				SELECT name FROM gis_meta.place
+				WHERE gis_meta.place_search_key(name) ILIKE gis_meta.place_search_key('%musterstraße%')
+				""").query(String.class).list();
+		assertThat(foundByTypingSharfesS).as("\"Musterstraße\" (typed with ß) must find \"Musterstrasse\" (stored with ss)")
+				.containsExactly("Musterstrasse");
+	}
+
 	private void insertPlace(String name, String context, String kind) {
 		probeJdbc.sql("""
 				INSERT INTO gis_meta.place (id, name, context, kind, source, geom)
