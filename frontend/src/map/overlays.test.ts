@@ -5,6 +5,7 @@ import {
   overlayOrder,
   overlayTier,
   raiseOverlays,
+  PLACE_MARKER_LAYER_ID,
   type OverlayMapLike,
 } from './overlays'
 
@@ -12,6 +13,7 @@ const DATA = 'hgis-layer-gebaeude-render'
 const LABEL = 'hgis-layer-gebaeude-label'
 const SELECTION = 'hgis-layer-gebaeude-selected'
 const SELECTION_OUTLINE = 'hgis-layer-gebaeude-selected-outline'
+const PLACE_MARKER = PLACE_MARKER_LAYER_ID
 const SKETCH_FILL = 'hgis-measurement-fill'
 const SKETCH_VERTEX = 'hgis-measurement-vertex'
 const RECT_FILL = 'hgis-rectangle-select-fill'
@@ -42,11 +44,12 @@ function createFakeMap(initial: string[]) {
 }
 
 describe('overlayTier', () => {
-  it('erkennt Auswahl, Messung und Rechteckauswahl, aber keinen Datenlayer', () => {
+  it('erkennt Auswahl, Ortsmarke, Messung und Rechteckauswahl, aber keinen Datenlayer', () => {
     expect(overlayTier(SELECTION)).toBe(0)
-    expect(overlayTier(SKETCH_FILL)).toBe(1)
-    expect(overlayTier(RECT_FILL)).toBe(2)
-    expect(overlayTier(SPLIT_LINE)).toBe(3)
+    expect(overlayTier(PLACE_MARKER)).toBe(1)
+    expect(overlayTier(SKETCH_FILL)).toBe(2)
+    expect(overlayTier(RECT_FILL)).toBe(3)
+    expect(overlayTier(SPLIT_LINE)).toBe(4)
     expect(overlayTier(DATA)).toBe(-1)
     expect(overlayTier('basemap:osm')).toBe(-1)
     expect(isOverlayLayer(LABEL)).toBe(false)
@@ -56,6 +59,14 @@ describe('overlayTier', () => {
 describe('overlayOrder', () => {
   it('stellt die Messung über die Auswahl, unabhängig davon, wer zuerst da war', () => {
     expect(overlayOrder([SKETCH_FILL, SELECTION, DATA])).toEqual([SELECTION, SKETCH_FILL])
+  })
+
+  it('stellt die Ortsmarke über die Auswahl, aber unter die Messung', () => {
+    expect(overlayOrder([SKETCH_FILL, PLACE_MARKER, SELECTION, DATA])).toEqual([
+      SELECTION,
+      PLACE_MARKER,
+      SKETCH_FILL,
+    ])
   })
 
   it('stellt die Rechteckauswahl über Auswahl und Messung', () => {

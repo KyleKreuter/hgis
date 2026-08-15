@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import type { Place } from '@/api/places'
 import { layerListQuery, type LayerSummary } from '@/api/layers'
 import type { ProjectDetail } from '@/api/projects'
 import { BasemapControl } from './BasemapControl'
@@ -8,6 +9,8 @@ import { computeInitialView } from './initialView'
 import { MapCanvas } from './MapCanvas'
 import { MapLayerSync } from './MapLayerSync'
 import { MapViewportTracker } from './MapViewportTracker'
+import { placeExtent } from './placeExtent'
+import { PlaceMarker } from './PlaceMarker'
 import { ViewportPersistence } from './ViewportPersistence'
 import { ZoomToExtent, type ZoomRequest } from './ZoomToExtent'
 import { IdentifyControl } from './IdentifyControl'
@@ -15,6 +18,7 @@ import { MapImageControl } from './imageExport/MapImageControl'
 import { resolveBasemapSettings } from './resolveBasemapSettings'
 import { SelectionHighlight } from './SelectionHighlight'
 import { MapControls } from './controls/MapControls'
+import { PlaceSearchControl } from './controls/PlaceSearchControl'
 
 interface ProjectMapProps {
   project: ProjectDetail
@@ -51,6 +55,20 @@ export function ProjectMap({
   // it knows nothing about layers or projects.
   const resolved = resolveBasemapSettings(activeLayer, project)
 
+  // Own request/nonce pair, deliberately separate from `zoomTo` above: that one is the
+  // layer tree's "zoom to layer", driven by the workspace route, while a place search
+  // is entirely local to the map itself and has no reason to reach back into it.
+  const [placeZoomTo, setPlaceZoomTo] = useState<ZoomRequest | null>(null)
+  const [selectedPlace, setSelectedPlace] = useState<[number, number] | null>(null)
+
+  function handlePlaceSelect(place: Place) {
+    setSelectedPlace([place.lng, place.lat])
+    setPlaceZoomTo((previous) => ({
+      extent: placeExtent(place.lng, place.lat),
+      nonce: (previous?.nonce ?? 0) + 1,
+    }))
+  }
+
   // Already in the cache from `MapLayerSync`'s own fetch of the same query -- this is
   // what turns the layer list into the licence notices `MapCanvas` has to show next to
   // the basemap's own attribution (CONTRACT.md phase 23, section 11.7).
@@ -68,7 +86,10 @@ export function ProjectMap({
       <MapViewportTracker />
       <ViewportPersistence projectId={project.id} />
       <ZoomToExtent request={zoomTo} />
+      <ZoomToExtent request={placeZoomTo} />
       <SelectionHighlight projectId={project.id} />
+      <PlaceMarker position={selectedPlace} />
+      <PlaceSearchControl onSelect={handlePlaceSelect} onClear={() => setSelectedPlace(null)} />
       {identifyEnabled && <IdentifyControl activeLayerId={activeLayer?.id ?? null} />}
       {/* Top right, immediately left of the zoom stack (`right-11` clears its 28px
           column plus a gap): the top left corner is where the measurement readout

@@ -3,13 +3,13 @@ import type { Map as MapLibreMap } from 'maplibre-gl'
 /**
  * Which layers are overlays, and in which order they belong above the data.
  *
- * Four components add layers to the same style without knowing about each other:
+ * Several components add layers to the same style without knowing about each other:
  * `syncMapLayers` reconciles the catalog and finishes by moving every data layer to
- * the top, `SelectionHighlight` adds a highlight per selected feature, `MeasurementLayer`
- * draws its sketch, and `RectangleSelectTool` draws the rectangle being dragged.
- * Whoever ran last used to win -- so toggling a layer's visibility, changing a colour
- * or reordering the tree pushed the data over a running measurement, and the sketch
- * disappeared under it.
+ * the top, `SelectionHighlight` adds a highlight per selected feature, `PlaceMarker`
+ * pins the last place-search hit, `MeasurementLayer` draws its sketch, and
+ * `RectangleSelectTool` draws the rectangle being dragged. Whoever ran last used to
+ * win -- so toggling a layer's visibility, changing a colour or reordering the tree
+ * pushed the data over a running measurement, and the sketch disappeared under it.
  *
  * The fix is one shared rule instead of three private ones: an overlay is recognised
  * by its id, every writer calls `raiseOverlays` when it is done, and the tier list
@@ -21,6 +21,9 @@ import type { Map as MapLibreMap } from 'maplibre-gl'
 /** Id namespace of the selection highlight layers -- see `SelectionHighlight`. */
 export const SELECTION_LAYER_SUFFIX = '-selected'
 
+/** Id of the place-search pin -- see `PlaceMarker`. A single fixed id, not a namespace: unlike a selection or a sketch, there is only ever one. */
+export const PLACE_MARKER_LAYER_ID = 'hgis-place-marker-point'
+
 /** Id namespace of the measurement sketch layers -- see `MeasurementLayer`. */
 export const MEASUREMENT_LAYER_PREFIX = 'hgis-measurement'
 
@@ -31,17 +34,20 @@ export const RECTANGLE_SELECT_LAYER_PREFIX = 'hgis-rectangle-select'
 export const SPLIT_LINE_LAYER_PREFIX = 'hgis-split-line'
 
 /**
- * Bottom to top. The selection belongs above the data it points at; the measurement
+ * Bottom to top. The selection belongs above the data it points at; the place marker
+ * sits one step above that -- it is a static point of interest, not a feature of the
+ * layer underneath, but still less urgent than a tool actually in use. The measurement
  * sketch, the rectangle being dragged and the split line belong above everything,
  * because each is the one thing being drawn right now and a vertex or a corner hidden
  * under a highlight cannot be placed with any confidence.
  *
  * The split line is the one that has to be highest: it is drawn over an object that is
  * selected at the same time -- the selection is what said which object gets cut -- so
- * unlike the other three it genuinely overlaps the highlight, every time.
+ * unlike the others it genuinely overlaps the highlight, every time.
  */
 const TIERS: readonly ((layerId: string) => boolean)[] = [
   (layerId) => layerId.includes(SELECTION_LAYER_SUFFIX),
+  (layerId) => layerId === PLACE_MARKER_LAYER_ID,
   (layerId) => layerId.startsWith(MEASUREMENT_LAYER_PREFIX),
   (layerId) => layerId.startsWith(RECTANGLE_SELECT_LAYER_PREFIX),
   (layerId) => layerId.startsWith(SPLIT_LINE_LAYER_PREFIX),
