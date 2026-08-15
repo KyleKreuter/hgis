@@ -240,7 +240,17 @@ export function PlaceSearchControl({ onSelect, onClear }: PlaceSearchControlProp
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="absolute top-1/2 right-1 size-6 -translate-y-1/2"
+            // A plain X, deliberately motionless -- shaped like the toolbars' own close
+            // buttons (`EditToolbar`, `MeasurementToolbar`: ghost, `icon-sm`, `size-7`).
+            //
+            // Centred with `inset-y-0 my-auto` rather than `top-1/2 -translate-y-1/2`:
+            // that -50% base offset met the primitive's `active:translate-y-px` on every
+            // press, leaving `transition-all` to interpolate a percentage against a
+            // pixel -- a visible wobble the toolbars never show, since they carry no
+            // base transform. `transition-none` and the neutralised `active:` offset
+            // then go one step further than the toolbars do, because this button sits
+            // inside a field the user is typing into, where the eye is already busy.
+            className="absolute inset-y-0 right-1 my-auto size-7 transition-none active:translate-y-0"
             aria-label="Suche löschen"
             // Fires before the input's onBlur only in event order, not in effect --
             // both run, and clearing after closing is harmless either way.
