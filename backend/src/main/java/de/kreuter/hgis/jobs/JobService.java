@@ -48,6 +48,19 @@ public class JobService {
 		job.updateProgress(0, totalCount, 0);
 	}
 
+	/**
+	 * Starts a job that produces no layer -- {@code places.PlaceRefreshService} is the
+	 * first caller. Everything {@link #markRunning(UUID, UUID, Long)} does except setting
+	 * {@code outputLayerId}, the same way {@link #markDuplicateRunning} leaves it unset for
+	 * a job whose result is a project rather than a layer.
+	 */
+	@Transactional
+	public void markRunning(UUID jobId, Long totalCount) {
+		Job job = require(jobId);
+		job.markRunning();
+		job.updateProgress(0, totalCount, 0);
+	}
+
 	@Transactional
 	public void updateProgress(UUID jobId, long processedCount, Long totalCount, long skippedCount) {
 		require(jobId).updateProgress(processedCount, totalCount, skippedCount);

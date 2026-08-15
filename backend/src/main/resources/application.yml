@@ -41,6 +41,15 @@ spring:
       max-file-size: 500MB
       max-request-size: 500MB
 
+hgis:
+  places:
+    photon:
+      # Public donated endpoint by default (CONTRACT.md "Ortssuche"). Overridable so a
+      # self-hosted Photon instance can be used instead, and switchable off entirely --
+      # a Hamburg-only search still works with Photon disabled.
+      url: ${HGIS_PLACES_PHOTON_URL:https://photon.komoot.io/api/}
+      enabled: ${HGIS_PLACES_PHOTON_ENABLED:true}
+
 server:
   port: ${HGIS_PORT:8080}
   error:

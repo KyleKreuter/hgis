@@ -1,0 +1,146 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<wfs:FeatureCollection xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:wfs="http://www.opengis.net/wfs/2.0" xmlns:gml="http://www.opengis.net/gml/3.2" timeStamp="2026-08-15T16:15:15Z" numberMatched="unknown" numberReturned="0">
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30613749">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Billstedter Hauptstraße (OT 0130), Hamburg (22111, 22117)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30613749_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>572618.893 5932168.327 572618.893 5933170.562 573971.832 5933170.562 573971.832 5932168.327 572618.893 5932168.327</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30613749_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30613749_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>573295.363 5932669.444</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30613749_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30613749_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>573354.946 5932674.881</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;1;12;130;0130;B3300</dog:strassenschluessel>
+      <dog:strassenname>Billstedter Hauptstraße</dog:strassenname>
+      <dog:strassenname_normalisiert>BILSTEDTERHAUPTSTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>B423</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Billstedter Hauptstraße</dog:strassenname_kurz>
+      <dog:ortsteilname>Billstedt,OT 0130</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0130</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0130</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22111</dog:postleitzahl>
+      <dog:postleitzahl>22117</dog:postleitzahl>
+      <dog:postOrtsteil>Billstedt</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>BILSTEDT</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22111</dog:postleitzahl>
+      <dog:postleitzahl>22117</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30615922">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Hummelsbüttler Hauptstraße (OT 0520), Hamburg (22339)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30615922_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>568337.088 5943566.320 568337.088 5944839.474 568962.746 5944839.474 568962.746 5943566.320 568337.088 5943566.320</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30615922_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30615922_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>568649.917 5944202.897</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30615922_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30615922_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>568617.954 5944155.289</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;5;12;520;0520;H6890</dog:strassenschluessel>
+      <dog:strassenname>Hummelsbüttler Hauptstraße</dog:strassenname>
+      <dog:strassenname_normalisiert>HUMELSBUTLERHAUPTSTRASE</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>H542</dog:strassenname_soundex>
+      <dog:strassenname_kurz>Hummelsbüttler Hauptstr.</dog:strassenname_kurz>
+      <dog:ortsteilname>Hummelsbüttel,OT 0520</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0520</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0520</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22339</dog:postleitzahl>
+      <dog:postOrtsteil>Hummelsbüttel</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>HUMELSBUTEL</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22339</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+  <wfs:member>
+    <dog:Strassen xmlns:dog="http://www.adv-online.de/namespaces/adv/dog" gml:id="HH_STR_30617204">
+      <iso19112:geographicIdentifier xmlns:iso19112="http://www.opengis.net/iso19112">Luruper Hauptstraße 180-Parkanlagen (OT 0220), Hamburg (22547)</iso19112:geographicIdentifier>
+      <iso19112:geographicExtent xmlns:iso19112="http://www.opengis.net/iso19112">
+        <gmd:EX_BoundingPolygon xmlns:gmd="http://www.isotc211.org/2005/gmd">
+          <gmd:polygon>
+            <gml:Polygon gml:id="HH_STR_30617204_ISO19112_GEOGRAPHICEXTENT" srsName="urn:ogc:def:crs:EPSG::25832">
+              <gml:exterior>
+                <gml:LinearRing>
+                  <gml:posList>557555.238 5938710.592 557555.238 5938765.475 557663.359 5938765.475 557663.359 5938710.592 557555.238 5938710.592</gml:posList>
+                </gml:LinearRing>
+              </gml:exterior>
+            </gml:Polygon>
+          </gmd:polygon>
+        </gmd:EX_BoundingPolygon>
+      </iso19112:geographicExtent>
+      <iso19112:position xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30617204_ISO19112_POSITION'-->
+        <gml:Point gml:id="HH_STR_30617204_ISO19112_POSITION" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>557609.299 5938738.033</gml:pos>
+        </gml:Point>
+      </iso19112:position>
+      <iso19112:position_strassenachse xmlns:iso19112="http://www.opengis.net/iso19112">
+        <!--Inlined geometry 'HH_STR_30617204_ISO19112_POSITION_STRASSENACHSE'-->
+        <gml:Point gml:id="HH_STR_30617204_ISO19112_POSITION_STRASSENACHSE" srsName="urn:ogc:def:crs:EPSG::25832">
+          <gml:pos>557616.786 5938738.033</gml:pos>
+        </gml:Point>
+      </iso19112:position_strassenachse>
+      <iso19112:gazetteer xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SIGA_2#HH_SIGA_2"/>
+      <iso19112:locationType xmlns:iso19112="http://www.opengis.net/iso19112" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://geodienste.hamburg.de/HH_WFS_GAGES?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B+version%3D3.2&amp;STOREDQUERY_ID=urn:ogc:def:query:OGC-WFS::GetFeatureById&amp;ID=HH_SILC_2#HH_SILC_2"/>
+      <dog:land>02</dog:land>
+      <dog:strassenschluessel>02;2;08;220;0220;00034</dog:strassenschluessel>
+      <dog:strassenname>Luruper Hauptstraße 180-Parkanlagen</dog:strassenname>
+      <dog:strassenname_normalisiert>LURUPERHAUPTSTRASE180PARKANLAGEN</dog:strassenname_normalisiert>
+      <dog:strassenname_soundex>L616</dog:strassenname_soundex>
+      <dog:strassenname_kurz>-</dog:strassenname_kurz>
+      <dog:ortsteilname>Lurup,OT 0220</dog:ortsteilname>
+      <dog:ortsteilname_normalisiert>OT0220</dog:ortsteilname_normalisiert>
+      <dog:gemeindename_normalisiert>OT0220</dog:gemeindename_normalisiert>
+      <dog:postleitzahl>22547</dog:postleitzahl>
+      <dog:postOrtsteil>Lurup</dog:postOrtsteil>
+      <dog:postOrtsteil_normalisiert>LURUP</dog:postOrtsteil_normalisiert>
+      <dog:postleitzahl>22547</dog:postleitzahl>
+      <dog:ortsnamePost>Hamburg</dog:ortsnamePost>
+      <dog:ortsnamePost_normalisiert>HAMBURG</dog:ortsnamePost_normalisiert>
+    </dog:Strassen>
+  </wfs:member>
+</wfs:FeatureCollection>
