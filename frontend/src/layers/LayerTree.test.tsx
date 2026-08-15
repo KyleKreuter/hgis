@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 import { renderWithQueryClient, stubFetch } from '@/test/render'
 import type { LayerSummary, MapImageLayerSummary } from '@/api/layers'
+import { useMapViewport } from '@/map/mapViewportStore'
 import { LayerTree } from './LayerTree'
 
 function makeVectorLayer(overrides: Partial<LayerSummary> = {}): LayerSummary {
@@ -105,5 +106,43 @@ describe('LayerTree mit einem Kartenbild', () => {
     expect(within(menu).getByRole('menuitem', { name: /Felder verwalten/ })).toBeInTheDocument()
     expect(within(menu).getByRole('menuitem', { name: /Zuschnitt für alles darüber/ })).toBeInTheDocument()
     expect(within(menu).getByRole('menuitem', { name: /Layer exportieren/ })).toBeInTheDocument()
+  })
+})
+
+describe('LayerTree: das Auge am Kartenbild', () => {
+  test('sagt beim Zoom außerhalb des Fensters, ab wann der Layer zeichnet', async () => {
+    useMapViewport.setState({ bbox: null, zoom: 9.8 })
+    stubFetch([{ match: '/api/projects/p-1/layers', body: [makeMapImageLayer({ minZoom: 16 })] }])
+    renderWithQueryClient(<LayerTree {...baseProps()} />)
+
+    expect(await screen.findByTitle('Sichtbar ab Zoom 16 — Sie sind bei 10.')).toBeInTheDocument()
+  })
+
+  test('meldet innerhalb des Fensters, dass gezeichnet wird', async () => {
+    useMapViewport.setState({ bbox: null, zoom: 13 })
+    stubFetch([{ match: '/api/projects/p-1/layers', body: [makeMapImageLayer({ minZoom: 11 })] }])
+    renderWithQueryClient(<LayerTree {...baseProps()} />)
+
+    expect(await screen.findByTitle('Wird bei diesem Zoom gezeichnet')).toBeInTheDocument()
+  })
+
+  test('zeigt gar nichts, solange die Karte keinen Zoom gemeldet hat', async () => {
+    // Eine Aussage darueber, was der Nutzer sieht, waere hier geraten.
+    useMapViewport.setState({ bbox: null, zoom: null })
+    stubFetch([{ match: '/api/projects/p-1/layers', body: [makeMapImageLayer({ minZoom: 16 })] }])
+    renderWithQueryClient(<LayerTree {...baseProps()} />)
+
+    await screen.findByTitle('Stadtplan (Kartenbild)')
+    expect(screen.queryByTitle(/Sichtbar ab Zoom/)).toBeNull()
+    expect(screen.queryByTitle(/Wird bei diesem Zoom/)).toBeNull()
+  })
+
+  test('hängt einem Vektorlayer kein Auge an, sondern seine Objektzahl', async () => {
+    useMapViewport.setState({ bbox: null, zoom: 5 })
+    stubFetch([{ match: '/api/projects/p-1/layers', body: [makeVectorLayer({ minZoom: 16 })] }])
+    renderWithQueryClient(<LayerTree {...baseProps()} />)
+
+    expect(await screen.findByText('42')).toBeInTheDocument()
+    expect(screen.queryByTitle(/Sichtbar ab Zoom/)).toBeNull()
   })
 })

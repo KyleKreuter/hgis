@@ -4,6 +4,8 @@
  * formatting rules have a test of their own, independent of the component's DOM.
  */
 
+import { describeZoomWindow } from '@/layers/zoomWindow'
+
 /**
  * The scale window a service declares for one layer, as one line -- or `null` when the
  * service names neither bound, which is most of them (wms-api-vertrag.md: "minScale/
@@ -54,12 +56,7 @@ export function preferredImageFormat(offered: readonly string[]): string {
  * charged to the layer tree, and draws nothing -- which is indistinguishable from an
  * import that failed. Saying it outright costs one sentence.
  *
- * Silent when the map has not reported a zoom yet (`null`): a guess about what the user
- * can see is worse than no sentence at all.
+ * Delegates to `describeZoomWindow`, which the layer tree's own eye badge reads too:
+ * the toast and the badge must never disagree about whether a layer is on screen.
  */
-export function zoomWindowHint(minZoom: number, maxZoom: number, currentZoom: number | null): string | null {
-  if (currentZoom === null) return null
-  if (currentZoom < minZoom) return `Sichtbar ab Zoom ${minZoom} — Sie sind bei ${Math.round(currentZoom)}.`
-  if (currentZoom > maxZoom) return `Sichtbar bis Zoom ${maxZoom} — Sie sind bei ${Math.round(currentZoom)}.`
-  return null
-}
+export const zoomWindowHint = describeZoomWindow

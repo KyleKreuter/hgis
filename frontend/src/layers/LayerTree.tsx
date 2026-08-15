@@ -9,6 +9,8 @@ import {
   Crop,
   Crosshair,
   Download,
+  Eye,
+  EyeOff,
   FileDown,
   Filter,
   FilterX,
@@ -67,7 +69,9 @@ import {
   clipModeLabel,
 } from './clipMask'
 import { DeleteLayerDialog } from './DeleteLayerDialog'
+import { useMapViewport } from '@/map/mapViewportStore'
 import { GEOMETRY_LABELS } from './geometry'
+import { describeZoomWindow, zoomWindowState } from './zoomWindow'
 import { LayerBasemapDialog } from './LayerBasemapDialog'
 import { ManageFieldsDialog } from './ManageFieldsDialog'
 import { RenameLayerDialog } from './RenameLayerDialog'
@@ -457,11 +461,14 @@ function LayerRow({
         </span>
         {/* A Kartenbild's featureCount is always 0 (contract "wird nicht angezeigt") --
             showing it would read as an empty layer rather than as one with no concept
-            of objects at all. */}
-        {isVector && (
+            of objects at all. The slot the count would occupy carries the zoom-window
+            badge instead. */}
+        {isVector ? (
           <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground tabular-nums">
             {formatCount(layer.featureCount)}
           </span>
+        ) : (
+          <ZoomWindowBadge minZoom={layer.minZoom} maxZoom={layer.maxZoom} />
         )}
       </button>
 
@@ -637,5 +644,41 @@ function LayerRow({
         </DropdownMenuContent>
       </DropdownMenu>
     </li>
+  )
+}
+
+/**
+ * Whether this Kartenbild is being drawn at the zoom the map is standing at.
+ *
+ * Only for map images, and only because they are the kind that arrives with a zoom
+ * window it did not ask for: a WMS service declares the scale range each of its layers
+ * draws in, and roughly a third of Hamburg's services do (10 of 30 measured). A layer
+ * outside that range is not on the map, while its entry here sits with its tick set --
+ * which reads as a broken import rather than as a property of the service.
+ *
+ * Shown in both states rather than only the bad one: a badge that appears out of nowhere
+ * is a warning, and a layer that simply has a scale range is not a problem. Muted while
+ * everything is fine, plain while it is not.
+ *
+ * Deliberately not a button. The tick beside the name is what switches a layer on and
+ * off; a second control that looked like one but only reported would be two switches for
+ * one fact.
+ */
+function ZoomWindowBadge({ minZoom, maxZoom }: { minZoom: number; maxZoom: number }) {
+  const currentZoom = useMapViewport((state) => state.zoom)
+  const state = zoomWindowState(minZoom, maxZoom, currentZoom)
+  if (state === 'unknown') return null
+
+  const outside = state !== 'inside'
+  const Icon = outside ? EyeOff : Eye
+  return (
+    <span
+      className="ml-auto flex shrink-0 items-center"
+      // A title, not a tooltip component: the row is already a button with its own
+      // title, and nesting an interactive tooltip inside it would steal the click.
+      title={describeZoomWindow(minZoom, maxZoom, currentZoom) ?? 'Wird bei diesem Zoom gezeichnet'}
+    >
+      <Icon className={cn('size-3.5', outside ? 'text-foreground' : 'text-muted-foreground/50')} />
+    </span>
   )
 }
