@@ -41,10 +41,11 @@ import {
 import { MeasurementOverlay, MeasurementToolbar, useIsMeasuring } from '@/measurement'
 import { isVectorLayer, layerDetailQuery, layerListQuery } from '@/api/layers'
 import { featureDetailQuery } from '@/api/features'
-import { useSelection } from '@/state/selection'
+import { applyRemoteSelection, useSelection } from '@/state/selection'
+import { useDeferredLayerJump } from '@/state/useDeferredLayerJump'
 import { useLiveViewState } from '@/state/useLiveViewState'
 import { useViewStateWriter } from '@/state/useViewState'
-import { shouldRestoreActiveLayer } from '@/state/viewState'
+import { layerStateOf, shouldRestoreActiveLayer } from '@/state/viewState'
 import { boundsOfGeometry } from '@/map/geometryBounds'
 import { RectangleSelectTool } from '@/map/RectangleSelectTool'
 import { RectangleSelectToolbar } from '@/map/RectangleSelectToolbar'
@@ -89,10 +90,6 @@ function Workspace() {
   const [zoomTo, setZoomTo] = useState<ZoomRequest | null>(null)
   const clearSelection = useSelection((state) => state.clear)
   const viewState = useViewStateWriter(projectId)
-  // Held by this route rather than by the map or the table, for the same reason the
-  // writer above is: the stream belongs to the open project, so it opens when the project
-  // opens and closes when the project is left. A layer switch leaves it alone.
-  useLiveViewState(projectId, activeLayerId ?? null, viewState.hasPendingWrite)
   const editing = useEditSession({ layerId: activeLayerId ?? null, projectId })
   // Only the on/off fact, not the running measurement -- the sketch changes with every
   // mouse move, and re-rendering the whole workspace for that would be absurd.
@@ -140,6 +137,10 @@ function Workspace() {
   }
 
   function selectLayer(layerId: string | null) {
+    // The user has just said where they want to be, so a jump that is still waiting for
+    // them to finish is no longer wanted -- carrying it out afterwards would take the
+    // layer they just picked away again.
+    deferredJump.cancel()
     // A fid means nothing outside its layer, so a selection cannot survive the switch.
     clearSelection()
     // The switch itself is the action that makes this worth remembering (CONTRACT.md's
@@ -244,6 +245,63 @@ function Workspace() {
     shouldBlockFn: hasPendingWork,
     enableBeforeUnload: hasPendingWork,
     withResolver: true,
+  })
+
+  /**
+   * Follows a layer switch that came from somewhere else.
+   *
+   * Deliberately not `selectLayer`: that one also *saves* the switch, and this switch is
+   * already what the saved state says. Writing it back would answer someone else's change
+   * with a change of our own -- the same reason `applyRemoteSelection` exists on the
+   * selection side, and the same loop it avoids.
+   *
+   * `replace`, not `push`, for two reasons. A layer switch has never been a history entry
+   * in this workspace, and making the remote one an entry while the user's own is not
+   * would be incoherent. And an agent working through ten layers would bury "back to the
+   * project list" under ten steps -- the browser's back button has to stay a page control.
+   * What replaces it is the toast below, which is better at this job anyway: it says what
+   * happened, which no history entry can, and its way back leads to the layer the user was
+   * actually on rather than to some point in a chain.
+   */
+  function jumpToLayer(layerId: string) {
+    const cameFrom = activeLayerId
+    const cameFromName = activeLayer?.name
+    // Not the user's own doing, so it must not be saved back out. `select` on a different
+    // layer discards the previous selection by itself -- a fid means nothing outside its
+    // layer. Applied here rather than left to the attribute table's restore, which only
+    // runs on a layer's first visit and would leave a second jump back showing nothing.
+    const selection = layerStateOf(viewState.document, layerId).selection
+    applyRemoteSelection(() => useSelection.getState().select(layerId, selection, 'replace'))
+    navigate({ search: { layer: layerId }, replace: true })
+
+    toast.info(`Der Layer „${layerNameOf(layerId)}“ wurde von außen geöffnet`, {
+      // Long enough to read the sentence and decide, rather than the default few seconds:
+      // the view has just changed under the user, and the way back is the whole point.
+      duration: 12_000,
+      action:
+        cameFrom && cameFromName
+          ? { label: `Zurück zu „${cameFromName}“`, onClick: () => selectLayer(cameFrom) }
+          : undefined,
+    })
+  }
+
+  /** The layer's name, or a neutral stand-in while the catalog has not caught up. */
+  function layerNameOf(layerId: string): string {
+    return layers?.find((layer) => layer.id === layerId)?.name ?? 'ohne Namen'
+  }
+
+  // Waits out unsaved work before moving the view; see the hook for why saving and
+  // discarding are the same thing to it.
+  const deferredJump = useDeferredLayerJump(unsavedChangesCount, jumpToLayer)
+
+  // Held by this route rather than by the map or the table: the stream belongs to the open
+  // project, so it opens when the project opens and closes when the project is left. A
+  // layer switch leaves it alone.
+  useLiveViewState(projectId, activeLayerId ?? null, {
+    hasPendingWrite: viewState.hasPendingWrite,
+    loadedActiveLayerId: viewState.document.activeLayerId,
+    ready: viewState.ready,
+    onActiveLayerMoved: deferredJump.request,
   })
 
   return (
