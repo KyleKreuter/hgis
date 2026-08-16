@@ -39,8 +39,14 @@ export function PurgeLayerDialog({ entry, projectId, onOpenChange }: PurgeLayerD
     if (!entry || purging.current) return
     purging.current = true
     try {
-      await purgeLayer.mutateAsync(entry.id)
-      toast.success(`Layer „${entry.name}" endgültig gelöscht`)
+      const purged = await purgeLayer.mutateAsync(entry.id)
+      // Same fallback as `DeleteLayerDialog.handleDelete`: the response names what was
+      // actually dropped, the entry this dialog opened with is what a server still on
+      // `204` leaves us.
+      const featureCount = purged?.featureCount ?? entry.featureCount
+      toast.success(
+        `Layer „${entry.name}" mit ${formatCount(featureCount)} ${featureCount === 1 ? 'Objekt' : 'Objekten'} endgültig gelöscht`,
+      )
       onOpenChange(false)
     } catch {
       toast.error('Das Programm konnte den Layer nicht endgültig löschen')

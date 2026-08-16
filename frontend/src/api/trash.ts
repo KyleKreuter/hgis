@@ -83,13 +83,20 @@ export function useRestoreLayer(projectId: string) {
 /**
  * The options behind `usePurgeLayer`, separated for the same reason as
  * {@link restoreLayerOptions}.
+ *
+ * The response is moving from `204 No Content` to `200` with the just-dropped layer's
+ * own `TrashEntry` -- built against both, the same way `useDeleteLayer` (api/layers.ts)
+ * is: `api.delete` (api/client.ts) already returns `undefined` for a `204`, so nothing
+ * here breaks while `schutz` has not shipped its side yet, and `PurgeLayerDialog` falls
+ * back to the count it already knows from the entry it was opened with.
  */
 export function purgeLayerOptions(
   queryClient: QueryClient,
   projectId: string,
-): UseMutationOptions<void, Error, string> {
+): UseMutationOptions<TrashEntry | undefined, Error, string> {
   return {
-    mutationFn: (layerId: string) => api.delete<void>(`/api/layers/${layerId}/purge`),
+    mutationFn: (layerId: string) =>
+      api.delete<TrashEntry | undefined>(`/api/layers/${layerId}/purge`),
     onSuccess: (_result, layerId) => {
       queryClient.setQueryData<TrashEntry[]>(trashKeys.list(projectId), (current) =>
         current?.filter((entry) => entry.id !== layerId),

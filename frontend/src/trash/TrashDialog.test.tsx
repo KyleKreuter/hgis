@@ -107,6 +107,41 @@ describe('TrashDialog', () => {
     )
     const purgeRequest = requests.find((r) => r.url.includes('/purge'))
     expect(purgeRequest?.init?.method).toBe('DELETE')
+    // Und läuft die 204-Antwort bis zum Ende durch statt an der leeren Antwort zu
+    // scheitern -- die Rückfrage schließt nur auf einen erfolgreichen Abschluss hin.
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+  })
+
+  // Vertragswechsel (Paket 1 `schutz`): DELETE /api/layers/{id}/purge antwortet künftig
+  // 200 mit dem TrashEntry statt wie bisher 204 ohne Rumpf. Die 204-Form deckt der Test
+  // oben bereits ab; hier die künftige Form -- ein Server, der die Umstellung noch nicht
+  // ausgeliefert hat, darf das endgültige Löschen nicht brechen.
+  test('übersteht die künftige 200-Antwort mit TrashEntry-Rumpf beim endgültigen Löschen', async () => {
+    stubFetch([
+      { match: '/api/projects/p-1/trash', body: [makeEntry()] },
+      {
+        match: '/api/layers/l-1/purge',
+        body: {
+          id: 'l-1',
+          name: 'Gebäude',
+          deletedAt: new Date().toISOString(),
+          deletedBy: 'M. Mustermann',
+          featureCount: 12,
+        },
+      },
+    ])
+    renderWithQueryClient(<TrashDialog projectId="p-1" open onOpenChange={vi.fn()} />)
+    const user = userEvent.setup()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Layer „Gebäude" endgültig löschen' }),
+    )
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Endgültig löschen' }))
+
+    // Die Rückfrage schließt nur auf einen erfolgreichen Abschluss hin -- schließt sie,
+    // hat die Mutation den Rumpf verarbeitet, ohne daran zu scheitern.
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
   })
 
   // Prüfstand-Befund: `disabled={mutation.isPending}` greift erst nach dem nächsten

@@ -52,8 +52,16 @@ export function DeleteLayerDialog({
   async function handleDelete() {
     if (!layer || deleteLocked) return
     try {
-      await deleteLayer.mutateAsync(layer.id)
-      toast.success(`Layer „${layer.name}" in den Papierkorb verschoben`)
+      const trashed = await deleteLayer.mutateAsync(layer.id)
+      // The response names what was actually moved -- more current than the count this
+      // dialog opened with whenever the two disagree, but a server still on `204` sends
+      // nothing back, so the already-known count carries the message either way.
+      const featureCount = trashed?.featureCount ?? layer.featureCount
+      toast.success(
+        isMapImageLayer(layer)
+          ? `Layer „${layer.name}" in den Papierkorb verschoben`
+          : `Layer „${layer.name}" mit ${formatCount(featureCount)} ${featureCount === 1 ? 'Objekt' : 'Objekten'} in den Papierkorb verschoben`,
+      )
       onDeleted(layer.id)
       onOpenChange(false)
     } catch {
