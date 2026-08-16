@@ -7,6 +7,7 @@ import {
   type UseMutationOptions,
 } from '@tanstack/react-query'
 import { api } from './client'
+import { CLIENT_HEADER, CLIENT_ID } from './events'
 import type { Job } from './imports'
 import type { ViewStateDocument } from '@/state/viewState'
 
@@ -306,12 +307,16 @@ export const viewStateQuery = (id: string) =>
  * patch above, nothing in the workspace renders from this query while the session is
  * open -- `state/useViewState.ts` keeps its own copy for that -- so there is nothing an
  * optimistic write would make feel faster.
+ *
+ * The write names this tab, and that is what keeps the live channel from turning it into
+ * a read: the event this write produces comes back carrying `CLIENT_ID`, and a client
+ * that finds its own name there already holds the state (`api/events.ts`).
  */
 export function useSaveViewState(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (document: ViewStateDocument) =>
-      api.put<void>(`/api/projects/${id}/view-state`, document),
+      api.put<void>(`/api/projects/${id}/view-state`, document, { [CLIENT_HEADER]: CLIENT_ID }),
     onSuccess: (_result, document) => {
       queryClient.setQueryData(projectKeys.viewState(id), document)
     },

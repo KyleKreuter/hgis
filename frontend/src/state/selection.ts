@@ -78,3 +78,35 @@ export const useSelection = create<SelectionState>((set) => ({
 
   clear: () => set({ layerId: null, selected: new Set() }),
 }))
+
+/** Raised for exactly the write it belongs to; see `applyRemoteSelection`. */
+let applyingRemoteSelection = false
+
+/**
+ * Writes a selection that did not come from this user.
+ *
+ * There are two such sources, and they need the same thing: the state saved from a
+ * previous session, restored when a layer is first opened, and a state another client
+ * just set, which arrives over the live channel (`api/events.ts`). Neither is the user
+ * doing something, so neither may be saved back out -- the first would rewrite what was
+ * just read, and the second would answer someone else's change with a change of its own,
+ * which is a conversation with no end.
+ *
+ * Raised for the write itself and lowered again the moment it returns: subscribers run
+ * synchronously inside zustand's `set`, so the flag never outlives the write it belongs
+ * to. A flag held any longer would swallow selections the user makes in the meantime, and
+ * those are worth saving.
+ */
+export function applyRemoteSelection(write: () => void) {
+  applyingRemoteSelection = true
+  try {
+    write()
+  } finally {
+    applyingRemoteSelection = false
+  }
+}
+
+/** Whether the selection change being observed right now came from `applyRemoteSelection`. */
+export function isRemoteSelection(): boolean {
+  return applyingRemoteSelection
+}

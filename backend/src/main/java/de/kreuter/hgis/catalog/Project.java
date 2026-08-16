@@ -73,6 +73,19 @@ public class Project {
 	@Column(name = "view_state", columnDefinition = "jsonb")
 	private String viewState;
 
+	/**
+	 * Rises with every write to {@link #viewState}, and with nothing else. The live
+	 * channel ({@code de.kreuter.hgis.events}) reports this number instead of the state
+	 * itself, the same way a layer's {@code dataVersion} stands in for its rows.
+	 *
+	 * <p>Read-only from here on purpose: {@link ProjectService#updateViewState} bumps it
+	 * with a plain UPDATE so two writes at the same time cannot both read the same value
+	 * and produce the same next one. {@code updatable = false} is what keeps Hibernate
+	 * from writing this -- by then stale -- copy back over that.
+	 */
+	@Column(name = "view_state_version", nullable = false, updatable = false)
+	private long viewStateVersion = 1;
+
 	@Column(name = "last_opened_at")
 	private Instant lastOpenedAt;
 
@@ -167,6 +180,15 @@ public class Project {
 
 	public void setViewState(String viewState) {
 		this.viewState = viewState;
+	}
+
+	/**
+	 * @return the version as it was when this entity was loaded. A bump that happened
+	 *     since is not visible here -- {@link ProjectService#updateViewState} takes the
+	 *     new value straight from the UPDATE that produced it.
+	 */
+	public long getViewStateVersion() {
+		return viewStateVersion;
 	}
 
 	public Instant getLastOpenedAt() {
