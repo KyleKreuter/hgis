@@ -19,6 +19,7 @@ import { toSinglePart } from './singlePart'
 import {
   boundsOf,
   findSnapTarget,
+  isSnapPrecisionUsable,
   isTargetInReach,
   type SnapCandidate,
   type SnapTarget,
@@ -155,11 +156,23 @@ export function DrawController({
         onSnapTarget(null)
         return undefined
       }
-      const target = findSnapTarget(
-        [event.lng, event.lat],
-        allSnapCandidates(),
-        ([lng, lat]) => context.project(lng, lat),
-      )
+      const project = ([lng, lat]: [number, number]) => context.project(lng, lat)
+      const pointer: [number, number] = [event.lng, event.lat]
+
+      // Close to the horizon a pointer that barely moved on screen may have moved tens
+      // of metres on the ground (see `isSnapPrecisionUsable`) -- snapping there would
+      // place a vertex somewhere the user never pointed at, so it is refused rather than
+      // tolerated.
+      const map = mapRef.current
+      if (map) {
+        const center = map.getCenter()
+        if (!isSnapPrecisionUsable(pointer, [center.lng, center.lat], project)) {
+          onSnapTarget(null)
+          return undefined
+        }
+      }
+
+      const target = findSnapTarget(pointer, allSnapCandidates(), project)
       onSnapTarget(target)
       return target ? (target.position as [number, number]) : undefined
     }
@@ -387,11 +400,20 @@ export function DrawController({
         onSnapTarget(null)
         return
       }
-      const found = findSnapTarget(
-        [event.lngLat.lng, event.lngLat.lat],
-        candidates,
-        ([lng, lat]) => target.project([lng, lat]),
-      )
+      const project = ([lng, lat]: [number, number]) => target.project([lng, lat])
+      const pointer: [number, number] = [event.lngLat.lng, event.lngLat.lat]
+
+      // Same refusal as `snapTo` -- see there for why. The point tool has no callback of
+      // its own into terra-draw's snapping, so this is the only place its preview (and
+      // through it, `snapPlacedPoint`) can apply the same cutoff.
+      const center = target.getCenter()
+      if (!isSnapPrecisionUsable(pointer, [center.lng, center.lat], project)) {
+        previewTarget.current = null
+        onSnapTarget(null)
+        return
+      }
+
+      const found = findSnapTarget(pointer, candidates, project)
       // Held for the point tool, which snaps from here rather than through terra-draw.
       previewTarget.current = found
       onSnapTarget(found)
@@ -407,6 +429,16 @@ export function DrawController({
     async function loadEditableFeatures() {
       const target = mapRef.current
       if (!target) return
+      // Deliberately the plain rectangle, not the tighter one `MapViewportTracker` builds
+      // for the same reason a pitched `getBounds()` is not simply better: at pitch the
+      // rectangle reaches past the visible trapezoid toward the horizon, so it can load
+      // features nobody can currently see or click -- but it never *misses* anything
+      // that is on screen, since the trapezoid always sits inside its own bounding
+      // rectangle. Pulling the far edge in as `MapViewportTracker` does would risk the
+      // opposite: a building visibly on screen that quietly could not be selected,
+      // dragged, or snapped to, with no warning at all. Over-fetching already has one --
+      // `MAX_EDITABLE` below turns it into "zoom in", the same message a plain zoomed-out
+      // view without any pitch would get for the same reason.
       const bounds = target.getBounds()
       const bbox = [
         bounds.getWest(),
@@ -535,6 +567,9 @@ export function DrawController({
     }
 
     let cancelled = false
+    // Same rectangle, same reasoning as `loadEditableFeatures`: a superset of what is on
+    // screen never misses a target to snap to, and the cost of over-fetching under pitch
+    // is shared with it through the same `MAX_EDITABLE` cap below.
     const bounds = map.getBounds()
     const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(',')
 

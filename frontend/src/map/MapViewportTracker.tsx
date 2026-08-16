@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useMap } from './MapContext'
 import { useMapViewport } from './mapViewportStore'
+import { viewportQueryBounds } from './viewportBounds'
 
 /**
  * Renders nothing. Keeps `useMapViewport`'s bbox in step with the live map, so the
@@ -22,11 +23,20 @@ export function MapViewportTracker() {
     function report() {
       const target = mapRef.current
       if (!target) return
-      const bounds = target.getBounds()
-      setViewport(
-        [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
-        target.getZoom(),
-      )
+      const canvas = target.getCanvas()
+      const center = target.getCenter()
+      // Not `target.getBounds()` -- see `viewportQueryBounds` for why a pitched view
+      // needs its far edge pulled in before it is fit to stand for "the current view".
+      const bbox = viewportQueryBounds({
+        width: canvas.clientWidth,
+        height: canvas.clientHeight,
+        center: [center.lng, center.lat],
+        unproject: (point) => {
+          const lngLat = target.unproject(point)
+          return [lngLat.lng, lngLat.lat]
+        },
+      })
+      setViewport(bbox, target.getZoom())
     }
 
     report()

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   boundsOf,
   findSnapTarget,
+  isSnapPrecisionUsable,
   isTargetInReach,
   type Project,
   type SnapCandidate,
@@ -348,6 +349,49 @@ describe('isTargetInReach', () => {
 
     expect(isTargetInReach(target, pointer, project)).toBe(false)
     expect(isTargetInReach(target, pointer, project, 20)).toBe(true)
+  })
+})
+
+describe('mapUnitsPerPixel (via findSnapTarget under an anisotropic projection)', () => {
+  it('does not lose a candidate whose bounding-box distance is large only in the coarse direction', () => {
+    // A projection standing in for a pitched view: longitude reads at high resolution
+    // (10000 px/degree), the way the near edge of a tilted screen still does; latitude
+    // reads at a hundredth of that, the way the far edge does approaching the horizon.
+    // Before `mapUnitsPerPixel` took the worse of the two directions, the cheap bounds
+    // pre-filter converted the 12px tolerance using longitude's resolution alone,
+    // undersizing the latitude margin about a hundredfold -- rejecting this vertex on
+    // its bounding box before its real, pixel-space distance (0.5px) was ever measured.
+    const anisotropic: Project = ([lng, lat]) => ({ x: (lng - 10) * 10_000, y: -(lat - 53.55) * 100 })
+    const vertex = candidate({ type: 'Point', coordinates: [10, 53.555] })
+
+    const target = findSnapTarget([10, 53.55], [vertex], anisotropic)
+
+    expect(target?.kind).toBe('vertex')
+    expect(target?.position).toEqual([10, 53.555])
+  })
+})
+
+describe('isSnapPrecisionUsable', () => {
+  it('stays usable on a flat, unpitched projection', () => {
+    expect(isSnapPrecisionUsable([9.985, 53.545], [9.98, 53.54], project)).toBe(true)
+  })
+
+  it('refuses a pointer where the ground resolution is far coarser than at the map centre', () => {
+    // Longitude stays sharp everywhere (10000 px/degree); latitude only degrades north
+    // of 53.6, standing in for the sliver of screen near the horizon under pitch.
+    const pitchedNearHorizon: Project = ([lng, lat]) => {
+      const latScale = lat > 53.6 ? 100 : 10_000
+      return { x: lng * 10_000, y: -lat * latScale }
+    }
+    const center: [number, number] = [9.985, 53.55]
+
+    expect(isSnapPrecisionUsable(center, center, pitchedNearHorizon)).toBe(true)
+    expect(isSnapPrecisionUsable([9.985, 53.65], center, pitchedNearHorizon)).toBe(false)
+  })
+
+  it('does not block anything on a degenerate transform', () => {
+    const degenerate: Project = () => ({ x: 0, y: 0 })
+    expect(isSnapPrecisionUsable([9.985, 53.545], [9.98, 53.54], degenerate)).toBe(true)
   })
 })
 
