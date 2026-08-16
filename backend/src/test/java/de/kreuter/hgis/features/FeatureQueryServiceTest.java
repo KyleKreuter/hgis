@@ -1259,6 +1259,53 @@ class FeatureQueryServiceTest {
 				.containsExactly(2L, 3L, 9L, 12L);
 	}
 
+	// --- a text column is not ordered against a number -------------------------------------
+
+	/**
+	 * The same fixture carries the other half of the story. {@code kronendurchmesser_z} is
+	 * the text twin of a bigint column, and ordering it against a number is the quiet wrong
+	 * answer: on the real layer {@code > 10} counted 225.657 of 229.876 rows where 73.890 is
+	 * the honest number.
+	 */
+	@Test
+	@DisplayName("ordering a text column against a number is refused")
+	void refusesToOrderATextColumnAgainstANumber() {
+		assertThatThrownBy(() -> service.list(collidingLayer.getId(), new FeatureQueryService.Query(
+				null, false, "kronendurchmesser_z > 10", null, null, null, false, null, 100)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("ist vom Typ text");
+	}
+
+	@Test
+	@DisplayName("the message names the numeric field of the layer, with its id")
+	void namesTheNumericFieldIdWhenRefusingATextComparison() {
+		assertThatThrownBy(() -> service.list(collidingLayer.getId(), new FeatureQueryService.Query(
+				null, false, "kronendurchmesser_z > 10", null, null, null, false, null, 100)))
+				.hasMessageContaining("Kronendurchmesser Quelle (Id " + bigintFieldId + ")");
+	}
+
+	/** Quoted, the same comparison is a text comparison and is still served. */
+	@Test
+	@DisplayName("the quoted form still runs, and still counts four")
+	void servesTheQuotedTextComparison() {
+		FeatureDtos.Page page = service.list(collidingLayer.getId(), new FeatureQueryService.Query(
+				null, false, "kronendurchmesser_z > '10'", null, null, null, false, null, 100));
+
+		assertThat(page.totalCount()).isEqualTo(4);
+	}
+
+	@Test
+	@DisplayName("sorting by that column is untouched, and stays lexical")
+	void sortsATextColumnLexicallyAsBefore() {
+		FeatureDtos.Page page = service.list(collidingLayer.getId(),
+				query("kronendurchmesser_z", true, null, 100));
+
+		assertThat(page.features().stream()
+				.map(feature -> feature.properties().get("kronendurchmesser_z")))
+				.as("'9' before '3' before '2' before '12' -- character by character, on purpose")
+				.containsExactly("9", "3", "2", "12");
+	}
+
 	// --- fid as a filterable field --------------------------------------------------------
 
 	@Test

@@ -130,7 +130,65 @@ public final class FilterParser {
 		}
 
 		Token operator = expect(TokenType.OPERATOR, "Vergleichsoperator");
+		requireOrderableAgainstNumber(field, operator);
 		return column + " " + operator.text() + " " + bind(field, readLiteral(field));
+	}
+
+	/** The four operators that ask for an order rather than for equality. */
+	private static final List<String> ORDERING_OPERATORS = List.of("<", "<=", ">", ">=");
+
+	/**
+	 * Refuses to order a text column against a number.
+	 *
+	 * <p>PostgreSQL compares text character by character, so {@code '9'} sorts after
+	 * {@code '10'}. On the Straßenbaumkataster's {@code kronendurchmesser_z} -- a column of
+	 * values like "8 m" -- {@code > 10} therefore matched 225.657 of 229.876 rows where the
+	 * honest answer is 73.890. No error, no hint, and a result that looks like a result.
+	 *
+	 * <p>Only this one shape is refused, because only here is the intent legible. A bare
+	 * number after an ordering operator says "compare quantities"; the same value in single
+	 * quotes says "compare text" and is still served. {@code =}, {@code <>}, {@code IN} and
+	 * {@code LIKE} are untouched: equality on text is exact whichever way the value was
+	 * written, and none of them implies an order.
+	 *
+	 * <p>Casting the column instead was measured and rejected: of the 229.494 filled values
+	 * in that column, 229.067 are not a number, so the cast would answer the whole layer with
+	 * an error rather than with rows.
+	 *
+	 * <p>Sorting by such a column stays lexical on purpose. There is no literal there to read
+	 * an intent from, and of the 29 text columns in the real data only two hold quantities --
+	 * for the other 27 a lexical order is the right one.
+	 */
+	private void requireOrderableAgainstNumber(LayerField field, Token operator) {
+		if (!ORDERING_OPERATORS.contains(operator.text())
+				|| !baseType(field).equals("text")
+				|| current().type() != TokenType.NUMBER) {
+			return;
+		}
+		throw new BadRequestException("Feld " + field.getSourceName() + " ist vom Typ "
+				+ field.getDataType() + ". Der Operator " + operator.text()
+				+ " vergleicht dann Zeichen für Zeichen: '9' gilt als größer als '10'."
+				+ " Zahlenfelder dieses Layers: " + String.join(", ", numericFieldNames()) + "."
+				+ " Für einen Textvergleich setzen Sie den Wert in Hochkommas.");
+	}
+
+	/**
+	 * The layer's numeric fields, each with its id -- what the client should have named.
+	 *
+	 * <p>Listed as a fact about the layer, not guessed from the name that failed: on the
+	 * Straßenbaumkataster this puts "Kronendurchmesser Quelle" in front of someone who wrote
+	 * "Kronendurchmesser", without this parser knowing anything about a {@code _z} suffix.
+	 *
+	 * <p>Never empty, because {@code fid} is in the list and is a {@code bigint}. That is
+	 * what spares this message a second wording for a layer with no numeric field of its own.
+	 */
+	private List<String> numericFieldNames() {
+		return fields.stream()
+				.filter(LayerFields::isNumeric)
+				.map(candidate -> candidate.getId() == null
+						? candidate.getSourceName()
+						: candidate.getSourceName() + " (Id " + candidate.getId() + ")")
+				.toList();
 	}
 
 	/**
@@ -212,6 +270,9 @@ public final class FilterParser {
 		return switch (baseType(field)) {
 			case "integer", "bigint" -> parseLong(field, text);
 			case "double precision", "numeric", "real" -> parseDouble(field, text);
+			// A number against a text column stays the text it was written as, which is
+			// exact for =, <> and IN. The ordering operators are the ones that would read
+			// it wrongly, and they never get here -- see requireOrderableAgainstNumber.
 			case "text" -> text;
 			default -> throw new BadRequestException(
 					"Feld " + field.getSourceName() + " ist vom Typ " + field.getDataType()

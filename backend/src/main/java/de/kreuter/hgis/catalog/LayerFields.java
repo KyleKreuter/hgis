@@ -99,7 +99,14 @@ public final class LayerFields {
 				.findFirst();
 	}
 
-	static boolean isNumeric(LayerField field) {
+	/**
+	 * Whether a comparison or a computation may read this field as a quantity.
+	 *
+	 * <p>Public because {@code FilterParser} names the numeric fields of a layer when it
+	 * refuses to order a text column against a number, and that list has to mean the same
+	 * thing there as it does for a classification. One definition, one place.
+	 */
+	public static boolean isNumeric(LayerField field) {
 		return NUMERIC_TYPES.contains(baseType(field));
 	}
 
