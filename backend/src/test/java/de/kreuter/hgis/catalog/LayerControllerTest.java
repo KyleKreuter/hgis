@@ -5,14 +5,17 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import de.kreuter.hgis.common.ClientId;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.TestcontainersConfiguration;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -158,8 +161,99 @@ class LayerControllerTest {
 	}
 
 	@Test
-	void deletesTheLayerAndDropsThePhysicalTable() throws Exception {
+	@DisplayName("delete moves the layer to the trash -- catalog row and physical table both survive")
+	void deleteMovesTheLayerToTheTrashInsteadOfDroppingIt() throws Exception {
+		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId())
+						.header(ClientId.HEADER, "test-client"))
+				.andExpect(status().isNoContent());
+
+		Layer reloaded = layerRepository.findById(layer.getId()).orElseThrow();
+		assertThat(reloaded.isTrashed()).isTrue();
+		assertThat(reloaded.getDeletedAt()).isNotNull();
+		assertThat(reloaded.getDeletedBy()).isEqualTo("test-client");
+
+		Boolean tableStillExists = jdbc.sql("SELECT to_regclass('gis_data.' || :tableName) IS NOT NULL")
+				.param("tableName", tableName)
+				.query(Boolean.class)
+				.single();
+		assertThat(tableStillExists).isTrue();
+	}
+
+	@Test
+	void returnsNotFoundWhenDeletingAnUnknownLayer() throws Exception {
+		mockMvc.perform(delete("/api/layers/{layerId}", UUID.randomUUID()))
+				.andExpect(status().isNotFound());
+	}
+
+	@Test
+	@DisplayName("a trashed layer disappears from the ordinary layer list")
+	void trashedLayerIsHiddenFromTheOrdinaryList() throws Exception {
 		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isNoContent());
+
+		mockMvc.perform(get("/api/projects/{projectId}/layers", project.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$", hasSize(0)));
+	}
+
+	@Test
+	@DisplayName("deleting an already-trashed layer is a conflict, not a silent no-op")
+	void deletingAnAlreadyTrashedLayerConflicts() throws Exception {
+		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isNoContent());
+
+		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isConflict());
+	}
+
+	@Test
+	@DisplayName("the trash lists name, deletion time, object count and who deleted it")
+	void trashListsWhatWasDeleted() throws Exception {
+		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId())
+						.header(ClientId.HEADER, "cli-abc"))
+				.andExpect(status().isNoContent());
+
+		mockMvc.perform(get("/api/projects/{projectId}/trash", project.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$", hasSize(1)))
+				.andExpect(jsonPath("$[0].id").value(layer.getId().toString()))
+				.andExpect(jsonPath("$[0].name").value("Gebäude"))
+				.andExpect(jsonPath("$[0].featureCount").value(1))
+				.andExpect(jsonPath("$[0].deletedBy").value("cli-abc"))
+				.andExpect(jsonPath("$[0].deletedAt").exists());
+	}
+
+	@Test
+	@DisplayName("restore brings a trashed layer back and it reappears in the list")
+	void restoreBringsALayerBackFromTheTrash() throws Exception {
+		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isNoContent());
+
+		mockMvc.perform(post("/api/layers/{layerId}/restore", layer.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.id").value(layer.getId().toString()));
+
+		assertThat(layerRepository.findById(layer.getId()).orElseThrow().isTrashed()).isFalse();
+
+		mockMvc.perform(get("/api/projects/{projectId}/layers", project.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$", hasSize(1)));
+	}
+
+	@Test
+	@DisplayName("restoring a layer that is not in the trash is a conflict")
+	void restoringANonTrashedLayerConflicts() throws Exception {
+		mockMvc.perform(post("/api/layers/{layerId}/restore", layer.getId()))
+				.andExpect(status().isConflict());
+	}
+
+	@Test
+	@DisplayName("purge is the only path left that actually drops the payload table")
+	void purgeDropsThePhysicalTableAndRemovesTheCatalogRow() throws Exception {
+		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isNoContent());
+
+		mockMvc.perform(delete("/api/layers/{layerId}/purge", layer.getId()))
 				.andExpect(status().isNoContent());
 
 		assertThat(layerRepository.findById(layer.getId())).isEmpty();
@@ -169,11 +263,15 @@ class LayerControllerTest {
 				.query(Boolean.class)
 				.single();
 		assertThat(tableStillExists).isFalse();
+		// tearDown's own cleanup still runs against layer.getId() and project.getId(),
+		// both plain fields on the in-memory objects; it simply finds nothing left to
+		// delete for the layer, since purge already did that.
 	}
 
 	@Test
-	void returnsNotFoundWhenDeletingAnUnknownLayer() throws Exception {
-		mockMvc.perform(delete("/api/layers/{layerId}", UUID.randomUUID()))
-				.andExpect(status().isNotFound());
+	@DisplayName("purge without going through the trash first is a conflict, not a shortcut")
+	void purgingANonTrashedLayerConflicts() throws Exception {
+		mockMvc.perform(delete("/api/layers/{layerId}/purge", layer.getId()))
+				.andExpect(status().isConflict());
 	}
 }

@@ -2,6 +2,7 @@ package de.kreuter.hgis.catalog;
 
 import de.kreuter.hgis.catalog.dto.ClassificationDtos;
 import de.kreuter.hgis.catalog.dto.LayerDtos;
+import de.kreuter.hgis.common.ClientId;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -39,8 +41,9 @@ public class LayerController {
 
 	@PostMapping("/api/projects/{projectId}/layers")
 	public ResponseEntity<LayerDtos.Summary> create(@PathVariable UUID projectId,
-			@Valid @RequestBody LayerDtos.CreateRequest request) {
-		LayerDtos.Summary created = service.create(projectId, request);
+			@Valid @RequestBody LayerDtos.CreateRequest request,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		LayerDtos.Summary created = service.create(projectId, request, ClientId.require(origin));
 		return ResponseEntity.created(URI.create("/api/layers/" + created.id())).body(created);
 	}
 
@@ -51,8 +54,9 @@ public class LayerController {
 
 	@PatchMapping("/api/layers/{layerId}")
 	public LayerDtos.Detail update(@PathVariable UUID layerId,
-			@Valid @RequestBody LayerDtos.UpdateRequest request) {
-		return service.update(layerId, request);
+			@Valid @RequestBody LayerDtos.UpdateRequest request,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		return service.update(layerId, request, ClientId.require(origin));
 	}
 
 	/**
@@ -95,17 +99,44 @@ public class LayerController {
 		return service.reorder(projectId, request.layerIdsBottomToTop());
 	}
 
+	/** Moves the layer to the project's trash rather than destroying it (CONTRACT.md "Schreibstufe" 1.1). */
 	@DeleteMapping("/api/layers/{layerId}")
-	public ResponseEntity<Void> delete(@PathVariable UUID layerId) {
-		service.delete(layerId);
+	public ResponseEntity<Void> delete(@PathVariable UUID layerId,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		service.delete(layerId, ClientId.require(origin));
+		return ResponseEntity.noContent().build();
+	}
+
+	/** What sits in a project's trash: name, deletion time, object count, who deleted it. */
+	@GetMapping("/api/projects/{projectId}/trash")
+	public List<LayerDtos.TrashEntry> trash(@PathVariable UUID projectId) {
+		return service.trash(projectId);
+	}
+
+	/** Brings a trashed layer back into ordinary use. */
+	@PostMapping("/api/layers/{layerId}/restore")
+	public LayerDtos.Summary restore(@PathVariable UUID layerId,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		return service.restore(layerId, ClientId.require(origin));
+	}
+
+	/**
+	 * Empties one trash entry for good -- the only endpoint that actually destroys a
+	 * layer's data (CONTRACT.md "Schreibstufe" 1.1).
+	 */
+	@DeleteMapping("/api/layers/{layerId}/purge")
+	public ResponseEntity<Void> purge(@PathVariable UUID layerId,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		service.purge(layerId, ClientId.require(origin));
 		return ResponseEntity.noContent().build();
 	}
 
 	/** Adds one attribute field to an existing layer (CONTRACT.md phase 11). */
 	@PostMapping("/api/layers/{layerId}/fields")
 	public ResponseEntity<LayerDtos.Field> addField(@PathVariable UUID layerId,
-			@Valid @RequestBody LayerDtos.AddFieldRequest request) {
-		LayerDtos.Field field = fieldService.addField(layerId, request);
+			@Valid @RequestBody LayerDtos.AddFieldRequest request,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		LayerDtos.Field field = fieldService.addField(layerId, request, ClientId.require(origin));
 		return ResponseEntity.status(HttpStatus.CREATED).body(field);
 	}
 
@@ -131,8 +162,9 @@ public class LayerController {
 	 * phase 12).
 	 */
 	@DeleteMapping("/api/layers/{layerId}/fields/{fieldId}")
-	public ResponseEntity<Void> deleteField(@PathVariable UUID layerId, @PathVariable UUID fieldId) {
-		fieldService.deleteField(layerId, fieldId);
+	public ResponseEntity<Void> deleteField(@PathVariable UUID layerId, @PathVariable UUID fieldId,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		fieldService.deleteField(layerId, fieldId, ClientId.require(origin));
 		return ResponseEntity.noContent().build();
 	}
 }

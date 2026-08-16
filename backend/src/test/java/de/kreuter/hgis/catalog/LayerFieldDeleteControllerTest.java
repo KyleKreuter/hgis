@@ -369,7 +369,7 @@ class LayerFieldDeleteControllerTest {
 
 		EditDtos.Request request = new EditDtos.Request(
 				List.of(new EditDtos.Create(-1, json(SQUARE), Map.of())), null, null, false);
-		EditDtos.Response response = editService.apply(layer.getId(), request);
+		EditDtos.Response response = editService.apply(layer.getId(), request, null);
 
 		assertThat(response.createdFids()).hasSize(1);
 	}

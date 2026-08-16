@@ -176,9 +176,21 @@ class RequireVectorGuardTest {
 	}
 
 	@Test
-	@DisplayName("a map image can still be deleted -- no table to drop, but the catalog row goes")
+	@DisplayName("a map image can still be deleted -- moved to the trash like a vector layer")
 	void deletingAMapImageStillWorks() throws Exception {
 		mockMvc.perform(delete("/api/layers/{id}", wmsLayer.getId()))
+				.andExpect(status().isNoContent());
+
+		assertThat(layerRepository.findById(wmsLayer.getId())).get()
+				.extracting(Layer::isTrashed).isEqualTo(true);
+	}
+
+	@Test
+	@DisplayName("purging a map image works too -- no table to drop, but the catalog row goes")
+	void purgingAMapImageStillWorks() throws Exception {
+		mockMvc.perform(delete("/api/layers/{id}", wmsLayer.getId()))
+				.andExpect(status().isNoContent());
+		mockMvc.perform(delete("/api/layers/{id}/purge", wmsLayer.getId()))
 				.andExpect(status().isNoContent());
 
 		assertThat(layerRepository.findById(wmsLayer.getId())).isEmpty();

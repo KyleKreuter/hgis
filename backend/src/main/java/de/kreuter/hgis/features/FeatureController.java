@@ -1,5 +1,6 @@
 package de.kreuter.hgis.features;
 
+import de.kreuter.hgis.common.ClientId;
 import de.kreuter.hgis.features.dto.EditDtos;
 import de.kreuter.hgis.features.dto.FeatureDtos;
 import de.kreuter.hgis.features.dto.SplitMergeDtos;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -90,11 +92,16 @@ public class FeatureController {
 	 * <p>POST rather than PATCH on the features: the body is not a modified feature but a
 	 * list of operations, and its effect on the collection is a creation as much as a
 	 * change.
+	 *
+	 * @param origin who is writing, from {@code X-Hgis-Client}; travels on to the change
+	 *     log's {@code client_name} so a later reader can tell which client made this
+	 *     batch, the same header the live channel already reads for its own purpose.
 	 */
 	@PostMapping("/api/layers/{layerId}/edits")
 	public EditDtos.Response edit(@PathVariable UUID layerId,
-			@Valid @RequestBody EditDtos.Request request) {
-		return editService.apply(layerId, request);
+			@Valid @RequestBody EditDtos.Request request,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		return editService.apply(layerId, request, ClientId.require(origin));
 	}
 
 	/**

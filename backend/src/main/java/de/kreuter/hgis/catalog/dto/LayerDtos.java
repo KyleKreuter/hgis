@@ -378,6 +378,26 @@ public final class LayerDtos {
 	}
 
 	/**
+	 * One entry of {@code GET /api/projects/{projectId}/trash} (CONTRACT.md
+	 * "Schreibstufe" 1.1): exactly what the confirmation dialog needs to show for a
+	 * trashed layer, without exposing anything about its schema or content.
+	 *
+	 * @param deletedAt  when {@code DELETE /api/layers/{id}} moved it here
+	 * @param featureCount how many objects it holds, as of the moment it was trashed --
+	 *                   the payload table is untouched while a layer sits in the trash,
+	 *                   so this stays accurate until it is restored or purged
+	 * @param deletedBy  the {@code X-Hgis-Client} of whoever deleted it, or null when
+	 *                   they named none
+	 */
+	public record TrashEntry(
+			UUID id,
+			String name,
+			Instant deletedAt,
+			long featureCount,
+			String deletedBy) {
+	}
+
+	/**
 	 * New stacking order for a whole project.
 	 *
 	 * <p>The field name states the direction because getting it wrong is invisible until

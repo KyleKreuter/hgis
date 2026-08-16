@@ -209,6 +209,23 @@ public class Layer {
 	@Column(name = "source_fetched_at")
 	private Instant sourceFetchedAt;
 
+	// --- trash (CONTRACT.md "Schreibstufe" 1.1) -------------------------------------------
+	// Both null together means "not trashed". Set together by #moveToTrash, cleared
+	// together by #restoreFromTrash -- see LayerService#delete/restore/purge, the only
+	// three callers that ever touch them.
+
+	/**
+	 * When {@code DELETE /api/layers/{id}} moved this layer to the trash, or null for a
+	 * layer in ordinary use. The catalog row and its payload table both survive that move
+	 * -- only {@link LayerService#purge} removes either.
+	 */
+	@Column(name = "deleted_at")
+	private Instant deletedAt;
+
+	/** The {@code X-Hgis-Client} of whoever moved this layer to the trash, or null. */
+	@Column(name = "deleted_by")
+	private String deletedBy;
+
 	@CreationTimestamp
 	@Column(name = "created_at", updatable = false)
 	private Instant createdAt;
@@ -555,6 +572,32 @@ public class Layer {
 
 	public Instant getUpdatedAt() {
 		return updatedAt;
+	}
+
+	// --- trash (CONTRACT.md "Schreibstufe" 1.1) -------------------------------------------
+
+	/** Whether this layer currently sits in the trash -- see {@link #deletedAt}. */
+	public boolean isTrashed() {
+		return deletedAt != null;
+	}
+
+	public Instant getDeletedAt() {
+		return deletedAt;
+	}
+
+	public String getDeletedBy() {
+		return deletedBy;
+	}
+
+	/** @param clientName the {@code X-Hgis-Client} of whoever deleted it, or null */
+	public void moveToTrash(String clientName) {
+		this.deletedAt = Instant.now();
+		this.deletedBy = clientName;
+	}
+
+	public void restoreFromTrash() {
+		this.deletedAt = null;
+		this.deletedBy = null;
 	}
 
 	// --- Geoportal provenance (CONTRACT.md phase 23.7) -----------------------------------

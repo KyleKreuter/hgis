@@ -117,7 +117,7 @@ class EditServiceTest {
 	}
 
 	private EditDtos.Response apply(EditDtos.Request request) {
-		return editService.apply(layer.getId(), request);
+		return editService.apply(layer.getId(), request, null);
 	}
 
 	private EditDtos.Request creating(String geometry, Map<String, Object> properties) {
@@ -232,7 +232,7 @@ class EditServiceTest {
 			EditDtos.Request request = new EditDtos.Request(
 					List.of(new EditDtos.Create(-1, json(SQUARE), Map.of())), null, null, false);
 
-			assertThatThrownBy(() -> editService.apply(pointLayer.getId(), request))
+			assertThatThrownBy(() -> editService.apply(pointLayer.getId(), request, null))
 					.isInstanceOf(BadRequestException.class)
 					.hasMessageContaining("Punkte")
 					.hasMessageContaining("Flächen");
@@ -267,11 +267,11 @@ class EditServiceTest {
 			// accepting whatever comes next rather than only tolerating a mix within one
 			// request.
 			editService.apply(mixedLayer.getId(), new EditDtos.Request(
-					List.of(new EditDtos.Create(-1, json(point), Map.of())), null, null, false));
+					List.of(new EditDtos.Create(-1, json(point), Map.of())), null, null, false), null);
 			editService.apply(mixedLayer.getId(), new EditDtos.Request(
-					List.of(new EditDtos.Create(-2, json(LINE), Map.of())), null, null, false));
+					List.of(new EditDtos.Create(-2, json(LINE), Map.of())), null, null, false), null);
 			editService.apply(mixedLayer.getId(), new EditDtos.Request(
-					List.of(new EditDtos.Create(-3, json(SQUARE), Map.of())), null, null, false));
+					List.of(new EditDtos.Create(-3, json(SQUARE), Map.of())), null, null, false), null);
 
 			List<String> storedTypes = jdbc.sql("SELECT GeometryType(geom) AS type FROM "
 							+ SqlIdentifier.quoteLayerTable(mixedTable) + " ORDER BY fid")
@@ -467,7 +467,7 @@ class EditServiceTest {
 			EditDtos.Response response = editService.apply(richLayer.getId(), new EditDtos.Request(null,
 					List.of(new EditDtos.Update(first, null, null, firstUpdate),
 							new EditDtos.Update(second, null, null, secondUpdate)),
-					null, false));
+					null, false), null);
 
 			assertThat(response.updated()).isEqualTo(2);
 
