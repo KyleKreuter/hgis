@@ -64,6 +64,59 @@ public class MvtService {
 	 */
 	public record RenderedTile(byte[] mvt, boolean truncated) {}
 
+	/**
+	 * The tie-break {@code candidates} falls back to once {@code ST_Area + ST_Length}
+	 * ties -- which, for a point layer, is every row, always: neither function means
+	 * anything for a point, so the whole ranking used to fall straight through to
+	 * {@code fid}. {@code fid} is {@code GENERATED ALWAYS AS IDENTITY}, i.e. insertion
+	 * order, and nothing about ingest ever shuffles that -- a source sorted by district,
+	 * the ordinary shape of a government export, keeps that order into the table. The
+	 * result was not a thinned-out layer, it was one district kept whole and its
+	 * neighbour dropped whole: reviewed and reproduced with two 20.000-point "Bezirke"
+	 * in one tile, limit 5.000 -- 5.000 from the first, 0 from the second.
+	 *
+	 * <p>This scatters {@code fid} instead of using it directly: {@code (fid * A) mod M}
+	 * with {@code M = 2^31 - 1} (a Mersenne prime) and {@code A = 2654435761}, the Knuth
+	 * multiplicative-hashing constant ({@code 2^32} times the golden ratio's fractional
+	 * part, rounded to the nearest prime -- the standard choice for scattering small,
+	 * sequential integers, used for exactly that in hash tables and noise functions).
+	 * Multiplying by a unit modulo a prime is a bijection, so this loses no fids -- but
+	 * bijective alone would not have been enough. An earlier version of this multiplied
+	 * by {@code 16807} instead (the classic Park-Miller generator constant) and measured
+	 * as 2.500/2.500 in theory, 5.000/0 in the review's own reproduction: {@code 16807} is
+	 * so small relative to {@code M} that {@code fid * 16807} does not wrap {@code M} at
+	 * all across any realistic table's fid range, leaving the map linear -- and therefore
+	 * exactly the insertion order it was meant to break up -- in every practical case. The
+	 * review's own two-district table pins that regression down; see the class's test
+	 * {@code MvtServiceSpatialClumpingTest}, which fails on {@code 16807} and passes on
+	 * {@code 2654435761}. {@code A}'s size relative to {@code M} is what actually matters:
+	 * large enough that a single increment of {@code fid} already wraps {@code M}, so
+	 * neighbouring fids -- and anything correlated with them, like a spatial clump -- land
+	 * far apart in the ranking. Measured on the review's exact scenario (two 20.000-point
+	 * districts, one tile, limit 5.000): 2.499/2.501.
+	 *
+	 * <p>{@code (fid + 1) mod M} first keeps every fid inside the map's domain without
+	 * ever overflowing {@code bigint} -- the multiply that follows is then at most
+	 * {@code (M - 1) * A}, about {@code 5.7 * 10^18}, comfortably short of {@code bigint}'s
+	 * {@code 2^63 - 1} (about {@code 9.2 * 10^18}) -- and steers clear of {@code fid = -1},
+	 * the one value the bijection sends to {@code 0} regardless of {@code A}.
+	 *
+	 * <p>Plain arithmetic on purpose, not {@code hashtext} or {@code hashint8}: those are
+	 * PostgreSQL-internal hash functions explicitly reserved to change between major
+	 * versions (why {@code pg_upgrade} can demand a {@code REINDEX} of a hash index), so
+	 * two servers a version apart could truncate the very same tile into two different,
+	 * equally valid selections -- silently, since nothing about that changes {@code
+	 * dataVersion}, {@code styleVersion} or the tile's {@code ETag}. {@code +}, {@code *}
+	 * and {@code %} on {@code bigint} carry no such reservation; this expression means
+	 * exactly the same thing on any PostgreSQL version, past or future.
+	 *
+	 * <p>The trailing plain {@code l.fid} exists only for a total order: two fids can
+	 * share a scattered value if they are exactly {@code M} apart, a gap no real layer
+	 * reaches, so this never changes which rows a tile shows -- only, in that one
+	 * unreachable case, which order ties would otherwise leave unresolved.
+	 */
+	private static final String SPATIAL_SCATTER = "((l.fid + 1) % 2147483647) * 2654435761 % 2147483647";
+
 	private static final String TILE_QUERY = """
 			WITH bounds AS (
 			  SELECT ST_TileEnvelope(:z, :x, :y) AS merc,
@@ -74,7 +127,7 @@ public class MvtService {
 			         ST_AsMVTGeom(ST_Transform(%s, 3857), b.merc, 4096, 64, true) AS geom
 			  FROM %s
 			  WHERE %s
-			  ORDER BY (ST_Area(l.geom) + ST_Length(l.geom)) DESC, l.fid
+			  ORDER BY (ST_Area(l.geom) + ST_Length(l.geom)) DESC, %s, l.fid
 			  LIMIT :tileLimit
 			)
 			SELECT
@@ -262,7 +315,7 @@ public class MvtService {
 			}
 		}
 
-		return TILE_QUERY.formatted(nativeBounds, ctes, attributes, geom, from, where);
+		return TILE_QUERY.formatted(nativeBounds, ctes, attributes, geom, from, where, SPATIAL_SCATTER);
 	}
 
 	/**
