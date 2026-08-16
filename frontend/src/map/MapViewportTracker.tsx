@@ -22,8 +22,18 @@ export function MapViewportTracker() {
    * only the memory that produces the next one. A plain ref rather than state, since a
    * change here never needs a render of its own -- `setViewport` already causes the one
    * that matters, in whatever reads `pitchExpanded` from the store.
+   *
+   * Seeded from the store, not from `false`: the store outlives this component (a
+   * remount starts a fresh ref but not a fresh store), so starting at `false`
+   * unconditionally would forget an already-`true` answer the moment this component
+   * remounted with the pitch unchanged. The very next `report()` would then compare
+   * against the *high* threshold instead of the low one, miss it because the ratio was
+   * only ever past the low one, and silently flip the note off with no pitch change at
+   * all. `getState()` here, not the `pitchExpanded` selector above: this only has to run
+   * once, on mount, and a selector would subscribe this component to every change for a
+   * value it never reads again afterwards.
    */
-  const wasPitchExpanded = useRef(false)
+  const wasPitchExpanded = useRef(useMapViewport.getState().pitchExpanded)
 
   useEffect(() => {
     const map = mapRef.current

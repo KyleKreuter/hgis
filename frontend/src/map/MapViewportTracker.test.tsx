@@ -106,4 +106,22 @@ describe('MapViewportTracker', () => {
     })
     expect(useMapViewport.getState().pitchExpanded).toBe(false)
   })
+
+  test('remounting at an unchanged ratio inside the band does not flip an already-on note off', () => {
+    // Reproduces the finding exactly: pitch stays at a ratio inside 1.4-1.6 the whole
+    // time -- no user action -- but the component (and with it, the ref) gets torn down
+    // and rebuilt, the way an error boundary or a future conditional mount could.
+    const map = fakeMap()
+    map.setRatio(1.65) // establish "on" against the high threshold
+    const first = renderTracker(map)
+    expect(useMapViewport.getState().pitchExpanded).toBe(true)
+
+    first.unmount()
+    map.setRatio(1.5) // still inside the band -- an unseeded ref would compare this to
+    // the high threshold again on the next mount and miss it, turning the note off
+    // without any change in pitch at all.
+    renderTracker(map)
+
+    expect(useMapViewport.getState().pitchExpanded).toBe(true)
+  })
 })
