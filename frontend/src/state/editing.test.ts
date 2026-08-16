@@ -203,3 +203,50 @@ describe('edit buffer', () => {
     expect(store().redoStack).toHaveLength(0)
   })
 })
+
+/**
+ * Die angefangene Zeichnung: Arbeit, die noch in keinem Puffer steht. Sie zaehlt nicht
+ * als Aenderung -- sonst laege der Zaehler der Werkzeugleiste -- aber jede Frage nach
+ * "geht dabei etwas verloren" muss sie kennen.
+ */
+describe('sketching', () => {
+  beforeEach(() => {
+    store().end()
+  })
+
+  it('ist keine Aenderung -- der Zaehler bleibt bei null', () => {
+    store().begin('layer-a')
+    store().setSketching(true)
+
+    expect(store().sketching).toBe(true)
+    expect(countChanges(store().buffer)).toBe(0)
+  })
+
+  it('faellt weg, wenn eine Sitzung beginnt', () => {
+    store().setSketching(true)
+    store().begin('layer-a')
+
+    expect(store().sketching).toBe(false)
+  })
+
+  it('faellt weg, wenn die Sitzung endet', () => {
+    // Bliebe es stehen, waere jeder Waechter dauerhaft blockiert -- fuer ein Werkzeug,
+    // das gar nicht mehr da ist.
+    store().begin('layer-a')
+    store().setSketching(true)
+    store().end()
+
+    expect(store().sketching).toBe(false)
+  })
+
+  it('meldet denselben Wert ohne neuen Zustand', () => {
+    // `DrawController` rechnet den Wert bei jeder Aenderung von terra-draw neu aus, und
+    // das sind viele: ein gleicher Wert darf kein Rendern ausloesen.
+    store().begin('layer-a')
+    store().setSketching(true)
+    const vorher = useEditing.getState()
+    store().setSketching(true)
+
+    expect(useEditing.getState()).toBe(vorher)
+  })
+})

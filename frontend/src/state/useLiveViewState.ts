@@ -131,9 +131,24 @@ function readBackOnce(
    */
   function scheduleJump(target: string) {
     settleTarget = target
+    armJumpTimer()
+  }
+
+  function armJumpTimer() {
     if (settleTimer !== null) clearTimeout(settleTimer)
     settleTimer = setTimeout(() => {
       settleTimer = null
+      // A read that is still on its way may well change where the state stands. Firing
+      // now would move the view to the newest layer this client *knows about*, which is
+      // not the same thing -- and for the length of that request the view would sit on a
+      // layer the state no longer names, which is the very fault this whole path exists
+      // to prevent. Waiting another window instead of firing: by then the read has landed
+      // and either replaced the target or left it standing, and the decision is made on
+      // what is true rather than on what happened to be true 300 ms ago.
+      if (running) {
+        armJumpTimer()
+        return
+      }
       const layerId = settleTarget
       settleTarget = null
       // Checked again on arrival, not only when the timer was set: the user may have

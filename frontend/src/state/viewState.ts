@@ -194,6 +194,19 @@ export function activeLayerJumpTarget({ known, stored, open }: ActiveLayerJump):
 }
 
 /**
+ * The layer a jump's way back should lead to, or `null` when there is none worth offering.
+ *
+ * @param chosen the layer the user last opened themselves. It survives a whole chain of
+ *   jumps, which is the point: after A -> B -> C the way back is still A, not B.
+ * @param jumpedTo where the jump just landed. Equal to `chosen` when someone moved the
+ *   view away and then back again -- offering a way back to where the user already is
+ *   would be an empty gesture.
+ */
+export function layerJumpBackTarget(chosen: string | null, jumpedTo: string): string | null {
+  return chosen !== null && chosen !== jumpedTo ? chosen : null
+}
+
+/**
  * A restored selection with every fid that no longer exists removed -- see CONTRACT.md
  * rule 3, "Die Auswahl zeigt auf gelöschte Objekte": vanished ones drop silently, the
  * caller only needs to say something when nothing of the restored selection survives.

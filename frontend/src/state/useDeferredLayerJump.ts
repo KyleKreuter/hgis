@@ -25,14 +25,15 @@ export interface DeferredLayerJump {
  * the second is where the state now stands; jumping to the first and then to the second
  * would move the view twice for one moment of attention.
  *
- * @param unsavedChanges how many unsaved changes the user has right now. A number rather
- *   than a boolean because that is what the workspace already computes, and because it
- *   changes on every edit -- which is what makes the effect below run at the moment the
- *   last one is saved or discarded.
+ * @param workAtRisk whether the user would lose something by moving now -- buffered
+ *   changes *or* a shape that is half-drawn (`hasUnsavedWork`). A boolean, not a count:
+ *   a sketch is work without being a change, so no number can express the question this
+ *   hook actually asks. It flips to false the moment the last change is saved or
+ *   discarded, and that is what makes the effect below run.
  * @param jump carries out the move. Called at most once per requested target.
  */
 export function useDeferredLayerJump(
-  unsavedChanges: number,
+  workAtRisk: boolean,
   jump: (layerId: string) => void,
 ): DeferredLayerJump {
   const waiting = useRef<string | null>(null)
@@ -41,14 +42,14 @@ export function useDeferredLayerJump(
   // reasoning as `useViewState`'s `saveRef`: what matters is the value at call time.
   const jumpRef = useRef(jump)
   jumpRef.current = jump
-  const unsavedRef = useRef(unsavedChanges)
-  unsavedRef.current = unsavedChanges
+  const workAtRiskRef = useRef(workAtRisk)
+  workAtRiskRef.current = workAtRisk
 
   const request = useCallback((layerId: string) => {
     // Straight through when nothing is at stake. Going through the effect below instead
     // would never fire at all in the common case: `waiting` is a ref, so setting it
     // renders nothing, and an effect that nothing schedules does not run.
-    if (unsavedRef.current === 0) {
+    if (!workAtRiskRef.current) {
       jumpRef.current(layerId)
       return
     }
@@ -59,15 +60,15 @@ export function useDeferredLayerJump(
     waiting.current = null
   }, [])
 
-  // Fires on the render that brings the count to zero -- the moment the last change was
-  // saved or discarded.
+  // Fires on the render where nothing is at risk any more -- the moment the last change
+  // was saved or discarded, or the half-drawn shape was finished or dropped.
   useEffect(() => {
-    if (unsavedChanges > 0) return
+    if (workAtRisk) return
     const target = waiting.current
     if (target === null) return
     waiting.current = null
     jumpRef.current(target)
-  }, [unsavedChanges])
+  }, [workAtRisk])
 
   return { request, cancel }
 }

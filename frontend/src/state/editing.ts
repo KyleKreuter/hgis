@@ -56,6 +56,20 @@ interface EditingState {
    */
   historyNonce: number
 
+  /**
+   * Whether a shape is half-drawn: corners set, not yet closed.
+   *
+   * Deliberately not part of {@link countChanges}. It is not a change -- nothing has
+   * reached the buffer yet, and the toolbar counter would be lying if it said "1
+   * ungespeicherte Änderung" for three clicks that are not a polygon yet. But it *is*
+   * work, and anything that ends the drawing session throws it away, so every guard that
+   * asks "would leaving now cost the user something" has to count it (`hasUnsavedWork`).
+   *
+   * Only {@code DrawController} writes this: terra-draw is the one place that knows
+   * whether its current mode is mid-shape.
+   */
+  sketching: boolean
+
   begin: (layerId: string) => void
   end: () => void
 
@@ -75,6 +89,8 @@ interface EditingState {
   redo: () => void
   /** Called after a successful save: undo must never reach back past persisted state. */
   reset: () => void
+  /** Reported by {@code DrawController} whenever terra-draw's own state changes. */
+  setSketching: (sketching: boolean) => void
 }
 
 const EMPTY_BUFFER: Buffer = { creates: {}, updates: {}, deletes: [] }
@@ -143,12 +159,17 @@ export const useEditing = create<EditingState>((set, get) => {
     redoStack: [],
     nextTempId: -1,
     historyNonce: 0,
+    sketching: false,
 
+    // `sketching` is cleared by both: a session that starts or ends has no half-drawn
+    // shape, and leaving it set would keep every guard blocked for a tool that is gone.
     begin: (layerId) =>
-      set({ layerId, buffer: EMPTY_BUFFER, undoStack: [], redoStack: [], nextTempId: -1 }),
+      set({ layerId, buffer: EMPTY_BUFFER, undoStack: [], redoStack: [], nextTempId: -1,
+        sketching: false }),
 
     end: () =>
-      set({ layerId: null, buffer: EMPTY_BUFFER, undoStack: [], redoStack: [], nextTempId: -1 }),
+      set({ layerId: null, buffer: EMPTY_BUFFER, undoStack: [], redoStack: [], nextTempId: -1,
+        sketching: false }),
 
     takeTempId: () => {
       const fid = get().nextTempId
@@ -242,6 +263,8 @@ export const useEditing = create<EditingState>((set, get) => {
     },
 
     reset: () => set({ buffer: EMPTY_BUFFER, undoStack: [], redoStack: [] }),
+
+    setSketching: (sketching) => set((state) => (state.sketching === sketching ? state : { sketching })),
   }
 })
 

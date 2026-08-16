@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   describeUnsavedChanges,
+  describeUnsavedWork,
   hasUnsavedChanges,
+  hasUnsavedWork,
   totalUnsavedChanges,
   unsavedChangesVerb,
 } from './unsavedChanges'
@@ -55,5 +57,54 @@ describe('unsavedChangesVerb', () => {
   it('is "gehen" for more than one, and for zero', () => {
     expect(unsavedChangesVerb(0)).toBe('gehen')
     expect(unsavedChangesVerb(2)).toBe('gehen')
+  })
+})
+
+/**
+ * Eine angefangene Zeichnung ist Arbeit, ohne eine Aenderung zu sein: sie erreicht den
+ * Puffer erst beim Schliessen der Form. Vorher zaehlte sie nirgends -- und ein Wechsel
+ * warf sie kommentarlos weg.
+ */
+describe('hasUnsavedWork', () => {
+  it('zaehlt gepufferte Aenderungen wie bisher', () => {
+    expect(hasUnsavedWork({ mapChanges: 1, tableChanges: 0, sketching: false })).toBe(true)
+    expect(hasUnsavedWork({ mapChanges: 0, tableChanges: 2, sketching: false })).toBe(true)
+  })
+
+  it('zaehlt eine angefangene Zeichnung, obwohl kein Puffer etwas haelt', () => {
+    expect(hasUnsavedWork({ mapChanges: 0, tableChanges: 0, sketching: true })).toBe(true)
+  })
+
+  it('meldet nichts, wenn wirklich nichts offen ist', () => {
+    expect(hasUnsavedWork({ mapChanges: 0, tableChanges: 0, sketching: false })).toBe(false)
+  })
+
+  it('unterscheidet sich genau in diesem einen Fall von hasUnsavedChanges', () => {
+    // Der Fall, an dem der Fehler hing: der Zaehler sagt null, verloren geht trotzdem etwas.
+    expect(hasUnsavedChanges(0, 0)).toBe(false)
+    expect(hasUnsavedWork({ mapChanges: 0, tableChanges: 0, sketching: true })).toBe(true)
+  })
+})
+
+describe('describeUnsavedWork', () => {
+  it('bleibt beim gewohnten Satz, wenn nur Aenderungen offen sind', () => {
+    expect(describeUnsavedWork({ mapChanges: 3, tableChanges: 0, sketching: false }))
+      .toBe(`${describeUnsavedChanges(3)} ${unsavedChangesVerb(3)}`)
+    expect(describeUnsavedWork({ mapChanges: 1, tableChanges: 0, sketching: false }))
+      .toBe('1 ungespeicherte Änderung geht')
+  })
+
+  it('nennt die angefangene Zeichnung, wenn sonst nichts offen ist', () => {
+    // Ohne diesen Zweig stuende dort "0 ungespeicherte Änderungen gehen verloren" --
+    // eine Warnung, die sich selbst widerspricht.
+    expect(describeUnsavedWork({ mapChanges: 0, tableChanges: 0, sketching: true }))
+      .toBe('Eine angefangene Zeichnung geht')
+  })
+
+  it('nennt beides, wenn beides offen ist -- und dann im Plural', () => {
+    expect(describeUnsavedWork({ mapChanges: 2, tableChanges: 0, sketching: true }))
+      .toBe('2 ungespeicherte Änderungen und eine angefangene Zeichnung gehen')
+    expect(describeUnsavedWork({ mapChanges: 1, tableChanges: 0, sketching: true }))
+      .toBe('1 ungespeicherte Änderung und eine angefangene Zeichnung gehen')
   })
 })

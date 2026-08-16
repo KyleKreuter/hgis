@@ -3,6 +3,7 @@ import {
   EMPTY_VIEW_STATE,
   SELECTION_SAVE_LIMIT,
   activeLayerJumpTarget,
+  layerJumpBackTarget,
   layerStateOf,
   planSelectionWrite,
   queryOf,
@@ -168,5 +169,21 @@ describe('activeLayerJumpTarget', () => {
   it('springt, nachdem der gespeicherte Layer erst auf niemanden und dann woandershin zeigte', () => {
     // known folgt dem gespeicherten Wert auch dann, wenn nicht gesprungen wurde.
     expect(activeLayerJumpTarget({ known: null, stored: 'b', open: 'a' })).toBe('b')
+  })
+})
+
+describe('layerJumpBackTarget', () => {
+  it('fuehrt zu dem Layer, den der Nutzer selbst zuletzt geoeffnet hat', () => {
+    expect(layerJumpBackTarget('a', 'b')).toBe('a')
+  })
+
+  it('bietet nichts an, wenn der Sprung dort landet, wo der Nutzer ohnehin war', () => {
+    // Kommt vor: jemand holt die Ansicht weg und gleich wieder zurueck. Ein Knopf
+    // "Zurueck zu A", waehrend man auf A steht, ist eine leere Geste.
+    expect(layerJumpBackTarget('a', 'a')).toBeNull()
+  })
+
+  it('bietet nichts an, wenn der Nutzer nie selbst einen Layer geoeffnet hat', () => {
+    expect(layerJumpBackTarget(null, 'b')).toBeNull()
   })
 })

@@ -11,7 +11,8 @@ import { ensureProjectLoaded, projectDetailQuery } from '@/api/projects'
 import { countChanges, useEditing } from '@/state/editing'
 import {
   describeUnsavedChanges,
-  hasUnsavedChanges,
+  describeUnsavedWork,
+  hasUnsavedWork,
   totalUnsavedChanges,
   unsavedChangesVerb,
 } from '@/state/unsavedChanges'
@@ -45,7 +46,7 @@ import { applyRemoteSelection, useSelection } from '@/state/selection'
 import { useDeferredLayerJump } from '@/state/useDeferredLayerJump'
 import { useLiveViewState } from '@/state/useLiveViewState'
 import { useViewStateWriter } from '@/state/useViewState'
-import { layerStateOf, shouldRestoreActiveLayer } from '@/state/viewState'
+import { layerJumpBackTarget, layerStateOf, shouldRestoreActiveLayer } from '@/state/viewState'
 import { boundsOfGeometry } from '@/map/geometryBounds'
 import { RectangleSelectTool } from '@/map/RectangleSelectTool'
 import { RectangleSelectToolbar } from '@/map/RectangleSelectToolbar'
@@ -128,9 +129,19 @@ function Workspace() {
     if (restoredActiveLayer.current || !viewState.ready) return
     restoredActiveLayer.current = true
     const toRestore = shouldRestoreActiveLayer(activeLayerId, viewState.document)
-    if (toRestore) navigate({ search: { layer: toRestore }, replace: true })
+    if (toRestore) {
+      chosenLayerId.current = toRestore
+      navigate({ search: { layer: toRestore }, replace: true })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewState.ready])
+
+  /**
+   * The layer the user last opened themselves -- the address they arrived with, or
+   * whichever one they have picked since. A jump never touches it, which is what makes it
+   * the honest way back out of a chain of them: after A -> B -> C, this still says A.
+   */
+  const chosenLayerId = useRef<string | null>(activeLayerId ?? null)
 
   function requestZoom(extent: [number, number, number, number]) {
     setZoomTo((previous) => ({ extent, nonce: (previous?.nonce ?? 0) + 1 }))
@@ -143,6 +154,9 @@ function Workspace() {
     deferredJump.cancel()
     // A fid means nothing outside its layer, so a selection cannot survive the switch.
     clearSelection()
+    // The one place this is written: every call here is the user picking a layer -- from
+    // the tree, from a dialog that just created one, or from the way back out of a jump.
+    chosenLayerId.current = layerId
     // The switch itself is the action that makes this worth remembering (CONTRACT.md's
     // "Die wichtigste Regel") -- not an effect watching `activeLayerId`, which would fire
     // again, with a stale value, on every unrelated re-render of this route.
@@ -219,6 +233,13 @@ function Workspace() {
   }, [activeLayerId])
 
   const unsavedChangesCount = totalUnsavedChanges(editing.pending, tableChanges)
+  // What the user would lose, not what a buffer holds: a shape whose corners are set but
+  // which is not closed yet counts too. It reaches the buffer only on `finish`, so
+  // `unsavedChangesCount` is still 0 while it is being drawn -- and everything that ends
+  // the drawing session throws it away.
+  const sketching = useEditing((state) => state.sketching)
+  const unsavedWork = { mapChanges: editing.pending, tableChanges, sketching }
+  const workAtRisk = hasUnsavedWork(unsavedWork)
 
   // Reads both buffers fresh at call time rather than closing over `editing.pending` /
   // `tableChanges` -- `shouldBlockFn` and `enableBeforeUnload` both run outside React's
@@ -226,10 +247,11 @@ function Workspace() {
   // whatever was current when this function was created.
   const hasPendingWork = useCallback(
     () =>
-      hasUnsavedChanges(
-        countChanges(useEditing.getState().buffer),
-        tableChangeCount(useTableEditing.getState()),
-      ),
+      hasUnsavedWork({
+        mapChanges: countChanges(useEditing.getState().buffer),
+        tableChanges: tableChangeCount(useTableEditing.getState()),
+        sketching: useEditing.getState().sketching,
+      }),
     [],
   )
 
@@ -264,8 +286,12 @@ function Workspace() {
    * actually on rather than to some point in a chain.
    */
   function jumpToLayer(layerId: string) {
-    const cameFrom = activeLayerId
-    const cameFromName = activeLayer?.name
+    // The layer the *user* last opened, not the one this client was on a moment ago.
+    // Reading `activeLayerId` here was wrong as soon as two jumps followed each other:
+    // the second one then offered the way back to the first jump's destination -- a place
+    // the user had never chosen -- and the real starting point was gone for good.
+    const cameFrom = layerJumpBackTarget(chosenLayerId.current, layerId)
+    const cameFromName = cameFrom ? layerNameOf(cameFrom) : undefined
     // Not the user's own doing, so it must not be saved back out. `select` on a different
     // layer discards the previous selection by itself -- a fid means nothing outside its
     // layer. Applied here rather than left to the attribute table's restore, which only
@@ -275,13 +301,16 @@ function Workspace() {
     navigate({ search: { layer: layerId }, replace: true })
 
     toast.info(`Der Layer „${layerNameOf(layerId)}“ wurde von außen geöffnet`, {
+      // One id for all of them, so a second jump replaces the first hint instead of
+      // stacking beside it. Two hints offering two different ways back is a choice the
+      // user should never have to make -- and only the newest one is still true.
+      id: 'live-layer-jump',
       // Long enough to read the sentence and decide, rather than the default few seconds:
       // the view has just changed under the user, and the way back is the whole point.
       duration: 12_000,
-      action:
-        cameFrom && cameFromName
-          ? { label: `Zurück zu „${cameFromName}“`, onClick: () => selectLayer(cameFrom) }
-          : undefined,
+      action: cameFrom
+        ? { label: `Zurück zu „${cameFromName}“`, onClick: () => selectLayer(cameFrom) }
+        : undefined,
     })
   }
 
@@ -292,7 +321,7 @@ function Workspace() {
 
   // Waits out unsaved work before moving the view; see the hook for why saving and
   // discarding are the same thing to it.
-  const deferredJump = useDeferredLayerJump(unsavedChangesCount, jumpToLayer)
+  const deferredJump = useDeferredLayerJump(workAtRisk, jumpToLayer)
 
   // Held by this route rather than by the map or the table: the stream belongs to the open
   // project, so it opens when the project opens and closes when the project is left. A
@@ -565,7 +594,7 @@ function Workspace() {
       <DiscardEditsDialog
         open={leaveGuard.status === 'blocked'}
         title="Ungespeicherte Änderungen verwerfen?"
-        description={`${describeUnsavedChanges(unsavedChangesCount)} ${unsavedChangesVerb(unsavedChangesCount)} verloren, wenn Sie jetzt fortfahren.`}
+        description={`${describeUnsavedWork(unsavedWork)} verloren, wenn Sie jetzt fortfahren.`}
         confirmLabel="Änderungen verwerfen"
         onConfirm={() => {
           // Whichever mode is dirty is the one `hasPendingWork` blocked on -- ending both

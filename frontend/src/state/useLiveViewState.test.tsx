@@ -373,6 +373,42 @@ describe('useLiveViewState', () => {
       expect(moved).not.toHaveBeenCalled()
     })
 
+    it('springt nicht los, solange eine Nachlese noch unterwegs ist', async () => {
+      // Vom Prüfer gefunden: die Frist des ersten Sprungs lief unabhängig weiter und
+      // feuerte nach 300 ms mit dem Layer aus der *ersten* Antwort, obwohl die zweite
+      // Nachlese schon unterwegs war und einen anderen Stand brachte. Für die Dauer der
+      // Verzögerung stand die Ansicht dann auf einem Layer, den der Stand nicht nennt --
+      // genau der Zustand, den der Sprung beseitigen soll. 300 ms sind kein Puffer gegen
+      // eine schwankende Leitung.
+      const moved = vi.fn()
+      const antwort = (body: ViewStateDocument) =>
+        ({ ok: true, status: 200, json: () => Promise.resolve(body) }) as Response
+      let releaseSecond: (() => void) | undefined
+      let call = 0
+      const fetchStub = vi.fn(() => {
+        call += 1
+        if (call === 1) return Promise.resolve(antwort(documentWith([], OTHER_LAYER)))
+        return new Promise<Response>((resolve) => {
+          releaseSecond = () => resolve(antwort(documentWith([], 'layer-3')))
+        })
+      })
+      vi.stubGlobal('fetch', fetchStub)
+      renderWithQueryClient(<Probe onActiveLayerMoved={moved} />)
+
+      announce('anderer-tab', 2)
+      await waitFor(() => expect(fetchStub).toHaveBeenCalledTimes(1))
+      announce('anderer-tab', 3)
+      await waitFor(() => expect(fetchStub).toHaveBeenCalledTimes(2))
+
+      // Die zweite Nachlese hängt. Die Frist des ersten Sprungs läuft in dieser Zeit ab.
+      await pastTheSettleWindow()
+      expect(moved).not.toHaveBeenCalled()
+
+      releaseSecond?.()
+      await waitForJump(moved, 'layer-3')
+      expect(moved).toHaveBeenCalledTimes(1)
+    })
+
     it('bietet denselben Sprung nicht bei jedem späteren Ereignis erneut an', async () => {
       // Was gemeldet wurde, gilt als bekannt -- auch wenn die Ansicht ihm nicht gefolgt ist.
       const moved = vi.fn()

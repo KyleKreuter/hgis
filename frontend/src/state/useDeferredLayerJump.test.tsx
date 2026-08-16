@@ -11,31 +11,31 @@ import { useDeferredLayerJump, type DeferredLayerJump } from './useDeferredLayer
  * nachgeholt werden.
  */
 describe('useDeferredLayerJump', () => {
-  function setup(unsavedChanges = 0) {
+  function setup(workAtRisk = false) {
     const jump = vi.fn()
     let api: DeferredLayerJump | null = null
 
-    function Probe({ changes }: { changes: number }) {
-      api = useDeferredLayerJump(changes, jump)
+    function Probe({ atRisk }: { atRisk: boolean }) {
+      api = useDeferredLayerJump(atRisk, jump)
       return null
     }
 
-    const view = render(<Probe changes={unsavedChanges} />)
-    const setChanges = (changes: number) =>
+    const view = render(<Probe atRisk={workAtRisk} />)
+    const setAtRisk = (atRisk: boolean) =>
       act(() => {
-        view.rerender(<Probe changes={changes} />)
+        view.rerender(<Probe atRisk={atRisk} />)
       })
     return {
       jump,
       request: (layerId: string) => act(() => api!.request(layerId)),
       cancel: () => act(() => api!.cancel()),
-      setChanges,
+      setAtRisk,
       unmount: view.unmount,
     }
   }
 
   it('springt sofort, wenn nichts ungespeichert ist', () => {
-    const { jump, request } = setup(0)
+    const { jump, request } = setup(false)
 
     request('layer-b')
 
@@ -43,7 +43,7 @@ describe('useDeferredLayerJump', () => {
   })
 
   it('springt nicht, solange ungespeicherte Arbeit laeuft', () => {
-    const { jump, request } = setup(3)
+    const { jump, request } = setup(true)
 
     request('layer-b')
 
@@ -51,10 +51,10 @@ describe('useDeferredLayerJump', () => {
   })
 
   it('holt den Sprung nach, sobald die Arbeit fertig ist', () => {
-    const { jump, request, setChanges } = setup(3)
+    const { jump, request, setAtRisk } = setup(true)
     request('layer-b')
 
-    setChanges(0)
+    setAtRisk(false)
 
     expect(jump).toHaveBeenCalledWith('layer-b')
     expect(jump).toHaveBeenCalledTimes(1)
@@ -63,29 +63,29 @@ describe('useDeferredLayerJump', () => {
   it('behandelt Verwerfen wie Speichern -- beides endet mit leerem Puffer', () => {
     // Der Hook erfaehrt gar nicht, was aus der Arbeit wurde. Genau das ist der Punkt:
     // beides ist kein Grund mehr zu bleiben.
-    const { jump, request, setChanges } = setup(2)
+    const { jump, request, setAtRisk } = setup(true)
     request('layer-b')
 
-    setChanges(0)
+    setAtRisk(false)
 
     expect(jump).toHaveBeenCalledWith('layer-b')
   })
 
-  it('springt bei einem Zwischenstand noch nicht', () => {
-    const { jump, request, setChanges } = setup(3)
+  it('springt nicht bei einem Rendern, das nichts freigibt', () => {
+    const { jump, request, setAtRisk } = setup(true)
     request('layer-b')
 
-    setChanges(1)
+    setAtRisk(true)
 
     expect(jump).not.toHaveBeenCalled()
   })
 
   it('holt nur den neuesten von mehreren gewarteten Sprungen nach', () => {
-    const { jump, request, setChanges } = setup(1)
+    const { jump, request, setAtRisk } = setup(true)
     request('layer-b')
     request('layer-c')
 
-    setChanges(0)
+    setAtRisk(false)
 
     expect(jump).toHaveBeenCalledTimes(1)
     expect(jump).toHaveBeenCalledWith('layer-c')
@@ -93,29 +93,29 @@ describe('useDeferredLayerJump', () => {
 
   it('vergisst einen wartenden Sprung, wenn der Nutzer selbst einen Layer waehlt', () => {
     // Sonst naehme der nachgeholte Sprung ihm gleich wieder weg, was er gerade gewaehlt hat.
-    const { jump, request, cancel, setChanges } = setup(1)
+    const { jump, request, cancel, setAtRisk } = setup(true)
     request('layer-b')
 
     cancel()
-    setChanges(0)
+    setAtRisk(false)
 
     expect(jump).not.toHaveBeenCalled()
   })
 
   it('springt kein zweites Mal, wenn spaeter erneut gespeichert wird', () => {
-    const { jump, request, setChanges } = setup(1)
+    const { jump, request, setAtRisk } = setup(true)
     request('layer-b')
-    setChanges(0)
+    setAtRisk(false)
     expect(jump).toHaveBeenCalledTimes(1)
 
-    setChanges(2)
-    setChanges(0)
+    setAtRisk(true)
+    setAtRisk(false)
 
     expect(jump).toHaveBeenCalledTimes(1)
   })
 
   it('springt nach dem Verlassen der Seite nicht mehr', () => {
-    const { jump, request, unmount } = setup(1)
+    const { jump, request, unmount } = setup(true)
     request('layer-b')
 
     unmount()
