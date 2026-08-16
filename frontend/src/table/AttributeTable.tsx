@@ -21,6 +21,8 @@ import { FilterBar } from './FilterBar'
 import type { FilterMode } from './filterMode'
 import { layerTableStateOf } from './layerTableState'
 import { TableEditToolbar } from './TableEditToolbar'
+import { TableEditToolbarExit } from './TableEditToolbarExit'
+import { useTableEditToolbar } from './useTableEditToolbar'
 import { FieldInput } from './FieldInput'
 import { initialDraftFromChar, kindOf } from './fieldKind'
 import {
@@ -364,6 +366,13 @@ export function AttributeTable({
   const active = useTableEditing((state) => state.active)
   const focus = useTableEditing((state) => state.focus)
   const editingCell = useTableEditing((state) => state.editingCell)
+  // Called unconditionally, ahead of the `!layerId`/`isMapImage` early returns below
+  // (Rules of Hooks) -- `layerId ?? ''` matches how the queries above handle the same
+  // gap, and the mutation this creates is never triggered before there is a layer to
+  // save against. Lifted here, not into `TableEditToolbar`/`TableEditToolbarExit`
+  // themselves, so both halves of the toolbar share the one `useSaveTableEdits`
+  // mutation instead of each getting their own -- see the hook's own doc comment.
+  const tableEditToolbar = useTableEditToolbar(layerId ?? '', projectId)
   const rowCount = rows.length
   const columnCount = fields.length
 
@@ -514,12 +523,13 @@ export function AttributeTable({
             error={query.error}
             totalCount={total}
           />
-          <TableEditToolbar layerId={layerId} projectId={projectId} onRequestStart={onRequestEdit} />
+          <TableEditToolbar toolbar={tableEditToolbar} onRequestStart={onRequestEdit} />
           <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
             {query.isPending ? '…' : `${formatCount(rows.length)} / ${formatCount(total)}`}
           </span>
         </>
       }
+      exit={tableEditToolbar.active ? <TableEditToolbarExit toolbar={tableEditToolbar} /> : null}
     >
       {showRestoredHint && (
         <RestoredQueryHint mode={mode} matchedCount={total} totalCount={layerFeatureCount} onReset={resetRestoredQuery} />
@@ -877,10 +887,17 @@ function RestoredQueryHint({
 function Panel({
   title,
   toolbar,
+  exit,
   children,
 }: {
   title: string
   toolbar?: React.ReactNode
+  /**
+   * The way out of whatever mode `toolbar` is currently in (table editing's X so
+   * far). Rendered as a `shrink-0` sibling of the scrollable strip, never inside it --
+   * see the comment on the wrapping row below for why.
+   */
+  exit?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
@@ -891,44 +908,54 @@ function Panel({
        * line eats that height from the table below it -- `flex-wrap` was tried first and
        * rejected, because in the table's own edit mode (counter, Verwerfen, Speichern,
        * separator, X) it wrapped to four lines at 340px, which at the dock's own low end
-       * left the table 0px, not merely cramped. Overflow past one line is a real
-       * possibility that has to go *somewhere*; the choice here is sideways, not down --
-       * `overflow-x-auto` keeps every control reachable by scrolling the strip, the same
-       * way the table body itself already scrolls sideways for its columns (see the
-       * scroller comment below), rather than trading a fixed-height table for a
-       * growing one.
+       * left the table 0px, not merely cramped.
        *
-       * The scrollbar utilities below (`scrollbar-width`/`scrollbar-color` for
-       * Firefox, `::-webkit-scrollbar*` for the rest) force a thin, always-drawn bar
-       * instead of the platform's own overlay one: an overlay scrollbar only appears on
-       * hover or while dragging, so a strip that overflows by exactly the width of
-       * "42 / 1.234" can look complete at rest -- there is no other hint. A native
-       * scrollbar only ever renders when the content actually overflows, so this never
-       * shows on a line that fits. The way out of edit mode (the X, `TableEditToolbar`)
-       * is `sticky` inside this scroller and pinned to its own right edge for the same
-       * reason: at 400px the cut used to land in the gap right after "Speichern",
-       * which hid both the counter and the X with nothing visibly clipped to notice.
+       * The row is two flex siblings, not one: a scrollable strip (title, search,
+       * session controls) and, next to it, `exit` in its own `shrink-0` region. `exit`
+       * was first folded into the scrollable strip as a `position: sticky` element, and
+       * that was wrong -- sticky does not reserve its own space, it only relocates
+       * itself once its normal-flow position would scroll past the anchor. At rest
+       * (`scrollLeft: 0`, nothing scrolled yet) it rendered on top of whatever else the
+       * strip already put in that same spot, which at 340-400px was "Speichern", and a
+       * real click there opened the leave-mode dialog instead of saving. A dedicated
+       * region has nothing to overlap, because nothing else is ever drawn in it.
        */}
-      <div className="flex h-7 shrink-0 items-center gap-2 overflow-x-auto border-b bg-muted/40 px-2 [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
+      <div className="flex h-7 shrink-0 items-stretch border-b bg-muted/40">
         {/*
-         * Gives way before anything else in the strip does, and all the way down to
-         * nothing. Held at its full width it pushed the save button, the change counter
-         * and the whole search field out over the panel's edge -- and out of reach,
-         * because the panel then scrolled sideways and carried this title along with it.
-         *
-         * Nothing here holds it open, unlike the layer name in the tree: this is a
-         * caption, not the only place a layer is named. The same layer stands in the tree
-         * a panel away, in this title attribute, and over the table's own columns. The
-         * search field next to it is a control that has to stay operable, so the last
-         * pixels of the strip belong to it and not here.
+         * overflow-x-auto keeps every control reachable by scrolling the strip, the
+         * same way the table body itself already scrolls sideways for its columns (see
+         * the scroller comment below), rather than trading a fixed-height table for a
+         * growing one. The scrollbar utilities (`scrollbar-width`/`scrollbar-color` for
+         * Firefox, `::-webkit-scrollbar*` for the rest) force a thin, always-drawn bar
+         * instead of the platform's own overlay one: an overlay scrollbar only appears
+         * on hover or while dragging, so a strip that overflows by exactly the width of
+         * "42 / 1.234" can look complete at rest -- there is no other hint. A native
+         * scrollbar only ever renders when the content actually overflows, so this
+         * never shows on a line that fits.
          */}
-        <span
-          className="truncate text-xs font-medium tracking-wide uppercase text-muted-foreground"
-          title={title}
-        >
-          {title}
-        </span>
-        {toolbar}
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-2 [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
+          {/*
+           * Gives way before anything else in the strip does, and all the way down to
+           * nothing. Held at its full width it pushed the save button, the change
+           * counter and the whole search field out over the panel's edge -- and out of
+           * reach, because the panel then scrolled sideways and carried this title
+           * along with it.
+           *
+           * Nothing here holds it open, unlike the layer name in the tree: this is a
+           * caption, not the only place a layer is named. The same layer stands in the
+           * tree a panel away, in this title attribute, and over the table's own
+           * columns. The search field next to it is a control that has to stay
+           * operable, so the last pixels of the strip belong to it and not here.
+           */}
+          <span
+            className="truncate text-xs font-medium tracking-wide uppercase text-muted-foreground"
+            title={title}
+          >
+            {title}
+          </span>
+          {toolbar}
+        </div>
+        {exit && <div className="flex shrink-0 items-center gap-2 border-l px-2">{exit}</div>}
       </div>
       {children}
     </div>
