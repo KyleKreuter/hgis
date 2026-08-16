@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useMap } from './MapContext'
 import { useMapViewport } from './mapViewportStore'
 import { isPitchExpanded } from './viewportBounds'
@@ -15,6 +15,15 @@ import { isPitchExpanded } from './viewportBounds'
 export function MapViewportTracker() {
   const { mapRef, isLoaded } = useMap()
   const setViewport = useMapViewport((state) => state.setViewport)
+  /**
+   * `isPitchExpanded`'s hysteresis needs to know what it decided last time -- kept here,
+   * not in the store, because nothing outside this component has a reason to read it:
+   * the store's own `pitchExpanded` is the answer that matters to a consumer, this is
+   * only the memory that produces the next one. A plain ref rather than state, since a
+   * change here never needs a render of its own -- `setViewport` already causes the one
+   * that matters, in whatever reads `pitchExpanded` from the store.
+   */
+  const wasPitchExpanded = useRef(false)
 
   useEffect(() => {
     const map = mapRef.current
@@ -42,7 +51,9 @@ export function MapViewportTracker() {
         height: canvas.clientHeight,
         center: [center.lng, center.lat],
         zoom,
+        wasExpanded: wasPitchExpanded.current,
       })
+      wasPitchExpanded.current = expanded
       setViewport(bbox, zoom, expanded)
     }
 
