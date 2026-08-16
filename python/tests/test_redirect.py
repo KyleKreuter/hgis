@@ -24,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 import hgis
-from hgis.client import ReadOnlyGuard
+from hgis.client import RequestGuard
 from hgis.transport import HttpxTransport, Response, Transport
 
 PROJECT = "019fec3a-ef0c-775c-a14f-7535e8a676eb"
@@ -97,7 +97,7 @@ def test_a_redirect_cannot_smuggle_a_write_past_the_guard(
     handler.status = status
     client = _client(server)
 
-    with pytest.raises(hgis.ReadOnlyError) as error:
+    with pytest.raises(hgis.GuardError) as error:
         client.save_view_state(PROJECT, {"version": 1, "activeLayerId": None, "layers": {}})
 
     assert FORBIDDEN in str(error.value)
@@ -163,7 +163,7 @@ def test_an_allowed_hop_is_followed() -> None:
     moves a path. A hop that lands somewhere allowed is fine.
     """
     inner = _Scripted(_redirect(307, VIEW_STATE), Response(204, ""))
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
     response = guard.request("PUT", f"http://host{VIEW_STATE}", json={"a": 1})
 
@@ -177,7 +177,7 @@ def test_the_body_does_not_travel_when_the_method_changes() -> None:
     send a body that belonged to a different request.
     """
     inner = _Scripted(_redirect(303, "/api/projects"), Response(200, "{}"))
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
     guard.request("PUT", f"http://host{VIEW_STATE}", json={"a": 1})
 
@@ -197,7 +197,7 @@ def test_the_client_name_comes_off_a_rewritten_get() -> None:
     than a header that does no harm.
     """
     inner = _Scripted(_redirect(303, "/api/projects"), Response(200, "{}"))
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
     guard.request(
         "PUT",
@@ -215,7 +215,7 @@ def test_the_client_name_stays_on_a_hop_that_keeps_the_method() -> None:
     """307 and 308 stay a write, so the name still belongs on them."""
     inner = _Scripted(_redirect(307, VIEW_STATE), Response(204, ""))
 
-    ReadOnlyGuard(inner).request(
+    RequestGuard(inner).request(
         "PUT",
         f"http://host{VIEW_STATE}",
         json={"a": 1},
@@ -232,9 +232,9 @@ def test_a_hop_to_another_host_is_refused() -> None:
     so injecting one needs no malicious server -- only the network in between.
     """
     inner = _Scripted(_redirect(307, f"http://anderer-host{VIEW_STATE}"))
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
-    with pytest.raises(hgis.ReadOnlyError) as error:
+    with pytest.raises(hgis.GuardError) as error:
         guard.request("PUT", f"http://host{VIEW_STATE}", json={})
 
     assert "anderen Server" in str(error.value)
@@ -244,16 +244,16 @@ def test_a_hop_to_another_host_is_refused() -> None:
 def test_a_hop_to_another_scheme_is_refused() -> None:
     """https and http are different origins; a downgrade is a change of one."""
     inner = _Scripted(_redirect(307, f"https://host{VIEW_STATE}"))
-    with pytest.raises(hgis.ReadOnlyError):
-        ReadOnlyGuard(inner).request("PUT", f"http://host{VIEW_STATE}", json={})
+    with pytest.raises(hgis.GuardError):
+        RequestGuard(inner).request("PUT", f"http://host{VIEW_STATE}", json={})
 
 
 def test_a_relative_location_is_resolved_against_the_current_url() -> None:
     """``Location: ../order`` is a redirect like any other and gets checked."""
     inner = _Scripted(_redirect(307, "../../layers/x/order"))
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
-    with pytest.raises(hgis.ReadOnlyError) as error:
+    with pytest.raises(hgis.GuardError) as error:
         guard.request("PUT", f"http://host{VIEW_STATE}", json={})
 
     assert "/api/layers/x/order" in str(error.value)
@@ -262,7 +262,7 @@ def test_a_relative_location_is_resolved_against_the_current_url() -> None:
 def test_a_redirect_loop_ends() -> None:
     """A server pointing at itself must not spin this in place."""
     inner = _Scripted(*[_redirect(307, VIEW_STATE) for _ in range(20)])
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
     with pytest.raises(hgis.TransportError) as error:
         guard.request("PUT", f"http://host{VIEW_STATE}", json={})
@@ -274,7 +274,7 @@ def test_a_redirect_loop_ends() -> None:
 def test_a_redirect_without_a_location_is_handed_back() -> None:
     """Nothing to follow, so nothing to check; the caller sees what came."""
     inner = _Scripted(Response(307, ""))
-    response = ReadOnlyGuard(inner).request("GET", "http://host/api/projects")
+    response = RequestGuard(inner).request("GET", "http://host/api/projects")
     assert response.status == 307
 
 
@@ -285,7 +285,7 @@ def test_reads_are_redirected_normally(redirecting_server) -> None:
     """
     server, handler = redirecting_server
     host, port = server.server_address[:2]
-    guard = ReadOnlyGuard(HttpxTransport())
+    guard = RequestGuard(HttpxTransport())
 
     response = guard.request("GET", f"http://{host}:{port}{VIEW_STATE}")
 

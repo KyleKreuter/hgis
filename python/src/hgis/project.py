@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterator, Sequence
+from typing import TYPE_CHECKING, Any, Iterator, Mapping, Sequence
 
 from .errors import UnknownNameError
 
@@ -103,6 +103,36 @@ class Project:
         raise UnknownNameError(
             f"Unbekannter Layer: {name_or_id}. Verfügbar: {available}."
         )
+
+    def create_layer(
+        self,
+        name: str,
+        geometry_type: str,
+        *,
+        fields: Mapping[str, str] | None = None,
+    ) -> "Layer":
+        """
+        Create a new, empty layer in this project -- ready to draw into with
+        :meth:`hgis.layer.Layer.insert`.
+
+        >>> project.create_layer("Bäume", "MULTIPOINT",
+        ...     fields={"Gattung": "TEXT", "Pflanzjahr": "INTEGER"})
+
+        :param geometry_type: MULTIPOINT, MULTILINESTRING, MULTIPOLYGON or
+            GEOMETRY -- the last for a layer meant to hold a genuine mix from
+            the start
+        :param fields: attribute fields to create alongside the layer, name to
+            type, in the given order. See
+            :meth:`hgis.layer.Layer.create_field` for the nine type tokens.
+            None or empty is a valid layer that shows only ``fid``.
+        """
+        from .layer import Layer
+
+        data = self._client.create_layer(
+            self.id, name, geometry_type,
+            fields=list(fields.items()) if fields else None,
+        )
+        return Layer(self._client, data, project=self)
 
     # --- what the user is looking at ---------------------------------------
 

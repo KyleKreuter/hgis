@@ -57,6 +57,33 @@ class NotFoundError(ApiError):
     """A project, layer or feature the server does not have (HTTP 404)."""
 
 
+class ConflictError(ApiError):
+    """
+    A write collided with another one (HTTP 409).
+
+    Raised by :meth:`hgis.layer.Layer.edit` and the convenience methods built
+    on it, when the ``row_version`` sent with an update or a delete no longer
+    matches the row -- someone else wrote it in the meantime.
+
+    :param current: the row as it stands on the server right now, in the same
+        shape ``GET /api/layers/{id}/features/{fid}`` returns -- ``fid``,
+        ``properties``, ``geometry``, ``rowVersion``. Read it, decide, and try
+        again with the fresh ``rowVersion``. None when the server's answer did
+        not carry one.
+    """
+
+    def __init__(
+        self,
+        status: int,
+        detail: str,
+        title: str | None = None,
+        instance: str | None = None,
+        current: dict | None = None,
+    ) -> None:
+        super().__init__(status, detail, title, instance)
+        self.current = current
+
+
 class UnknownNameError(HgisError, LookupError):
     """
     A name that matches no project or layer in what was actually there.
@@ -80,17 +107,26 @@ class InvalidClientIdError(HgisError, ValueError):
     """
 
 
-class ReadOnlyError(HgisError):
+class GuardError(HgisError):
     """
-    A request that would change data, which this stage does not do.
+    A request that :class:`hgis.client.RequestGuard` refused before it reached
+    the server.
 
     Not a lock -- anyone who means to write can import an HTTP library and go
     around this library entirely. It is a guard against the accidental one: a
-    generic ``put`` or ``_send("DELETE", ...)`` reaching a real endpoint. That
-    matters most right now, because there is no undo behind the API and no
-    recycle bin: a deletion is final the moment it arrives.
+    request nobody meant to send reaching a real endpoint, or a redirect
+    quietly turning a checked request into an unchecked one. What is allowed
+    grows with what this library can do; see :class:`hgis.client.RequestGuard`
+    for the current list.
 
-    The message names the request and the one write that is allowed.
+    Two things a deletion still cannot undo, guard or not: a *layer* deleted
+    with :meth:`hgis.layer.Layer.purge` (its :meth:`hgis.layer.Layer.delete`
+    only moves it to the project's trash, and stays reversible until purged),
+    and an *object* deleted through :meth:`hgis.layer.Layer.edit` -- the
+    server's own change log is the only way back for those, never this
+    library. See the README's "Was unwiederbringlich ist".
+
+    The message names the request and, where useful, what is allowed instead.
     """
 
 

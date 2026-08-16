@@ -6,18 +6,19 @@ import os
 import re
 import threading
 import uuid
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable, Iterator
 from urllib.parse import urljoin, urlsplit
 
 from .errors import (
     ApiError,
+    ConflictError,
+    GuardError,
     InvalidClientIdError,
     NotFoundError,
-    ReadOnlyError,
     TransportError,
     UnknownNameError,
 )
-from .transport import DEFAULT_TIMEOUT, Response, Transport, build_url, default_transport
+from .transport import DEFAULT_TIMEOUT, Event, Response, Transport, build_url, default_transport
 
 #: Where hGIS listens by default.
 #:
@@ -27,7 +28,7 @@ from .transport import DEFAULT_TIMEOUT, Response, Transport, build_url, default_
 #:
 #: Point this at a host across a real network and that stops being true. Then
 #: the traffic is readable and changeable in transit -- including the redirects
-#: :class:`ReadOnlyGuard` has to reason about, which is why it refuses a hop
+#: :class:`RequestGuard` has to reason about, which is why it refuses a hop
 #: that leaves the origin. Use ``https://`` for anything that is not localhost.
 DEFAULT_BASE_URL = "http://localhost:8080"
 
@@ -143,21 +144,38 @@ _PROJECT_PAGE_SIZE = 100
 
 _UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 
+#: The one path :meth:`RequestGuard.events` may open. See its docstring for
+#: why this is a literal check rather than an entry in :data:`_ALLOWED`.
+_EVENTS_PATH = "/api/events"
+
 #: Every request this stage may make, as (method, path pattern).
 #:
 #: Reading is unrestricted -- a GET cannot destroy anything, and leaving it open
-#: keeps the API explorable. Writing is one entry long: the saved view state,
-#: which is what :meth:`hgis.project.Project.select` writes. Every other method
-#: is refused before it reaches the network.
+#: keeps the API explorable. Writing is this list: the saved view state
+#: (:meth:`hgis.project.Project.select`); a layer's lifecycle -- create, change,
+#: delete (to the trash), restore, purge (out of the trash, for good); a batch
+#: of object edits; and a field's own create and delete. Every other method or
+#: path is refused before it reaches the network -- split, merge and layer
+#: reordering among them, which this stage does not open.
 #:
-#: The backend has endpoints for deleting a layer, deleting a project and
-#: applying a batch of edits, and a generic ``put(path, body)`` would reach all
-#: three. There is no recycle bin behind them yet, so a request sent by mistake
-#: cannot be taken back. This list is what makes such a request a Python error
-#: instead of a lost layer.
+#: Deliberately still a list of (method, path pattern) rather than a generic
+#: ``request(method, path, body)`` on :class:`Client`: the pattern only ever
+#: checks *where* a request goes, never what its body contains, so a caller
+#: who could name any of these paths directly could also send any body to it.
+#: Each entry below therefore has exactly one named method on :class:`Client`
+#: that builds its body, and that is the only way to reach it from this
+#: library -- the same shape :meth:`Client.save_view_state` already had.
 _ALLOWED: tuple[tuple[str, str], ...] = (
     ("GET", r".*"),
     ("PUT", rf"/api/projects/{_UUID}/view-state"),
+    ("POST", rf"/api/projects/{_UUID}/layers"),
+    ("PATCH", rf"/api/layers/{_UUID}"),
+    ("DELETE", rf"/api/layers/{_UUID}"),
+    ("POST", rf"/api/layers/{_UUID}/restore"),
+    ("DELETE", rf"/api/layers/{_UUID}/purge"),
+    ("POST", rf"/api/layers/{_UUID}/edits"),
+    ("POST", rf"/api/layers/{_UUID}/fields"),
+    ("DELETE", rf"/api/layers/{_UUID}/fields/{_UUID}"),
 )
 
 
@@ -165,16 +183,21 @@ def _check_allowed(method: str, url: str) -> None:
     """
     Refuse anything the list above does not name.
 
-    :raises ReadOnlyError: naming the request and the one write that is allowed
+    :raises GuardError: naming the request and, in short, what this stage can
+        do instead
     """
     path = urlsplit(url).path
     for allowed_method, pattern in _ALLOWED:
         if method.upper() == allowed_method and re.fullmatch(pattern, path):
             return
-    raise ReadOnlyError(
-        f"Diese Stufe der Bibliothek liest nur. {method.upper()} {path} ist nicht "
-        "vorgesehen. Erlaubt sind lesende Anfragen und das Speichern der Auswahl "
-        "über project.select()."
+    raise GuardError(
+        f"{method.upper()} {path} ist nicht vorgesehen. Erlaubt sind lesende "
+        "Anfragen, project.select() und die Schreibwege dieser Stufe: ein Layer "
+        "anlegen, ändern, löschen, wiederherstellen oder endgültig löschen "
+        "(project.create_layer(), layer.update()/.delete()/.restore()/.purge()), "
+        "ein Stapel Objekt-Änderungen (layer.edit(), layer.insert(), "
+        "layer.update_feature(), layer.delete_features()) sowie ein Feld anlegen "
+        "oder löschen (layer.create_field(), layer.delete_field())."
     )
 
 
@@ -201,7 +224,7 @@ def _method_after_redirect(status: int, method: str) -> str:
     return "GET" if method.upper() not in ("GET", "HEAD") else method
 
 
-class ReadOnlyGuard(Transport):
+class RequestGuard(Transport):
     """
     Wraps a transport and lets only the allowed requests through.
 
@@ -222,7 +245,10 @@ class ReadOnlyGuard(Transport):
 
     It stops mistakes, not intent: writing to hGIS from Python needs nothing
     more than ``import httpx``. What it removes is the accidental write that
-    this library itself would otherwise make easy.
+    this library itself would otherwise make easy -- a wider one now than the
+    single view-state write this class was first built for, but the same
+    property: every path into the network is named ahead of time, in
+    :data:`_ALLOWED`, or it does not go.
     """
 
     def __init__(self, inner: Transport) -> None:
@@ -253,7 +279,7 @@ class ReadOnlyGuard(Transport):
 
             url = urljoin(url, location)
             if _origin(url) != origin:
-                raise ReadOnlyError(
+                raise GuardError(
                     f"Die Umleitung führt zu einem anderen Server: {url}. "
                     "Das Programm folgt Umleitungen nur innerhalb desselben Servers."
                 )
@@ -275,6 +301,41 @@ class ReadOnlyGuard(Transport):
         raise TransportError(
             f"Mehr als {_MAX_REDIRECTS} Umleitungen für {url}. Das Programm bricht ab."
         )
+
+    def events(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> Iterator[Event]:
+        """
+        The live channel, guarded -- but not by :data:`_ALLOWED` or by the
+        per-hop redirect check :meth:`request` runs.
+
+        Neither fits a stream. ``_ALLOWED`` would not add anything here: it
+        already lets every GET through -- ``("GET", r".*")`` -- so checking a
+        stream's path against it could never refuse one; a dedicated check
+        against the one path this stage opens is the check that actually
+        means something. And the redirect logic answers a question a stream
+        does not ask: it exists so a checked *write*, once redirected, cannot
+        leave again unchecked, and a stream is always a GET -- see
+        :meth:`Client.events`, the only caller -- so there is no write for it
+        to protect here. The browser floor already makes the same trade for
+        reads: :class:`hgis.transport.PyodideTransport` cannot intercept a
+        redirect at all, and relies on exactly this fact.
+
+        What this still refuses, which a bare ``self.inner.events(...)``
+        would not: a call whose *path* is not the one live channel this stage
+        knows about, before anything reaches the network.
+        """
+        path = urlsplit(url).path
+        if path != _EVENTS_PATH:
+            raise GuardError(
+                f"GET {path} ist als Ereignisstrom nicht vorgesehen. "
+                f"Erlaubt ist nur {_EVENTS_PATH}."
+            )
+        return self.inner.events(url, headers=headers, timeout=timeout)
 
 
 def _origin(url: str) -> tuple[str, str]:
@@ -311,11 +372,12 @@ def connect(
 
 class Client:
     """
-    An hGIS server, reachable and read-only.
+    An hGIS server, reachable through the writes this stage names and nothing
+    else.
 
-    Read-only is enforced, not merely intended: the transport is wrapped in a
-    :class:`ReadOnlyGuard`, so a request that would change data is refused
-    before it is sent. See :data:`_ALLOWED`.
+    Enforced, not merely intended: the transport is wrapped in a
+    :class:`RequestGuard`, so a request outside :data:`_ALLOWED` is refused
+    before it is sent.
     """
 
     def __init__(
@@ -340,7 +402,7 @@ class Client:
         floor = transport if transport is not None else default_transport()
         # Wrapped even when the caller supplied the floor: a substituted
         # transport is for testing or authentication, not for lifting the guard.
-        self._transport = ReadOnlyGuard(floor)
+        self._transport = RequestGuard(floor)
         self._timeout = timeout
 
     @property
@@ -436,16 +498,13 @@ class Client:
 
     def save_view_state(self, project_id: str, state: dict[str, Any]) -> None:
         """
-        Write a project's saved view state. The one write this stage makes.
+        Write a project's saved view state.
 
-        Named after what it does rather than after the HTTP verb it uses. A
-        generic ``put(path, body)`` would be a way to reach every writing
-        endpoint the backend has -- layer deletion among them -- and naming the
-        one operation instead removes that reach without taking anything away.
-
-        The state is the working state, never the data: which layer is active,
-        and per layer its sort, query and selection. See
-        :meth:`hgis.project.Project.select`, which is how to call this.
+        Named after what it does rather than after the HTTP verb it uses --
+        the same reasoning behind every write method below. The state is the
+        working state, never the data: which layer is active, and per layer
+        its sort, query and selection. See :meth:`hgis.project.Project.select`,
+        which is how to call this.
 
         Carries :data:`CLIENT_HEADER` with this client's name, so the live
         channel can report who wrote and this program can skip its own echo.
@@ -453,6 +512,135 @@ class Client:
         :param state: the complete state; the endpoint replaces it wholesale
         """
         self._send("PUT", f"/api/projects/{project_id}/view-state", json=state)
+
+    # --- layers --------------------------------------------------------
+
+    def create_layer(
+        self,
+        project_id: str,
+        name: str,
+        geometry_type: str,
+        *,
+        fields: Iterable[tuple[str, str]] | None = None,
+    ) -> Any:
+        """
+        Create an empty layer. See :meth:`hgis.project.Project.create_layer`,
+        which is how to call this -- it returns a :class:`hgis.layer.Layer`
+        instead of the raw body this hands back.
+
+        :param geometry_type: MULTIPOINT, MULTILINESTRING, MULTIPOLYGON or
+            GEOMETRY
+        :param fields: (name, type) pairs to create alongside the layer, in
+            this order. ``type`` is one of nine tokens -- TEXT, INTEGER,
+            BIGINT, DOUBLE, NUMERIC, BOOLEAN, DATE, TIME, TIMESTAMP -- checked
+            by the server, not here; an unknown one comes back naming itself.
+        """
+        body: dict[str, Any] = {"name": name, "geometryType": geometry_type}
+        if fields:
+            body["fields"] = [{"name": name, "type": type_} for name, type_ in fields]
+        return self._send("POST", f"/api/projects/{project_id}/layers", json=body)
+
+    def update_layer(
+        self,
+        layer_id: str,
+        *,
+        name: str | None = None,
+        visible: bool | None = None,
+        z_index: int | None = None,
+        min_zoom: int | None = None,
+        max_zoom: int | None = None,
+    ) -> Any:
+        """
+        Change a layer's ordinary properties. See :meth:`hgis.layer.Layer.update`.
+
+        Every argument left at None is left as it stood -- none of the five
+        has a meaningful None of its own, so this cannot be told apart from
+        "leave alone" the way :attr:`hgis.catalog.dto.LayerDtos.UpdateRequest`'s
+        style, basemap and clipMode can. Those three are not part of this stage.
+        """
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if visible is not None:
+            body["visible"] = visible
+        if z_index is not None:
+            body["zIndex"] = z_index
+        if min_zoom is not None:
+            body["minZoom"] = min_zoom
+        if max_zoom is not None:
+            body["maxZoom"] = max_zoom
+        return self._send("PATCH", f"/api/layers/{layer_id}", json=body)
+
+    def delete_layer(self, layer_id: str) -> None:
+        """
+        Move a layer to its project's trash. See :meth:`hgis.layer.Layer.delete`.
+
+        Reversible with :meth:`restore_layer`, until someone empties the trash
+        with :meth:`purge_layer` -- the only one of these that actually
+        destroys the data.
+        """
+        self._send("DELETE", f"/api/layers/{layer_id}")
+
+    def restore_layer(self, layer_id: str) -> None:
+        """Bring a trashed layer back. See :meth:`hgis.layer.Layer.restore`."""
+        self._send("POST", f"/api/layers/{layer_id}/restore")
+
+    def purge_layer(self, layer_id: str) -> None:
+        """
+        Permanently delete a trashed layer and its data. See
+        :meth:`hgis.layer.Layer.purge`.
+
+        Not reversible. There is no trash behind this call, unlike
+        :meth:`delete_layer` -- the name says so on purpose.
+        """
+        self._send("DELETE", f"/api/layers/{layer_id}/purge")
+
+    # --- objects ---------------------------------------------------------
+
+    def apply_edits(self, layer_id: str, body: dict[str, Any]) -> Any:
+        """
+        Send one batch of creates, updates and deletes. See
+        :func:`hgis.edits.apply_edits`, which builds ``body`` and is how to
+        call this -- it also turns a 409 into
+        :class:`hgis.errors.ConflictError` with the current row attached.
+        """
+        return self._send("POST", f"/api/layers/{layer_id}/edits", json=body)
+
+    # --- fields ------------------------------------------------------------
+
+    def create_field(self, layer_id: str, name: str, type: str) -> Any:
+        """Add one attribute field. See :meth:`hgis.layer.Layer.create_field`."""
+        return self._send("POST", f"/api/layers/{layer_id}/fields", json={
+            "name": name, "type": type,
+        })
+
+    def delete_field(self, layer_id: str, field_id: str) -> None:
+        """Delete one attribute field. See :meth:`hgis.layer.Layer.delete_field`."""
+        self._send("DELETE", f"/api/layers/{layer_id}/fields/{field_id}")
+
+    # --- the live channel ----------------------------------------------
+
+    def events(self, *, timeout: float | None = None) -> Iterator[Event]:
+        """
+        The live channel, ``GET /api/events``, as a stream of :class:`Event`.
+
+        Groundwork for a later stage: nothing in this one reads from it, and
+        this method does no more than open the connection through
+        :class:`RequestGuard` and hand back the iterator. What a real reader
+        will need on top -- recognising :attr:`Client.client_id` in an event's
+        ``origin`` to skip its own echo, reconnecting after a drop -- belongs
+        to that stage, not this one.
+
+        >>> for event in client.events():
+        ...     print(event.name, event.data)
+
+        :raises TransportError: the connection cannot be opened, or the
+            floor has none (:class:`hgis.transport.PyodideTransport`, so far)
+        """
+        url = build_url(self.base_url, "/api/events")
+        return self._transport.events(
+            url, timeout=timeout if timeout is not None else self._timeout
+        )
 
     def _send(
         self,
@@ -490,12 +678,16 @@ def _to_error(response: Response, path: str) -> ApiError:
     detail = None
     title = None
     instance = None
+    current = None
     try:
         body = response.json()
         if isinstance(body, dict):
             detail = body.get("detail")
             title = body.get("title")
             instance = body.get("instance")
+            # Only a 409 carries this -- the row as it stands now, so a caller
+            # can decide without a second request. See ConflictError.
+            current = body.get("current")
     except Exception:
         pass
 
@@ -503,6 +695,8 @@ def _to_error(response: Response, path: str) -> ApiError:
         excerpt = response.text[:200].strip()
         detail = f"HTTP {response.status} für {path}" + (f": {excerpt}" if excerpt else "")
 
+    if response.status == 409:
+        return ConflictError(response.status, detail, title, instance, current)
     error_type = NotFoundError if response.status == 404 else ApiError
     return error_type(response.status, detail, title, instance)
 

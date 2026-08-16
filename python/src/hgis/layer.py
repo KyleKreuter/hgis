@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator, Sequence
 
+from .edits import EditResult, FeatureUpdate, NewFeature
+from .edits import apply_edits as _apply_edits
 from .errors import ApiError
 from .query import PAGE_SIZE, Feature, Query, _column_to_name, _to_feature
 
@@ -196,6 +198,95 @@ class Layer:
         self._data = self._client.get(f"/api/layers/{self.id}")
         self._fields = [_to_field(item) for item in self._data["fields"]]
         return self
+
+    # --- fields: writing -----------------------------------------------
+
+    def create_field(self, name: str, type: str) -> Field:  # noqa: A002
+        """
+        Add one attribute field, widening this layer's table by one column.
+
+        :param type: one of TEXT, INTEGER, BIGINT, DOUBLE, NUMERIC, BOOLEAN,
+            DATE, TIME, TIMESTAMP. Checked by the server, not here -- an
+            unknown token comes back naming itself in the error.
+        :return: the new field, already reflected in :meth:`fields`
+        """
+        created = _to_field(self._client.create_field(self.id, name, type))
+        if self._fields is not None:
+            self._fields = [*self._fields, created]
+        return created
+
+    def delete_field(self, field: "Field | str") -> None:
+        """
+        Delete one attribute field -- by :class:`Field`, id, source name or
+        column name, resolved the same way :meth:`field` resolves one.
+
+        Drops the column. What was in it is gone from the live table; the only
+        way back is the server's change log, never this library -- the same
+        rule a deleted object follows, see :meth:`delete_features`.
+
+        :raises hgis.errors.UnknownNameError: the name fits none or more than
+            one field of this layer
+        """
+        resolved = field if isinstance(field, Field) else self.field(field)
+        self._client.delete_field(self.id, resolved.id)
+        if self._fields is not None:
+            self._fields = [item for item in self._fields if item.id != resolved.id]
+
+    # --- writing the layer itself ---------------------------------------
+
+    def update(
+        self,
+        *,
+        name: str | None = None,
+        visible: bool | None = None,
+        z_index: int | None = None,
+        min_zoom: int | None = None,
+        max_zoom: int | None = None,
+    ) -> "Layer":
+        """
+        Change this layer's ordinary properties in place and return it.
+
+        Every argument left at None keeps its current value. Style, basemap
+        and clip mode are not part of this stage -- change them, if you must,
+        through the interface.
+        """
+        self._data = self._client.update_layer(
+            self.id,
+            name=name,
+            visible=visible,
+            z_index=z_index,
+            min_zoom=min_zoom,
+            max_zoom=max_zoom,
+        )
+        self._fields = [_to_field(item) for item in self._data["fields"]]
+        return self
+
+    def delete(self) -> None:
+        """
+        Move this layer to its project's trash. The data stays where it is --
+        see :meth:`restore` -- until someone empties the trash with
+        :meth:`purge`, which is the one call that actually destroys it.
+
+        This object keeps its id afterwards, so :meth:`restore` and
+        :meth:`purge` still work on it; :meth:`fields`, :meth:`count` and
+        every query do not, until it is restored.
+        """
+        self._client.delete_layer(self.id)
+
+    def restore(self) -> "Layer":
+        """Bring this layer back out of the trash, and re-read it."""
+        self._client.restore_layer(self.id)
+        return self.refresh()
+
+    def purge(self) -> None:
+        """
+        Permanently delete this layer and its data.
+
+        Not reversible -- there is no trash behind this call, unlike
+        :meth:`delete`. Call :meth:`delete` first and look at what is in the
+        trash if there is any doubt.
+        """
+        self._client.purge_layer(self.id)
 
     # --- the whole picture, in one call ------------------------------------
 
@@ -432,6 +523,107 @@ class Layer:
             f"/api/layers/{self.id}/values", field=field, limit=limit
         )
         return [(entry.get("value"), entry.get("count")) for entry in answer.get("values") or []]
+
+    # --- objects: writing ----------------------------------------------
+    #
+    # Every one of these sends immediately -- there is no lazy form here, on
+    # purpose, unlike Query above. See :mod:`hgis.edits`.
+
+    def edit(
+        self,
+        *,
+        creates: Sequence[NewFeature] = (),
+        updates: Sequence[FeatureUpdate] = (),
+        deletes: Sequence[int] = (),
+        repair_invalid: bool = False,
+    ) -> EditResult:
+        """
+        Apply one batch of creates, updates and deletes in a single
+        transaction -- either all of it lands, or none does.
+
+        The primitive :meth:`insert`, :meth:`insert_many`,
+        :meth:`update_feature` and :meth:`delete_features` are built on. Reach
+        for this directly to mix operations in one transaction, or to pass
+        ``repair_invalid``.
+
+        At most 5000 entries across the three lists; the server refuses more.
+
+        :param repair_invalid: repair an invalid geometry with ``ST_MakeValid``
+            instead of rejecting it. Off by default -- repairing changes the
+            data, and can turn a self-intersecting shape into a different one
+            than what was drawn.
+        :raises hgis.errors.ConflictError: a ``row_version`` in ``updates`` no
+            longer matches (409); ``error.current`` is the row as it stands now
+        :raises hgis.errors.ApiError: an updated or deleted fid does not exist
+            (404), or a value or geometry is invalid (400)
+        """
+        result = _apply_edits(
+            self._client,
+            self.id,
+            creates=creates,
+            updates=updates,
+            deletes=deletes,
+            repair_invalid=repair_invalid,
+        )
+        if creates or updates or deletes:
+            # Kept in step with what the batch just reported, so a caller who
+            # only ever writes through this object never reads a stale count
+            # off self.feature_count without asking again.
+            self._data = dict(self._data)
+            self._data["dataVersion"] = result.data_version
+            self._data["featureCount"] = result.feature_count
+        return result
+
+    def insert(self, geometry: dict[str, Any], properties: dict[str, Any] | None = None) -> int:
+        """
+        Insert one object.
+
+        :param geometry: GeoJSON in EPSG:4326
+        :param properties: keyed by column name; a field left out gets the
+            column's default
+        :return: the fid the server assigned
+        """
+        return self.edit(creates=[NewFeature(geometry, properties)]).created_fids[0]
+
+    def insert_many(self, features: Sequence[NewFeature]) -> list[int]:
+        """Insert several objects in one transaction. Fids come back in the given order."""
+        return self.edit(creates=features).created_fids
+
+    def update_feature(
+        self,
+        fid: int,
+        row_version: str,
+        *,
+        geometry: dict[str, Any] | None = None,
+        properties: dict[str, Any] | None = None,
+    ) -> EditResult:
+        """
+        Change one object.
+
+        :param row_version: :attr:`hgis.query.Feature.row_version`, as it was
+            read -- a mismatch raises :class:`hgis.errors.ConflictError`
+        :param geometry: None leaves the geometry untouched
+        :param properties: None leaves every attribute untouched; a key
+            missing from a given mapping leaves that one column alone, a key
+            present with value None sets it to SQL NULL
+        """
+        return self.edit(updates=[FeatureUpdate(fid, row_version, geometry, properties)])
+
+    def delete_features(self, fids: Sequence[int]) -> EditResult:
+        """
+        Delete these objects, named one by one.
+
+        There is no filter-based delete and no "delete everything" shortcut --
+        both would turn an empty or mistaken selection into the whole layer.
+        To empty a layer, name every fid explicitly: ``layer.delete_features(layer.fids())``.
+
+        Not reversible through this library. The server's change log
+        (``GET /api/projects/{id}/changes``) keeps the full row -- geometry and
+        attributes -- of everything deleted this way; recovering one means
+        reading it from there and calling :meth:`insert` again. This library
+        does not do that for you.
+        """
+        return self.edit(deletes=list(fids))
 
 
 @dataclass(frozen=True)

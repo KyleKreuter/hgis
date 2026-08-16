@@ -25,7 +25,7 @@ import json as jsonlib
 import sys
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Any
+from typing import Any, Iterable, Iterator
 from urllib.parse import urlencode  # string work only, no sockets; runs in Pyodide
 
 from .errors import TransportError
@@ -40,7 +40,7 @@ class Response:
 
     Headers are part of it because a redirect has to be readable: the floors do
     not follow one by themselves, so whoever called has to see the ``Location``
-    and decide. See :class:`hgis.client.ReadOnlyGuard`.
+    and decide. See :class:`hgis.client.RequestGuard`.
     """
 
     status: int
@@ -70,6 +70,77 @@ class Response:
             raise TransportError(
                 f"Die Antwort ist kein JSON (Status {self.status}): {excerpt}"
             ) from error
+
+
+@dataclass(frozen=True)
+class Event:
+    """
+    One dispatched Server-Sent Event, from the stream :meth:`Transport.events`
+    opens.
+
+    A comment line (``: ...``, used for the greeting and the heartbeat, see the
+    backend's ``EventStreams``) and a bare ``retry:`` never become one of
+    these -- see :func:`_parse_sse`. Only a block that actually carried a
+    ``data:`` field is dispatched, which is what keeps a caller from having to
+    filter the connection's own housekeeping out of the events it asked for.
+
+    :param name: the SSE ``event:`` field, e.g. ``"project-view-state"``.
+        ``"message"`` when the server sent none -- the default the spec itself
+        assigns, not a value this library invents.
+    :param data: the ``data:`` field, joined with ``\\n`` when it spanned
+        several lines. JSON on this channel, so ``json.loads(event.data)`` is
+        the usual next step.
+    :param id: the SSE ``id:`` field, or None when absent
+    """
+
+    name: str
+    data: str
+    id: str | None = None
+
+
+def _parse_sse(lines: Iterable[str]) -> Iterator[Event]:
+    """
+    Turn the raw lines of an SSE body into :class:`Event`.
+
+    One floor-independent function rather than one parser per floor, the same
+    reasoning as :func:`build_url`: two implementations of the same eight-line
+    state machine are two places a fix has to land twice.
+
+    Follows the WHATWG event-stream grammar, as far as this library needs it:
+    a line starting with ``:`` is a comment and carries nothing; ``field:
+    value`` sets that field, with a single leading space in ``value`` dropped;
+    a blank line dispatches whatever was collected so far -- but **only when a
+    ``data:`` line was among it**. A block of only ``retry:`` or only a
+    comment (the connection's greeting, and every heartbeat) never dispatches;
+    that is what keeps this library's own housekeeping bytes out of the events
+    a caller iterates.
+    """
+    event_type: str | None = None
+    data_lines: list[str] = []
+    event_id: str | None = None
+
+    for line in lines:
+        if line == "":
+            if data_lines:
+                yield Event(name=event_type or "message", data="\n".join(data_lines), id=event_id)
+            event_type, data_lines, event_id = None, [], None
+            continue
+        if line.startswith(":"):
+            continue  # a comment: the greeting, or a heartbeat -- never dispatched
+
+        field_name, separator, value = line.partition(":")
+        if not separator:
+            continue  # a field with no colon at all; the spec says ignore it
+        if value.startswith(" "):
+            value = value[1:]
+
+        if field_name == "event":
+            event_type = value
+        elif field_name == "data":
+            data_lines.append(value)
+        elif field_name == "id":
+            event_id = value
+        # "retry" and anything else: not surfaced by this stage.
 
 
 def build_url(base_url: str, path: str, params: dict[str, Any] | None = None) -> str:
@@ -138,6 +209,33 @@ class Transport:
         """
         raise NotImplementedError
 
+    def events(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> Iterator[Event]:
+        """
+        Open a stream of Server-Sent Events and return an iterator over them.
+
+        The second form this seam offers, next to :meth:`request`. One
+        :class:`Response` cannot stand for ``/api/events``: that connection
+        stays open and pushes events for as long as the caller keeps reading,
+        so this hands back one :class:`Event` at a time instead of one answer
+        for the whole exchange. The request-response form above is unchanged.
+
+        Laid down in this stage as groundwork; nothing in this library reads
+        from it yet -- see :meth:`Client.events`.
+
+        :param timeout: how long to wait for the *connection* to open. Once
+            open, the stream is meant to run for as long as the caller reads
+            it, so this is not a per-event timeout.
+        :raises TransportError: the connection cannot be opened at all, or
+            answers with anything but 200
+        """
+        raise NotImplementedError
+
 
 class HttpxTransport(Transport):
     """The CPython floor. Needs ``httpx``."""
@@ -182,6 +280,25 @@ class HttpxTransport(Transport):
         except httpx.HTTPError as error:
             raise TransportError(f"{url} ist nicht erreichbar: {error}") from error
         return Response(response.status_code, response.text, dict(response.headers))
+
+    def events(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> Iterator[Event]:
+        import httpx
+
+        try:
+            with self._client.stream("GET", url, headers=headers, timeout=timeout) as response:
+                if response.status_code != 200:
+                    raise TransportError(
+                        f"{url} antwortet mit Status {response.status_code} statt 200."
+                    )
+                yield from _parse_sse(response.iter_lines())
+        except httpx.HTTPError as error:
+            raise TransportError(f"{url} ist nicht erreichbar: {error}") from error
 
     def close(self) -> None:
         """Release the connection pool."""
@@ -244,6 +361,28 @@ class PyodideTransport(Transport):
 
         return Response(request.status, request.responseText,
                         _parse_headers(request.getAllResponseHeaders()))
+
+    def events(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> Iterator[Event]:
+        """
+        Not implemented on this floor yet.
+
+        A synchronous ``XMLHttpRequest`` cannot be read incrementally the way
+        this needs -- it hands back the body only once the connection is
+        finished, which a live channel by definition never is. The browser
+        binding for this belongs to the stage that actually uses the channel,
+        not this one; see the module docstring for ``request``'s equivalent
+        limits on this floor.
+        """
+        raise TransportError(
+            "Der Ereigniskanal läuft in dieser Stufe nur unter CPython. "
+            "PyodideTransport hat noch keine Anbindung dafür."
+        )
 
 
 class MissingHttpLibrary(TransportError):

@@ -1,9 +1,14 @@
 # hgis
 
-Python-Bibliothek für hGIS. Sie lesen damit Projekte, Layer und Objekte.
+Python-Bibliothek für hGIS. Sie lesen und schreiben damit Projekte, Layer und
+Objekte.
 
-Diese Stufe liest nur. Sie ändert keine Daten. Die einzige Ausnahme ist die
-Auswahl: `project.select()` schreibt den Arbeitsstand, nicht die Daten.
+Ein `RequestGuard` prüft jede Anfrage, bevor sie den Server erreicht. Lesen
+ist uneingeschränkt. Schreiben ist eine feste Liste: die Auswahl speichern,
+einen Layer anlegen/ändern/löschen/wiederherstellen/endgültig löschen, ein
+Feld anlegen/löschen und ein Stapel Objekt-Änderungen. Jede andere Anfrage
+lehnt die Bibliothek ab, bevor sie den Server erreicht -- siehe
+[„Was der Wächter durchlässt"](#was-der-wächter-durchlässt).
 
 ## Installation
 
@@ -78,6 +83,7 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 | `project.view()` | `View`: Mitte, Zoom, Ausschnitt, aktiver Layer |
 | `project.selection()` | `Selection`: was der Nutzer angeklickt hat |
 | `project.select(fids)` | setzt die Auswahl, macht den Layer aktiv |
+| `project.create_layer(name, geometrietyp, fields=...)` | legt einen leeren Layer an, gibt ihn zurück |
 
 ### Layer
 
@@ -91,6 +97,17 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 | `layer.count()` | Objektzahl |
 | `layer.feature(fid)` | ein Objekt mit allen Feldern |
 | `layer.values(feld)` | Werte mit Häufigkeit |
+| `layer.update(name=..., visible=..., ...)` | ändert den Layer, gibt sich selbst zurück |
+| `layer.delete()` | Layer in den Papierkorb |
+| `layer.restore()` | Layer aus dem Papierkorb zurück |
+| `layer.purge()` | Layer und Daten endgültig löschen -- **unwiderruflich** |
+| `layer.create_field(name, typ)` | ein neues Feld, siehe [Felder anlegen und löschen](#felder-anlegen-und-löschen) |
+| `layer.delete_field(feld)` | löscht ein Feld -- **unwiderruflich** |
+| `layer.insert(geometrie, eigenschaften=...)` | ein neues Objekt, gibt dessen Fid zurück |
+| `layer.insert_many(objekte)` | mehrere neue Objekte in einer Transaktion |
+| `layer.update_feature(fid, row_version, ...)` | ändert ein Objekt |
+| `layer.delete_features(fids)` | löscht benannte Objekte -- siehe [Was unwiederbringlich ist](#was-unwiederbringlich-ist) |
+| `layer.edit(creates=..., updates=..., deletes=...)` | ein Stapel aller drei, eine Transaktion |
 
 ### Abfrage
 
@@ -157,6 +174,131 @@ Stammumfang (text)  mehrdeutig, Id 019ff731-1f15-7f4f-ba6a-804ecd372cd5  leer 0.
 Nutzen Sie `layer.reference(feld)`, wenn Sie einen Feldnamen in einen Filter
 oder eine Sortierung schreiben. `describe()` tut das bereits von sich aus.
 
+## Schreiben
+
+Jeder Schreibvorgang wirkt sofort. Es gibt hier keine verzögerte Auswertung
+wie bei `Query` -- `layer.insert(...)` sendet, sobald Sie es aufrufen.
+
+### Layer anlegen, ändern, löschen
+
+```python
+neu = project.create_layer(
+    "Bäume", "MULTIPOINT",
+    fields={"Gattung": "TEXT", "Pflanzjahr": "INTEGER"},
+)
+
+neu.update(name="Straßenbäume", visible=True)
+
+neu.delete()          # in den Papierkorb
+neu.restore()          # zurück, liest den Layer neu
+neu.purge()             # endgültig -- siehe unten
+```
+
+`create_layer()` kennt neun Feldtypen: `TEXT`, `INTEGER`, `BIGINT`, `DOUBLE`,
+`NUMERIC`, `BOOLEAN`, `DATE`, `TIME`, `TIMESTAMP`. Ein unbekannter Typ kommt
+als Serverfehler zurück, der die gültigen Typen nennt.
+
+### Felder anlegen und löschen
+
+```python
+feld = layer.create_field("Baujahr", "INTEGER")
+layer.delete_field(feld)              # auch nach Name oder Id: layer.delete_field("Baujahr")
+```
+
+### Objekte schreiben
+
+```python
+fid = layer.insert(
+    {"type": "Point", "coordinates": [9.99, 53.55]},
+    {"Gattung": "Tilia", "Pflanzjahr": 2024},
+)
+
+fids = layer.insert_many([
+    hgis.NewFeature({"type": "Point", "coordinates": [9.98, 53.54]}, {"Gattung": "Acer"}),
+    hgis.NewFeature({"type": "Point", "coordinates": [9.97, 53.53]}, {"Gattung": "Quercus"}),
+])
+
+objekt = layer.feature(fid)
+layer.update_feature(fid, objekt.row_version, properties={"Pflanzjahr": 2025})
+
+layer.delete_features([fid])          # nennt jede Kennung einzeln, siehe unten
+```
+
+`row_version` kommt von `Feature.row_version` (`GET .../features/{fid}` oder
+jede Abfrage). Stimmt sie nicht mehr mit der Serverzeile überein, wirft die
+Bibliothek `hgis.ConflictError`; `error.current` trägt die Zeile, wie sie
+gerade auf dem Server steht.
+
+Alle vier Aufrufe sind Kurzformen von `layer.edit(creates=..., updates=...,
+deletes=...)`, das einen ganzen Stapel in einer Transaktion sendet und dabei
+`repair_invalid=True` annimmt, um eine ungültige Geometrie zu reparieren
+(`ST_MakeValid`) statt sie abzulehnen.
+
+**Kein `layer.delete_all_features()`.** Es gibt keinen Aufruf, der Objekte
+ohne benannte Kennung löscht. Wer eine ganze Auswahl löschen will, nennt sie
+ausdrücklich: `layer.delete_features(layer.fids())`. Ein vergessener Filter
+kann so nie zu "alles löschen" werden.
+
+### Was unwiederbringlich ist
+
+| Vorgang | Rückgängig zu machen? |
+|---|---|
+| `layer.delete()` | Ja -- `layer.restore()`, solange der Papierkorb nicht geleert wurde |
+| `layer.purge()` | **Nein.** Es gibt keinen Papierkorb hinter diesem Aufruf |
+| `layer.delete_field(...)` | **Nein**, nicht über diese Bibliothek |
+| `layer.delete_features(...)` / `layer.edit(deletes=...)` | **Nein**, nicht über diese Bibliothek |
+
+Für gelöschte Felder und Objekte führt der Server ein Änderungsprotokoll
+(`GET /api/projects/{id}/changes`), das bei einer Objektlöschung die
+vollständige Zeile mitschreibt -- Geometrie und Attribute. Das ist die
+einzige Rückfallebene: Wiederherstellen heißt, die Zeile von dort zu lesen
+und mit `layer.insert(...)` neu anzulegen. Diese Bibliothek liest das
+Protokoll nicht für Sie; `client.get(f"/api/projects/{project_id}/changes")`
+funktioniert bereits, denn Lesen ist uneingeschränkt.
+
+### Was der Wächter durchlässt
+
+`RequestGuard` prüft jede Anfrage gegen eine feste Liste, bevor sie den
+Transport erreicht -- egal ob sie über `client.get(...)` kommt oder über
+`client._transport.request(...)` direkt. Erlaubt sind lesende Anfragen
+(jedes `GET`) sowie genau die Schreibvorgänge oben. Alles andere -- Layer neu
+ordnen, Objekte teilen oder zusammenführen, ein Projekt löschen -- lehnt die
+Bibliothek mit `hgis.GuardError` ab, bevor der Server sie sieht.
+
+```python
+>>> client._send("PUT", f"/api/projects/{pid}/layers/order", json={})
+hgis.errors.GuardError: PUT /api/projects/.../layers/order ist nicht
+vorgesehen. Erlaubt sind lesende Anfragen, project.select() und die
+Schreibwege dieser Stufe: ...
+```
+
+Das ist kein Schloss. Wer schreiben will, bindet `httpx` ein und umgeht die
+Bibliothek. Es schützt vor dem Versehen -- einer Anfrage, die niemand
+absichtlich gestellt hat.
+
+**`X-Hgis-Client` reist bei jedem Schreibvorgang mit**, auch bei den neuen.
+Der Server schreibt ihn ins Änderungsprotokoll; ohne ihn steht dort
+"unbekannt". Siehe [Der Client-Name](#der-client-name).
+
+### Umleitungen
+
+Die Bibliothek folgt einer Umleitung selbst und prüft jeden Sprung erneut --
+das gilt jetzt für jeden erlaubten Schreibweg, nicht nur für die Auswahl.
+
+Das HTTP-Paket folgt nicht mehr von allein. Es täte das innerhalb desselben
+Aufrufs, den die Prüfung schon durchgelassen hat. Bei 307 und 308 behält die
+Anfrage dabei Methode und Inhalt -- ein erlaubtes `DELETE` auf einen Layer
+würde so als `DELETE` auf einen verbotenen Pfad wieder hinausgehen, ungeprüft,
+wenn die Bibliothek nicht selbst nachsähe.
+
+Eine Umleitung darf den Server nicht wechseln. Sonst schickt eine
+eingeschleuste Umleitung Ihre Anfrage samt Kopfzeilen an einen fremden
+Rechner.
+
+Im Browser gilt das nicht. `XMLHttpRequest` folgt Umleitungen selbst und
+lässt sich davon nicht abbringen. Dort schützt die Herkunftsregel des
+Browsers -- wie beim Ereigniskanal, siehe unten.
+
 ## Fehler nennen das Gültige
 
 Die Bibliothek reicht die Meldung des Servers unverändert durch.
@@ -181,10 +323,11 @@ Alle Fehler erben von `hgis.HgisError`.
 |---|---|
 | `ApiError` | Der Server antwortet mit einem Fehler. `str()` ist seine Meldung. |
 | `NotFoundError` | Der Server kennt die Sache nicht (HTTP 404). |
+| `ConflictError` | `row_version` stimmt nicht mehr (HTTP 409); `error.current` trägt die Zeile |
 | `TransportError` | Es kommt keine Antwort an. |
 | `UnknownNameError` | Kein Projekt oder Layer trägt diesen Namen. |
 | `MissingDependencyError` | Ein wahlfreies Paket fehlt. |
-| `ReadOnlyError` | Die Anfrage würde Daten ändern. Diese Stufe liest nur. |
+| `GuardError` | Die Anfrage ist nicht vorgesehen, siehe [Was der Wächter durchlässt](#was-der-wächter-durchlässt). |
 | `InvalidClientIdError` | Der Client-Name passt nicht zu dem, was der Server annimmt. |
 
 ## Der Client-Name
@@ -252,50 +395,7 @@ Das gilt auch nach einer Umleitung. Schreibt die Bibliothek eine Anfrage auf
 zusammen mit dem Inhalt weg. Bei 307 und 308 bleibt die Anfrage ein
 Schreibvorgang, also bleibt auch der Kopf.
 
-## Diese Stufe schreibt nicht
-
-Die Bibliothek lässt nur lesende Anfragen durch. Dazu kommt genau ein
-Schreibweg: `project.select()` speichert die Auswahl.
-
-Jede andere Anfrage lehnt sie ab, bevor sie den Server erreicht. Das gilt für
-jede einzelne Anfrage, auch für die nach einer Umleitung.
-
-```python
->>> client._send("DELETE", "/api/layers/019fecb8-...")
-hgis.errors.ReadOnlyError: Diese Stufe der Bibliothek liest nur.
-DELETE /api/layers/019fecb8-... ist nicht vorgesehen. Erlaubt sind lesende
-Anfragen und das Speichern der Auswahl über project.select().
-```
-
-Das ist kein Schloss. Wer schreiben will, bindet `httpx` ein und umgeht die
-Bibliothek. Es schützt vor dem Versehen.
-
-Der Schutz zählt gerade jetzt besonders. Das Backend hat Endpunkte zum Löschen
-von Layern und Projekten. Einen Papierkorb gibt es noch nicht. Eine
-versehentlich gesendete Löschung ist endgültig.
-
-Die Prüfung sitzt in `ReadOnlyGuard`. Der Client legt sie um jeden Transport,
-auch um einen, den Sie selbst übergeben. Damit führt jeder Weg zum Netz durch
-sie hindurch.
-
-### Umleitungen
-
-Die Bibliothek folgt einer Umleitung selbst und prüft jeden Sprung erneut.
-
-Das HTTP-Paket folgt nicht mehr von allein. Es täte das innerhalb desselben
-Aufrufs, den die Prüfung schon durchgelassen hat. Bei 307 und 308 behält die
-Anfrage dabei Methode und Inhalt.
-
-Ein erlaubtes `PUT` auf den view-state würde so als `PUT` auf einen verbotenen
-Pfad wieder hinausgehen, ungeprüft. Der Aufrufer sähe einen normalen Erfolg.
-
-Eine Umleitung darf den Server nicht wechseln. Sonst schickt eine
-eingeschleuste Umleitung Ihre Anfrage samt Kopfzeilen an einen fremden Rechner.
-
-Im Browser gilt das nicht. `XMLHttpRequest` folgt Umleitungen selbst und lässt
-sich davon nicht abbringen. Dort schützt die Herkunftsregel des Browsers.
-
-### Verschlüsselung
+## Verschlüsselung
 
 Die Standardadresse ist `http://localhost:8080`, also unverschlüsselt.
 
@@ -305,9 +405,10 @@ es keine Leitung, auf der jemand mithören kann.
 Sobald Sie über ein echtes Netz zugreifen, gilt das nicht mehr. Verwenden Sie
 dann `https://`.
 
-Einen allgemeinen Schreibbefehl gibt es nicht mehr. `Client.put(pfad, körper)`
-ist entfallen. An seiner Stelle steht `Client.save_view_state(projekt, zustand)`,
-also die eine Handlung statt eines beliebig einsetzbaren Verbs.
+Einen allgemeinen Schreibbefehl gibt es nicht. `Client.put(pfad, körper)` hat
+es nie gegeben, auch jetzt nicht, wo die Bibliothek wirklich schreibt -- jeder
+Schreibweg hat einen eigenen, benannten Aufruf, siehe
+[Was der Wächter durchlässt](#was-der-wächter-durchlässt).
 
 ## describe()
 
@@ -386,6 +487,32 @@ Sie können den Boden ersetzen:
 client = hgis.connect("http://localhost:8080", transport=MeinTransport())
 ```
 
+Ein `Transport` bietet zwei Formen an: `request()`, eine Anfrage gegen eine
+Antwort, und `events()`, ein Strom. `HttpxTransport.events()` öffnet
+`GET /api/events` mit `httpx`s Streaming-Modus und liest Server-Sent Events
+zeilenweise; `PyodideTransport.events()` wirft `TransportError` -- eine
+synchrone `XMLHttpRequest` kann einen Strom nicht schrittweise lesen, das
+braucht eine eigene Anbindung, die diese Stufe noch nicht baut.
+
+## Der Ereigniskanal (Grundlage)
+
+`client.events()` öffnet den Live-Kanal und liefert `hgis.Event` (`name`,
+`data`, `id`) für jedes ankommende Ereignis:
+
+```python
+for event in client.events():
+    print(event.name, event.data)          # z. B. "project-view-state", '{"projectId":...}'
+```
+
+Diese Stufe baut nur die Grundlage. Sie liest nicht selbst vom Kanal --
+wiederverbinden nach einem Abbruch, das eigene Echo an `origin ==
+client.client_id` erkennen: das ist Sache einer späteren Stufe. Geprüft ist
+hier, dass ein Ereignis tatsächlich ankommt (`tests/test_events.py`, gegen
+einen echten Server auf localhost) und dass der Pfad vom `RequestGuard`
+geprüft wird wie jeder andere auch -- mit einer eigenen, wörtlichen Prüfung
+auf `/api/events`, weil die allgemeine Erlaubnisliste jedes `GET` ohnehin
+durchlässt und daher für einen Strom nichts Eigenes prüfen würde.
+
 ## Tests
 
 ```bash
@@ -410,10 +537,20 @@ python -m pytest -m "not live"                        # ohne
 
 ## Grenzen dieser Stufe
 
-- Kein Schreiben von Objekten. Kein Anlegen, kein Löschen.
+- Kein Umbenennen eines Felds (`PATCH .../fields/{id}`) -- nur anlegen und
+  löschen.
+- Kein Teilen, Zusammenführen oder Neuordnen von Layern über diese
+  Bibliothek.
+- Kein Löschen eines ganzen Projekts.
+- Kein Lesen des Papierkorbs oder des Änderungsprotokolls über eine eigene
+  Methode -- `client.get(".../trash")` und `client.get(".../changes")`
+  funktionieren bereits, denn Lesen ist uneingeschränkt; eine eigene,
+  typisierte Oberfläche dafür ist nicht Teil dieser Stufe.
+- Der Ereigniskanal ist nur die Grundlage, siehe oben -- kein Wiederverbinden,
+  kein Erkennen des eigenen Echos, kein Konsument, der ihn tatsächlich nutzt.
+- `PyodideTransport.events()` läuft nicht -- nur unter CPython.
 - Kein MCP-Server.
 - Kein Editor im Browser.
-- Kein Live-Kanal, keine Ereignisse.
 - `to_dataframe()` überträgt GeoJSON. Arrow und GeoParquet sind eine Frage der
   Geschwindigkeit. Sie kommen später.
 

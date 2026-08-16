@@ -1,5 +1,5 @@
 """
-Read hGIS from Python.
+Read and write hGIS from Python.
 
     import hgis
 
@@ -13,11 +13,16 @@ Read hGIS from Python.
     print(alt.count())
     project.select(alt.fids())
 
-The one rule worth knowing: the server does the work. ``where``, ``bbox``,
-``search`` and ``order_by`` describe a restriction and send nothing; ``count``,
-``fids``, ``to_dataframe`` and iterating are what run it. Reading a whole layer
-into Python and filtering it there works for a thousand objects and fails for a
-million.
+The one rule worth knowing for reading: the server does the work. ``where``,
+``bbox``, ``search`` and ``order_by`` describe a restriction and send nothing;
+``count``, ``fids``, ``to_dataframe`` and iterating are what run it. Reading a
+whole layer into Python and filtering it there works for a thousand objects
+and fails for a million.
+
+Writing is the opposite: nothing here is lazy. ``layer.insert(...)``,
+``layer.edit(...)`` and the rest of :mod:`hgis.edits` act immediately, and
+:class:`RequestGuard` refuses anything else that would change data before it
+reaches the server -- see :class:`hgis.errors.GuardError`.
 
 ``pandas`` and ``shapely`` are optional. Everything except ``to_dataframe``
 works without them.
@@ -26,24 +31,26 @@ works without them.
 from .client import (
     DEFAULT_BASE_URL,
     Client,
-    ReadOnlyGuard,
+    RequestGuard,
     connect,
     default_client_id,
 )
+from .edits import EditResult, FeatureUpdate, NewFeature
 from .errors import (
     ApiError,
+    ConflictError,
+    GuardError,
     HgisError,
     InvalidClientIdError,
     MissingDependencyError,
     NotFoundError,
-    ReadOnlyError,
     TransportError,
     UnknownNameError,
 )
 from .layer import Field, FieldSummary, Layer, LayerDescription
 from .project import Project, Selection, View
 from .query import Feature, Query
-from .transport import HttpxTransport, PyodideTransport, Response, Transport
+from .transport import Event, HttpxTransport, PyodideTransport, Response, Transport
 
 __version__ = "0.1.0"
 
@@ -63,20 +70,26 @@ __all__ = [
     "View",
     "LayerDescription",
     "FieldSummary",
+    # writing
+    "NewFeature",
+    "FeatureUpdate",
+    "EditResult",
     # errors
     "HgisError",
     "ApiError",
     "NotFoundError",
+    "ConflictError",
     "TransportError",
     "UnknownNameError",
-    "ReadOnlyError",
+    "GuardError",
     "InvalidClientIdError",
     "MissingDependencyError",
     # transport, for substituting the HTTP floor
     "Transport",
     "HttpxTransport",
     "PyodideTransport",
-    "ReadOnlyGuard",
+    "RequestGuard",
     "Response",
+    "Event",
     "__version__",
 ]
