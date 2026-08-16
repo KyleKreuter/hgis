@@ -98,9 +98,9 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 | `layer.feature(fid)` | ein Objekt mit allen Feldern |
 | `layer.values(feld)` | Werte mit Häufigkeit |
 | `layer.update(name=..., visible=..., ...)` | ändert den Layer, gibt sich selbst zurück |
-| `layer.delete()` | Layer in den Papierkorb |
+| `layer.delete()` | Layer in den Papierkorb, gibt `TrashEntry` zurück (oder `None`, siehe unten) |
 | `layer.restore()` | Layer aus dem Papierkorb zurück |
-| `layer.purge()` | Layer und Daten endgültig löschen -- **unwiderruflich** |
+| `layer.purge()` | Layer und Daten endgültig löschen -- **unwiderruflich**, gibt `TrashEntry` zurück (oder `None`, siehe unten) |
 | `layer.create_field(name, typ)` | ein neues Feld, siehe [Felder anlegen und löschen](#felder-anlegen-und-löschen) |
 | `layer.delete_field(feld)` | löscht ein Feld -- **unwiderruflich** |
 | `layer.insert(geometrie, eigenschaften=...)` | ein neues Objekt, gibt dessen Fid zurück |
@@ -189,14 +189,23 @@ neu = project.create_layer(
 
 neu.update(name="Straßenbäume", visible=True)
 
-neu.delete()          # in den Papierkorb
-neu.restore()          # zurück, liest den Layer neu
-neu.purge()             # endgültig -- siehe unten
+eintrag = neu.delete()   # in den Papierkorb
+neu.restore()             # zurück, liest den Layer neu
+neu.purge()                # endgültig -- siehe unten
 ```
 
 `create_layer()` kennt neun Feldtypen: `TEXT`, `INTEGER`, `BIGINT`, `DOUBLE`,
 `NUMERIC`, `BOOLEAN`, `DATE`, `TIME`, `TIMESTAMP`. Ein unbekannter Typ kommt
 als Serverfehler zurück, der die gültigen Typen nennt.
+
+`delete()` und `purge()` melden, was geschehen ist: `TrashEntry` (`id`,
+`name`, `deleted_at`, `feature_count`, `deleted_by`) -- **sofern der Server
+das mitschickt.** Heute antworten beide Endpunkte noch mit einem leeren 204,
+also ist `eintrag` zurzeit `None`. Das ist bewusst kein geratener Wert: die
+Bibliothek erfindet keine Objektzahl aus dem, was sie vor dem Aufruf über den
+Layer wusste, weil das inzwischen nicht mehr stimmen muss. Sobald der Server
+eine Antwort im Format von `LayerDtos.TrashEntry` mitschickt, füllt sich
+`eintrag` von selbst -- ohne eine weitere Änderung in dieser Bibliothek.
 
 ### Felder anlegen und löschen
 

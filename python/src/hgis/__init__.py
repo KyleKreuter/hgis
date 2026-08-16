@@ -47,7 +47,7 @@ from .errors import (
     TransportError,
     UnknownNameError,
 )
-from .layer import Field, FieldSummary, Layer, LayerDescription
+from .layer import Field, FieldSummary, Layer, LayerDescription, TrashEntry
 from .project import Project, Selection, View
 from .query import Feature, Query
 from .transport import Event, HttpxTransport, PyodideTransport, Response, Transport
@@ -70,6 +70,7 @@ __all__ = [
     "View",
     "LayerDescription",
     "FieldSummary",
+    "TrashEntry",
     # writing
     "NewFeature",
     "FeatureUpdate",

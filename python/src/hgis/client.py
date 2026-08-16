@@ -571,29 +571,48 @@ class Client:
             body["maxZoom"] = max_zoom
         return self._send("PATCH", f"/api/layers/{layer_id}", json=body)
 
-    def delete_layer(self, layer_id: str) -> None:
+    def delete_layer(self, layer_id: str) -> Any:
         """
         Move a layer to its project's trash. See :meth:`hgis.layer.Layer.delete`.
 
         Reversible with :meth:`restore_layer`, until someone empties the trash
         with :meth:`purge_layer` -- the only one of these that actually
         destroys the data.
+
+        :return: whatever the server answered with, unchanged -- as of this
+            writing that is nothing (204), so this is None; a caller wanting
+            to know how many objects moved to the trash currently has to ask
+            :meth:`hgis.project.Project.trash` (unwritten this stage, but
+            ``client.get(f"/api/projects/{{project_id}}/trash")`` works) or
+            wait for this endpoint to start answering with a body
         """
-        self._send("DELETE", f"/api/layers/{layer_id}")
+        return self._send("DELETE", f"/api/layers/{layer_id}")
 
-    def restore_layer(self, layer_id: str) -> None:
-        """Bring a trashed layer back. See :meth:`hgis.layer.Layer.restore`."""
-        self._send("POST", f"/api/layers/{layer_id}/restore")
+    def restore_layer(self, layer_id: str) -> Any:
+        """
+        Bring a trashed layer back. See :meth:`hgis.layer.Layer.restore`.
 
-    def purge_layer(self, layer_id: str) -> None:
+        :return: whatever the server answered with, unchanged
+        """
+        return self._send("POST", f"/api/layers/{layer_id}/restore")
+
+    def purge_layer(self, layer_id: str) -> Any:
         """
         Permanently delete a trashed layer and its data. See
         :meth:`hgis.layer.Layer.purge`.
 
         Not reversible. There is no trash behind this call, unlike
         :meth:`delete_layer` -- the name says so on purpose.
+
+        :return: whatever the server answered with, unchanged -- as of this
+            writing that is nothing (204). See :meth:`delete_layer`: the same
+            gap, and for the same reason -- there is nothing this library
+            could honestly report instead without either guessing or asking
+            the server again beforehand, and a "before" read cannot be
+            trusted for an operation whose whole point is to destroy what it
+            named.
         """
-        self._send("DELETE", f"/api/layers/{layer_id}/purge")
+        return self._send("DELETE", f"/api/layers/{layer_id}/purge")
 
     # --- objects ---------------------------------------------------------
 

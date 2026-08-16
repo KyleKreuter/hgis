@@ -118,16 +118,47 @@ def test_layer_update_with_nothing_sends_an_empty_body() -> None:
 
 
 def test_layer_delete_moves_it_to_the_trash() -> None:
+    """
+    Today's backend, faithfully: 204 with no body. There is nothing to build
+    a TrashEntry from, and delete() must not pretend otherwise -- see
+    test_layer_delete_reports_the_trash_entry_when_the_server_provides_one
+    for the moment that changes.
+    """
+
     def handle(request: object) -> Response:
         return Response(204, "")
 
     client, transport = _client(handle)
     layer = _layer(client)
 
-    layer.delete()
+    result = layer.delete()
 
     assert transport.requests[-1].method == "DELETE"
     assert transport.requests[-1].path == f"/api/layers/{LAYER_ID}"
+    assert result is None
+
+
+def test_layer_delete_reports_the_trash_entry_when_the_server_provides_one() -> None:
+    """
+    Not yet how the real backend answers (see the test above), but the shape
+    it would use if it did -- LayerDtos.TrashEntry. Once it does, this is
+    what delete() reports instead of None, with no further change here.
+    """
+
+    def handle(request: object) -> Response:
+        return Response(200, f'{{"id":"{LAYER_ID}","name":"Gebäude Speicherstadt",'
+                              '"deletedAt":"2026-08-16T10:00:00Z","featureCount":1003,'
+                              '"deletedBy":"agent-a"}')
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    result = layer.delete()
+
+    assert result == hgis.TrashEntry(
+        id=LAYER_ID, name="Gebäude Speicherstadt",
+        deleted_at="2026-08-16T10:00:00Z", feature_count=1003, deleted_by="agent-a",
+    )
 
 
 def test_layer_restore_re_reads_it() -> None:
@@ -151,17 +182,37 @@ def test_layer_restore_re_reads_it() -> None:
 
 
 def test_layer_purge_calls_the_right_endpoint_and_does_not_reread() -> None:
+    """Today's backend: 204, no body -- see delete()'s equivalent pair of tests."""
+
     def handle(request: object) -> Response:
         return Response(204, "")
 
     client, transport = _client(handle)
     layer = _layer(client)
 
-    layer.purge()
+    result = layer.purge()
 
     assert len(transport.requests) == 1
     assert transport.requests[-1].method == "DELETE"
     assert transport.requests[-1].path == f"/api/layers/{LAYER_ID}/purge"
+    assert result is None
+
+
+def test_layer_purge_reports_the_trash_entry_when_the_server_provides_one() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, f'{{"id":"{LAYER_ID}","name":"Gebäude Speicherstadt",'
+                              '"deletedAt":"2026-08-16T10:00:00Z","featureCount":1003,'
+                              '"deletedBy":"agent-a"}')
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    result = layer.purge()
+
+    assert result == hgis.TrashEntry(
+        id=LAYER_ID, name="Gebäude Speicherstadt",
+        deleted_at="2026-08-16T10:00:00Z", feature_count=1003, deleted_by="agent-a",
+    )
 
 
 # --- fields --------------------------------------------------------------

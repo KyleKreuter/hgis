@@ -51,6 +51,49 @@ class Field:
         return _base_type(self.type) in _NUMERIC_TYPES
 
 
+@dataclass(frozen=True)
+class TrashEntry:
+    """
+    What :meth:`Layer.delete` and :meth:`Layer.purge` report, when the server
+    answers with one -- mirrors the backend's ``LayerDtos.TrashEntry`` field
+    for field, the same shape :meth:`hgis.project.Project.trash` would read
+    from ``GET /api/projects/{id}/trash``.
+
+    As of this writing, ``DELETE /api/layers/{id}`` and its ``/purge``
+    sibling still answer 204 with no body, so :meth:`Layer.delete` and
+    :meth:`Layer.purge` return None rather than one of these -- there is
+    nothing here to build one from, and guessing from what was known before
+    the call would report a count that might no longer be true. Once the
+    backend starts sending a body shaped like this, both methods build one
+    without any further change on this side.
+
+    :param id: the layer, unchanged by the trip through the trash
+    :param name: the layer's name at the time it was deleted or purged
+    :param deleted_at: when it moved into the trash, ISO 8601. Present on a
+        :meth:`Layer.purge` result too -- it describes the trashing, not the
+        purge, since purging has no date of its own worth naming
+    :param feature_count: how many objects it held
+    :param deleted_by: :data:`hgis.client.CLIENT_HEADER` of whoever deleted
+        it, or None when that request carried none
+    """
+
+    id: str
+    name: str
+    deleted_at: str | None
+    feature_count: int
+    deleted_by: str | None
+
+
+def _to_trash_entry(data: dict[str, Any]) -> TrashEntry:
+    return TrashEntry(
+        id=data["id"],
+        name=data["name"],
+        deleted_at=data.get("deletedAt"),
+        feature_count=data.get("featureCount", 0),
+        deleted_by=data.get("deletedBy"),
+    )
+
+
 class Layer:
     """
     One layer of a project.
@@ -261,7 +304,7 @@ class Layer:
         self._fields = [_to_field(item) for item in self._data["fields"]]
         return self
 
-    def delete(self) -> None:
+    def delete(self) -> "TrashEntry | None":
         """
         Move this layer to its project's trash. The data stays where it is --
         see :meth:`restore` -- until someone empties the trash with
@@ -270,23 +313,33 @@ class Layer:
         This object keeps its id afterwards, so :meth:`restore` and
         :meth:`purge` still work on it; :meth:`fields`, :meth:`count` and
         every query do not, until it is restored.
+
+        :return: the trash entry the server reports -- how many objects moved
+            with it, when, by whom -- or None while the backend still answers
+            this endpoint with an empty 204. See :class:`TrashEntry`.
         """
-        self._client.delete_layer(self.id)
+        body = self._client.delete_layer(self.id)
+        return _to_trash_entry(body) if body else None
 
     def restore(self) -> "Layer":
         """Bring this layer back out of the trash, and re-read it."""
         self._client.restore_layer(self.id)
         return self.refresh()
 
-    def purge(self) -> None:
+    def purge(self) -> "TrashEntry | None":
         """
         Permanently delete this layer and its data.
 
         Not reversible -- there is no trash behind this call, unlike
         :meth:`delete`. Call :meth:`delete` first and look at what is in the
         trash if there is any doubt.
+
+        :return: what was destroyed -- or None while the backend still
+            answers this endpoint with an empty 204. See :class:`TrashEntry`
+            and :meth:`delete`; the same gap, for the same reason.
         """
-        self._client.purge_layer(self.id)
+        body = self._client.purge_layer(self.id)
+        return _to_trash_entry(body) if body else None
 
     # --- the whole picture, in one call ------------------------------------
 
