@@ -192,6 +192,146 @@ class FilterParserTest {
 		}
 	}
 
+	/**
+	 * A name that means two fields is the bug this section exists for. The filter used to
+	 * take the display-name match and the sort parameter the first field in ordinal order,
+	 * so on the Straßenbaumkataster {@code kronendurchmesser > 10} counted 225.657 rows
+	 * (a text column, compared as text) while sorting by the same word ordered a bigint
+	 * column of 73.890 matches. Neither answer announced itself as the wrong one.
+	 */
+	@Nested
+	@DisplayName("a name that means two fields is refused, not guessed")
+	class Ambiguity {
+
+		/** The shape from the Straßenbaumkataster: field 14's display name is field 13's column. */
+		private static final List<LayerField> COLLIDING = List.of(
+				new LayerField(null, "Kronendurchmesser Quelle", "kronendurchmesser", "bigint", 0),
+				new LayerField(null, "Kronendurchmesser", "kronendurchmesser_z", "text", 1));
+
+		@Test
+		void refusesTheNameAndNamesBothCandidates() {
+			assertThatThrownBy(() -> FilterParser.parse("kronendurchmesser > 10", COLLIDING))
+					.isInstanceOf(BadRequestException.class)
+					.hasMessageContaining("Mehrdeutiges Feld: kronendurchmesser")
+					.hasMessageContaining("Kronendurchmesser Quelle (Spalte kronendurchmesser)")
+					.hasMessageContaining("Kronendurchmesser (Spalte kronendurchmesser_z)");
+		}
+
+		@Test
+		void offersTheNamesThatDoResolve() {
+			assertThatThrownBy(() -> FilterParser.parse("kronendurchmesser > 10", COLLIDING))
+					.hasMessageContaining("Eindeutig sind: Kronendurchmesser Quelle, kronendurchmesser_z");
+		}
+
+		/**
+		 * The message must not read as "this field is gone": the client discards a filter
+		 * on the wording "Unbekanntes Feld" (frontend/src/table/filterValidity.ts), and
+		 * discarding is wrong here -- the field exists twice and only the user can say which.
+		 */
+		@Test
+		void doesNotLookLikeADeletedField() {
+			assertThatThrownBy(() -> FilterParser.parse("kronendurchmesser > 10", COLLIDING))
+					.hasMessageNotContaining("Unbekanntes Feld");
+		}
+
+		@Test
+		void resolvesTheUnambiguousNamesOfTheSameTwoFields() {
+			assertThat(FilterParser.parse("\"Kronendurchmesser Quelle\" > 10", COLLIDING).sql())
+					.isEqualTo("\"kronendurchmesser\" > :f0");
+			assertThat(FilterParser.parse("kronendurchmesser_z = 'x'", COLLIDING).sql())
+					.isEqualTo("\"kronendurchmesser_z\" = :f0");
+		}
+
+		/** The ordinary case: display name and column name are the same word, one field. */
+		@Test
+		void aFieldNamedLikeItsOwnColumnIsNotAmbiguous() {
+			assertThat(parse("einwohner > 1").sql()).isEqualTo("\"einwohner\" > :f0");
+		}
+
+		/**
+		 * Two fields that swapped names -- reachable by renaming one onto the other's
+		 * column -- leave neither with a name of its own. There is nothing to offer, and
+		 * the message says that instead of naming an alternative that fails the same way.
+		 */
+		@Test
+		void saysSoWhenNoNameResolves() {
+			List<LayerField> fields = List.of(
+					new LayerField(null, "wert_1", "wert", "bigint", 0),
+					new LayerField(null, "wert", "wert_1", "text", 1));
+
+			assertThatThrownBy(() -> FilterParser.parse("wert > 1", fields))
+					.isInstanceOf(BadRequestException.class)
+					.hasMessageContaining("Kein Name spricht genau eines dieser Felder an");
+			assertThatThrownBy(() -> FilterParser.parse("wert_1 > 1", fields))
+					.isInstanceOf(BadRequestException.class)
+					.hasMessageContaining("Kein Name spricht genau eines dieser Felder an");
+		}
+	}
+
+	@Nested
+	@DisplayName("fid is a field like any other")
+	class RowId {
+
+		@Test
+		void comparesLikeANumberColumn() {
+			ParsedFilter filter = parse("fid > 100");
+
+			assertThat(filter.sql()).isEqualTo("\"fid\" > :f0");
+			assertThat(filter.parameters()).containsEntry("f0", 100L);
+		}
+
+		/**
+		 * One bound array, not one parameter per value: a program re-reading a selection
+		 * names every fid it holds, and PostgreSQL stops at 65535 bind parameters.
+		 */
+		@Test
+		void binsAWholeInListIntoOneArrayParameter() {
+			ParsedFilter filter = parse("fid IN (1, 2, 3)");
+
+			assertThat(filter.sql()).isEqualTo("\"fid\" = ANY(:f0)");
+			assertThat(filter.parameters()).hasSize(1);
+			assertThat(filter.parameters().get("f0")).isEqualTo(new Long[] { 1L, 2L, 3L });
+		}
+
+		@Test
+		void negatesAnInListWithAllRatherThanNotIn() {
+			assertThat(parse("fid NOT IN (1, 2)").sql()).isEqualTo("\"fid\" <> ALL(:f0)");
+		}
+
+		@Test
+		void staysOutOfTheWayOfOtherColumnsInLists() {
+			assertThat(parse("einwohner IN (1, 2)").sql())
+					.as("only fid changes shape -- every other column keeps its placeholders")
+					.isEqualTo("\"einwohner\" IN (:f0, :f1)");
+		}
+
+		@Test
+		void isRejectedForTextOperatorsLikeAnyOtherNumberColumn() {
+			assertThatThrownBy(() -> parse("fid LIKE '1%'"))
+					.isInstanceOf(BadRequestException.class)
+					.hasMessageContaining("nur für Textfelder");
+		}
+
+		@Test
+		void appearsAmongTheAvailableNames() {
+			assertThatThrownBy(() -> parse("passwort = 'x'")).hasMessageContaining("fid");
+		}
+
+		/**
+		 * An ESRI shapefile brings an attribute called FID. The row id must not quietly
+		 * shadow it -- the column it was imported into is reachable, the name is not.
+		 */
+		@Test
+		void refusesTheNameWhenTheLayerBroughtOneToo() {
+			List<LayerField> fields = List.of(new LayerField(null, "FID", "fid_1", "bigint", 0));
+
+			assertThatThrownBy(() -> FilterParser.parse("fid > 1", fields))
+					.isInstanceOf(BadRequestException.class)
+					.hasMessageContaining("Mehrdeutiges Feld: fid")
+					.hasMessageContaining("Eindeutig sind: fid_1");
+		}
+	}
+
 	@Nested
 	@DisplayName("type mismatches are reported, not passed to PostgreSQL")
 	class Types {

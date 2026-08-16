@@ -372,6 +372,65 @@ class FeatureQueryServiceTest {
 		projectRepository.deleteById(hugeProject.getId());
 	}
 
+	private Project collidingProject;
+	private Layer collidingLayer;
+	private String collidingTableName;
+
+	/**
+	 * The Straßenbaumkataster's shape, reduced to two columns and four rows.
+	 *
+	 * <p>One field is displayed as "Kronendurchmesser Quelle" and stored in the column
+	 * {@code kronendurchmesser}; the next is displayed as "Kronendurchmesser" and stored in
+	 * {@code kronendurchmesser_z}. The word "kronendurchmesser" is therefore a display name
+	 * and a column name at once, and it used to mean the text column to the filter and the
+	 * bigint column to the sort parameter -- on the real layer that was 225.657 rows against
+	 * 73.890 for what a user reads as the same question. The values below reproduce the
+	 * split in miniature: compared as numbers, one row is over 10; compared as text, three
+	 * are.
+	 */
+	@BeforeAll
+	void createCollidingLayer() {
+		collidingProject = projectRepository.saveAndFlush(
+				new Project("Namensgleich-Test " + UUID.randomUUID(), null, 4326, "osm"));
+
+		UUID layerId = UUID.randomUUID();
+		collidingTableName = SqlIdentifier.tableName(layerId);
+		String table = SqlIdentifier.quoteLayerTable(collidingTableName);
+
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid                 bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom                geometry(MultiPoint, 4326) NOT NULL,
+				    kronendurchmesser   bigint,
+				    kronendurchmesser_z text
+				)
+				""".formatted(table)).update();
+		jdbc.sql("""
+				INSERT INTO %s (geom, kronendurchmesser, kronendurchmesser_z) VALUES
+				(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), 2, '2'),
+				(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), 3, '3'),
+				(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), 9, '9'),
+				(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), 12, '12')
+				""".formatted(table)).update();
+
+		Layer newLayer = new Layer(layerId, collidingProject, "Namensgleich", collidingTableName,
+				"MULTIPOINT", 4326);
+		newLayer.setFeatureCount(4);
+		collidingLayer = layerRepository.saveAndFlush(newLayer);
+
+		fieldRepository.saveAndFlush(new LayerField(collidingLayer, "Kronendurchmesser Quelle",
+				"kronendurchmesser", "bigint", 0));
+		fieldRepository.saveAndFlush(new LayerField(collidingLayer, "Kronendurchmesser",
+				"kronendurchmesser_z", "text", 1));
+	}
+
+	@AfterAll
+	void dropCollidingLayer() {
+		jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(collidingTableName)).update();
+		layerRepository.deleteById(collidingLayer.getId());
+		projectRepository.deleteById(collidingProject.getId());
+	}
+
 	private Project typeProject;
 	private Layer typeLayer;
 	private String typeTableName;
@@ -875,11 +934,33 @@ class FeatureQueryServiceTest {
 				.hasMessageContaining("Auswahlmodus");
 	}
 
+	/**
+	 * A page size past the ceiling used to be clamped to it. The request came back looking
+	 * complete: 1.000 rows, no cursor if the filter matched no more, and nothing anywhere
+	 * saying that 4.000 rows had been left out. A person might have stopped at the round
+	 * number; a program has no reason to.
+	 */
 	@Test
-	void capsAnAbsurdPageSize() {
-		FeatureDtos.Page page = service.list(layer.getId(), query(null, false, null, 10_000_000));
+	@DisplayName("a page size past the ceiling is refused, with the ceiling in the message")
+	void rejectsAPageSizeOverTheCeiling() {
+		assertThatThrownBy(() -> service.list(layer.getId(), query(null, false, null, 5_000)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("1000");
+	}
 
-		assertThat(page.features()).hasSize(ROWS.size());
+	@Test
+	void rejectsAPageSizeBelowOne() {
+		assertThatThrownBy(() -> service.list(layer.getId(), query(null, false, null, 0)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("size");
+	}
+
+	@Test
+	@DisplayName("the ceiling itself is served in full")
+	void servesThePageSizeAtTheCeiling() {
+		FeatureDtos.Page page = service.list(hugeLayer.getId(), query(null, false, null, 1_000));
+
+		assertThat(page.features()).hasSize(1_000);
 	}
 
 	// --- column types the cursor and the filter have to survive ---------------------------
@@ -1069,6 +1150,144 @@ class FeatureQueryServiceTest {
 				.as("the nummer-only match (name/ort both null) and the search-only match "
 						+ "(nummer 99) must both be excluded")
 				.containsExactly("Schmidt");
+	}
+
+	// --- one name, two fields ------------------------------------------------------------
+
+	/**
+	 * The two ways into the same word have to agree. Before, they did not: the filter took
+	 * the field whose display name matched and the sort parameter the first field in ordinal
+	 * order, so "kronendurchmesser" meant the text column to one and the bigint column to
+	 * the other. Both now refuse it, which is the only answer that cannot be mistaken for a
+	 * result.
+	 */
+	@Test
+	@DisplayName("filter and sort answer an ambiguous name the same way")
+	void refusesAnAmbiguousNameOnBothPaths() {
+		assertThatThrownBy(() -> service.list(collidingLayer.getId(), new FeatureQueryService.Query(
+				null, false, "kronendurchmesser > 10", null, null, null, false, null, 100)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("Mehrdeutiges Feld: kronendurchmesser");
+
+		assertThatThrownBy(() -> service.list(collidingLayer.getId(),
+				query("kronendurchmesser", false, null, 100)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("Mehrdeutiges Sortierfeld: kronendurchmesser");
+	}
+
+	@Test
+	@DisplayName("the message names both candidates and how to reach each")
+	void namesBothCandidatesOfAnAmbiguousName() {
+		assertThatThrownBy(() -> service.list(collidingLayer.getId(), new FeatureQueryService.Query(
+				null, false, "kronendurchmesser > 10", null, null, null, false, null, 100)))
+				.hasMessageContaining("Kronendurchmesser Quelle (Spalte kronendurchmesser)")
+				.hasMessageContaining("Kronendurchmesser (Spalte kronendurchmesser_z)")
+				.hasMessageContaining("Eindeutig sind: Kronendurchmesser Quelle, kronendurchmesser_z");
+	}
+
+	/**
+	 * And the point of refusing: the two unambiguous names really do read different columns,
+	 * one as a number and one as text. Guessing between them was never a small difference.
+	 */
+	@Test
+	@DisplayName("the two unambiguous names count different rows")
+	void theTwoFieldsBehindAnAmbiguousNameAreNotTheSame() {
+		FeatureDtos.Page byNumber = service.list(collidingLayer.getId(), new FeatureQueryService.Query(
+				null, false, "\"Kronendurchmesser Quelle\" > 10", null, null, null, false, null, 100));
+		FeatureDtos.Page byText = service.list(collidingLayer.getId(), new FeatureQueryService.Query(
+				null, false, "kronendurchmesser_z > '10'", null, null, null, false, null, 100));
+
+		assertThat(byNumber.totalCount()).as("only 12 is greater than 10").isEqualTo(1);
+		assertThat(byText.totalCount())
+				.as("as text, 2, 3 and 9 sort after '10' as well -- the count is four times the other")
+				.isEqualTo(4);
+	}
+
+	@Test
+	@DisplayName("an unambiguous name sorts as before")
+	void sortsByAnUnambiguousName() {
+		FeatureDtos.Page page = service.list(collidingLayer.getId(),
+				query("Kronendurchmesser Quelle", false, null, 100));
+
+		assertThat(page.features().stream()
+				.map(feature -> feature.properties().get("kronendurchmesser")))
+				.containsExactly(2L, 3L, 9L, 12L);
+	}
+
+	// --- fid as a filterable field --------------------------------------------------------
+
+	@Test
+	@DisplayName("fid compares like a number column")
+	void filtersByFid() {
+		List<Long> all = service.fids(layer.getId(), null, null).fids();
+		long third = all.get(2);
+
+		FeatureDtos.Page page = service.list(layer.getId(), new FeatureQueryService.Query(
+				null, false, "fid > " + third, null, null, null, false, null, 100));
+
+		assertThat(page.totalCount()).isEqualTo(ROWS.size() - 3);
+		assertThat(page.features()).allSatisfy(feature -> assertThat(feature.fid()).isGreaterThan(third));
+	}
+
+	@Test
+	@DisplayName("fid IN names an exact set of objects")
+	void filtersByAnExplicitFidList() {
+		List<Long> all = service.fids(layer.getId(), null, null).fids();
+		List<Long> wanted = List.of(all.get(0), all.get(4), all.get(9));
+
+		FeatureDtos.Page page = service.list(layer.getId(), new FeatureQueryService.Query(
+				null, false, "fid IN (" + join(wanted) + ")", null, null, null, false, null, 100));
+
+		assertThat(page.features().stream().map(FeatureDtos.Feature::fid))
+				.containsExactlyInAnyOrderElementsOf(wanted);
+	}
+
+	@Test
+	@DisplayName("fid NOT IN is the complement of the same list")
+	void filtersByANegatedFidList() {
+		List<Long> all = service.fids(layer.getId(), null, null).fids();
+		List<Long> excluded = List.of(all.get(0), all.get(1));
+
+		FeatureDtos.Page page = service.list(layer.getId(), new FeatureQueryService.Query(
+				null, false, "fid NOT IN (" + join(excluded) + ")", null, null, null, false, null, 100));
+
+		assertThat(page.totalCount()).isEqualTo(ROWS.size() - excluded.size());
+		assertThat(page.features().stream().map(FeatureDtos.Feature::fid)).doesNotContainAnyElementsOf(excluded);
+	}
+
+	/**
+	 * The reason the list is bound as one array rather than one placeholder per value:
+	 * expanded, this expression would be 70.000 bind parameters and PostgreSQL refuses past
+	 * 65535. Deliberately past that number, not merely large -- a selection here runs to
+	 * 100.000 objects, so a program re-reading one arrives on the far side of the ceiling.
+	 */
+	@Test
+	@DisplayName("a fid list past the bind-parameter ceiling still runs")
+	void filtersByAVeryLongFidList() {
+		List<Long> wanted = service.fids(hugeLayer.getId(), "Bucket = 2", null).fids()
+				.subList(0, 70_000);
+
+		FeatureDtos.Page page = service.list(hugeLayer.getId(), new FeatureQueryService.Query(
+				null, false, "fid IN (" + join(wanted) + ")", null, null, null, false, null, 1_000));
+
+		assertThat(page.totalCount()).isEqualTo(wanted.size());
+		assertThat(page.features()).hasSize(1_000);
+	}
+
+	@Test
+	@DisplayName("fid filters and fid sorting name the same column")
+	void filtersAndSortsByFidTogether() {
+		List<Long> all = service.fids(layer.getId(), null, null).fids();
+
+		FeatureDtos.Page page = service.list(layer.getId(), new FeatureQueryService.Query(
+				"fid", true, "fid <= " + all.get(2), null, null, null, false, null, 100));
+
+		assertThat(page.features().stream().map(FeatureDtos.Feature::fid))
+				.containsExactly(all.get(2), all.get(1), all.get(0));
+	}
+
+	private static String join(List<Long> fids) {
+		return fids.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
 	}
 
 	// --- fid endpoint --------------------------------------------------------------------

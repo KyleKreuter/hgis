@@ -1,6 +1,7 @@
 package de.kreuter.hgis.features;
 
 import de.kreuter.hgis.catalog.LayerField;
+import de.kreuter.hgis.catalog.LayerFields;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.SqlIdentifier;
 import java.util.ArrayList;
@@ -24,6 +25,11 @@ import java.util.Map;
  *       fragment, so quoting a value cannot end the string and start a statement.
  * </ul>
  *
+ * <p>Names are resolved by {@link LayerFields#require}, the same rule the sort parameter
+ * uses -- the two used to resolve a name that means two fields to opposite ones, so
+ * filtering and sorting by the same word silently read different columns.
+ * {@link QueryFields} adds {@code fid} to what may be named.
+ *
  * <p>Supported: comparisons ({@code = <> != < <= > >=}), {@code LIKE}/{@code ILIKE},
  * {@code IS [NOT] NULL}, {@code IN (…)}, {@code AND}, {@code OR}, {@code NOT} and
  * parentheses. Field names containing spaces or umlauts go in double quotes, values in
@@ -35,31 +41,23 @@ public final class FilterParser {
 	public record ParsedFilter(String sql, Map<String, Object> parameters) {
 	}
 
-	private final Map<String, LayerField> fieldsBySourceName = new LinkedHashMap<>();
-	private final Map<String, LayerField> fieldsByColumnName = new LinkedHashMap<>();
+	/** Everything an identifier may name: the layer's fields plus {@code fid}. */
+	private final List<LayerField> fields;
 	private final Map<String, Object> parameters = new LinkedHashMap<>();
 	private final List<Token> tokens;
 	private int position;
 
 	private FilterParser(String expression, List<LayerField> fields) {
-		for (LayerField field : fields) {
-			// Matching is case-insensitive: the UI shows the source name as it came from
-			// the file, and expecting someone to reproduce its capitalisation is a trap.
-			fieldsBySourceName.put(field.getSourceName().toLowerCase(Locale.ROOT), field);
-			// The normalised column name is accepted as well, because that is the key the
-			// feature response uses for its properties -- someone reading a response and
-			// writing a filter from it should not have to translate. Source names win on
-			// a clash, matching the sort parameter.
-			fieldsByColumnName.putIfAbsent(field.getColumnName().toLowerCase(Locale.ROOT), field);
-		}
+		this.fields = QueryFields.withRowId(fields);
 		this.tokens = tokenize(expression);
 	}
 
 	/**
 	 * @param expression user-supplied filter; blank means "no filter"
-	 * @param fields the layer's fields, the only identifiers that may appear
+	 * @param fields the layer's fields; those and {@code fid} are the only identifiers
+	 *     that may appear
 	 * @return the fragment, or null when nothing was filtered
-	 * @throws BadRequestException on any syntax error or unknown field
+	 * @throws BadRequestException on any syntax error, unknown field or ambiguous name
 	 */
 	public static ParsedFilter parse(String expression, List<LayerField> fields) {
 		if (expression == null || expression.isBlank()) {
@@ -115,7 +113,7 @@ public final class FilterParser {
 
 		boolean negated = matchKeyword("NOT");
 		if (matchKeyword("IN")) {
-			return column + (negated ? " NOT IN " : " IN ") + parseValueList(field);
+			return parseIn(field, column, negated);
 		}
 		if (matchKeyword("LIKE") || matchKeyword("ILIKE")) {
 			String operator = previous().text().toUpperCase(Locale.ROOT);
@@ -130,15 +128,37 @@ public final class FilterParser {
 		return column + " " + operator.text() + " " + bind(field, readLiteral(field));
 	}
 
-	private String parseValueList(LayerField field) {
+	/**
+	 * {@code IN} over a list of values.
+	 *
+	 * <p>For {@code fid} the whole list becomes one bound array compared with
+	 * {@code = ANY(…)}, not one placeholder per value. That is the case where the list gets
+	 * long: a program re-reads a selection by naming the fids it holds, and a selection runs
+	 * to five figures here (see {@code FidSelection.MAX_FIDS}). Expanded, that would be one
+	 * bind parameter per object against PostgreSQL's ceiling of 65535 -- the export already
+	 * passes its selection as one array for exactly this reason. Any other column keeps the
+	 * expanded form: its values carry a type that would have to be spelled into the array
+	 * cast, and no client sends thousands of them.
+	 */
+	private String parseIn(LayerField field, String column, boolean negated) {
 		expect(TokenType.LPAREN, "öffnende Klammer nach IN");
-		List<String> placeholders = new ArrayList<>();
+		List<Object> values = new ArrayList<>();
 		do {
-			placeholders.add(bind(field, readLiteral(field)));
+			values.add(readLiteral(field));
 		}
 		while (match(TokenType.COMMA));
 		expect(TokenType.RPAREN, "schließende Klammer");
-		return "(" + String.join(", ", placeholders) + ")";
+
+		if (QueryFields.isRowId(field)) {
+			// <> ALL is NOT IN written for an array. fid is NOT NULL, so the two agree on
+			// every row -- the difference NULL makes between them cannot arise here.
+			String placeholder = bindArray(values);
+			return column + (negated ? " <> ALL(" : " = ANY(") + placeholder + ")";
+		}
+
+		List<String> placeholders = values.stream().map(value -> bind(field, value)).toList();
+		return column + (negated ? " NOT IN " : " IN ")
+				+ "(" + String.join(", ", placeholders) + ")";
 	}
 
 	private LayerField resolveField() {
@@ -147,17 +167,7 @@ public final class FilterParser {
 			throw error("Feldname erwartet. Gefunden: " + describe(token) + ".");
 		}
 		advance();
-		String name = token.text().toLowerCase(Locale.ROOT);
-		LayerField field = fieldsBySourceName.getOrDefault(name, fieldsByColumnName.get(name));
-		if (field == null) {
-			throw new BadRequestException("Unbekanntes Feld: " + token.text()
-					+ ". Verfügbar: " + String.join(", ", availableFieldNames()) + ".");
-		}
-		return field;
-	}
-
-	private List<String> availableFieldNames() {
-		return fieldsBySourceName.values().stream().map(LayerField::getSourceName).toList();
+		return LayerFields.require(token.text(), fields, "Feld");
 	}
 
 	// --- values -----------------------------------------------------------------------
@@ -270,6 +280,19 @@ public final class FilterParser {
 
 		String cast = value instanceof String ? castFor(baseType(field)) : null;
 		return cast == null ? ":" + name : "CAST(:" + name + " AS " + cast + ")";
+	}
+
+	/**
+	 * Registers a whole value list as one {@code bigint[]} and returns its placeholder.
+	 *
+	 * <p>Only reached for {@code fid}, whose literals are already {@link Long} by the time
+	 * they get here: {@link #readLiteral} converts against the field's type, and the row id
+	 * is declared {@code bigint}.
+	 */
+	private String bindArray(List<Object> values) {
+		String name = "f" + parameters.size();
+		parameters.put(name, values.stream().map(Long.class::cast).toArray(Long[]::new));
+		return ":" + name;
 	}
 
 	/**

@@ -146,16 +146,17 @@ public class LayerStyleService {
 
 		StyleDtos.Renderer renderer = style.renderer();
 		if (renderer != null && classifies(renderer.type())) {
-			// Skipping an unresolvable name rather than throwing: this runs on the tile
-			// path, and a style that no longer matches its layer must degrade to the plain
-			// tile, not turn every tile request into a 500.
-			LayerFields.find(renderer.field(), fields)
+			// By column name, which is what a validated style stores, and skipping an
+			// unresolvable one rather than throwing: this runs on the tile path, and a
+			// style that no longer matches its layer must degrade to the plain tile, not
+			// turn every tile request into a 500 (see LayerFields.byColumnName).
+			LayerFields.byColumnName(renderer.field(), fields)
 					.ifPresent(field -> columns.add(field.getColumnName()));
 		}
 
 		StyleDtos.Labels labels = style.labels();
 		if (labels != null && labels.isEnabled()) {
-			LayerFields.find(labels.field(), fields)
+			LayerFields.byColumnName(labels.field(), fields)
 					.ifPresent(field -> columns.add(field.getColumnName()));
 		}
 		return columns;

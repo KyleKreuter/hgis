@@ -305,6 +305,53 @@ class LayerStyleTest {
 		assertThat(styleService.tileColumns(reload())).containsExactly("gebaeudehoehe");
 	}
 
+	/**
+	 * A stored style names a column, and the tile has to read that column.
+	 *
+	 * <p>It used to be read back through the rule that accepts a display name as well, so
+	 * once a second field was displayed as "gebaeudehoehe" -- the shape the
+	 * Straßenbaumkataster has twice -- the stored name matched that field first and the
+	 * tile was drawn from the wrong column. Nothing about the map said so: it had colours,
+	 * they were simply computed from other data.
+	 */
+	@Test
+	@DisplayName("a stored style reads its own column, even when another field is displayed by that name")
+	void storedFieldNamesAreReadAsColumnNames() throws Exception {
+		addFieldDisplayedAs("gebaeudehoehe", "gebaeudehoehe_z", "text");
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "graduated", "field": "Gebäudehöhe",
+				  "classes": [ { "min": 0, "max": 10, "label": "0 – 10",
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.field").value("gebaeudehoehe"));
+
+		assertThat(styleService.tileColumns(reload()))
+				.as("the column the style was validated against, not the field that shares its name")
+				.containsExactly("gebaeudehoehe");
+	}
+
+	@Test
+	@DisplayName("a style field naming two fields at once is refused rather than resolved")
+	void anAmbiguousStyleFieldIsRefused() throws Exception {
+		addFieldDisplayedAs("gebaeudehoehe", "gebaeudehoehe_z", "text");
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "categorized", "field": "gebaeudehoehe",
+				  "categories": [ { "value": "hoch", "label": "hoch",
+				                    "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""")
+				.andExpect(status().isBadRequest());
+	}
+
+	/** A second field whose display name is another field's column name. */
+	private void addFieldDisplayedAs(String sourceName, String columnName, String dataType) {
+		jdbc.sql("ALTER TABLE " + SqlIdentifier.quoteLayerTable(tableName)
+				+ " ADD COLUMN " + SqlIdentifier.quoteColumn(columnName) + " " + dataType).update();
+		layerFieldRepository.saveAndFlush(new LayerField(layer, sourceName, columnName, dataType, 3));
+	}
+
 	@Test
 	@DisplayName("a dash pattern survives storage; no pattern means the member is gone, not null")
 	void dashArrayRoundTrips() throws Exception {
