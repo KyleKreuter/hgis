@@ -1,0 +1,1 @@
+export { TrashDialog } from './TrashDialog'

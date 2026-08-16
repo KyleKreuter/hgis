@@ -22,10 +22,14 @@ interface DeleteLayerDialogProps {
 }
 
 /**
- * Deleting a layer drops its physical table, so the count is named outright -- the
- * number is the only thing that conveys what is at stake. Unlike deleting a project
- * this does not ask for the name to be typed: it destroys one layer, not everything,
- * and a hurdle placed everywhere only teaches people to push past it.
+ * `DELETE /api/layers/{layerId}` no longer drops the physical table (contract
+ * "Schreibstufe" Paket 1 `schutz`) -- it moves the layer into the project's Papierkorb
+ * (`trash/TrashDialog.tsx`), where it can be restored or, separately and with its own
+ * confirmation, purged for good. The count is still named outright: leaving the map and
+ * the attribute table is itself a real change, even though it is no longer the loss it
+ * used to be. Unlike deleting a project this does not ask for the name to be typed: one
+ * layer is a smaller blast radius than a whole project, and it goes somewhere recoverable
+ * besides.
  */
 export function DeleteLayerDialog({
   layer,
@@ -49,7 +53,7 @@ export function DeleteLayerDialog({
     if (!layer || deleteLocked) return
     try {
       await deleteLayer.mutateAsync(layer.id)
-      toast.success(`Layer „${layer.name}" gelöscht`)
+      toast.success(`Layer „${layer.name}" in den Papierkorb verschoben`)
       onDeleted(layer.id)
       onOpenChange(false)
     } catch {
@@ -73,16 +77,16 @@ export function DeleteLayerDialog({
                 empty layer rather than as a picture, which has no such count at all. */}
             {layer && !deleteLocked && isMapImageLayer(layer) && (
               <>
-                Das Programm löscht „{layer.name}" endgültig. Sie können das Kartenbild
-                danach nicht wiederherstellen.
+                Das Programm verschiebt „{layer.name}" in den Papierkorb. Sie können das
+                Kartenbild von dort wiederherstellen.
               </>
             )}
             {layer && !deleteLocked && !isMapImageLayer(layer) && (
               <>
-                Das Programm löscht „{layer.name}" mit{' '}
+                Das Programm verschiebt „{layer.name}" mit{' '}
                 <span className="tabular-nums">{formatCount(layer.featureCount)}</span>{' '}
-                {layer.featureCount === 1 ? 'Objekt' : 'Objekten'} endgültig. Sie können die
-                Daten danach nicht wiederherstellen.
+                {layer.featureCount === 1 ? 'Objekt' : 'Objekten'} in den Papierkorb. Sie
+                können den Layer von dort wiederherstellen.
               </>
             )}
           </AlertDialogDescription>

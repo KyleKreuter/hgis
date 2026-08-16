@@ -54,7 +54,7 @@ describe('DeleteLayerDialog', () => {
 
     expect(screen.getByText(/mit/)).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()
-    expect(screen.getByText(/Objekten endgültig/)).toBeInTheDocument()
+    expect(screen.getByText(/Objekten in den Papierkorb/)).toBeInTheDocument()
   })
 
   test('nennt für ein Kartenbild keine Objektzahl', () => {
@@ -62,7 +62,7 @@ describe('DeleteLayerDialog', () => {
       <DeleteLayerDialog layer={makeMapImageLayer()} projectId="p-1" onOpenChange={vi.fn()} onDeleted={vi.fn()} />,
     )
 
-    expect(screen.getByText(/löscht „Stadtplan" endgültig/)).toBeInTheDocument()
+    expect(screen.getByText(/verschiebt „Stadtplan" in den Papierkorb/)).toBeInTheDocument()
     expect(screen.queryByText(/Objekt/)).not.toBeInTheDocument()
   })
 })

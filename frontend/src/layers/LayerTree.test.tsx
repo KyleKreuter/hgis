@@ -146,3 +146,37 @@ describe('LayerTree: das Auge am Kartenbild', () => {
     expect(screen.queryByTitle(/Sichtbar ab Zoom/)).toBeNull()
   })
 })
+
+describe('LayerTree: Papierkorb', () => {
+  test('öffnet den Papierkorb auch ohne einen einzigen (verbliebenen) Layer', async () => {
+    stubFetch([
+      { match: '/api/projects/p-1/layers', body: [] },
+      { match: '/api/projects/p-1/trash', body: [] },
+    ])
+    renderWithQueryClient(<LayerTree {...baseProps()} />)
+    const user = userEvent.setup()
+
+    // "Noch keine Layer" ist der leere Zustand der Liste selbst -- der Papierkorb muss
+    // trotzdem erreichbar sein, denn genau dieser Zustand kann von restlos geleerten,
+    // aber nicht endgültig gelöschten Layern kommen.
+    await screen.findByText('Noch keine Layer in diesem Projekt.')
+    await user.click(screen.getByRole('button', { name: 'Papierkorb öffnen' }))
+
+    expect(await screen.findByText('Papierkorb')).toBeInTheDocument()
+    expect(await screen.findByText('Der Papierkorb ist leer')).toBeInTheDocument()
+  })
+
+  test('öffnet den Papierkorb aus der Layerliste heraus', async () => {
+    stubFetch([
+      { match: '/api/projects/p-1/layers', body: [makeVectorLayer()] },
+      { match: '/api/projects/p-1/trash', body: [] },
+    ])
+    renderWithQueryClient(<LayerTree {...baseProps()} />)
+    const user = userEvent.setup()
+
+    await screen.findByText('Gebäude')
+    await user.click(screen.getByRole('button', { name: 'Papierkorb öffnen' }))
+
+    expect(await screen.findByText('Papierkorb')).toBeInTheDocument()
+  })
+})
