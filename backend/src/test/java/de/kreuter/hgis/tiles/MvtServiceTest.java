@@ -3,6 +3,7 @@ package de.kreuter.hgis.tiles;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import de.kreuter.hgis.TestcontainersConfiguration;
+import de.kreuter.hgis.common.ProjectionDomain;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.tiles.LayerTableFixture.TestLayer;
 import java.util.ArrayList;
@@ -44,6 +45,9 @@ class MvtServiceTest {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	@Autowired
+	private ProjectionDomain projectionDomain;
+
 	private TestLayer testLayer;
 
 	@BeforeAll
@@ -55,7 +59,7 @@ class MvtServiceTest {
 	@DisplayName("renders a tile containing exactly the known signal features")
 	void rendersExpectedFeatures() {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), List.of(),
-				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
+				testLayer.zoom(), testLayer.tileX(), testLayer.tileY()).mvt();
 
 		assertThat(mvt).isNotNull();
 
@@ -70,7 +74,7 @@ class MvtServiceTest {
 	@DisplayName("an unstyled layer carries no attributes beyond its feature ids")
 	void tileWithoutStyleCarriesNoAttributes() {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), List.of(),
-				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
+				testLayer.zoom(), testLayer.tileX(), testLayer.tileY()).mvt();
 
 		assertThat(MvtTileDecoder.decode(mvt).get(0).keys()).isEmpty();
 	}
@@ -80,7 +84,7 @@ class MvtServiceTest {
 	void tileCarriesTheRequestedAttribute() {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832,
 				List.of(LayerTableFixture.CATEGORY_COLUMN), List.of(),
-				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
+				testLayer.zoom(), testLayer.tileX(), testLayer.tileY()).mvt();
 
 		MvtTileDecoder.Layer decoded = MvtTileDecoder.decode(mvt).get(0);
 		assertThat(decoded.keys()).containsExactly(LayerTableFixture.CATEGORY_COLUMN);
@@ -97,7 +101,7 @@ class MvtServiceTest {
 	void tileOmitsAttributesNoStyleAskedFor() {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832,
 				List.of(LayerTableFixture.CATEGORY_COLUMN), List.of(),
-				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
+				testLayer.zoom(), testLayer.tileX(), testLayer.tileY()).mvt();
 
 		assertThat(MvtTileDecoder.decode(mvt).get(0).keys())
 				.doesNotContain(LayerTableFixture.NUMERIC_COLUMN);
@@ -108,8 +112,46 @@ class MvtServiceTest {
 	void emptyTileRendersToNull() {
 		// z=0 with the corner tile (0,0) is a fixed point far from every possible
 		// signal/noise coordinate this fixture ever produces -- no guessing involved.
-		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), List.of(), 0, 0, 0);
+		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832, List.of(), List.of(), 0, 0, 0).mvt();
 		assertThat(mvt).isNull();
+	}
+
+	/**
+	 * The tile size finding (CONTRACT.md): a layer with more features in a tile than the
+	 * limit allows must not silently hand back an incomplete tile -- {@code truncated()}
+	 * has to say so. {@link #testLayer} carries exactly four signal features in this
+	 * tile, so a limit of three is guaranteed to cut one -- deterministically, since the
+	 * ranking ({@code ST_Area + ST_Length}, then {@code fid}) ties every one of these
+	 * point features at zero and falls back to {@code fid} either way.
+	 */
+	@Test
+	@DisplayName("a tile with more features than the limit is truncated, and says so")
+	void tileWithTooManyFeaturesIsTruncated() {
+		MvtService limited = new MvtService(jdbc, projectionDomain, 3);
+
+		MvtService.RenderedTile rendered = limited.renderTile(testLayer.tableName(), 25832, List.of(), List.of(),
+				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
+
+		assertThat(rendered.truncated()).isTrue();
+		assertThat(rendered.mvt()).isNotNull();
+		assertThat(MvtTileDecoder.decode(rendered.mvt()).get(0).featureIds())
+				.as("das Limit muss die Kachel wirklich auf drei Objekte kuerzen, nicht nur den Hinweis setzen")
+				.hasSize(3)
+				.isSubsetOf(testLayer.featureIds());
+	}
+
+	/** The other half: a tile within the limit is not falsely flagged as cut down. */
+	@Test
+	@DisplayName("a tile within the limit is not truncated")
+	void tileWithinTheLimitIsNotTruncated() {
+		MvtService generous = new MvtService(jdbc, projectionDomain, 1000);
+
+		MvtService.RenderedTile rendered = generous.renderTile(testLayer.tableName(), 25832, List.of(), List.of(),
+				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
+
+		assertThat(rendered.truncated()).isFalse();
+		assertThat(MvtTileDecoder.decode(rendered.mvt()).get(0).featureIds())
+				.containsExactlyInAnyOrderElementsOf(testLayer.featureIds());
 	}
 
 	@Test
@@ -185,7 +227,7 @@ class MvtServiceTest {
 	void rendersATileBeyondTheProjectionDomain() {
 		String tableName = createCoarseLayer();
 		try {
-			byte[] mvt = mvtService.renderTile(tableName, 25832, List.of(), List.of(), 2, 2, 1);
+			byte[] mvt = mvtService.renderTile(tableName, 25832, List.of(), List.of(), 2, 2, 1).mvt();
 
 			assertThat(mvt).as("the tile covers the whole layer, so it cannot be empty").isNotNull();
 			assertThat(MvtTileDecoder.decode(mvt).get(0).featureIds()).hasSize(1);
@@ -206,7 +248,7 @@ class MvtServiceTest {
 		String tableName = createCoarseLayer();
 		try {
 			// z=2/x=0/y=1 spans 180° to 90° west -- as far from the layer as a tile gets.
-			byte[] mvt = mvtService.renderTile(tableName, 25832, List.of(), List.of(), 2, 0, 1);
+			byte[] mvt = mvtService.renderTile(tableName, 25832, List.of(), List.of(), 2, 0, 1).mvt();
 
 			assertThat(mvt).isNull();
 		}
@@ -236,7 +278,7 @@ class MvtServiceTest {
 		// UTM32 projects, so this is the transformed envelope, not the fallback.
 		String tableName = createEdgeLayer(41.05, List.of(1.0, 9.0));
 		try {
-			byte[] mvt = mvtService.renderTile(tableName, 25832, List.of(), List.of(), 3, 4, 2);
+			byte[] mvt = mvtService.renderTile(tableName, 25832, List.of(), List.of(), 3, 4, 2).mvt();
 
 			assertThat(mvt).isNotNull();
 			assertThat(MvtTileDecoder.decode(mvt).get(0).featureIds())

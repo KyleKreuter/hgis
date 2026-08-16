@@ -255,7 +255,7 @@ class MvtServiceOutsideClipTest {
 	}
 
 	private byte[] render(String layerTable, List<MvtService.ClipMask> masks) {
-		return mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, tileX, tileY);
+		return mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, tileX, tileY).mvt();
 	}
 
 	private static MvtTileDecoder.Feature firstFeature(byte[] mvt) {

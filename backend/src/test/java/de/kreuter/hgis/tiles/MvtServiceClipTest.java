@@ -298,8 +298,9 @@ class MvtServiceClipTest {
 		insertRectangle(maskTable, maskX0, fy(0.30), maskX1, fy(0.70));
 
 		List<MvtService.ClipMask> masks = List.of(mask(maskTable, "insideWhole"));
-		byte[] firstTile = mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, tileX, tileY);
-		byte[] secondTile = mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, eastTile[0], eastTile[1]);
+		byte[] firstTile = mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, tileX, tileY).mvt();
+		byte[] secondTile =
+				mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, eastTile[0], eastTile[1]).mvt();
 
 		assertThat(firstTile).as("Objekt liegt ganz in der Maske, muss in der ersten Kachel erscheinen").isNotNull();
 		assertThat(secondTile)
@@ -450,7 +451,7 @@ class MvtServiceClipTest {
 	}
 
 	private byte[] render(String layerTable, List<MvtService.ClipMask> masks) {
-		return mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, tileX, tileY);
+		return mvtService.renderTile(layerTable, SRID, List.of(), masks, ZOOM, tileX, tileY).mvt();
 	}
 
 	private static MvtTileDecoder.Feature firstFeature(byte[] mvt) {
