@@ -124,10 +124,15 @@ def stub_server(request: Recorded) -> Response:
         return ok("projects.json")
     if path == f"/api/projects/{PROJECT_ID}":
         return ok("project.json")
-    if path == f"/api/projects/{PROJECT_ID}/view-state":
+    if path.startswith("/api/projects/") and path.endswith("/view-state"):
+        # Any project, not only the stored one: a real server writes the view
+        # state of whichever project is named, and tests about which ids the
+        # guard accepts need the server behind it to answer for all of them.
         if request.method == "PUT":
             return Response(204, "")
-        return ok("view-state.json")
+        if path == f"/api/projects/{PROJECT_ID}/view-state":
+            return ok("view-state.json")
+        return Response(200, '{"version":1,"activeLayerId":null,"layers":{}}')
     if path == f"/api/projects/{PROJECT_ID}/layers":
         return ok("layers.json")
 

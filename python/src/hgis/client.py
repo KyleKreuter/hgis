@@ -6,17 +6,28 @@ import os
 import re
 import uuid
 from typing import TYPE_CHECKING, Any, Iterable
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from .errors import (
     ApiError,
     InvalidClientIdError,
     NotFoundError,
     ReadOnlyError,
+    TransportError,
     UnknownNameError,
 )
 from .transport import DEFAULT_TIMEOUT, Response, Transport, build_url, default_transport
 
+#: Where hGIS listens by default.
+#:
+#: Plain ``http``, and the assumption behind that is written down rather than
+#: left to be inferred: hGIS is a local GIS, and this address is the loopback
+#: interface, where there is no network segment for anyone to sit on.
+#:
+#: Point this at a host across a real network and that stops being true. Then
+#: the traffic is readable and changeable in transit -- including the redirects
+#: :class:`ReadOnlyGuard` has to reason about, which is why it refuses a hop
+#: that leaves the origin. Use ``https://`` for anything that is not localhost.
 DEFAULT_BASE_URL = "http://localhost:8080"
 
 # --- naming this client ---------------------------------------------------
@@ -112,6 +123,29 @@ def _check_allowed(method: str, url: str) -> None:
     )
 
 
+#: Statuses that send a request somewhere else.
+_REDIRECT_STATUS = frozenset({301, 302, 303, 307, 308})
+
+#: How many hops to follow before giving up. A real API needs none of them.
+_MAX_REDIRECTS = 5
+
+
+def _method_after_redirect(status: int, method: str) -> str:
+    """
+    The method the next hop would use.
+
+    303 always becomes GET. 301 and 302 become GET for anything but GET/HEAD,
+    which is what every browser does. **307 and 308 keep both the method and
+    the body** -- which is exactly what makes an unchecked redirect dangerous:
+    a PUT stays a PUT, with its payload, and lands wherever it is sent.
+    """
+    if status in (307, 308):
+        return method
+    if status == 303:
+        return "GET"
+    return "GET" if method.upper() not in ("GET", "HEAD") else method
+
+
 class ReadOnlyGuard(Transport):
     """
     Wraps a transport and lets only the allowed requests through.
@@ -119,6 +153,17 @@ class ReadOnlyGuard(Transport):
     Sits between the client and the real floor, so every path into the network
     passes it -- including ``client._transport.request(...)``, which would walk
     straight past a check placed in :meth:`Client.get` alone.
+
+    **Redirects are followed here, one hop at a time, and every hop is
+    checked.** Letting the HTTP library follow them would undo the whole guard:
+    it follows *inside* the single call that was checked once, so a permitted
+    ``PUT .../view-state`` answered with a 307 would leave again as a
+    ``PUT .../layers/order`` -- same method, same body, never checked, and the
+    caller sees an ordinary success. That is not a hypothetical; it was
+    demonstrated against this library.
+
+    A hop may not change origin either. Without that rule, an injected redirect
+    could send this request -- and the headers on it -- to another host.
 
     It stops mistakes, not intent: writing to hGIS from Python needs nothing
     more than ``import httpx``. What it removes is the accidental write that
@@ -136,8 +181,43 @@ class ReadOnlyGuard(Transport):
         timeout: float = DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
     ) -> Response:
-        _check_allowed(method, url)
-        return self.inner.request(method, url, json=json, timeout=timeout, headers=headers)
+        origin = _origin(url)
+
+        for _ in range(_MAX_REDIRECTS + 1):
+            _check_allowed(method, url)
+            response = self.inner.request(
+                method, url, json=json, timeout=timeout, headers=headers
+            )
+            if response.status not in _REDIRECT_STATUS:
+                return response
+
+            location = response.header("Location")
+            if not location:
+                # A redirect naming no target is not something to reason about.
+                return response
+
+            url = urljoin(url, location)
+            if _origin(url) != origin:
+                raise ReadOnlyError(
+                    f"Die Umleitung führt zu einem anderen Server: {url}. "
+                    "Das Programm folgt Umleitungen nur innerhalb desselben Servers."
+                )
+
+            next_method = _method_after_redirect(response.status, method)
+            if next_method != method:
+                # The body belonged to the old method; it does not travel on.
+                json = None
+            method = next_method
+
+        raise TransportError(
+            f"Mehr als {_MAX_REDIRECTS} Umleitungen für {url}. Das Programm bricht ab."
+        )
+
+
+def _origin(url: str) -> tuple[str, str]:
+    """Scheme and host:port -- what a redirect may not change."""
+    parts = urlsplit(url)
+    return (parts.scheme.lower(), parts.netloc.lower())
 
 
 def connect(

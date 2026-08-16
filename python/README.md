@@ -236,7 +236,8 @@ also gibt es dort kein Echo.
 Die Bibliothek lässt nur lesende Anfragen durch. Dazu kommt genau ein
 Schreibweg: `project.select()` speichert die Auswahl.
 
-Jede andere Anfrage lehnt sie ab, bevor sie den Server erreicht.
+Jede andere Anfrage lehnt sie ab, bevor sie den Server erreicht. Das gilt für
+jede einzelne Anfrage, auch für die nach einer Umleitung.
 
 ```python
 >>> client._send("DELETE", "/api/layers/019fecb8-...")
@@ -255,6 +256,33 @@ versehentlich gesendete Löschung ist endgültig.
 Die Prüfung sitzt in `ReadOnlyGuard`. Der Client legt sie um jeden Transport,
 auch um einen, den Sie selbst übergeben. Damit führt jeder Weg zum Netz durch
 sie hindurch.
+
+### Umleitungen
+
+Die Bibliothek folgt einer Umleitung selbst und prüft jeden Sprung erneut.
+
+Das HTTP-Paket folgt nicht mehr von allein. Es täte das innerhalb desselben
+Aufrufs, den die Prüfung schon durchgelassen hat. Bei 307 und 308 behält die
+Anfrage dabei Methode und Inhalt.
+
+Ein erlaubtes `PUT` auf den view-state würde so als `PUT` auf einen verbotenen
+Pfad wieder hinausgehen, ungeprüft. Der Aufrufer sähe einen normalen Erfolg.
+
+Eine Umleitung darf den Server nicht wechseln. Sonst schickt eine
+eingeschleuste Umleitung Ihre Anfrage samt Kopfzeilen an einen fremden Rechner.
+
+Im Browser gilt das nicht. `XMLHttpRequest` folgt Umleitungen selbst und lässt
+sich davon nicht abbringen. Dort schützt die Herkunftsregel des Browsers.
+
+### Verschlüsselung
+
+Die Standardadresse ist `http://localhost:8080`, also unverschlüsselt.
+
+Das ist für einen lokalen Server richtig. Auf der Loopback-Schnittstelle gibt
+es keine Leitung, auf der jemand mithören kann.
+
+Sobald Sie über ein echtes Netz zugreifen, gilt das nicht mehr. Verwenden Sie
+dann `https://`.
 
 Einen allgemeinen Schreibbefehl gibt es nicht mehr. `Client.put(pfad, körper)`
 ist entfallen. An seiner Stelle steht `Client.save_view_state(projekt, zustand)`,

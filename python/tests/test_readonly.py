@@ -175,3 +175,68 @@ def test_a_test_transport_on_its_own_is_unguarded() -> None:
     """
     transport = FakeTransport(stub_server)
     assert not isinstance(transport, hgis.ReadOnlyGuard)
+
+
+# --- the shape of the one allowed path ------------------------------------
+#
+# The write entry names a UUID, not a wildcard. Without the cases below, that
+# is a claim: loosening the pattern to `.*` left every other test in this file
+# green, because they all vary the path around the id and never the id itself.
+
+
+@pytest.mark.parametrize(
+    "project_id",
+    [
+        "abc",
+        "019fec3a",
+        "019fec3a-ef0c-775c-a14f",
+        "019fec3a-ef0c-775c-a14f-7535e8a676eb-extra",
+        "019fec3a_ef0c_775c_a14f_7535e8a676eb",
+        "019fec3a-ef0c-775c-a14f-7535e8a676eg",  # g is not a hex digit
+        "019fec3a-ef0c-775c-a14f-7535e8a676e",  # one short
+        "019fec3a-ef0c-775c-a14f-7535e8a676ebb",  # one long
+        "..",
+        "%2e%2e",
+        "*",
+    ],
+)
+def test_the_write_path_needs_a_real_project_id(guarded, transport, project_id) -> None:
+    """
+    Anything but a UUID in that position is refused.
+
+    The pattern is what keeps the write entry from widening into
+    "any path under /api/projects that ends in view-state".
+    """
+    with pytest.raises(hgis.ReadOnlyError):
+        guarded._send("PUT", f"/api/projects/{project_id}/view-state", json={})
+
+    assert transport.count == 0
+
+
+@pytest.mark.parametrize(
+    "project_id",
+    [
+        PROJECT_ID,
+        PROJECT_ID.upper(),  # hex digits are case-insensitive
+        "00000000-0000-0000-0000-000000000000",
+    ],
+)
+def test_a_real_project_id_is_accepted(transport, project_id) -> None:
+    """The check must not be so tight that a legitimate write fails."""
+    client = hgis.connect("http://stub", transport=transport)
+    client.save_view_state(project_id, {"version": 1, "activeLayerId": None, "layers": {}})
+    assert transport.count == 1
+
+
+def test_the_write_path_must_end_at_the_view_state(guarded, transport) -> None:
+    """Not a prefix match: the entry names one resource, not a subtree."""
+    for path in (
+        f"/api/projects/{PROJECT_ID}/view-state/extra",
+        f"/api/projects/{PROJECT_ID}/view-state2",
+        f"/api/projects/{PROJECT_ID}/layers/order",
+        f"/api/projects/{PROJECT_ID}",
+    ):
+        with pytest.raises(hgis.ReadOnlyError):
+            guarded._send("PUT", path, json={})
+
+    assert transport.count == 0

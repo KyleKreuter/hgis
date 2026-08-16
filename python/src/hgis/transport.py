@@ -24,6 +24,7 @@ from __future__ import annotations
 import json as jsonlib
 import sys
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any
 from urllib.parse import urlencode  # string work only, no sockets; runs in Pyodide
 
@@ -34,10 +35,25 @@ DEFAULT_TIMEOUT = 30.0
 
 @dataclass(frozen=True)
 class Response:
-    """What every floor returns: a status and a body, nothing driver-specific."""
+    """
+    What every floor returns: a status, a body and the response headers.
+
+    Headers are part of it because a redirect has to be readable: the floors do
+    not follow one by themselves, so whoever called has to see the ``Location``
+    and decide. See :class:`hgis.client.ReadOnlyGuard`.
+    """
 
     status: int
     text: str
+    headers: dict[str, str] = dataclass_field(default_factory=dict)
+
+    def header(self, name: str) -> str | None:
+        """One response header, matched case-insensitively as HTTP requires."""
+        wanted = name.lower()
+        for key, value in self.headers.items():
+            if key.lower() == wanted:
+                return value
+        return None
 
     def json(self) -> Any:
         """
@@ -141,7 +157,12 @@ class HttpxTransport(Transport):
                     "httpx ist nicht installiert. Installieren Sie es mit: "
                     "pip install 'hgis[http]' oder pip install httpx"
                 ) from error
-            client = httpx.Client(follow_redirects=True)
+            # follow_redirects stays off, and that is a security property rather
+            # than a preference: httpx would follow a redirect *inside* this one
+            # call, so a request checked once could leave as a second, unchecked
+            # one -- and 307/308 keep the method and the body while doing it.
+            # ReadOnlyGuard follows redirects itself, checking each hop.
+            client = httpx.Client(follow_redirects=False)
         self._client = client
 
     def request(
@@ -160,7 +181,7 @@ class HttpxTransport(Transport):
             )
         except httpx.HTTPError as error:
             raise TransportError(f"{url} ist nicht erreichbar: {error}") from error
-        return Response(response.status_code, response.text)
+        return Response(response.status_code, response.text, dict(response.headers))
 
     def close(self) -> None:
         """Release the connection pool."""
@@ -181,6 +202,14 @@ class PyodideTransport(Transport):
 
     ``timeout`` is accepted and ignored: XMLHttpRequest only honours its
     ``timeout`` property in asynchronous mode.
+
+    **Redirects cannot be intercepted here.** XMLHttpRequest follows them by
+    itself and offers no way to turn that off, so the per-hop check that
+    :class:`hgis.client.ReadOnlyGuard` performs on CPython does not apply in
+    the browser. What limits the damage there is the browser itself: a page can
+    only reach its own origin unless the server allows otherwise, and this
+    library talks to the server that served the page. Worth knowing before this
+    floor is put to use.
     """
 
     def request(
@@ -213,11 +242,27 @@ class PyodideTransport(Transport):
         except Exception as error:  # a JsException; the name is not importable here
             raise TransportError(f"{url} ist nicht erreichbar: {error}") from error
 
-        return Response(request.status, request.responseText)
+        return Response(request.status, request.responseText,
+                        _parse_headers(request.getAllResponseHeaders()))
 
 
 class MissingHttpLibrary(TransportError):
     """No HTTP library for this interpreter. The message names what to install."""
+
+
+def _parse_headers(raw: str | None) -> dict[str, str]:
+    """
+    ``getAllResponseHeaders()`` returns one CRLF-separated block; split it.
+
+    Kept next to the browser floor rather than inside it so it can be read and
+    tested without a browser.
+    """
+    headers: dict[str, str] = {}
+    for line in (raw or "").splitlines():
+        name, separator, value = line.partition(":")
+        if separator:
+            headers[name.strip()] = value.strip()
+    return headers
 
 
 def in_pyodide() -> bool:
