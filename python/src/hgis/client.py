@@ -50,24 +50,39 @@ _CLIENT_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,64}")
 #: Environment variable for naming this process from outside.
 CLIENT_ID_VARIABLE = "HGIS_CLIENT_ID"
 
-#: This process's name, made once at import.
+#: The generated name, together with the process id it was made for.
 #:
-#: Random rather than fixed, and that is the point: two agents running at the
-#: same time under one name would each take the other's change for their own
-#: echo and ignore it. A real change would then be swallowed, which is worse
-#: than processing one twice.
-_PROCESS_CLIENT_ID = f"hgis-python-{uuid.uuid4().hex[:12]}"
+#: The pid is stored with it because of ``fork``: a forked child inherits the
+#: parent's memory, so a name computed once at import is already there and this
+#: module never runs again to make a new one. Four workers of a
+#: ``multiprocessing.Pool`` then share one name, each takes the others' changes
+#: for its own echo, and a real change is dropped in silence. Comparing the pid
+#: is what makes the name belong to the process using it rather than to the one
+#: that happened to import first.
+_generated: tuple[int, str] | None = None
 
 
 def default_client_id() -> str:
     """
     The name this process writes under.
 
-    ``HGIS_CLIENT_ID`` when set, otherwise a random per-process name. Set the
-    variable when something outside needs to recognise this program's writes --
-    an agent runner naming its workers, say. Keep it different per process.
+    ``HGIS_CLIENT_ID`` when set, otherwise a random name belonging to this
+    process. Set the variable when something outside needs to recognise this
+    program's writes -- an agent runner naming its workers, say. Two programs
+    running at once need two names.
+
+    A name that came from the environment is left exactly as it is, across a
+    fork included: it was chosen deliberately, and choosing is the caller's.
     """
-    return os.environ.get(CLIENT_ID_VARIABLE) or _PROCESS_CLIENT_ID
+    from_environment = os.environ.get(CLIENT_ID_VARIABLE)
+    if from_environment:
+        return from_environment
+
+    global _generated
+    pid = os.getpid()
+    if _generated is None or _generated[0] != pid:
+        _generated = (pid, f"hgis-python-{uuid.uuid4().hex[:12]}")
+    return _generated[1]
 
 
 def _check_client_id(client_id: str) -> str:
@@ -205,8 +220,16 @@ class ReadOnlyGuard(Transport):
 
             next_method = _method_after_redirect(response.status, method)
             if next_method != method:
-                # The body belonged to the old method; it does not travel on.
+                # 301/302/303 turn this into a GET, so it is no longer a write.
+                # Both the body and the client name belonged to the write and
+                # do not travel on: the name says who is changing something,
+                # and after this hop nobody is.
                 json = None
+                headers = {
+                    name: value
+                    for name, value in (headers or {}).items()
+                    if name.lower() != CLIENT_HEADER.lower()
+                } or None
             method = next_method
 
         raise TransportError(
@@ -266,14 +289,28 @@ class Client:
         self.base_url = base_url.rstrip("/")
         # Checked now, not at the first write: a name that cannot travel is a
         # mistake in the calling program, and the first write may be minutes away.
-        self.client_id = _check_client_id(
-            client_id if client_id is not None else default_client_id()
-        )
+        # A name given here is kept as given; without one, the name is looked up
+        # per access so that a client built before a fork does not carry the
+        # parent's name into the child. See :func:`default_client_id`.
+        self._client_id = _check_client_id(client_id) if client_id is not None else None
+        if self._client_id is None:
+            _check_client_id(default_client_id())
         floor = transport if transport is not None else default_transport()
         # Wrapped even when the caller supplied the floor: a substituted
         # transport is for testing or authentication, not for lifting the guard.
         self._transport = ReadOnlyGuard(floor)
         self._timeout = timeout
+
+    @property
+    def client_id(self) -> str:
+        """
+        The name this client writes under.
+
+        Read rather than stored when it was not given explicitly, so that a
+        client built before a ``fork`` writes under the child's name in the
+        child. A name the caller passed in stays what the caller passed in.
+        """
+        return self._client_id if self._client_id is not None else default_client_id()
 
     def __repr__(self) -> str:
         return f"<hgis.Client {self.base_url} als {self.client_id}>"

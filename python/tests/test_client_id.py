@@ -14,6 +14,7 @@ random per process rather than a fixed string.
 
 from __future__ import annotations
 
+import os
 import re
 
 import pytest
@@ -210,3 +211,114 @@ def test_two_clients_can_be_named_apart(transport) -> None:
     second = hgis.connect("http://stub", transport=FakeTransport(stub_server), client_id="agent-b")
 
     assert first.client_id != second.client_id
+
+
+# --- across a fork ---------------------------------------------------------
+#
+# A forked child inherits the parent's memory. A name computed once at import
+# is already sitting there, and this module never runs again to make a new one,
+# so parent and child would write under one name. Four workers of a
+# multiprocessing.Pool then take each other's changes for their own echo, and a
+# real change is dropped without a sound.
+#
+# These use os.fork directly rather than multiprocessing: same mechanism, no
+# pool machinery, and the child exits with os._exit so it never runs pytest's
+# teardown.
+
+fork_only = pytest.mark.skipif(
+    not hasattr(os, "fork"), reason="fork gibt es auf dieser Plattform nicht"
+)
+
+# Python warns that forking a multi-threaded process can deadlock the child.
+# It is right in general and does not apply here: the child computes one
+# string, writes it and leaves through os._exit, taking no lock on the way.
+pytestmark = pytest.mark.filterwarnings("ignore:This process .* is multi-threaded")
+
+
+def _in_a_forked_child(produce) -> str:
+    """Run ``produce()`` in a forked child and return what it produced."""
+    read_end, write_end = os.pipe()
+    pid = os.fork()
+    if pid == 0:
+        os.close(read_end)
+        try:
+            os.write(write_end, produce().encode())
+        except BaseException as error:  # never let a child raise into pytest
+            os.write(write_end, f"FEHLER {error!r}".encode())
+        finally:
+            os.close(write_end)
+            os._exit(0)
+
+    os.close(write_end)
+    produced = os.read(read_end, 4096).decode()
+    os.close(read_end)
+    os.waitpid(pid, 0)
+    assert produced, "Das Kind hat nichts geliefert."
+    assert not produced.startswith("FEHLER"), produced
+    return produced
+
+
+@fork_only
+def test_a_forked_child_gets_its_own_name(monkeypatch) -> None:
+    """
+    The reported failure, as a test.
+
+    Same name in parent and child is the bad case, not a cosmetic one: it makes
+    each process ignore the other's change as its own echo.
+    """
+    monkeypatch.delenv(CLIENT_ID_VARIABLE, raising=False)
+    parent = default_client_id()
+
+    child = _in_a_forked_child(default_client_id)
+
+    assert child != parent
+    assert SERVER_PATTERN.fullmatch(child)
+
+
+@fork_only
+def test_a_client_built_before_the_fork_writes_under_the_child_name(monkeypatch) -> None:
+    """
+    Building the client first and forking after is the ordinary shape of a
+    worker pool, so the name has to follow the process, not the object.
+    """
+    monkeypatch.delenv(CLIENT_ID_VARIABLE, raising=False)
+    client = hgis.connect("http://stub")
+    parent = client.client_id
+
+    child = _in_a_forked_child(lambda: client.client_id)
+
+    assert child != parent
+
+
+@fork_only
+def test_the_child_keeps_a_name_that_was_chosen(monkeypatch) -> None:
+    """
+    A name given explicitly is the caller's decision, and a fork does not
+    overrule it. Only the generated fallback belongs to one process.
+    """
+    monkeypatch.delenv(CLIENT_ID_VARIABLE, raising=False)
+    client = hgis.connect("http://stub", client_id="agent-a")
+
+    assert _in_a_forked_child(lambda: client.client_id) == "agent-a"
+
+
+@fork_only
+def test_the_child_keeps_the_name_from_the_environment(monkeypatch) -> None:
+    """Set from outside means set on purpose, and it survives the fork."""
+    monkeypatch.setenv(CLIENT_ID_VARIABLE, "runner-worker-3")
+
+    assert _in_a_forked_child(default_client_id) == "runner-worker-3"
+
+
+def test_the_name_is_still_stable_without_a_fork(monkeypatch) -> None:
+    """
+    Binding the name to the process must not make it change per call.
+
+    A name that differed between two writes of one program would defeat the
+    purpose just as thoroughly as a shared one.
+    """
+    monkeypatch.delenv(CLIENT_ID_VARIABLE, raising=False)
+    assert default_client_id() == default_client_id()
+
+    client = hgis.connect("http://stub")
+    assert client.client_id == client.client_id

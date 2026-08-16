@@ -145,9 +145,11 @@ class _Scripted(Transport):
     def __init__(self, *responses: Response) -> None:
         self.responses = list(responses)
         self.seen: list[tuple[str, str, object]] = []
+        self.headers_seen: list[dict[str, str] | None] = []
 
     def request(self, method, url, json=None, timeout=30.0, headers=None) -> Response:
         self.seen.append((method, url, json))
+        self.headers_seen.append(headers)
         return self.responses.pop(0) if self.responses else Response(204, "")
 
 
@@ -183,6 +185,44 @@ def test_the_body_does_not_travel_when_the_method_changes() -> None:
         ("PUT", {"a": 1}),
         ("GET", None),
     ]
+
+
+def test_the_client_name_comes_off_a_rewritten_get() -> None:
+    """
+    301/302/303 turn the write into a GET, so it is no longer a write.
+
+    The name answers "who is changing something", and after this hop nobody
+    is. Leaving it on would also make the README's "only when writing" untrue,
+    which is the more concrete reason: a promise that does not hold is worse
+    than a header that does no harm.
+    """
+    inner = _Scripted(_redirect(303, "/api/projects"), Response(200, "{}"))
+    guard = ReadOnlyGuard(inner)
+
+    guard.request(
+        "PUT",
+        f"http://host{VIEW_STATE}",
+        json={"a": 1},
+        headers={"X-Hgis-Client": "agent-a"},
+    )
+
+    first, second = inner.headers_seen
+    assert first == {"X-Hgis-Client": "agent-a"}
+    assert second is None or "X-Hgis-Client" not in second
+
+
+def test_the_client_name_stays_on_a_hop_that_keeps_the_method() -> None:
+    """307 and 308 stay a write, so the name still belongs on them."""
+    inner = _Scripted(_redirect(307, VIEW_STATE), Response(204, ""))
+
+    ReadOnlyGuard(inner).request(
+        "PUT",
+        f"http://host{VIEW_STATE}",
+        json={"a": 1},
+        headers={"X-Hgis-Client": "agent-a"},
+    )
+
+    assert all(seen == {"X-Hgis-Client": "agent-a"} for seen in inner.headers_seen)
 
 
 def test_a_hop_to_another_host_is_refused() -> None:

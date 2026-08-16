@@ -218,6 +218,14 @@ geht eine echte Änderung verloren.
 Der Vorgabewert ist deshalb zufällig und nicht fest. Er bleibt über die
 Laufzeit des Prozesses gleich.
 
+**Nach einem `fork` bekommt das Kind einen eigenen Namen.** Das gilt auch für
+einen Client, den Sie vor dem `fork` gebaut haben. Ein Kind erbt das
+Speicherabbild der Eltern, also auch einen einmal berechneten Namen. Vier
+Arbeiter eines `multiprocessing.Pool` schrieben sonst unter einem Namen.
+
+Einen Namen, den Sie selbst gesetzt haben, behält das Kind. Sie haben ihn
+gewählt, und ein `fork` hebt Ihre Wahl nicht auf.
+
 Erlaubt sind 1 bis 64 Zeichen aus Buchstaben, Ziffern, Bindestrich und
 Unterstrich. Die Bibliothek prüft den Namen, sobald Sie den Client bauen.
 
@@ -230,6 +238,11 @@ Unterstrich.
 
 Der Kopf reist nur beim Schreiben mit. Ein Lesevorgang erzeugt kein Ereignis,
 also gibt es dort kein Echo.
+
+Das gilt auch nach einer Umleitung. Schreibt die Bibliothek eine Anfrage auf
+`GET` um, weil der Server mit 301, 302 oder 303 antwortet, fällt der Kopf
+zusammen mit dem Inhalt weg. Bei 307 und 308 bleibt die Anfrage ein
+Schreibvorgang, also bleibt auch der Kopf.
 
 ## Diese Stufe schreibt nicht
 
