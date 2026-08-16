@@ -21,7 +21,16 @@ export function Row({ label, children }: { label: string; children: ReactNode })
   return (
     <div className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       <span className="w-20 shrink-0 text-xs text-muted-foreground">{label}</span>
-      <div className="flex min-w-0 flex-1 basis-40 items-center gap-1.5">{children}</div>
+      {/*
+       * flex-wrap here too: a row with two controls (GraduatedEditor's "Klassen" --
+       * `NumberInput` plus `PaletteSelect`) still overflowed at 108px even once it had
+       * this whole line to itself. `PaletteSelect`'s trigger has its own unavoidable
+       * floor -- chevron, padding and the gap between them, none of which can shrink any
+       * further, `min-w-0` or not -- so once two such controls compete for one line
+       * there is a width neither can retreat below. Letting them split onto their own
+       * lines here is the same idea as the wrap around this div, one level in.
+       */}
+      <div className="flex min-w-0 flex-1 basis-40 flex-wrap items-center gap-1.5">{children}</div>
     </div>
   )
 }

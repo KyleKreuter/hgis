@@ -886,15 +886,19 @@ function Panel({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/*
-       * min-h-7, not h-7: once the title has given up all its width and `FilterBar` has
-       * shrunk to its own floor (see there), a save/discard session in `TableEditToolbar`
-       * still would not fit -- those buttons must not wrap word-by-word (CONTRACT.md,
-       * "Aktionsmenü-Einträge... nie umbrechen" applies to any button label here just the
-       * same). `flex-wrap` lets the strip itself grow a second line instead, the same
-       * trade `WorkspaceLayout`'s own header makes under the identical squeeze: a few
-       * pixels off the table below buys a toolbar that never spills past the panel edge.
+       * h-7, fixed, not min-h-7: this dock is resizable down to 8% of the window
+       * (`WorkspaceLayout.tsx`, `minSize="8%"`), and a strip that grows taller than one
+       * line eats that height from the table below it -- `flex-wrap` was tried first and
+       * rejected, because in the table's own edit mode (counter, Verwerfen, Speichern,
+       * separator, X) it wrapped to four lines at 340px, which at the dock's own low end
+       * left the table 0px, not merely cramped. Overflow past one line is a real
+       * possibility that has to go *somewhere*; the choice here is sideways, not down --
+       * `overflow-x-auto` keeps every control reachable by scrolling the strip, the same
+       * way the table body itself already scrolls sideways for its columns (see the
+       * scroller comment below), rather than trading a fixed-height table for a
+       * growing one.
        */}
-      <div className="flex min-h-7 shrink-0 flex-wrap items-center gap-2 border-b bg-muted/40 px-2">
+      <div className="flex h-7 shrink-0 items-center gap-2 overflow-x-auto border-b bg-muted/40 px-2">
         {/*
          * Gives way before anything else in the strip does, and all the way down to
          * nothing. Held at its full width it pushed the save button, the change counter
