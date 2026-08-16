@@ -2,15 +2,80 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any, Iterable
+from urllib.parse import urlsplit
 
-from .errors import ApiError, NotFoundError, UnknownNameError
+from .errors import ApiError, NotFoundError, ReadOnlyError, UnknownNameError
 from .transport import DEFAULT_TIMEOUT, Response, Transport, build_url, default_transport
 
 DEFAULT_BASE_URL = "http://localhost:8080"
 
 #: Page size for the project browser. The server allows 1 to 100.
 _PROJECT_PAGE_SIZE = 100
+
+_UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+
+#: Every request this stage may make, as (method, path pattern).
+#:
+#: Reading is unrestricted -- a GET cannot destroy anything, and leaving it open
+#: keeps the API explorable. Writing is one entry long: the saved view state,
+#: which is what :meth:`hgis.project.Project.select` writes. Every other method
+#: is refused before it reaches the network.
+#:
+#: The backend has endpoints for deleting a layer, deleting a project and
+#: applying a batch of edits, and a generic ``put(path, body)`` would reach all
+#: three. There is no recycle bin behind them yet, so a request sent by mistake
+#: cannot be taken back. This list is what makes such a request a Python error
+#: instead of a lost layer.
+_ALLOWED: tuple[tuple[str, str], ...] = (
+    ("GET", r".*"),
+    ("PUT", rf"/api/projects/{_UUID}/view-state"),
+)
+
+
+def _check_allowed(method: str, url: str) -> None:
+    """
+    Refuse anything the list above does not name.
+
+    :raises ReadOnlyError: naming the request and the one write that is allowed
+    """
+    path = urlsplit(url).path
+    for allowed_method, pattern in _ALLOWED:
+        if method.upper() == allowed_method and re.fullmatch(pattern, path):
+            return
+    raise ReadOnlyError(
+        f"Diese Stufe der Bibliothek liest nur. {method.upper()} {path} ist nicht "
+        "vorgesehen. Erlaubt sind lesende Anfragen und das Speichern der Auswahl "
+        "über project.select()."
+    )
+
+
+class ReadOnlyGuard(Transport):
+    """
+    Wraps a transport and lets only the allowed requests through.
+
+    Sits between the client and the real floor, so every path into the network
+    passes it -- including ``client._transport.request(...)``, which would walk
+    straight past a check placed in :meth:`Client.get` alone.
+
+    It stops mistakes, not intent: writing to hGIS from Python needs nothing
+    more than ``import httpx``. What it removes is the accidental write that
+    this library itself would otherwise make easy.
+    """
+
+    def __init__(self, inner: Transport) -> None:
+        self.inner = inner
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        json: Any = None,
+        timeout: float = DEFAULT_TIMEOUT,
+    ) -> Response:
+        _check_allowed(method, url)
+        return self.inner.request(method, url, json=json, timeout=timeout)
 
 
 def connect(
@@ -36,7 +101,13 @@ def connect(
 
 
 class Client:
-    """An hGIS server, reachable and read-only."""
+    """
+    An hGIS server, reachable and read-only.
+
+    Read-only is enforced, not merely intended: the transport is wrapped in a
+    :class:`ReadOnlyGuard`, so a request that would change data is refused
+    before it is sent. See :data:`_ALLOWED`.
+    """
 
     def __init__(
         self,
@@ -46,7 +117,10 @@ class Client:
         timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         self.base_url = base_url.rstrip("/")
-        self._transport = transport if transport is not None else default_transport()
+        floor = transport if transport is not None else default_transport()
+        # Wrapped even when the caller supplied the floor: a substituted
+        # transport is for testing or authentication, not for lifting the guard.
+        self._transport = ReadOnlyGuard(floor)
         self._timeout = timeout
 
     def __repr__(self) -> str:
@@ -129,15 +203,22 @@ class Client:
         """
         return self._send("GET", path, params=params)
 
-    def put(self, path: str, body: Any) -> Any:
+    def save_view_state(self, project_id: str, state: dict[str, Any]) -> None:
         """
-        PUT a JSON body.
+        Write a project's saved view state. The one write this stage makes.
 
-        The one write this stage makes -- the saved view state, which is what
-        the user is looking at rather than what the data says. See
-        :meth:`hgis.project.Project.select`.
+        Named after what it does rather than after the HTTP verb it uses. A
+        generic ``put(path, body)`` would be a way to reach every writing
+        endpoint the backend has -- layer deletion among them -- and naming the
+        one operation instead removes that reach without taking anything away.
+
+        The state is the working state, never the data: which layer is active,
+        and per layer its sort, query and selection. See
+        :meth:`hgis.project.Project.select`, which is how to call this.
+
+        :param state: the complete state; the endpoint replaces it wholesale
         """
-        return self._send("PUT", path, json=body)
+        self._send("PUT", f"/api/projects/{project_id}/view-state", json=state)
 
     def _send(
         self,

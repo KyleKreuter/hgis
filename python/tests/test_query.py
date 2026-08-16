@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from conftest import LAYER_ID, load, stored
 
 import hgis
+from conftest import LAYER_ID, load, stored
 from hgis.transport import Response
 
 # --- nothing travels while building ---------------------------------------

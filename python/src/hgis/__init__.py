@@ -23,12 +23,13 @@ million.
 works without them.
 """
 
-from .client import DEFAULT_BASE_URL, Client, connect
+from .client import DEFAULT_BASE_URL, Client, ReadOnlyGuard, connect
 from .errors import (
     ApiError,
     HgisError,
     MissingDependencyError,
     NotFoundError,
+    ReadOnlyError,
     TransportError,
     UnknownNameError,
 )
@@ -60,11 +61,13 @@ __all__ = [
     "NotFoundError",
     "TransportError",
     "UnknownNameError",
+    "ReadOnlyError",
     "MissingDependencyError",
     # transport, for substituting the HTTP floor
     "Transport",
     "HttpxTransport",
     "PyodideTransport",
+    "ReadOnlyGuard",
     "Response",
     "__version__",
 ]

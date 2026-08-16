@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from conftest import LAYER_ID, OTHER_LAYER_ID, FakeTransport, load, stub_server
 
 import hgis
+from conftest import LAYER_ID, OTHER_LAYER_ID, FakeTransport, load, stub_server
 from hgis.transport import Response
 
 # --- fields ---------------------------------------------------------------

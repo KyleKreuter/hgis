@@ -183,6 +183,36 @@ Alle Fehler erben von `hgis.HgisError`.
 | `TransportError` | Es kommt keine Antwort an. |
 | `UnknownNameError` | Kein Projekt oder Layer trägt diesen Namen. |
 | `MissingDependencyError` | Ein wahlfreies Paket fehlt. |
+| `ReadOnlyError` | Die Anfrage würde Daten ändern. Diese Stufe liest nur. |
+
+## Diese Stufe schreibt nicht
+
+Die Bibliothek lässt nur lesende Anfragen durch. Dazu kommt genau ein
+Schreibweg: `project.select()` speichert die Auswahl.
+
+Jede andere Anfrage lehnt sie ab, bevor sie den Server erreicht.
+
+```python
+>>> client._send("DELETE", "/api/layers/019fecb8-...")
+hgis.errors.ReadOnlyError: Diese Stufe der Bibliothek liest nur.
+DELETE /api/layers/019fecb8-... ist nicht vorgesehen. Erlaubt sind lesende
+Anfragen und das Speichern der Auswahl über project.select().
+```
+
+Das ist kein Schloss. Wer schreiben will, bindet `httpx` ein und umgeht die
+Bibliothek. Es schützt vor dem Versehen.
+
+Der Schutz zählt gerade jetzt besonders. Das Backend hat Endpunkte zum Löschen
+von Layern und Projekten. Einen Papierkorb gibt es noch nicht. Eine
+versehentlich gesendete Löschung ist endgültig.
+
+Die Prüfung sitzt in `ReadOnlyGuard`. Der Client legt sie um jeden Transport,
+auch um einen, den Sie selbst übergeben. Damit führt jeder Weg zum Netz durch
+sie hindurch.
+
+Einen allgemeinen Schreibbefehl gibt es nicht mehr. `Client.put(pfad, körper)`
+ist entfallen. An seiner Stelle steht `Client.save_view_state(projekt, zustand)`,
+also die eine Handlung statt eines beliebig einsetzbaren Verbs.
 
 ## describe()
 
@@ -266,7 +296,11 @@ client = hgis.connect("http://localhost:8080", transport=MeinTransport())
 ```bash
 cd python
 python -m pytest
+ruff check .
 ```
+
+Die Ruff-Konfiguration steht im `pyproject.toml`. Rufen Sie `ruff check .` ohne
+Zusatzflaggen auf. Dann bekommt jeder dasselbe Ergebnis.
 
 Die Tests laufen ohne Backend. Sie arbeiten gegen abgelegte Antworten unter
 `tests/responses/`.

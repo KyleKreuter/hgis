@@ -69,6 +69,20 @@ class UnknownNameError(HgisError, LookupError):
     """
 
 
+class ReadOnlyError(HgisError):
+    """
+    A request that would change data, which this stage does not do.
+
+    Not a lock -- anyone who means to write can import an HTTP library and go
+    around this library entirely. It is a guard against the accidental one: a
+    generic ``put`` or ``_send("DELETE", ...)`` reaching a real endpoint. That
+    matters most right now, because there is no undo behind the API and no
+    recycle bin: a deletion is final the moment it arrives.
+
+    The message names the request and the one write that is allowed.
+    """
+
+
 class MissingDependencyError(HgisError, ImportError):
     """
     An optional package is not installed.

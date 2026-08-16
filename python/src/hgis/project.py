@@ -192,9 +192,8 @@ class Project:
         entry.setdefault("query", None)
         layers[target] = entry
 
-        self._client.put(
-            f"/api/projects/{self.id}/view-state",
-            {"version": 1, "activeLayerId": target, "layers": layers},
+        self._client.save_view_state(
+            self.id, {"version": 1, "activeLayerId": target, "layers": layers}
         )
         # Returns nothing on purpose. Handing back a Selection would mean
         # reading the layer to name it -- one more request for something the
