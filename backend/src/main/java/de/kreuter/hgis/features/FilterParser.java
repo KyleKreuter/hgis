@@ -173,11 +173,19 @@ public final class FilterParser {
 	}
 
 	/**
-	 * The layer's numeric fields, each with its id -- what the client should have named.
+	 * The layer's numeric fields -- what the client should have named.
 	 *
 	 * <p>Listed as a fact about the layer, not guessed from the name that failed: on the
 	 * Straßenbaumkataster this puts "Kronendurchmesser Quelle" in front of someone who wrote
 	 * "Kronendurchmesser", without this parser knowing anything about a {@code _z} suffix.
+	 * The order is the layer's own field order, for the same reason -- a predictable list
+	 * beats a clever one.
+	 *
+	 * <p>The id is spent only where the name does not carry. The question here is "which
+	 * field holds numbers", and a name answers it; a field whose name means two fields would
+	 * send the reader into a second error to find that out, so that one is named by id as
+	 * well. A field that has no id yet -- unsaved, or the synthetic {@code fid} -- is left
+	 * with its name, because "Id null" is worse than nothing.
 	 *
 	 * <p>Never empty, because {@code fid} is in the list and is a {@code bigint}. That is
 	 * what spares this message a second wording for a layer with no numeric field of its own.
@@ -185,10 +193,16 @@ public final class FilterParser {
 	private List<String> numericFieldNames() {
 		return fields.stream()
 				.filter(LayerFields::isNumeric)
-				.map(candidate -> candidate.getId() == null
-						? candidate.getSourceName()
-						: candidate.getSourceName() + " (Id " + candidate.getId() + ")")
+				.map(this::describeNumeric)
 				.toList();
+	}
+
+	private String describeNumeric(LayerField candidate) {
+		String name = candidate.getSourceName();
+		if (candidate.getId() == null || LayerFields.resolvesUniquely(name, fields)) {
+			return name;
+		}
+		return name + " (Id " + candidate.getId() + ")";
 	}
 
 	/**
