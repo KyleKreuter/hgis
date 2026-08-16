@@ -52,3 +52,12 @@ backend/uploads/
 # Arbeitsdokumente, lokal gepflegt
 PLAN.md
 CONTRACT.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

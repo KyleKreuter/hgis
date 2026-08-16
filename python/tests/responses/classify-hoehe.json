@@ -1,0 +1,1 @@
+{"field":"hoehe","method":"quantile","breaks":[3.5,8.5,14.5],"min":3.5,"max":14.5,"nullCount":3}
