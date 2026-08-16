@@ -585,12 +585,37 @@ function HeaderRow({
   sort: { field: string; desc: boolean } | null
   onSort: (sort: { field: string; desc: boolean } | null) => void
 }) {
-  function toggle(columnName: string) {
+  /**
+   * The field id, not the column name.
+   *
+   * A column name is only unique among columns. A layer can carry a field whose *display*
+   * name is another field's column name -- the Straßenbaumkataster does it twice -- and the
+   * server then refuses the name rather than guessing which of the two was meant. Clicking
+   * such a header used to do nothing at all: the request came back 400, the table fell back
+   * to unsorted, and no arrow, no highlight and no message said why. Measured in the
+   * browser, over four seconds; the click was simply swallowed.
+   *
+   * The id is the one identifier that always resolves. It is already here -- the same value
+   * `key` below is keyed by -- so nothing extra is fetched to use it.
+   */
+  function toggle(fieldId: string) {
     // Three states in sequence: ascending, descending, unsorted. Without the third,
     // there is no way back to the layer's natural order once a column was clicked.
-    if (sort?.field !== columnName) return onSort({ field: columnName, desc: false })
-    if (!sort.desc) return onSort({ field: columnName, desc: true })
+    if (sort?.field !== fieldId) return onSort({ field: fieldId, desc: false })
+    if (!sort.desc) return onSort({ field: fieldId, desc: true })
     return onSort(null)
+  }
+
+  /**
+   * Whether this column is the one being sorted by.
+   *
+   * Both spellings, because a sort saved before the switch above holds a column name and is
+   * still served: the server resolves a column name as readily as an id (`LayerFields`).
+   * Comparing against the id alone would leave such a state sorted correctly but without an
+   * arrow -- a false negative rather than a false positive, and just as misleading.
+   */
+  function isSortedBy(field: LayerField) {
+    return sort?.field === field.id || sort?.field === field.columnName
   }
 
   return (
@@ -610,9 +635,9 @@ function HeaderRow({
           key={field.id}
           label={field.sourceName}
           align={isNumeric(field) ? 'right' : 'left'}
-          active={sort?.field === field.columnName}
+          active={isSortedBy(field)}
           descending={sort?.desc}
-          onClick={() => toggle(field.columnName)}
+          onClick={() => toggle(field.id)}
         />
       ))}
       {/* Matches the trailing 2rem track of gridTemplate. Paints like a cell so the
