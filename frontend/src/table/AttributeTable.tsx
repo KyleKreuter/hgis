@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { formatAttributeNumber, formatCount } from '@/lib/format'
 import { layerDetailQuery, type LayerField, type LayerKind } from '@/api/layers'
 import { featurePagesQuery, fetchFeatureFids, type Feature } from '@/api/features'
-import { useSelection } from '@/state/selection'
+import { applyRemoteSelection, isRemoteSelection, useSelection } from '@/state/selection'
 import type { ViewStateWriter } from '@/state/useViewState'
 import {
   layerStateOf,
@@ -112,10 +112,6 @@ export function AttributeTable({
   // effect next to it. A one-time seed from `viewState.document`, not something that should
   // run again just because a later write changes that document.
   const restoredLayers = useRef<Set<string>>(new Set())
-  // Set right before a restored selection is written into the store, so the write it
-  // triggers (the subscription below fires on every store change) does not turn straight
-  // around and PUT the exact value it just read back.
-  const suppressSelectionEcho = useRef(false)
   // The unmount/dependency-light effects below read the latest writer through this
   // instead of closing over `viewState`, the same reasoning as `useStyleEditor`'s `saveRef`.
   const viewStateRef = useRef(viewState)
@@ -290,16 +286,10 @@ export function AttributeTable({
           toast.error('Das Programm konnte die gespeicherte Auswahl nicht wiederherstellen')
           return
         }
-        // Raised for exactly the store write it belongs to, and lowered again the
-        // moment it returns: the subscription below runs synchronously inside `select`,
-        // so a flag held for the whole request would swallow every selection the user
-        // makes while it is in flight -- and their selections are worth saving.
-        suppressSelectionEcho.current = true
-        try {
-          useSelection.getState().select(layerId, surviving, 'replace')
-        } finally {
-          suppressSelectionEcho.current = false
-        }
+        // A state read back off the server, not something the user did, so the
+        // subscription below must not save it again -- see `applyRemoteSelection`, which
+        // the live channel uses for exactly the same reason.
+        applyRemoteSelection(() => useSelection.getState().select(layerId, surviving, 'replace'))
       })
       .catch(() => {
         if (cancelled) return
@@ -326,10 +316,10 @@ export function AttributeTable({
     if (!layerId) return
     return useSelection.subscribe((state, previous) => {
       if (state.selected === previous.selected || state.layerId !== layerId) return
-      // Raised and lowered by the restore above, around its own `select` call and nothing
-      // more -- so a selection that reaches this point is always one the user made, never
-      // the value that was just read back off the server.
-      if (suppressSelectionEcho.current) return
+      // Raised around a single `select` call by whoever is applying a state that came
+      // from elsewhere -- the restore above, or the live channel. A selection that
+      // reaches this point is therefore always one the user made.
+      if (isRemoteSelection()) return
       const written = viewStateRef.current.writeSelection(layerId, [...state.selected])
       if (!written) {
         toast.error('Das Programm konnte die Auswahl nicht speichern', {

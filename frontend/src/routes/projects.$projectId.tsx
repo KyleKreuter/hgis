@@ -42,6 +42,7 @@ import { MeasurementOverlay, MeasurementToolbar, useIsMeasuring } from '@/measur
 import { isVectorLayer, layerDetailQuery, layerListQuery } from '@/api/layers'
 import { featureDetailQuery } from '@/api/features'
 import { useSelection } from '@/state/selection'
+import { useLiveViewState } from '@/state/useLiveViewState'
 import { useViewStateWriter } from '@/state/useViewState'
 import { shouldRestoreActiveLayer } from '@/state/viewState'
 import { boundsOfGeometry } from '@/map/geometryBounds'
@@ -88,6 +89,10 @@ function Workspace() {
   const [zoomTo, setZoomTo] = useState<ZoomRequest | null>(null)
   const clearSelection = useSelection((state) => state.clear)
   const viewState = useViewStateWriter(projectId)
+  // Held by this route rather than by the map or the table, for the same reason the
+  // writer above is: the stream belongs to the open project, so it opens when the project
+  // opens and closes when the project is left. A layer switch leaves it alone.
+  useLiveViewState(projectId, activeLayerId ?? null, viewState.hasPendingWrite)
   const editing = useEditSession({ layerId: activeLayerId ?? null, projectId })
   // Only the on/off fact, not the running measurement -- the sketch changes with every
   // mouse move, and re-rendering the whole workspace for that would be absurd.

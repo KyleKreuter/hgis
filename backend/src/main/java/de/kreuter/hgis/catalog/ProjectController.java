@@ -1,6 +1,7 @@
 package de.kreuter.hgis.catalog;
 
 import de.kreuter.hgis.catalog.dto.ProjectDtos;
+import de.kreuter.hgis.common.ClientId;
 import de.kreuter.hgis.jobs.dto.JobDtos;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -93,11 +95,20 @@ public class ProjectController {
 		return service.viewState(id);
 	}
 
-	/** Replaces the saved view state wholesale; there is no partial update. */
+	/**
+	 * Replaces the saved view state wholesale; there is no partial update.
+	 *
+	 * @param origin who is writing, as an opaque per-client name. Travels on to the live
+	 *     channel's event so this client can recognise its own echo there and leave it
+	 *     alone instead of reading back the state it just sent (plan "Live-Kanal"). A
+	 *     header rather than a body field: it says nothing about the working state, and
+	 *     a client that names none simply hears its own change like anyone else's.
+	 */
 	@PutMapping("/{id}/view-state")
 	public ResponseEntity<Void> updateViewState(@PathVariable UUID id,
-			@RequestBody ProjectDtos.ViewState request) {
-		service.updateViewState(id, request);
+			@RequestBody ProjectDtos.ViewState request,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		service.updateViewState(id, request, ClientId.require(origin));
 		return ResponseEntity.noContent().build();
 	}
 }

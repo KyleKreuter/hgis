@@ -16,6 +16,7 @@ import type { FeaturePage } from '@/api/features'
 import { useMap } from '@/map/MapContext'
 import { useEditing, type DraftFeature } from '@/state/editing'
 import { toSinglePart } from './singlePart'
+import { MAX_EDITABLE } from './editableLimit'
 import {
   boundsOf,
   findSnapTarget,
@@ -23,15 +24,6 @@ import {
   type SnapCandidate,
   type SnapTarget,
 } from './snapping'
-
-/**
- * How many existing features are loaded into the editor at once.
- *
- * Above this the viewport holds more than anyone edits by hand, and every one of them
- * would become a draggable object with its own vertices. The limit is announced rather
- * than silently applied -- plan section D.1 makes the same call for snapping.
- */
-const MAX_EDITABLE = 2000
 
 
 interface DrawControllerProps {
