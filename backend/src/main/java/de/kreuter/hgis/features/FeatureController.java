@@ -113,8 +113,9 @@ public class FeatureController {
 	 */
 	@PostMapping("/api/layers/{layerId}/features/{fid}/split")
 	public SplitMergeDtos.SplitResponse split(@PathVariable UUID layerId, @PathVariable long fid,
-			@Valid @RequestBody SplitMergeDtos.SplitRequest request) {
-		return splitMergeService.split(layerId, fid, request);
+			@Valid @RequestBody SplitMergeDtos.SplitRequest request,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		return splitMergeService.split(layerId, fid, request, ClientId.require(origin));
 	}
 
 	/**
@@ -127,7 +128,8 @@ public class FeatureController {
 	 */
 	@PostMapping("/api/layers/{layerId}/features/merge")
 	public SplitMergeDtos.MergeResponse merge(@PathVariable UUID layerId,
-			@Valid @RequestBody SplitMergeDtos.MergeRequest request) {
-		return splitMergeService.merge(layerId, request);
+			@Valid @RequestBody SplitMergeDtos.MergeRequest request,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		return splitMergeService.merge(layerId, request, ClientId.require(origin));
 	}
 }

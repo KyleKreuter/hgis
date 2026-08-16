@@ -600,6 +600,27 @@ public class Layer {
 		this.deletedBy = null;
 	}
 
+	/**
+	 * Guards every write against a layer sitting in the trash: {@code PATCH}, the edit
+	 * batch, adding or deleting a field, and split/merge all call this before touching
+	 * anything (CONTRACT.md "Schreibstufe" 1.1, orchestrator follow-up). Without it a
+	 * layer that looks deleted -- gone from the list, gone from the map -- could still be
+	 * written to underneath that appearance, most concretely by the Python library
+	 * addressing it directly by id; restoring it would then bring back something other
+	 * than what looked deleted. {@code LayerService#delete}, {@code #restore} and
+	 * {@code #purge} are exempt on purpose -- they are the operations that manage this
+	 * very state and each already checks the opposite condition.
+	 *
+	 * @throws ConflictException mapped to 409: the request is valid for a layer in
+	 *     general, just not for one currently in the trash
+	 */
+	public void requireNotTrashed() {
+		if (isTrashed()) {
+			throw new ConflictException(
+					"Layer '" + name + "' liegt im Papierkorb und kann nicht mehr geändert werden.", null);
+		}
+	}
+
 	// --- Geoportal provenance (CONTRACT.md phase 23.7) -----------------------------------
 
 	public String getSourceAttribution() {

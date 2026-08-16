@@ -127,6 +127,7 @@ public class LayerService {
 	@Transactional
 	public LayerDtos.Detail update(UUID layerId, LayerDtos.UpdateRequest request, String clientName) {
 		Layer layer = require(layerId);
+		layer.requireNotTrashed();
 
 		if (request.name() != null) {
 			String name = request.name().trim();

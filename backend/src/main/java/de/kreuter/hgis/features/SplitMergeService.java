@@ -4,6 +4,8 @@ import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerField;
 import de.kreuter.hgis.catalog.LayerFieldRepository;
 import de.kreuter.hgis.catalog.LayerRepository;
+import de.kreuter.hgis.changelog.ChangeLogAction;
+import de.kreuter.hgis.changelog.ChangeLogService;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.ConflictException;
 import de.kreuter.hgis.common.NotFoundException;
@@ -63,13 +65,23 @@ public class SplitMergeService {
 	private final LayerFieldRepository fieldRepository;
 	private final JdbcClient jdbc;
 	private final LayerBookkeeping bookkeeping;
+	private final ChangeLogService changeLog;
+	private final FeatureDeleteCapture deleteCapture;
 
 	SplitMergeService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
-			JdbcClient jdbc, LayerBookkeeping bookkeeping) {
+			JdbcClient jdbc, LayerBookkeeping bookkeeping, ChangeLogService changeLog,
+			FeatureDeleteCapture deleteCapture) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.jdbc = jdbc;
 		this.bookkeeping = bookkeeping;
+		this.changeLog = changeLog;
+		this.deleteCapture = deleteCapture;
+	}
+
+	private void log(Layer layer, String action, String clientName, int affectedCount, String deletedRowsJson) {
+		changeLog.record(layer.getProject().getId(), layer.getId(), layer.getName(),
+				action, clientName, affectedCount, deletedRowsJson);
 	}
 
 	/** One saved row, as much of it as either operation has to decide on before writing. */
@@ -92,7 +104,7 @@ public class SplitMergeService {
 	 */
 	@Transactional
 	public SplitMergeDtos.SplitResponse split(UUID layerId, long fid,
-			SplitMergeDtos.SplitRequest request) {
+			SplitMergeDtos.SplitRequest request, String clientName) {
 		Layer layer = require(layerId);
 		String table = SqlIdentifier.quoteLayerTable(layer.getTableName());
 
@@ -118,6 +130,16 @@ public class SplitMergeService {
 		fids.add(fid);
 		for (Computed part : parts.subList(1, parts.size())) {
 			fids.add(copyRow(table, columns, fid, part.wkb()));
+		}
+
+		// No object disappears here -- the original is rewritten in place (feature.update)
+		// and every further part is a genuinely new row (feature.insert). Nothing here
+		// needs the change log's full-row capture; that is only for a write that makes a
+		// feature vanish, which split never does.
+		log(layer, ChangeLogAction.FEATURE_UPDATE, clientName, 1, null);
+		int inserted = fids.size() - 1;
+		if (inserted > 0) {
+			log(layer, ChangeLogAction.FEATURE_INSERT, clientName, inserted, null);
 		}
 
 		long featureCount = bookkeeping.recount(layer, table);
@@ -210,7 +232,7 @@ public class SplitMergeService {
 	 * touch: two separate polygons legitimately become one MULTIPOLYGON.
 	 */
 	@Transactional
-	public SplitMergeDtos.MergeResponse merge(UUID layerId, SplitMergeDtos.MergeRequest request) {
+	public SplitMergeDtos.MergeResponse merge(UUID layerId, SplitMergeDtos.MergeRequest request, String clientName) {
 		Layer layer = require(layerId);
 		String table = SqlIdentifier.quoteLayerTable(layer.getTableName());
 
@@ -247,11 +269,17 @@ public class SplitMergeService {
 				.param("g", union.wkb())
 				.param("fid", leadFid)
 				.update();
+		log(layer, ChangeLogAction.FEATURE_UPDATE, clientName, 1, null);
 
-		Long[] others = fids.stream().filter(fid -> fid != leadFid).toArray(Long[]::new);
-		jdbc.sql("DELETE FROM " + table + " WHERE fid = ANY(:fids)")
-				.param("fids", others)
-				.update();
+		// Every part but the lead genuinely disappears here -- unlike split, this is
+		// exactly the case the change log's full-row capture exists for (CONTRACT.md
+		// "Schreibstufe": deleted objects get no trash of their own, only whole layers do).
+		List<Long> others = fids.stream().filter(fid -> fid != leadFid).toList();
+		List<LayerField> layerFields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
+		FeatureDeleteCapture.Result capture = deleteCapture.deleteAndCapture(table, layerFields, others);
+		if (capture.count() > 0) {
+			log(layer, ChangeLogAction.FEATURE_DELETE, clientName, capture.count(), capture.rowsJson());
+		}
 
 		long featureCount = bookkeeping.recount(layer, table);
 		return new SplitMergeDtos.MergeResponse(leadFid, layer.getDataVersion(), featureCount);
@@ -295,11 +323,17 @@ public class SplitMergeService {
 
 	// --- shared -----------------------------------------------------------------------
 
-	/** Both operations write the payload table, so a map image (kind WMS) is rejected up front. */
+	/**
+	 * Both operations write the payload table, so a map image (kind WMS) is rejected up
+	 * front, and so is a layer sitting in the trash -- neither {@link #split} nor
+	 * {@link #merge} has any other caller of this, so the guard belongs here once rather
+	 * than at the top of each.
+	 */
 	private Layer require(UUID layerId) {
 		Layer layer = layerRepository.findById(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
 		layer.requireVector();
+		layer.requireNotTrashed();
 		return layer;
 	}
 

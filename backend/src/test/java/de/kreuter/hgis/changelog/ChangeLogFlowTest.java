@@ -16,7 +16,10 @@ import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.features.EditService;
+import de.kreuter.hgis.features.SplitMergeService;
 import de.kreuter.hgis.features.dto.EditDtos;
+import de.kreuter.hgis.features.dto.SplitMergeDtos;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -47,6 +50,16 @@ class ChangeLogFlowTest {
 			{"type":"Polygon","coordinates":[[[9.98,53.54],[9.99,53.54],[9.99,53.55],[9.98,53.55],[9.98,53.54]]]}
 			""";
 
+	/** Shares the eastern edge of {@link #SQUARE}, so a merge of the two has no gap. */
+	private static final String SQUARE_EAST = """
+			{"type":"Polygon","coordinates":[[[9.99,53.54],[10.0,53.54],[10.0,53.55],[9.99,53.55],[9.99,53.54]]]}
+			""";
+
+	/** Cuts {@link #SQUARE} in two, off centre so the parts are never mistaken for equal halves. */
+	private static final String CUT_OFF_CENTRE = """
+			{"type":"LineString","coordinates":[[9.9825,53.53],[9.9825,53.56]]}
+			""";
+
 	@Autowired
 	private LayerService layerService;
 
@@ -55,6 +68,9 @@ class ChangeLogFlowTest {
 
 	@Autowired
 	private EditService editService;
+
+	@Autowired
+	private SplitMergeService splitMergeService;
 
 	@Autowired
 	private ChangeLogService changeLogService;
@@ -246,6 +262,83 @@ class ChangeLogFlowTest {
 		assertThat(row.get("properties").get("art").asString()).isEqualTo("Buche");
 		// Promoted to its multi form on write, like every stored geometry (EditService).
 		assertThat(row.get("geometry").get("type").asString()).isEqualTo("MultiPolygon");
+	}
+
+	@Test
+	@DisplayName("a split logs feature.update for the original and feature.insert for the new parts -- nothing disappears")
+	void splitLogsUpdateAndInsert() {
+		Layer layer = createLayer("Teilen", null);
+		EditDtos.Response created = editService.apply(layer.getId(),
+				new EditDtos.Request(List.of(new EditDtos.Create(-1, json(SQUARE), Map.of())), null, null, false),
+				null);
+		long fid = created.createdFids().get(-1L);
+
+		splitMergeService.split(layer.getId(), fid,
+				new SplitMergeDtos.SplitRequest(json(CUT_OFF_CENTRE), null), "cli-split");
+
+		List<ChangeLogEntry> entries = entriesFor(layer.getId());
+		ChangeLogEntry updateEntry = entries.stream()
+				.filter(e -> e.getAction().equals(ChangeLogAction.FEATURE_UPDATE)).findFirst().orElseThrow();
+		assertThat(updateEntry.getAffectedCount()).isEqualTo(1);
+		assertThat(updateEntry.getClientName()).isEqualTo("cli-split");
+
+		// Two feature.insert entries exist for this layer by now: the earlier create
+		// (client null) and the split's own new part (client "cli-split") -- filtering on
+		// the client name is what tells them apart.
+		ChangeLogEntry insertEntry = entries.stream()
+				.filter(e -> e.getAction().equals(ChangeLogAction.FEATURE_INSERT)
+						&& "cli-split".equals(e.getClientName()))
+				.findFirst().orElseThrow();
+		assertThat(insertEntry.getAffectedCount()).isEqualTo(1);
+
+		// Split never makes an object vanish -- no feature.delete, and no captured rows.
+		assertThat(entries).noneMatch(e -> e.getAction().equals(ChangeLogAction.FEATURE_DELETE));
+	}
+
+	@Test
+	@DisplayName("a merge logs feature.update for the lead and feature.delete, with the captured row, for the rest")
+	void mergeLogsUpdateAndDeleteWithCapturedRow() {
+		Layer layer = createLayer("Zusammenführen", null);
+		EditDtos.Response created = editService.apply(layer.getId(),
+				new EditDtos.Request(
+						List.of(new EditDtos.Create(-1, json(SQUARE), Map.of("art", "Weide")),
+								new EditDtos.Create(-2, json(SQUARE_EAST), Map.of("art", "Pappel"))),
+						null, null, false),
+				null);
+		long lead = created.createdFids().get(-1L);
+		long other = created.createdFids().get(-2L);
+
+		Map<String, String> versions = new LinkedHashMap<>();
+		versions.put(String.valueOf(lead), rowVersion(layer, lead));
+		versions.put(String.valueOf(other), rowVersion(layer, other));
+
+		splitMergeService.merge(layer.getId(),
+				new SplitMergeDtos.MergeRequest(List.of(lead, other), lead, versions), "cli-merge");
+
+		List<ChangeLogEntry> entries = entriesFor(layer.getId());
+		ChangeLogEntry updateEntry = entries.stream()
+				.filter(e -> e.getAction().equals(ChangeLogAction.FEATURE_UPDATE)).findFirst().orElseThrow();
+		assertThat(updateEntry.getAffectedCount()).isEqualTo(1);
+		assertThat(updateEntry.getClientName()).isEqualTo("cli-merge");
+
+		ChangeLogEntry deleteEntry = entries.stream()
+				.filter(e -> e.getAction().equals(ChangeLogAction.FEATURE_DELETE)).findFirst().orElseThrow();
+		assertThat(deleteEntry.getAffectedCount()).isEqualTo(1);
+		assertThat(deleteEntry.getClientName()).isEqualTo("cli-merge");
+		assertThat(deleteEntry.getDeletedRows()).isNotNull();
+
+		JsonNode rows = json(deleteEntry.getDeletedRows());
+		assertThat(rows).hasSize(1);
+		assertThat(rows.get(0).get("fid").asLong()).isEqualTo(other);
+		assertThat(rows.get(0).get("properties").get("art").asString()).isEqualTo("Pappel");
+	}
+
+	private String rowVersion(Layer layer, long fid) {
+		return jdbc.sql("SELECT xmin::text FROM " + SqlIdentifier.quoteLayerTable(layer.getTableName())
+						+ " WHERE fid = :fid")
+				.param("fid", fid)
+				.query(String.class)
+				.single();
 	}
 
 	@Test

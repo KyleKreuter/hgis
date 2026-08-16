@@ -70,6 +70,7 @@ public class LayerFieldService {
 	@Transactional
 	public LayerDtos.Field addField(UUID layerId, LayerDtos.AddFieldRequest request, String clientName) {
 		Layer layer = requireLayer(layerId);
+		layer.requireNotTrashed();
 		List<LayerField> existing = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
 		if (existing.size() >= MAX_FIELDS) {
 			throw new FieldValidationException("name",
@@ -158,6 +159,7 @@ public class LayerFieldService {
 	@Transactional
 	public void deleteField(UUID layerId, UUID fieldId, String clientName) {
 		Layer layer = requireLayer(layerId);
+		layer.requireNotTrashed();
 		List<LayerField> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
 		LayerField field = fields.stream()
 				.filter(candidate -> candidate.getId().equals(fieldId))

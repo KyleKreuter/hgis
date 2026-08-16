@@ -48,14 +48,17 @@ public class EditService {
 	private final JdbcClient jdbc;
 	private final LayerBookkeeping bookkeeping;
 	private final ChangeLogService changeLog;
+	private final FeatureDeleteCapture deleteCapture;
 
 	EditService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
-			JdbcClient jdbc, LayerBookkeeping bookkeeping, ChangeLogService changeLog) {
+			JdbcClient jdbc, LayerBookkeeping bookkeeping, ChangeLogService changeLog,
+			FeatureDeleteCapture deleteCapture) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.jdbc = jdbc;
 		this.bookkeeping = bookkeeping;
 		this.changeLog = changeLog;
+		this.deleteCapture = deleteCapture;
 	}
 
 	@Transactional
@@ -63,6 +66,7 @@ public class EditService {
 		Layer layer = layerRepository.findById(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
 		layer.requireVector();
+		layer.requireNotTrashed();
 
 		int total = request.creates().size() + request.updates().size() + request.deletes().size();
 		if (total == 0) {
@@ -94,7 +98,8 @@ public class EditService {
 
 		int deleted = 0;
 		if (!request.deletes().isEmpty()) {
-			DeleteCapture capture = deleteAndCapture(table, fields, request.deletes());
+			FeatureDeleteCapture.Result capture =
+					deleteCapture.deleteAndCapture(table, fields.values(), request.deletes());
 			deleted = capture.count();
 			if (deleted > 0) {
 				log(layer, ChangeLogAction.FEATURE_DELETE, clientName, deleted, capture.rowsJson());
@@ -202,65 +207,6 @@ public class EditService {
 		return new ConflictException(
 				"Eine andere Stelle hat Objekt " + fid + " zwischenzeitlich geändert",
 				rows.get(0));
-	}
-
-	/** @param count how many rows were actually removed; @param rowsJson their captured shape, or null if none were */
-	private record DeleteCapture(int count, String rowsJson) {
-	}
-
-	/**
-	 * Deletes the given rows and, in the same statement, captures what they looked like
-	 * the moment before -- geometry as GeoJSON in EPSG:4326, attributes keyed by
-	 * column_name, the same shape a {@link EditDtos.Create} arrives in. This is the
-	 * fallback CONTRACT.md "Schreibstufe" names for a deleted feature: a deleted object
-	 * gets no trash of its own the way a whole layer does, so the change log is the only
-	 * place its shape survives.
-	 *
-	 * <p>One statement, not a {@code SELECT} followed by the {@code DELETE}: a {@code
-	 * DELETE ... RETURNING} inside a CTE hands the removed rows to the aggregate directly,
-	 * so there is no window in which a concurrent write could see, or change, a row this
-	 * statement is about to remove.
-	 */
-	private DeleteCapture deleteAndCapture(String table, Map<String, LayerField> fields, List<Long> fids) {
-		StringBuilder returning = new StringBuilder("fid, geom");
-		StringBuilder properties = new StringBuilder("jsonb_build_object(");
-		boolean first = true;
-		for (LayerField field : fields.values()) {
-			String column = SqlIdentifier.quoteColumn(field.getColumnName());
-			returning.append(", ").append(column);
-			if (!first) {
-				properties.append(", ");
-			}
-			// The column name is a validated SQL identifier (SqlIdentifier.quoteColumn
-			// above already rejected anything unsafe), so it can never carry a quote of
-			// its own -- embedding it as a string literal key needs no escaping.
-			properties.append('\'').append(field.getColumnName()).append("', ").append(column);
-			first = false;
-		}
-		properties.append(')');
-
-		String sql = """
-				WITH removed AS (
-				    DELETE FROM %s WHERE fid = ANY(:fids)
-				    RETURNING %s
-				)
-				SELECT count(*) AS deleted_count,
-				       jsonb_agg(jsonb_build_object(
-				           'fid', fid,
-				           'geometry', ST_AsGeoJSON(ST_Transform(geom, 4326))::jsonb,
-				           'properties', %s
-				       ))::text AS deleted_rows
-				FROM removed
-				""".formatted(table, returning, properties);
-
-		Map<String, Object> row = jdbc.sql(sql)
-				.param("fids", fids.toArray(Long[]::new))
-				.query()
-				.singleRow();
-
-		int count = ((Number) row.get("deleted_count")).intValue();
-		String rowsJson = (String) row.get("deleted_rows");
-		return new DeleteCapture(count, rowsJson);
 	}
 
 	// --- geometry ---------------------------------------------------------------------
