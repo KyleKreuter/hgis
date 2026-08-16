@@ -13,6 +13,9 @@ import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
+import de.kreuter.hgis.changelog.ChangeLogAction;
+import de.kreuter.hgis.changelog.ChangeLogEntry;
+import de.kreuter.hgis.changelog.ChangeLogRepository;
 import de.kreuter.hgis.common.LayerProvenance;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.geoportal.GeoportalDatasetService;
@@ -54,6 +57,9 @@ class MapLayerControllerTest {
 
 	@Autowired
 	private LayerRepository layerRepository;
+
+	@Autowired
+	private ChangeLogRepository changeLogRepository;
 
 	@MockitoBean
 	private WmsCapabilitiesService capabilitiesService;
@@ -125,6 +131,17 @@ class MapLayerControllerTest {
 		assertThat(stored.getMinZoom()).isBetween(0, 22);
 		assertThat(stored.getMaxZoom()).isBetween(stored.getMinZoom(), 22);
 		assertThat(stored.getSourceDatasetId()).as("no datasetId given, so no provenance").isNull();
+
+		// A map image is a layer coming into existence just as much as an import or a
+		// hand-drawn one, and CONTRACT.md's change log does not carve out an exception
+		// for how a write got there.
+		List<ChangeLogEntry> entries = changeLogRepository
+				.findByProjectIdOrderByOccurredAtDescIdDesc(project.getId(), org.springframework.data.domain.PageRequest.of(0, 10))
+				.stream()
+				.filter(e -> layerId.equals(e.getLayerId()))
+				.toList();
+		assertThat(entries).extracting(ChangeLogEntry::getAction).containsExactly(ChangeLogAction.LAYER_CREATE);
+		assertThat(entries.get(0).getAffectedCount()).isEqualTo(1);
 	}
 
 	@Test

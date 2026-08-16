@@ -1,5 +1,7 @@
 package de.kreuter.hgis.catalog;
 
+import de.kreuter.hgis.changelog.ChangeLogAction;
+import de.kreuter.hgis.changelog.ChangeLogService;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.common.Uuid7;
@@ -23,16 +25,18 @@ class ProjectDuplicateTransactions {
 	private final ProjectDeletionService deletionService;
 	private final JobService jobService;
 	private final JdbcClient jdbc;
+	private final ChangeLogService changeLog;
 
 	ProjectDuplicateTransactions(ProjectRepository projectRepository, LayerRepository layerRepository,
 			LayerFieldRepository fieldRepository, ProjectDeletionService deletionService, JobService jobService,
-			JdbcClient jdbc) {
+			JdbcClient jdbc, ChangeLogService changeLog) {
 		this.projectRepository = projectRepository;
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.deletionService = deletionService;
 		this.jobService = jobService;
 		this.jdbc = jdbc;
+		this.changeLog = changeLog;
 	}
 
 	@Transactional
@@ -86,6 +90,19 @@ class ProjectDuplicateTransactions {
 			fieldRepository.save(new LayerField(copy, field.getSourceName(), field.getColumnName(),
 					field.getDataType(), field.getOrdinal()));
 		}
+
+		// Logged here rather than deferred: unlike an import, a failed duplicate's
+		// compensateAndFail drops the whole target *project* (ON DELETE CASCADE also
+		// takes every change_log row logged against it along), so nothing is left
+		// orphaned if this never reaches complete(). No client name -- duplicating a
+		// project carries none today (see ClientId).
+		changeLog.record(targetProjectId, copy.getId(), copy.getName(), ChangeLogAction.LAYER_CREATE, null, 1, null);
+		if (source.getFeatureCount() > 0) {
+			long inserted = Math.min(source.getFeatureCount(), Integer.MAX_VALUE);
+			changeLog.record(targetProjectId, copy.getId(), copy.getName(),
+					ChangeLogAction.FEATURE_INSERT, null, (int) inserted, null);
+		}
+
 		long processed = jdbc.sql("""
 				SELECT COALESCE(SUM(feature_count), 0)
 				FROM gis_meta.layer WHERE project_id = :projectId

@@ -1,9 +1,11 @@
 package de.kreuter.hgis.catalog;
 
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -31,6 +33,28 @@ public interface LayerRepository extends JpaRepository<Layer, UUID> {
 	List<Layer> findTrashedByProject(@Param("projectId") UUID projectId);
 
 	Optional<Layer> findByTableName(String tableName);
+
+	/**
+	 * Same lookup as {@link #findById}, but with a {@code SELECT ... FOR UPDATE} --
+	 * exactly the three trash state transitions ({@code delete}, {@code restore},
+	 * {@code purge} in {@code LayerService}) need it, and only them: each reads the
+	 * current state, decides whether the requested transition is legal, and writes the
+	 * new state, and without a lock spanning that whole sequence two transitions racing
+	 * on the same layer can both read the state as legal before either has written
+	 * anything. The concrete failure a review turned up: {@code restore} and {@code
+	 * purge} run concurrently, both see the layer as trashed, both proceed -- {@code
+	 * restore} answers 200, {@code purge} drops the table and answers 204, and the
+	 * layer the caller of {@code restore} was just told is back is gone.
+	 *
+	 * <p>Holding the lock from the read onward serialises the three operations against
+	 * each other for one layer: whichever transaction's {@code SELECT ... FOR UPDATE}
+	 * has to wait sees the first transaction's committed result once it finally gets
+	 * the row, and its own state check then correctly reports a conflict instead of
+	 * acting on a state that has since changed underneath it.
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("SELECT l FROM Layer l WHERE l.id = :id")
+	Optional<Layer> findByIdForUpdate(@Param("id") UUID id);
 
 	/**
 	 * Bumps the tile cache buster without loading the entity. Used after every write to

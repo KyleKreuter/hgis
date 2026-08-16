@@ -239,7 +239,7 @@ public class LayerService {
 	 */
 	@Transactional
 	public void delete(UUID layerId, String clientName) {
-		Layer layer = require(layerId);
+		Layer layer = requireLocked(layerId);
 		if (layer.isTrashed()) {
 			throw new ConflictException("Layer '" + layer.getName() + "' liegt bereits im Papierkorb", null);
 		}
@@ -274,7 +274,7 @@ public class LayerService {
 	 */
 	@Transactional
 	public LayerDtos.Summary restore(UUID layerId, String clientName) {
-		Layer layer = require(layerId);
+		Layer layer = requireLocked(layerId);
 		if (!layer.isTrashed()) {
 			throw new ConflictException("Layer '" + layer.getName() + "' liegt nicht im Papierkorb", null);
 		}
@@ -299,7 +299,7 @@ public class LayerService {
 	 */
 	@Transactional
 	public void purge(UUID layerId, String clientName) {
-		Layer layer = require(layerId);
+		Layer layer = requireLocked(layerId);
 		if (!layer.isTrashed()) {
 			throw new ConflictException("Layer '" + layer.getName()
 					+ "' liegt nicht im Papierkorb. Erst löschen, dann endgültig entfernen.", null);
@@ -533,6 +533,17 @@ public class LayerService {
 
 	private Layer require(UUID layerId) {
 		return layerRepository.findById(layerId)
+				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
+	}
+
+	/**
+	 * Same as {@link #require}, but for {@link #delete}, {@link #restore} and
+	 * {@link #purge} only -- see {@link LayerRepository#findByIdForUpdate} for why
+	 * exactly those three, and only those three, need the row locked from the read
+	 * onward.
+	 */
+	private Layer requireLocked(UUID layerId) {
+		return layerRepository.findByIdForUpdate(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
 	}
 

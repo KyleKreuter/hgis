@@ -4,6 +4,7 @@ import de.kreuter.hgis.catalog.LayerField;
 import de.kreuter.hgis.common.SqlIdentifier;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
@@ -59,7 +60,8 @@ class FeatureDeleteCapture {
 			// The column name is a validated SQL identifier (SqlIdentifier.quoteColumn
 			// above already rejected anything unsafe), so it can never carry a quote of
 			// its own -- embedding it as a string literal key needs no escaping.
-			properties.append('\'').append(field.getColumnName()).append("', ").append(column);
+			properties.append('\'').append(field.getColumnName()).append("', ")
+					.append(propertyValueExpression(field, column));
 			first = false;
 		}
 		properties.append(')');
@@ -86,5 +88,36 @@ class FeatureDeleteCapture {
 		int count = ((Number) row.get("deleted_count")).intValue();
 		String rowsJson = (String) row.get("deleted_rows");
 		return new Result(count, rowsJson);
+	}
+
+	/**
+	 * The SQL expression that carries one field's value into the captured JSON --
+	 * {@code column} unchanged for most types, but not for two of them, both found by
+	 * actually replaying a captured row through {@link EditService} rather than only
+	 * inspecting the JSON:
+	 *
+	 * <ul>
+	 * <li>{@code numeric}: {@code jsonb_build_object} would otherwise carry it as a
+	 *     native JSON number, and a generic reader -- {@code EditService}'s own Jackson
+	 *     decoding of an incoming {@code Create.properties()} included -- turns a
+	 *     floating-point JSON token into a {@code double} by default, discarding
+	 *     precision {@code numeric} exists to keep. Casting to text keeps every digit;
+	 *     {@link EditService#toColumnValue} parses the text with {@link
+	 *     java.math.BigDecimal}'s own constructor, never a {@code double} in between.
+	 * <li>{@code bytea}: {@code jsonb_build_object} encodes it as PostgreSQL's own hex
+	 *     text ({@code \xDEAD...}) by default. {@code EditService} expects base64 --
+	 *     the same encoding {@code FeatureQueryService}'s response already uses for a
+	 *     raw {@code byte[]} (Jackson's own default) -- so without this, replaying a
+	 *     captured row with a bytea value fails outright, and since a {@code Create} is
+	 *     all or nothing, it takes every other field of the same object down with it.
+	 * </ul>
+	 */
+	private static String propertyValueExpression(LayerField field, String column) {
+		String type = field.getDataType().toLowerCase(Locale.ROOT);
+		return switch (type) {
+			case "numeric", "decimal" -> column + "::text";
+			case "bytea" -> "encode(" + column + ", 'base64')";
+			default -> column;
+		};
 	}
 }

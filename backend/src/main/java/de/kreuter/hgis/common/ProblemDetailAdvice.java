@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -45,6 +46,23 @@ public class ProblemDetailAdvice {
 			problem.setProperty("current", ex.getCurrent());
 		}
 		return problem;
+	}
+
+	/**
+	 * Hibernate's own optimistic check -- a row this request loaded was changed or
+	 * removed by someone else before this request's write reached it -- not a client
+	 * -supplied {@code rowVersion} mismatch, which is already a {@link ConflictException}
+	 * of its own. A client cannot tell the two apart and should not have to: same 409
+	 * shape as every hand-rolled conflict here, not the catch-all's "Interner Fehler".
+	 * Concretely reachable from two racing trash state transitions (delete/restore/purge)
+	 * on the same layer -- {@code LayerRepository#findByIdForUpdate} closes the window
+	 * where the race would otherwise happen, but this stays as the honest answer for
+	 * whatever narrower race the row lock does not cover.
+	 */
+	@ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+	public ProblemDetail handleOptimisticLocking(ObjectOptimisticLockingFailureException ex) {
+		return problem(HttpStatus.CONFLICT, "Konflikt",
+				"Eine andere Stelle hat diesen Datensatz zwischenzeitlich geändert oder entfernt");
 	}
 
 	/** The resource exists and answered, but its content cannot be used as asked. */

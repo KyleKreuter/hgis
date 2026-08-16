@@ -390,9 +390,30 @@ public class EditService {
 		throw typeMismatch(field, value);
 	}
 
+	/**
+	 * A JSON number token is not the only shape a numeric value legitimately arrives
+	 * in: {@link FeatureDeleteCapture} deliberately captures a {@code numeric} column as
+	 * text (see there for why), specifically so replaying a deleted row through this
+	 * same method never has to go through {@code double} -- Jackson's default reading of
+	 * a floating-point JSON token, which does not have the precision {@code numeric}
+	 * promises. A plain {@link String} is therefore parsed with {@link BigDecimal}'s own
+	 * constructor first; only a genuine JSON number (the ordinary UI write) falls back
+	 * to the {@code double} route, same as before.
+	 */
 	private static BigDecimal asBigDecimal(LayerField field, Object value) {
+		if (value instanceof BigDecimal decimal) {
+			return decimal;
+		}
+		if (value instanceof String text) {
+			try {
+				return new BigDecimal(text);
+			}
+			catch (NumberFormatException ex) {
+				throw typeMismatch(field, value);
+			}
+		}
 		Number number = asNumber(field, value);
-		return number instanceof BigDecimal decimal ? decimal : BigDecimal.valueOf(number.doubleValue());
+		return BigDecimal.valueOf(number.doubleValue());
 	}
 
 	private static Boolean asBoolean(LayerField field, Object value) {
