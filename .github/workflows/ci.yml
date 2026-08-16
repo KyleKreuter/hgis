@@ -1,0 +1,99 @@
+name: CI
+
+# Three sub-projects in three languages, each checked on its own. They are
+# separate jobs rather than steps in one, so a red backend still tells you
+# whether the frontend is fine -- and so the two fast jobs report in a minute
+# instead of waiting behind the slow one.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend (Java 21, Testcontainers)
+    runs-on: ubuntu-latest
+    # The suite starts a real PostGIS container per context. On the developer
+    # machine that is the slowest part by far; here it is the reason for the
+    # generous timeout rather than a sign of trouble.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+
+      # Pulled ahead of the suite so a slow registry shows up as its own step
+      # instead of a test that looks flaky. Must match TestcontainersConfiguration.
+      - name: Pull the PostGIS image
+        run: docker pull imresamu/postgis:17-3.5
+
+      - name: Test
+        working-directory: backend
+        run: ./mvnw --batch-mode test
+
+  frontend:
+    name: Frontend (types, lint, tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      # `tsc -b` is not interchangeable with `tsc --noEmit` here: without -b
+      # this project's config checks zero files and still reports success.
+      - name: Types
+        working-directory: frontend
+        run: npx tsc -b --noEmit
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Test
+        working-directory: frontend
+        run: npx vitest run
+
+  python:
+    name: Python library (ruff, pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # `dev` covers httpx, pandas, shapely and pytest; ruff is a checker, not a
+      # dependency of the library, so it is pinned here rather than in the extra.
+      - name: Install
+        working-directory: python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+          pip install 'ruff==0.16.3'
+
+      # The library's own suite runs without a server; test_live.py skips itself
+      # when none answers. A run that needs the network would fail here, which
+      # is the point.
+      - name: Lint
+        working-directory: python
+        run: ruff check src tests
+
+      - name: Test
+        working-directory: python
+        run: python -m pytest -q
