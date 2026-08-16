@@ -13,7 +13,19 @@ interface PaletteSelectProps {
 export function PaletteSelect({ value, onValueChange, includeCategorical = true }: PaletteSelectProps) {
   return (
     <Select value={value} onValueChange={(next) => next && onValueChange(next)}>
-      <SelectTrigger size="sm" className="min-w-0 flex-1">
+      {/*
+       * min-w-11 (44px), not min-w-0: `min-w-0` alone lets the flex layout squeeze this
+       * trigger narrower than its own unshrinkable content -- the chevron (16px),
+       * padding (18px), border (2px) and the gap between them (6px), 42px together,
+       * none of which can give any further. Next to `NumberInput` in the "Klassen" row
+       * (`GraduatedEditor.tsx`), that meant the wrap on `Row`'s content div never
+       * triggered (both items' computed minimum read as ~0, so the flex algorithm saw
+       * room to fit them side by side) and this trigger was pressed down to ~22px
+       * instead, with its own chevron sticking out past its edge. A real floor here
+       * makes the row's own wrap trigger honestly, dropping this onto its own line
+       * once there truly is no room, rather than crushing it below what it needs.
+       */}
+      <SelectTrigger size="sm" className="min-w-11 flex-1">
         <SelectValue>{(value: string) => paletteLabel(value)}</SelectValue>
       </SelectTrigger>
       <SelectContent>

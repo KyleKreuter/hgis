@@ -222,7 +222,16 @@ export function CategorizedEditor({
               // falls back to how the value itself reads.
               const label = category.label || formatCategoryValue(category.value)
               return (
-              <li key={`${index}-${String(category.value)}`} className="flex items-center gap-1.5">
+              // min-w-0: this `<li>` is a grid item of the `<ul>` below (`overflow:
+              // visible`, same as any other unset element), so its own automatic minimum
+              // width is its min-content size regardless of the `truncate` label inside --
+              // that rule only zeroes out the box that itself has overflow-hidden, not an
+              // ancestor one level further out (see the matching fix on `SelectTrigger`,
+              // `components/ui/select.tsx`). Without it, a long category label pushed the
+              // whole panel past a narrow dock's edge, reachable only by scrolling sideways
+              // -- the exact failure `Row`/`NumberInput` in `controls.tsx` already guard
+              // against, just not retrofitted here yet.
+              <li key={`${index}-${String(category.value)}`} className="flex min-w-0 items-center gap-1.5">
                 <ColorInput
                   value={primaryColorOf(category.symbol)}
                   onChange={(color, options) => setCategoryColor(index, color, options)}
