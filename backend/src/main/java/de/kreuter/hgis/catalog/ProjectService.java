@@ -20,6 +20,7 @@ import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.Polygon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,11 +51,13 @@ public class ProjectService {
 	private final ProjectDuplicateService duplicateService;
 	private final LayerRepository layerRepository;
 	private final ObjectMapper objectMapper;
+	/** Where {@link ProjectViewStateChanged} goes; who listens is not this package's business. */
+	private final ApplicationEventPublisher events;
 
 	ProjectService(ProjectRepository repository, ProjectDeletionService deletionService,
 			GeometryFactory geometryFactory, JdbcClient jdbc, JobService jobService,
 			ProjectDuplicateService duplicateService, LayerRepository layerRepository,
-			ObjectMapper objectMapper) {
+			ObjectMapper objectMapper, ApplicationEventPublisher events) {
 		this.repository = repository;
 		this.deletionService = deletionService;
 		this.geometryFactory = geometryFactory;
@@ -63,6 +66,7 @@ public class ProjectService {
 		this.duplicateService = duplicateService;
 		this.layerRepository = layerRepository;
 		this.objectMapper = objectMapper;
+		this.events = events;
 	}
 
 	/**
@@ -221,11 +225,39 @@ public class ProjectService {
 	 * be dropped after this is saved, so a check at write time would give no guarantee. The
 	 * attribute table's own query already reports "Unbekanntes Sortierfeld" when that
 	 * happens; this method must not build a second check for the same thing.
+	 *
+	 * <p>The write goes out as {@link ProjectViewStateChanged}, which is what reaches every
+	 * open live channel once this transaction has committed -- never before, or a listener
+	 * would read the state back and get the value this call is about to replace.
+	 *
+	 * @param origin who is writing, from {@code X-Hgis-Client}, or null. Only carried
+	 *     through to the event so the writer can tell its own echo apart from someone
+	 *     else's change; nothing here reads it.
 	 */
 	@Transactional
-	public void updateViewState(UUID id, ProjectDtos.ViewState request) {
-		Project project = require(id);
-		project.setViewState(objectMapper.writeValueAsString(validateViewState(request)));
+	public void updateViewState(UUID id, ProjectDtos.ViewState request, String origin) {
+		require(id);
+		String document = objectMapper.writeValueAsString(validateViewState(request));
+
+		// Written and bumped in one statement rather than through the entity: two clients
+		// saving at the same time would otherwise both read version N and both write N+1,
+		// and a receiver that has already seen N+1 would take the second change for the
+		// first one and never read it. RETURNING is what makes the new value available
+		// without a second read that could see a third client's write instead.
+		// project_touch_updated_at keeps updated_at honest for this path, see V1.
+		long version = jdbc.sql("""
+						UPDATE gis_meta.project
+						   SET view_state = CAST(:document AS jsonb),
+						       view_state_version = view_state_version + 1
+						 WHERE id = :id
+						RETURNING view_state_version
+						""")
+				.param("document", document)
+				.param("id", id)
+				.query(Long.class)
+				.single();
+
+		events.publishEvent(new ProjectViewStateChanged(id, version, origin));
 	}
 
 	// --- helpers ---------------------------------------------------------------

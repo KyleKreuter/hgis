@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { useSelection } from './selection'
+import { applyRemoteSelection, isRemoteSelection, useSelection } from './selection'
 
 const LAYER = 'layer-a'
 const OTHER = 'layer-b'
@@ -98,5 +98,60 @@ describe('select with a mode', () => {
     state().select(OTHER, [1], 'subtract')
     expect(state().layerId).toBe(OTHER)
     expect([...state().selected]).toEqual([])
+  })
+})
+
+describe('applyRemoteSelection', () => {
+  beforeEach(() => {
+    state().clear()
+  })
+
+  it('is raised while the write runs and lowered again afterwards', () => {
+    let duringWrite: boolean | null = null
+    applyRemoteSelection(() => {
+      duringWrite = isRemoteSelection()
+      state().select(LAYER, [1])
+    })
+
+    expect(duringWrite).toBe(true)
+    expect(isRemoteSelection()).toBe(false)
+    expect([...state().selected]).toEqual([1])
+  })
+
+  it('is what a subscriber sees, because subscribers run inside the write', () => {
+    // The whole mechanism rests on this: `AttributeTable` saves selections from a store
+    // subscription, and zustand runs those synchronously inside `set`. A flag lowered any
+    // earlier would not reach them.
+    let seenBySubscriber: boolean | null = null
+    const unsubscribe = useSelection.subscribe(() => {
+      seenBySubscriber = isRemoteSelection()
+    })
+
+    applyRemoteSelection(() => state().select(LAYER, [1]))
+    unsubscribe()
+
+    expect(seenBySubscriber).toBe(true)
+  })
+
+  it('is lowered even when the write fails, so one failure does not mute every later save', () => {
+    expect(() =>
+      applyRemoteSelection(() => {
+        throw new Error('geplatzt')
+      }),
+    ).toThrow('geplatzt')
+
+    expect(isRemoteSelection()).toBe(false)
+  })
+
+  it('is not raised for an ordinary selection', () => {
+    let seenBySubscriber: boolean | null = null
+    const unsubscribe = useSelection.subscribe(() => {
+      seenBySubscriber = isRemoteSelection()
+    })
+
+    state().select(LAYER, [1])
+    unsubscribe()
+
+    expect(seenBySubscriber).toBe(false)
   })
 })
