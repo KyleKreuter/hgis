@@ -54,6 +54,20 @@ export interface StubRoute {
   match: string
   body: unknown
   status?: number
+  /**
+   * Answers after this many real ms instead of on the next microtask. Default: none.
+   *
+   * Needed to test a genuine race between two fired-together requests (e.g. a double
+   * click): `userEvent.click()` itself takes several real ticks to walk through its own
+   * pointerdown/mouseup/click sequence, so an instantly-resolving mock lets the *first*
+   * click's whole round trip -- request, state update, `finally` -- finish before the
+   * *second* click's sequence ever reaches its own click dispatch. The two calls then
+   * never actually overlap, and a re-entrancy guard looks like it is doing nothing even
+   * though nothing raced it. A few ms of delay, closer to a real network round trip,
+   * keeps the first call in flight long enough for the second one to genuinely land
+   * while it is still pending.
+   */
+  delayMs?: number
 }
 
 /**
@@ -76,11 +90,13 @@ export function stubFetch(routes: StubRoute[]) {
       return Promise.reject(new Error(`No stub route for ${url}`))
     }
     const status = route.status ?? 200
-    return Promise.resolve({
+    const response = {
       ok: status >= 200 && status < 300,
       status,
       json: () => Promise.resolve(route.body),
-    } as Response)
+    } as Response
+    if (!route.delayMs) return Promise.resolve(response)
+    return new Promise<Response>((resolve) => setTimeout(() => resolve(response), route.delayMs))
   })
   vi.stubGlobal('fetch', fetchStub)
   return { calls, requests, fetchStub }

@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { toast } from 'sonner'
 import {
   AlertDialog,
@@ -27,15 +28,24 @@ interface PurgeLayerDialogProps {
  */
 export function PurgeLayerDialog({ entry, projectId, onOpenChange }: PurgeLayerDialogProps) {
   const purgeLayer = usePurgeLayer(projectId)
+  // Same reasoning as `TrashRow`'s `restoring` ref (`TrashDialog.tsx`): `disabled` alone
+  // only blocks a second click once React has re-rendered with it, and two clicks fired
+  // before that render both went through, each firing its own DELETE .../purge -- one of
+  // which then hits a layer the first call already dropped. Checked and set synchronously
+  // inside the handler, so it holds regardless of render timing.
+  const purging = useRef(false)
 
   async function handlePurge() {
-    if (!entry) return
+    if (!entry || purging.current) return
+    purging.current = true
     try {
       await purgeLayer.mutateAsync(entry.id)
       toast.success(`Layer „${entry.name}" endgültig gelöscht`)
       onOpenChange(false)
     } catch {
       toast.error('Das Programm konnte den Layer nicht endgültig löschen')
+    } finally {
+      purging.current = false
     }
   }
 

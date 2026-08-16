@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Loader2, RotateCcw, Trash2 } from 'lucide-react'
@@ -141,13 +141,22 @@ function TrashRow({
   onRequestPurge: () => void
 }) {
   const restoreLayer = useRestoreLayer(projectId)
+  // `disabled={restoreLayer.isPending}` below only takes effect once React has
+  // re-rendered -- two clicks fired before that render (e.g. a fast double click) both
+  // go through and fire two POSTs. This ref is checked and set synchronously inside the
+  // handler itself, so the second click is turned away regardless of render timing.
+  const restoring = useRef(false)
 
   async function handleRestore() {
+    if (restoring.current) return
+    restoring.current = true
     try {
       await restoreLayer.mutateAsync(entry.id)
       toast.success(`Layer „${entry.name}" wiederhergestellt`)
     } catch {
       toast.error('Das Programm konnte den Layer nicht wiederherstellen')
+    } finally {
+      restoring.current = false
     }
   }
 
