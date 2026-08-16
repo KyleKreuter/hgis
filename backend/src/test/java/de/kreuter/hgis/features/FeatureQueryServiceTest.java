@@ -375,6 +375,8 @@ class FeatureQueryServiceTest {
 	private Project collidingProject;
 	private Layer collidingLayer;
 	private String collidingTableName;
+	private UUID bigintFieldId;
+	private UUID textFieldId;
 
 	/**
 	 * The Straßenbaumkataster's shape, reduced to two columns and four rows.
@@ -418,10 +420,12 @@ class FeatureQueryServiceTest {
 		newLayer.setFeatureCount(4);
 		collidingLayer = layerRepository.saveAndFlush(newLayer);
 
-		fieldRepository.saveAndFlush(new LayerField(collidingLayer, "Kronendurchmesser Quelle",
-				"kronendurchmesser", "bigint", 0));
-		fieldRepository.saveAndFlush(new LayerField(collidingLayer, "Kronendurchmesser",
-				"kronendurchmesser_z", "text", 1));
+		// The ids are kept: they are the one identifier that resolves for both of these
+		// fields, and the tests below spend them on exactly that.
+		bigintFieldId = fieldRepository.saveAndFlush(new LayerField(collidingLayer,
+				"Kronendurchmesser Quelle", "kronendurchmesser", "bigint", 0)).getId();
+		textFieldId = fieldRepository.saveAndFlush(new LayerField(collidingLayer,
+				"Kronendurchmesser", "kronendurchmesser_z", "text", 1)).getId();
 	}
 
 	@AfterAll
@@ -1180,8 +1184,10 @@ class FeatureQueryServiceTest {
 	void namesBothCandidatesOfAnAmbiguousName() {
 		assertThatThrownBy(() -> service.list(collidingLayer.getId(), new FeatureQueryService.Query(
 				null, false, "kronendurchmesser > 10", null, null, null, false, null, 100)))
-				.hasMessageContaining("Kronendurchmesser Quelle (Spalte kronendurchmesser)")
-				.hasMessageContaining("Kronendurchmesser (Spalte kronendurchmesser_z)")
+				.hasMessageContaining("Kronendurchmesser Quelle (Spalte kronendurchmesser, Id "
+						+ bigintFieldId + ")")
+				.hasMessageContaining("Kronendurchmesser (Spalte kronendurchmesser_z, Id "
+						+ textFieldId + ")")
 				.hasMessageContaining("Eindeutig sind: Kronendurchmesser Quelle, kronendurchmesser_z");
 	}
 
@@ -1201,6 +1207,45 @@ class FeatureQueryServiceTest {
 		assertThat(byText.totalCount())
 				.as("as text, 2, 3 and 9 sort after '10' as well -- the count is four times the other")
 				.isEqualTo(4);
+	}
+
+	/**
+	 * The id is what the ambiguity message offers, so it has to be reachable from both
+	 * paths and it has to hit the field it names -- not merely "a" field.
+	 */
+	@Test
+	@DisplayName("the field id filters, and reaches the field the name could not")
+	void filtersByFieldId() {
+		FeatureDtos.Page byNumberField = service.list(collidingLayer.getId(),
+				new FeatureQueryService.Query(null, false, bigintFieldId + " > 10", null, null,
+						null, false, null, 100));
+		FeatureDtos.Page byTextField = service.list(collidingLayer.getId(),
+				new FeatureQueryService.Query(null, false, textFieldId + " > '10'", null, null,
+						null, false, null, 100));
+
+		assertThat(byNumberField.totalCount()).as("the bigint field, compared as a number").isEqualTo(1);
+		assertThat(byTextField.totalCount()).as("the text field, compared as text").isEqualTo(4);
+	}
+
+	@Test
+	@DisplayName("the field id sorts")
+	void sortsByFieldId() {
+		FeatureDtos.Page page = service.list(collidingLayer.getId(),
+				query(bigintFieldId.toString(), true, null, 100));
+
+		assertThat(page.features().stream()
+				.map(feature -> feature.properties().get("kronendurchmesser")))
+				.containsExactly(12L, 9L, 3L, 2L);
+	}
+
+	@Test
+	@DisplayName("the ambiguity message hands out the id of every candidate")
+	void namesTheFieldIdsOfAnAmbiguousName() {
+		assertThatThrownBy(() -> service.list(collidingLayer.getId(), new FeatureQueryService.Query(
+				null, false, "kronendurchmesser > 10", null, null, null, false, null, 100)))
+				.hasMessageContaining("Id " + bigintFieldId)
+				.hasMessageContaining("Id " + textFieldId)
+				.hasMessageContaining("Die Id trifft immer genau ein Feld");
 	}
 
 	@Test

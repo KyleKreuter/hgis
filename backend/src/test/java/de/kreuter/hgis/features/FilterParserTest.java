@@ -234,6 +234,17 @@ class FilterParserTest {
 					.hasMessageNotContaining("Unbekanntes Feld");
 		}
 
+		/**
+		 * A field that was never saved has no id. The message must then say nothing about
+		 * one -- offering "Id null" as the way out would be worse than offering nothing.
+		 */
+		@Test
+		void promisesNoIdWhenTheFieldsHaveNone() {
+			assertThatThrownBy(() -> FilterParser.parse("kronendurchmesser > 10", COLLIDING))
+					.hasMessageNotContaining("Id ")
+					.hasMessageNotContaining("null");
+		}
+
 		@Test
 		void resolvesTheUnambiguousNamesOfTheSameTwoFields() {
 			assertThat(FilterParser.parse("\"Kronendurchmesser Quelle\" > 10", COLLIDING).sql())
@@ -265,6 +276,54 @@ class FilterParserTest {
 			assertThatThrownBy(() -> FilterParser.parse("wert_1 > 1", fields))
 					.isInstanceOf(BadRequestException.class)
 					.hasMessageContaining("Kein Name spricht genau eines dieser Felder an");
+		}
+	}
+
+	/**
+	 * The ambiguity message above prints a field id as the way out that always resolves.
+	 * It is printed plainly, so it has to parse plainly -- a way out that first has to be
+	 * quoted is a second thing to know, and the one place it is read is an error message
+	 * someone is already stuck in.
+	 */
+	@Nested
+	@DisplayName("a field id is an identifier, written as it is printed")
+	class FieldId {
+
+		private static final String ID = "019ff731-1f0c-7de5-9100-b9022e19ea3f";
+
+		@Test
+		void readsTheWholeIdAsOneName() {
+			// Unknown, because these fixtures are unsaved and carry no id -- but reported
+			// as one name rather than torn apart at the first dash, which is what the
+			// number and word branches would have done.
+			assertThatThrownBy(() -> parse(ID + " > 10"))
+					.isInstanceOf(BadRequestException.class)
+					.hasMessageContaining("Unbekanntes Feld: " + ID);
+		}
+
+		@Test
+		void readsAnUppercaseIdTheSameWay() {
+			assertThatThrownBy(() -> parse(ID.toUpperCase(java.util.Locale.ROOT) + " > 10"))
+					.hasMessageContaining("Unbekanntes Feld");
+		}
+
+		@Test
+		void quotingItStillWorks() {
+			assertThatThrownBy(() -> parse("\"" + ID + "\" > 10"))
+					.hasMessageContaining("Unbekanntes Feld: " + ID);
+		}
+
+		/** Nothing that is not that exact shape may be swallowed by it. */
+		@ParameterizedTest
+		@ValueSource(strings = {
+				"einwohner > 1",
+				"einwohner > -1",
+				"\"Gebäudehöhe\" > 12.5",
+				"name = 'O''Brien'",
+				"name = '019ff731-1f0c-7de5-9100-b9022e19ea3f'",
+		})
+		void leavesEveryOtherExpressionAlone(String expression) {
+			assertThat(parse(expression)).isNotNull();
 		}
 	}
 

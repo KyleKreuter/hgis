@@ -16,15 +16,23 @@ import java.util.stream.Stream;
  * query. A name that does not resolve is rejected -- there is no fallback that passes the
  * text through.
  *
- * <p>Both spellings are accepted, case-insensitively: the source name shown in the UI and
- * the normalised column name that appears as a key in feature responses and tile
- * properties. Because both are accepted, one name can mean two different fields -- the
- * Straßenbaumkataster has a field named "Kronendurchmesser" whose column is
- * {@code kronendurchmesser_z}, next to a field "Kronendurchmesser Quelle" whose column is
- * {@code kronendurchmesser}. Such a name is <em>rejected</em>, never resolved to whichever
- * candidate happens to come first: filtering and sorting used to pick opposite ones, so the
- * same name silently meant a text column in one place and a bigint column in the other, and
- * both answers looked like an answer.
+ * <p>Three spellings are accepted, case-insensitively: the source name shown in the UI, the
+ * normalised column name that appears as a key in feature responses and tile properties,
+ * and the field id.
+ *
+ * <p>The first two can collide. The Straßenbaumkataster has a field named
+ * "Kronendurchmesser" whose column is {@code kronendurchmesser_z}, next to a field
+ * "Kronendurchmesser Quelle" whose column is {@code kronendurchmesser}, so the word
+ * "kronendurchmesser" means both. Such a name is <em>rejected</em>, never resolved to
+ * whichever candidate happens to come first: filtering and sorting used to pick opposite
+ * ones, so the same name silently meant a text column in one place and a bigint column in
+ * the other, and both answers looked like an answer.
+ *
+ * <p>The id is the third spelling because of that rejection. Display names collide and
+ * column names collide with display names, but an id is unique for the life of the field
+ * and survives a rename -- it is the only identifier that always resolves, which is what
+ * lets a client address the two fields above at all. The ambiguity message therefore prints
+ * it for every candidate.
  *
  * <p>This is the only rule for a name a client sent. Filter expressions, the sort
  * parameter, classifications and style fields all come through here, so none of them can
@@ -103,7 +111,7 @@ public final class LayerFields {
 	}
 
 	/**
-	 * Every field the name matches, by display name or by column name.
+	 * Every field the name matches, by field id, display name or column name.
 	 *
 	 * <p>One pass, one entry per field: a field whose display name equals its own column
 	 * name -- the ordinary case -- is one candidate, not two.
@@ -123,23 +131,44 @@ public final class LayerFields {
 	}
 
 	private static boolean carriesName(LayerField field, String wanted) {
-		return field.getSourceName().toLowerCase(Locale.ROOT).equals(wanted)
+		return wanted.equals(idOf(field))
+				|| field.getSourceName().toLowerCase(Locale.ROOT).equals(wanted)
 				|| field.getColumnName().toLowerCase(Locale.ROOT).equals(wanted);
+	}
+
+	/**
+	 * The field id as it may be written, or null when the field has none.
+	 *
+	 * <p>Null happens twice: before a field is persisted, and for the synthetic {@code fid}
+	 * of {@code QueryFields}, which describes a column we create rather than a
+	 * {@code layer_field} row. Neither can be addressed by id, and neither may be matched
+	 * by a client that sends the word "null".
+	 *
+	 * <p>{@link java.util.UUID#toString} is lower case, so comparing against the
+	 * already-lowered name needs no further folding.
+	 */
+	private static String idOf(LayerField field) {
+		return field.getId() == null ? null : field.getId().toString();
 	}
 
 	/**
 	 * Names the candidates and how to reach each of them.
 	 *
-	 * <p>The list of unambiguous names is what makes the message actionable: whoever wrote
-	 * the name -- a person or a program reading the error -- can take one from it and write
-	 * the next expression correctly. A field can be left without any such name (two fields
-	 * sharing a display name, where each column name is the other's display name), and the
-	 * message then says so instead of offering an alternative that fails the same way.
+	 * <p>What makes the message actionable is that every way out in it was checked against
+	 * the same lookup that just failed: the "Eindeutig sind" list holds only names that
+	 * really do match one field, and the id printed with each candidate is unique by
+	 * construction. Whoever wrote the name -- a person or a program reading the error --
+	 * can take one from it and write the next expression correctly.
+	 *
+	 * <p>Two fields can leave each other without a usable name (each one's column name is
+	 * the other's display name, reachable by renaming). The id is the way out that survives
+	 * that, which is why it is printed for every candidate rather than only when the names
+	 * run out.
 	 */
 	private static String ambiguity(String name, String kind, List<LayerField> matches,
 			List<LayerField> fields) {
 		String candidates = matches.stream()
-				.map(field -> field.getSourceName() + " (Spalte " + field.getColumnName() + ")")
+				.map(LayerFields::describe)
 				.reduce((left, right) -> left + ", " + right)
 				.orElse("");
 		List<String> unique = matches.stream()
@@ -147,13 +176,24 @@ public final class LayerFields {
 				.distinct()
 				.filter(candidate -> matching(candidate, fields).size() == 1)
 				.toList();
+		boolean addressableById = matches.stream().allMatch(field -> idOf(field) != null);
 
 		String message = "Mehrdeutiges " + kind + ": " + name + ". Der Name passt auf "
 				+ matches.size() + " Felder: " + candidates + ".";
-		return unique.isEmpty()
-				? message + " Kein Name spricht genau eines dieser Felder an."
-						+ " Benennen Sie eines der Felder um."
-				: message + " Eindeutig sind: " + String.join(", ", unique) + ".";
+		if (!unique.isEmpty()) {
+			message += " Eindeutig sind: " + String.join(", ", unique) + ".";
+		}
+		else {
+			message += " Kein Name spricht genau eines dieser Felder an.";
+		}
+		return addressableById ? message + " Die Id trifft immer genau ein Feld." : message;
+	}
+
+	/** One candidate with every way to reach it. The id is left out when there is none. */
+	private static String describe(LayerField field) {
+		String id = idOf(field);
+		return field.getSourceName() + " (Spalte " + field.getColumnName()
+				+ (id == null ? "" : ", Id " + id) + ")";
 	}
 
 	private static List<String> sourceNames(List<LayerField> fields) {

@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Turns a small filter expression into a SQL fragment with bound parameters.
@@ -34,6 +35,10 @@ import java.util.Map;
  * {@code IS [NOT] NULL}, {@code IN (…)}, {@code AND}, {@code OR}, {@code NOT} and
  * parentheses. Field names containing spaces or umlauts go in double quotes, values in
  * single quotes: {@code "Gebäudehöhe" > 10 AND nutzung LIKE 'Wohn%'}.
+ *
+ * <p>A field id may be written where a name may, and without quotes:
+ * {@code 019ff731-1f0c-7de5-9100-b9022e19ea3f > 10}. That is what the message about an
+ * ambiguous name offers as the way that always resolves, so it has to work as printed.
  */
 public final class FilterParser {
 
@@ -353,6 +358,13 @@ public final class FilterParser {
 			else if (isOperatorStart(c)) {
 				index = readOperator(input, index, result);
 			}
+			// Before the number and the word: a field id starts with a hex digit or a
+			// letter, and either branch would tear it apart at the first dash.
+			else if (isFieldIdAt(input, index)) {
+				result.add(new Token(TokenType.IDENTIFIER,
+						input.substring(index, index + FIELD_ID_LENGTH), index));
+				index += FIELD_ID_LENGTH;
+			}
 			else if (Character.isDigit(c) || (c == '-' && index + 1 < input.length()
 					&& Character.isDigit(input.charAt(index + 1)))) {
 				index = readNumber(input, index, result);
@@ -391,6 +403,30 @@ public final class FilterParser {
 			index++;
 		}
 		throw new BadRequestException("Nicht geschlossenes Hochkomma ab Position " + (start + 1));
+	}
+
+	/** Characters in {@code 8-4-4-4-12}, the shape {@link java.util.UUID#toString} writes. */
+	private static final int FIELD_ID_LENGTH = 36;
+
+	/** That same shape as a pattern: hex digits everywhere the dashes are not. */
+	private static final Pattern FIELD_ID = Pattern.compile(
+			"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+
+	/**
+	 * Whether a field id, written plainly, starts here.
+	 *
+	 * <p>Recognised without quotes because the ambiguity message hands the id out as the
+	 * way that always resolves, and a way out that has to be quoted before it works is a
+	 * second thing to know. Quoting still works -- this only removes the need for it.
+	 *
+	 * <p>Nothing else can be read as this shape: a column name never contains a dash
+	 * ({@code SqlIdentifier.SAFE_COLUMN}), and a number stops at the first one. A display
+	 * name could in principle be spelled like an id, and then the name is ambiguous -- which
+	 * {@link de.kreuter.hgis.catalog.LayerFields} reports, exactly as for any other collision.
+	 */
+	private static boolean isFieldIdAt(String input, int start) {
+		return start + FIELD_ID_LENGTH <= input.length()
+				&& FIELD_ID.matcher(input).region(start, start + FIELD_ID_LENGTH).matches();
 	}
 
 	private static int readQuotedIdentifier(String input, int start, List<Token> result) {
