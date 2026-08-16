@@ -121,6 +121,36 @@ def test_the_http_client_does_not_follow_on_its_own() -> None:
     assert transport._client.follow_redirects is False
 
 
+def test_a_client_with_follow_redirects_true_is_refused() -> None:
+    """
+    The gap the pin above only half closes: it proves the default is safe,
+    not that an unsafe one is kept out.
+
+    A caller-supplied ``httpx.Client`` with ``follow_redirects=True`` resolves
+    a redirect *inside* the one call :class:`hgis.client.RequestGuard`
+    checked once -- for ``request()``, the guard's per-hop loop then never
+    runs a second iteration, because the response it sees is already the
+    final 200, not the 3xx it exists to catch; for the write itself, that
+    means it leaves again unchecked, full body and ``X-Hgis-Client`` header
+    included, at wherever the first hop pointed. Refused here, at
+    construction, before any of that becomes reachable.
+    """
+    import httpx
+
+    with pytest.raises(hgis.UnsafeTransportError) as error:
+        HttpxTransport(client=httpx.Client(follow_redirects=True))
+
+    assert "follow_redirects" in str(error.value)
+
+
+def test_a_client_with_follow_redirects_false_is_accepted() -> None:
+    """The check must not be so tight that an already-safe, caller-built client fails."""
+    import httpx
+
+    transport = HttpxTransport(client=httpx.Client(follow_redirects=False))
+    assert transport._client.follow_redirects is False
+
+
 def test_a_redirect_is_visible_to_the_caller(redirecting_server) -> None:
     """
     The floors hand the redirect back instead of resolving it, so whoever

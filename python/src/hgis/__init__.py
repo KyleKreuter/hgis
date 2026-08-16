@@ -41,11 +41,13 @@ from .errors import (
     ConflictError,
     GuardError,
     HgisError,
+    InvalidArgumentError,
     InvalidClientIdError,
     MissingDependencyError,
     NotFoundError,
     TransportError,
     UnknownNameError,
+    UnsafeTransportError,
 )
 from .layer import Field, FieldSummary, Layer, LayerDescription, TrashEntry
 from .project import Project, Selection, View
@@ -84,6 +86,8 @@ __all__ = [
     "UnknownNameError",
     "GuardError",
     "InvalidClientIdError",
+    "InvalidArgumentError",
+    "UnsafeTransportError",
     "MissingDependencyError",
     # transport, for substituting the HTTP floor
     "Transport",

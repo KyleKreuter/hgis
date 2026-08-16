@@ -28,7 +28,7 @@ from dataclasses import field as dataclass_field
 from typing import Any, Iterable, Iterator
 from urllib.parse import urlencode  # string work only, no sockets; runs in Pyodide
 
-from .errors import TransportError
+from .errors import TransportError, UnsafeTransportError
 
 DEFAULT_TIMEOUT = 30.0
 
@@ -246,6 +246,9 @@ class HttpxTransport(Transport):
             which keeps the connection pool alive across requests -- the
             difference between one TCP handshake and one per page while paging
             through a large layer.
+        :raises hgis.errors.UnsafeTransportError: ``client`` has
+            ``follow_redirects=True``. See the error's own docstring for what
+            that would silently reopen -- it was demonstrated, not guessed at.
         """
         if client is None:
             try:
@@ -259,8 +262,25 @@ class HttpxTransport(Transport):
             # than a preference: httpx would follow a redirect *inside* this one
             # call, so a request checked once could leave as a second, unchecked
             # one -- and 307/308 keep the method and the body while doing it.
-            # ReadOnlyGuard follows redirects itself, checking each hop.
+            # RequestGuard follows redirects itself, checking each hop -- but
+            # only ever sees one to check when httpx hands the 3xx back
+            # untouched, which is what follow_redirects=False guarantees.
             client = httpx.Client(follow_redirects=False)
+        elif getattr(client, "follow_redirects", False):
+            # A client the caller built and configured to follow redirects
+            # itself defeats RequestGuard just as completely as the case
+            # above would without this branch -- see UnsafeTransportError.
+            # Refused rather than silently corrected: flipping the flag here
+            # would change that client's behaviour everywhere else it is used
+            # too, which is a bigger and quieter change than an error.
+            raise UnsafeTransportError(
+                "Dieser httpx.Client hat follow_redirects=True. RequestGuard "
+                "prüft jeden Umleitungssprung selbst und kann das nur, wenn "
+                "httpx eine Umleitung unverändert zurückgibt, statt ihr selbst "
+                "zu folgen. Übergeben Sie einen Client mit "
+                "follow_redirects=False (die Vorgabe), oder lassen Sie das "
+                "Argument ganz weg."
+            )
         self._client = client
 
     def request(
@@ -322,7 +342,7 @@ class PyodideTransport(Transport):
 
     **Redirects cannot be intercepted here.** XMLHttpRequest follows them by
     itself and offers no way to turn that off, so the per-hop check that
-    :class:`hgis.client.ReadOnlyGuard` performs on CPython does not apply in
+    :class:`hgis.client.RequestGuard` performs on CPython does not apply in
     the browser. What limits the damage there is the browser itself: a page can
     only reach its own origin unless the server allows otherwise, and this
     library talks to the server that served the page. Worth knowing before this

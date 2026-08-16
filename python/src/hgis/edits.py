@@ -12,6 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
+from .errors import InvalidArgumentError
+
 if TYPE_CHECKING:
     from .client import Client
 
@@ -96,10 +98,23 @@ def apply_edits(
     delegates to; kept apart from :class:`hgis.layer.Layer` so that module stays
     about reading a layer's shape, not about the wire format of a write.
 
+    :raises hgis.errors.InvalidArgumentError: ``creates``, ``updates`` or
+        ``deletes`` is a ``str`` or ``bytes`` -- both are iterable too, and
+        walked character by character rather than refused outright, a
+        ``str`` given for ``deletes`` would quietly reach the server as a
+        list of digits rather than the fid it was meant to be
     :raises hgis.errors.ConflictError: a ``row_version`` no longer matches
     :raises hgis.errors.ApiError: 404 when an updated or deleted fid does not
         exist, 400 on an invalid value or geometry
     """
+    for name, value in (("creates", creates), ("updates", updates), ("deletes", deletes)):
+        if isinstance(value, (str, bytes)):
+            raise InvalidArgumentError(
+                f"{name} erwartet eine Liste, keine Zeichenkette: {value!r}. Als "
+                "Zeichenkette würde sie zeichenweise zerlegt und andere Objekte "
+                "treffen, als gemeint war."
+            )
+
     # Placeholders private to this one call, negative so they can never collide
     # with a real fid (fids are assigned from 1 up). Not exposed to the caller:
     # the server's clientId is this function's implementation detail, not part
@@ -123,9 +138,7 @@ def apply_edits(
                 "rowVersion": update.row_version,
                 **({"geometry": dict(update.geometry)} if update.geometry is not None else {}),
                 **(
-                    {"properties": dict(update.properties)}
-                    if update.properties is not None
-                    else {}
+                    {"properties": dict(update.properties)} if update.properties is not None else {}
                 ),
             }
             for update in updates

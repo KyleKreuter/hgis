@@ -12,7 +12,16 @@ runs green.
     HGIS_URL=http://localhost:8080 python -m pytest        # with a server
     python -m pytest -m "not live"                         # without
 
-Read-only. It sends nothing but GET.
+**Read-only, structurally, not by convention.** ``HGIS_URL`` defaults to
+``hgis.DEFAULT_BASE_URL`` -- typically the developer's own running app, real
+project data, no throwaway database behind it. Before this stage, that was
+harmless: the library had nothing but reads to offer, so nobody writing a
+test here could reach for a write by accident. That stopped being true the
+moment ``layer.delete()``, ``layer.edit()`` and the rest of the new surface
+existed to reach for. :class:`_ReadOnlyFloor` below is what keeps that from
+mattering: the ``live`` fixture hands out a client built on it, and every
+non-GET call through that client fails loudly before it reaches the network
+-- whether or not whoever adds the next test here knows any of this history.
 """
 
 from __future__ import annotations
@@ -22,10 +31,82 @@ import os
 import pytest
 
 import hgis
+from hgis.transport import DEFAULT_TIMEOUT, Response, Transport, default_transport
 
 URL = os.environ.get("HGIS_URL", hgis.DEFAULT_BASE_URL)
 
 pytestmark = pytest.mark.live
+
+
+class _ReadOnlyFloor(Transport):
+    """
+    Wraps the real floor and refuses anything but GET -- unconditionally, not
+    only for the paths :class:`hgis.client.RequestGuard` would refuse anyway.
+
+    That distinction is the point: ``RequestGuard`` now *allows* real writes,
+    so relying on it here would make this floor exactly as permissive as the
+    library itself, which is precisely what must not be true for a client
+    built against ``HGIS_URL``. See the module docstring.
+    """
+
+    def __init__(self, inner: Transport) -> None:
+        self.inner = inner
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        json: object = None,
+        timeout: float = DEFAULT_TIMEOUT,
+        headers: dict[str, str] | None = None,
+    ) -> Response:
+        if method.upper() != "GET":
+            raise AssertionError(
+                f"test_live.py hat versucht zu schreiben: {method} {url}. Diese "
+                "Testreihe läuft gegen einen echten Server und muss lesend "
+                "bleiben -- siehe _ReadOnlyFloor im Modul-Docstring."
+            )
+        return self.inner.request(method, url, json=json, timeout=timeout, headers=headers)
+
+    def events(self, url: str, *, headers=None, timeout=None):
+        # A stream is always a GET (see hgis.client.Client.events), so there
+        # is nothing here for this floor to refuse.
+        return self.inner.events(url, headers=headers, timeout=timeout)
+
+
+def test_the_read_only_floor_refuses_a_write() -> None:
+    """
+    Not conditional on a server answering, unlike the test below -- this has
+    to hold in CI too, where nothing ever listens on ``HGIS_URL`` and the one
+    real test always skips.
+    """
+
+    class _NeverCalled(Transport):
+        def request(self, *args: object, **kwargs: object) -> Response:
+            raise AssertionError("Der echte Boden wurde erreicht.")
+
+        def events(self, *args: object, **kwargs: object):
+            raise AssertionError("Der echte Boden wurde erreicht.")
+
+    floor = _ReadOnlyFloor(_NeverCalled())
+
+    with pytest.raises(AssertionError, match="test_live.py"):
+        floor.request("POST", "http://x/api/projects/p/layers", json={"name": "x"})
+    with pytest.raises(AssertionError, match="test_live.py"):
+        floor.request("DELETE", "http://x/api/layers/x")
+
+
+def test_the_read_only_floor_lets_reads_through() -> None:
+    class _Answering(Transport):
+        def request(self, method, url, json=None, timeout=DEFAULT_TIMEOUT, headers=None):
+            return Response(200, "{}")
+
+        def events(self, *args: object, **kwargs: object):
+            raise AssertionError
+
+    floor = _ReadOnlyFloor(_Answering())
+
+    assert floor.request("GET", "http://x/api/projects").status == 200
 
 
 #: A layer worth testing against holds more than one page, so paging is
@@ -72,8 +153,8 @@ def _test_subject(projects):
 
 @pytest.fixture(scope="module")
 def live() -> hgis.Client:
-    """A client, or a skip when nothing is listening."""
-    client = hgis.connect(URL, timeout=5)
+    """A client, or a skip when nothing is listening. Cannot write -- see _ReadOnlyFloor."""
+    client = hgis.connect(URL, transport=_ReadOnlyFloor(default_transport()), timeout=5)
     try:
         client.projects()
     except hgis.HgisError as error:

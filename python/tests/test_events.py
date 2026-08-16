@@ -33,7 +33,7 @@ def test_a_bare_retry_is_never_an_event() -> None:
 
 def test_a_named_event_with_data_is_dispatched() -> None:
     lines = [
-        'event: project-view-state',
+        "event: project-view-state",
         'data: {"projectId":"p1","version":3,"origin":"agent-a"}',
         "",
     ]
@@ -70,9 +70,14 @@ def test_a_field_with_no_colon_at_all_is_ignored() -> None:
 
 def test_several_events_in_one_stream_are_dispatched_separately() -> None:
     lines = [
-        "event: a", "data: 1", "",
-        ": hb", "",
-        "event: b", "data: 2", "",
+        "event: a",
+        "data: 1",
+        "",
+        ": hb",
+        "",
+        "event: b",
+        "data: 2",
+        "",
     ]
     assert list(_parse_sse(lines)) == [
         Event(name="a", data="1"),
@@ -121,7 +126,7 @@ class _Streaming(BaseHTTPRequestHandler):
         self.wfile.write(b": Live-Kanal offen\n\n")
         self.wfile.write(b": hb\n\n")
         self.wfile.write(
-            b'event: project-view-state\n'
+            b"event: project-view-state\n"
             b'data: {"projectId":"019fec3a-ef0c-775c-a14f-7535e8a676eb",'
             b'"version":3,"origin":"agent-a"}\n\n'
         )
@@ -159,7 +164,7 @@ def test_an_event_really_arrives_over_the_wire(streaming_server) -> None:
         Event(
             name="project-view-state",
             data='{"projectId":"019fec3a-ef0c-775c-a14f-7535e8a676eb",'
-                 '"version":3,"origin":"agent-a"}',
+            '"version":3,"origin":"agent-a"}',
         ),
     ]
 

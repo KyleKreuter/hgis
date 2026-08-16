@@ -1,4 +1,4 @@
-"""What can go wrong, as four exceptions.
+"""What can go wrong, each its own exception.
 
 Every one of them is an :class:`HgisError`, so a caller who wants to catch
 everything this library raises needs one name.
@@ -104,6 +104,41 @@ class InvalidClientIdError(HgisError, ValueError):
     is. Raised when the client is built rather than when it first writes: a
     name that cannot travel is a mistake in the calling program, and finding it
     at the first write means finding it late.
+    """
+
+
+class UnsafeTransportError(HgisError, ValueError):
+    """
+    An ``httpx.Client`` was handed to :class:`hgis.transport.HttpxTransport`
+    with ``follow_redirects=True``.
+
+    Also a :class:`ValueError`, because that is what a bad constructor argument
+    is. :class:`hgis.client.RequestGuard` checks a redirect one hop at a time by
+    reading the 3xx response back and deciding for itself whether to follow --
+    which only works if httpx hands that response back untouched. With
+    ``follow_redirects=True``, httpx resolves the whole chain *inside* the one
+    call the guard checked once, so its loop never runs and its per-hop check
+    never sees where the request actually went. Demonstrated: a checked
+    ``PUT`` -- full body, the client-name header included -- arrived
+    unchecked at wherever the first hop pointed.
+
+    Refused at construction rather than patched silently: quietly flipping the
+    flag on a client the caller built would change that client's behaviour
+    everywhere else it is used too, not only inside this library.
+    """
+
+
+class InvalidArgumentError(HgisError, TypeError):
+    """
+    An argument does not have the shape this library expects.
+
+    Also a :class:`TypeError`, because that is what a wrongly shaped argument
+    is. Exists for the one place a value can misbehave instead of failing
+    outright: ``str`` and ``bytes`` are iterable too, so
+    ``layer.delete_features("123")`` -- meant as one fid -- would otherwise be
+    walked character by character and quietly delete objects 1, 2 and 3
+    instead. See :meth:`hgis.layer.Layer.delete_features` and
+    :func:`hgis.edits.apply_edits`.
     """
 
 

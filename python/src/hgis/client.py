@@ -243,6 +243,16 @@ class RequestGuard(Transport):
     A hop may not change origin either. Without that rule, an injected redirect
     could send this request -- and the headers on it -- to another host.
 
+    **This depends on the floor handing a redirect response back untouched,
+    and is not merely assumed of it.** A caller who hands
+    :class:`hgis.transport.HttpxTransport` an ``httpx.Client`` configured with
+    ``follow_redirects=True`` would put this class in exactly the position
+    the paragraph above describes -- httpx resolving the whole chain *inside*
+    the one call this loop checked once, so the loop never runs a second
+    iteration and never sees where the request actually went. That
+    configuration is refused at the floor's own construction, not merely
+    discouraged here; see :class:`hgis.errors.UnsafeTransportError`.
+
     It stops mistakes, not intent: writing to hGIS from Python needs nothing
     more than ``import httpx``. What it removes is the accidental write that
     this library itself would otherwise make easy -- a wider one now than the

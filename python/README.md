@@ -248,6 +248,12 @@ ohne benannte Kennung löscht. Wer eine ganze Auswahl löschen will, nennt sie
 ausdrücklich: `layer.delete_features(layer.fids())`. Ein vergessener Filter
 kann so nie zu "alles löschen" werden.
 
+**Eine Zeichenkette ist keine Liste, auch wenn Python sie so behandelt.**
+`layer.delete_features("123")` -- fast immer als die eine Kennung 123 gemeint
+-- würde ohne eigene Prüfung Zeichen für Zeichen zerlegt und die Objekte 1, 2
+und 3 löschen. Die Bibliothek lehnt eine Zeichenkette hier mit
+`hgis.InvalidArgumentError` ab, statt sie stillschweigend so zu lesen.
+
 ### Was unwiederbringlich ist
 
 | Vorgang | Rückgängig zu machen? |
@@ -337,6 +343,8 @@ Alle Fehler erben von `hgis.HgisError`.
 | `UnknownNameError` | Kein Projekt oder Layer trägt diesen Namen. |
 | `MissingDependencyError` | Ein wahlfreies Paket fehlt. |
 | `GuardError` | Die Anfrage ist nicht vorgesehen, siehe [Was der Wächter durchlässt](#was-der-wächter-durchlässt). |
+| `InvalidArgumentError` | Ein Argument hat nicht die erwartete Form, z. B. eine Zeichenkette statt einer Liste bei `delete_features(...)`. |
+| `UnsafeTransportError` | Ein übergebener `httpx.Client` hat `follow_redirects=True` und wird deshalb abgelehnt, siehe [Zwei Böden für den Transport](#zwei-böden-für-den-transport). |
 | `InvalidClientIdError` | Der Client-Name passt nicht zu dem, was der Server annimmt. |
 
 ## Der Client-Name
@@ -495,6 +503,19 @@ Sie können den Boden ersetzen:
 ```python
 client = hgis.connect("http://localhost:8080", transport=MeinTransport())
 ```
+
+**`HttpxTransport` lehnt einen mitgebrachten `httpx.Client` mit
+`follow_redirects=True` ab** (`hgis.UnsafeTransportError`). Der Grund liegt
+im Wächter, nicht im Boden: `RequestGuard` prüft jeden Umleitungssprung
+selbst, indem er die 3xx-Antwort liest und selbst entscheidet, ob er folgt --
+das setzt voraus, dass `httpx` eine Umleitung unverändert zurückgibt, statt
+ihr selbst zu folgen. Mit `follow_redirects=True` löst `httpx` die ganze
+Kette **innerhalb** des einen Aufrufs auf, den der Wächter schon geprüft hat;
+seine Schleife läuft dann kein zweites Mal, und ein durchgelassener
+Schreibvorgang -- vollständiger Rumpf, Client-Name-Kopfzeile eingeschlossen
+-- verlässt die Bibliothek so ungeprüft an der Stelle, auf die der erste
+Sprung zeigt. Übergeben Sie einen Client mit `follow_redirects=False` (die
+Vorgabe), oder lassen Sie das Argument weg.
 
 Ein `Transport` bietet zwei Formen an: `request()`, eine Anfrage gegen eine
 Antwort, und `events()`, ein Strom. `HttpxTransport.events()` öffnet

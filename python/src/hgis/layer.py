@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Iterator, Sequence
 
 from .edits import EditResult, FeatureUpdate, NewFeature
 from .edits import apply_edits as _apply_edits
-from .errors import ApiError
+from .errors import ApiError, InvalidArgumentError
 from .query import PAGE_SIZE, Feature, Query, _column_to_name, _to_feature
 
 if TYPE_CHECKING:
@@ -675,7 +675,18 @@ class Layer:
         attributes -- of everything deleted this way; recovering one means
         reading it from there and calling :meth:`insert` again. This library
         does not do that for you.
+
+        :raises hgis.errors.InvalidArgumentError: ``fids`` is a ``str`` or
+            ``bytes``. Both are iterable too, so ``layer.delete_features("123")``
+            -- almost certainly meant as the one fid 123 -- would otherwise be
+            walked character by character into ``[1, 2, 3]`` and delete three
+            objects that have nothing to do with each other.
         """
+        if isinstance(fids, (str, bytes)):
+            raise InvalidArgumentError(
+                f"delete_features() erwartet eine Liste von Fids, keine Zeichenkette: "
+                f"{fids!r}. Meinten Sie delete_features([{fids!r}])?"
+            )
         return self.edit(deletes=list(fids))
 
 
