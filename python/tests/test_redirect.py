@@ -151,6 +151,52 @@ def test_a_client_with_follow_redirects_false_is_accepted() -> None:
     assert transport._client.follow_redirects is False
 
 
+def test_a_client_flipped_to_follow_redirects_after_construction_is_still_refused() -> None:
+    """
+    The reported break: passing the check at construction proves nothing
+    about the client's value a moment later, because ``follow_redirects`` is
+    a plain, mutable attribute on an object the caller owns -- not something
+    this library can freeze.
+
+    >>> client = httpx.Client(follow_redirects=False)
+    >>> transport = HttpxTransport(client=client)   # passes
+    >>> client.follow_redirects = True              # flipped afterwards
+    >>> transport.request(...)                      # must still refuse
+
+    A script reusing one ``httpx.Client`` for hgis and for unrelated calls,
+    flipping this flag somewhere for those other calls, would trigger this
+    without meaning to -- so the check has to run again on every call, not
+    only once.
+    """
+    import httpx
+
+    client = httpx.Client(follow_redirects=False)
+    transport = HttpxTransport(client=client)
+
+    client.follow_redirects = True
+
+    with pytest.raises(hgis.UnsafeTransportError):
+        transport.request("GET", "http://x/api/projects")
+
+
+def test_events_refuses_a_client_flipped_after_construction_too() -> None:
+    """
+    The same check, the other of the two calls this floor makes.
+    ``events()`` is a generator -- its body, this check included, does not
+    run until the first ``next()``, so the request has to reach that point
+    for the refusal to fire, same as the network call it also gates.
+    """
+    import httpx
+
+    client = httpx.Client(follow_redirects=False)
+    transport = HttpxTransport(client=client)
+
+    client.follow_redirects = True
+
+    with pytest.raises(hgis.UnsafeTransportError):
+        next(transport.events("http://x/api/events"))
+
+
 def test_a_redirect_is_visible_to_the_caller(redirecting_server) -> None:
     """
     The floors hand the redirect back instead of resolving it, so whoever

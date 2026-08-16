@@ -84,6 +84,30 @@ class EditResult:
         )
 
 
+#: Iterable types that are actually one value, not a collection of them.
+#: Passed where a list of fids or edits was expected, each of these is walked
+#: element by element instead of failing outright -- a ``str`` splits into
+#: characters (``"123"`` -> ``['1', '2', '3']``); ``bytes``, ``bytearray`` and
+#: ``memoryview`` split into byte values (``b"123"`` -> ``[49, 50, 51]``, the
+#: ASCII codes of the digits, not the digits). Both land on the server as a
+#: batch touching several unrelated objects instead of the one that was meant.
+_SCALAR_ITERABLES = (str, bytes, bytearray, memoryview)
+
+
+def _reject_scalar_iterable(name: str, value: Any) -> None:
+    """
+    :raises hgis.errors.InvalidArgumentError: ``value`` is one of
+        :data:`_SCALAR_ITERABLES` -- see there for what it would otherwise
+        quietly become
+    """
+    if isinstance(value, _SCALAR_ITERABLES):
+        raise InvalidArgumentError(
+            f"{name} erwartet eine Liste, keine einzelne Zeichen- oder Bytefolge: "
+            f"{value!r}. Zerlegt in ihre einzelnen Zeichen oder Bytes, würde sie "
+            "andere Objekte treffen, als gemeint war."
+        )
+
+
 def apply_edits(
     client: "Client",
     layer_id: str,
@@ -99,21 +123,15 @@ def apply_edits(
     about reading a layer's shape, not about the wire format of a write.
 
     :raises hgis.errors.InvalidArgumentError: ``creates``, ``updates`` or
-        ``deletes`` is a ``str`` or ``bytes`` -- both are iterable too, and
-        walked character by character rather than refused outright, a
-        ``str`` given for ``deletes`` would quietly reach the server as a
-        list of digits rather than the fid it was meant to be
+        ``deletes`` is one of :data:`_SCALAR_ITERABLES` -- passed for
+        ``deletes``, a ``str`` or ``bytes`` given as one fid would otherwise
+        quietly reach the server as several
     :raises hgis.errors.ConflictError: a ``row_version`` no longer matches
     :raises hgis.errors.ApiError: 404 when an updated or deleted fid does not
         exist, 400 on an invalid value or geometry
     """
     for name, value in (("creates", creates), ("updates", updates), ("deletes", deletes)):
-        if isinstance(value, (str, bytes)):
-            raise InvalidArgumentError(
-                f"{name} erwartet eine Liste, keine Zeichenkette: {value!r}. Als "
-                "Zeichenkette würde sie zeichenweise zerlegt und andere Objekte "
-                "treffen, als gemeint war."
-            )
+        _reject_scalar_iterable(name, value)
 
     # Placeholders private to this one call, negative so they can never collide
     # with a real fid (fids are assigned from 1 up). Not exposed to the caller:

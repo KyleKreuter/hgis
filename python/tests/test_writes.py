@@ -439,17 +439,19 @@ def test_delete_features_with_nothing_sends_no_request() -> None:
     assert result.deleted == 0
 
 
-@pytest.mark.parametrize("fids", ["123", b"123"])
-def test_delete_features_rejects_a_string_instead_of_a_list(fids) -> None:
+@pytest.mark.parametrize("fids", ["123", b"123", bytearray(b"123"), memoryview(b"123")])
+def test_delete_features_rejects_a_scalar_iterable_instead_of_a_list(fids) -> None:
     """
-    The reported break, as a test: a str/bytes is iterable too, so without
-    this check ``delete_features("123")`` -- almost certainly meant as the
-    one fid 123 -- would walk it character by character and delete objects
-    1, 2 and 3 instead. No request may leave for either shape.
+    The reported break, as a test, for all four shapes that are iterable but
+    are really one value: without this check, ``delete_features("123")`` --
+    almost certainly meant as the one fid 123 -- would walk it character by
+    character and delete objects 1, 2 and 3 instead; the three bytes-like
+    shapes would walk it byte by byte and delete 49, 50 and 51. No request
+    may leave for any of the four.
     """
 
     def handle(request: object) -> Response:  # pragma: no cover - must not run
-        raise AssertionError("Eine Zeichenkette haette nichts senden duerfen.")
+        raise AssertionError("Das haette nichts senden duerfen.")
 
     client, transport = _client(handle)
     layer = _layer(client)
@@ -458,6 +460,23 @@ def test_delete_features_rejects_a_string_instead_of_a_list(fids) -> None:
         layer.delete_features(fids)
 
     assert transport.count == 0
+
+
+@pytest.mark.parametrize("fids", [[123], (123,), {123}, frozenset({123}), range(120, 124)])
+def test_delete_features_accepts_real_collections(fids) -> None:
+    """The check above must not be so tight that an ordinary collection fails."""
+
+    def handle(request: object) -> Response:
+        return Response(
+            200, '{"createdFids":{},"updated":0,"deleted":1,"dataVersion":1,"featureCount":1}'
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.delete_features(fids)
+
+    assert transport.count == 1
 
 
 def test_edit_rejects_a_string_for_deletes_too() -> None:

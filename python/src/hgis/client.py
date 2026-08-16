@@ -250,8 +250,16 @@ class RequestGuard(Transport):
     the paragraph above describes -- httpx resolving the whole chain *inside*
     the one call this loop checked once, so the loop never runs a second
     iteration and never sees where the request actually went. That
-    configuration is refused at the floor's own construction, not merely
-    discouraged here; see :class:`hgis.errors.UnsafeTransportError`.
+    configuration is refused, not merely discouraged: on every call
+    :class:`hgis.transport.HttpxTransport` makes, not only when it is built,
+    since ``follow_redirects`` is a plain attribute the caller can still flip
+    afterwards on a client they own; see
+    :class:`hgis.errors.UnsafeTransportError`. That guarantee belongs to
+    ``HttpxTransport`` specifically -- a caller who substitutes the *entire*
+    floor with their own :class:`~hgis.transport.Transport`, one that builds
+    its own following ``httpx.Client`` internally, sits outside what either
+    class can see. That is intent, not the accident this paragraph guards
+    against.
 
     It stops mistakes, not intent: writing to hGIS from Python needs nothing
     more than ``import httpx``. What it removes is the accidental write that

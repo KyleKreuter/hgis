@@ -109,22 +109,27 @@ class InvalidClientIdError(HgisError, ValueError):
 
 class UnsafeTransportError(HgisError, ValueError):
     """
-    An ``httpx.Client`` was handed to :class:`hgis.transport.HttpxTransport`
-    with ``follow_redirects=True``.
+    :class:`hgis.transport.HttpxTransport` is wrapping, or was just handed, an
+    ``httpx.Client`` with ``follow_redirects=True``.
 
-    Also a :class:`ValueError`, because that is what a bad constructor argument
-    is. :class:`hgis.client.RequestGuard` checks a redirect one hop at a time by
-    reading the 3xx response back and deciding for itself whether to follow --
-    which only works if httpx hands that response back untouched. With
-    ``follow_redirects=True``, httpx resolves the whole chain *inside* the one
-    call the guard checked once, so its loop never runs and its per-hop check
-    never sees where the request actually went. Demonstrated: a checked
-    ``PUT`` -- full body, the client-name header included -- arrived
+    Also a :class:`ValueError`, because that is what an unusable configuration
+    value is. :class:`hgis.client.RequestGuard` checks a redirect one hop at a
+    time by reading the 3xx response back and deciding for itself whether to
+    follow -- which only works if httpx hands that response back untouched.
+    With ``follow_redirects=True``, httpx resolves the whole chain *inside*
+    the one call the guard checked once, so its loop never runs and its
+    per-hop check never sees where the request actually went. Demonstrated: a
+    checked ``PUT`` -- full body, the client-name header included -- arrived
     unchecked at wherever the first hop pointed.
 
-    Refused at construction rather than patched silently: quietly flipping the
-    flag on a client the caller built would change that client's behaviour
-    everywhere else it is used too, not only inside this library.
+    Checked when a :class:`~hgis.transport.HttpxTransport` is built *and*
+    again before every request or event stream it opens -- ``follow_redirects``
+    is a plain, mutable attribute on an object the caller owns, so a client
+    that passed the check once can still be set to follow redirects a moment
+    later, by code with no idea this library exists. Refused every time
+    rather than silently turned back off: flipping the flag here would change
+    that client's behaviour everywhere else it is used too, and do it
+    quietly.
     """
 
 

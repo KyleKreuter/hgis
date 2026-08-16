@@ -109,6 +109,54 @@ def test_the_read_only_floor_lets_reads_through() -> None:
     assert floor.request("GET", "http://x/api/projects").status == 200
 
 
+def test_every_client_in_this_file_is_built_on_the_read_only_floor() -> None:
+    """
+    ``_ReadOnlyFloor`` only protects a client built on it. Nothing stops a
+    future test in this file from calling ``hgis.connect(...)`` or
+    ``hgis.Client(...)`` on its own, against its own server, without it --
+    that client would carry every write this stage's ``RequestGuard`` now
+    allows, unguarded, and the mistake would not show up until it ran
+    against real data.
+
+    So this reads the file's own syntax tree and proves the property instead
+    of trusting the next person to remember it -- the same shape as
+    test_client_id.py's "the header name is spelled in one place" and
+    test_transport.py's "only transport.py imports httpx".
+    """
+    import ast
+    from pathlib import Path
+
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"), filename=__file__)
+
+    def _name(node: ast.expr) -> str | None:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        return None
+
+    client_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and _name(node.func) in ("connect", "Client")
+    ]
+    assert client_calls, "Diese Datei baut gar keinen hgis.Client mehr -- Test veraltet."
+
+    for call in client_calls:
+        transport_kwarg = next((kw for kw in call.keywords if kw.arg == "transport"), None)
+        assert transport_kwarg is not None, (
+            f"Zeile {call.lineno}: hgis.{_name(call.func)}(...) ohne transport=... -- "
+            "kann einen ungeschützten Client gegen HGIS_URL bauen."
+        )
+        built_on_the_floor = isinstance(transport_kwarg.value, ast.Call) and (
+            _name(transport_kwarg.value.func) == "_ReadOnlyFloor"
+        )
+        assert built_on_the_floor, (
+            f"Zeile {call.lineno}: transport ist nicht _ReadOnlyFloor(...) -- "
+            "der Schreibschutz dieser Datei gilt nicht für diesen Client."
+        )
+
+
 #: A layer worth testing against holds more than one page, so paging is
 #: actually exercised, and fewer than the 100.000 ids the fids endpoint will
 #: return, so asking for all of them is not an error by itself.

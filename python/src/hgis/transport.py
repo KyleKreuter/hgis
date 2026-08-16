@@ -249,6 +249,8 @@ class HttpxTransport(Transport):
         :raises hgis.errors.UnsafeTransportError: ``client`` has
             ``follow_redirects=True``. See the error's own docstring for what
             that would silently reopen -- it was demonstrated, not guessed at.
+            Checked again on every call this floor makes, not only here --
+            see :meth:`_require_no_follow_redirects`.
         """
         if client is None:
             try:
@@ -266,13 +268,47 @@ class HttpxTransport(Transport):
             # only ever sees one to check when httpx hands the 3xx back
             # untouched, which is what follow_redirects=False guarantees.
             client = httpx.Client(follow_redirects=False)
-        elif getattr(client, "follow_redirects", False):
-            # A client the caller built and configured to follow redirects
-            # itself defeats RequestGuard just as completely as the case
-            # above would without this branch -- see UnsafeTransportError.
-            # Refused rather than silently corrected: flipping the flag here
-            # would change that client's behaviour everywhere else it is used
-            # too, which is a bigger and quieter change than an error.
+        self._client = client
+        # Checked now for the earliest possible failure, and again before
+        # every call -- see the method's own docstring for why construction
+        # alone is not enough.
+        self._require_no_follow_redirects()
+
+    def _require_no_follow_redirects(self) -> None:
+        """
+        Refuse to go on if the wrapped client would follow a redirect itself.
+
+        Called before :meth:`__init__` accepts a client and again at the top
+        of every :meth:`request` and :meth:`events` call -- not only once.
+        ``follow_redirects`` is a plain, mutable attribute on an object the
+        *caller* owns, so passing this check at construction proves nothing
+        about its value a moment later:
+
+        >>> client = httpx.Client(follow_redirects=False)
+        >>> transport = HttpxTransport(client=client)   # passes
+        >>> client.follow_redirects = True              # flipped afterwards
+        >>> transport.request(...)                      # must still refuse
+
+        A script that reuses one ``httpx.Client`` for hgis and for other
+        calls, and flips this flag somewhere for those other calls, would
+        trigger exactly that without meaning to. Checking here, on every
+        call, is what makes the refusal a standing property of this floor
+        rather than a one-time gate its caller can step around by accident.
+
+        This is a property of :class:`HttpxTransport` specifically, not of
+        every :class:`Transport`. Substituting the *entire* floor with a
+        caller's own implementation -- one that builds its own following
+        httpx.Client internally, say -- sits outside what this class can see
+        or enforce; see :class:`RequestGuard`'s own docstring: "stops
+        mistakes, not intent." Replacing the floor is intentional in a way
+        that flipping one attribute on a shared client is not.
+
+        :raises hgis.errors.UnsafeTransportError: see :meth:`__init__`
+        """
+        if getattr(self._client, "follow_redirects", False):
+            # Refused rather than silently corrected: flipping the flag back
+            # here would change this client's behaviour everywhere else it is
+            # used too, which is a bigger and quieter change than an error.
             raise UnsafeTransportError(
                 "Dieser httpx.Client hat follow_redirects=True. RequestGuard "
                 "prüft jeden Umleitungssprung selbst und kann das nur, wenn "
@@ -281,7 +317,6 @@ class HttpxTransport(Transport):
                 "follow_redirects=False (die Vorgabe), oder lassen Sie das "
                 "Argument ganz weg."
             )
-        self._client = client
 
     def request(
         self,
@@ -291,6 +326,7 @@ class HttpxTransport(Transport):
         timeout: float = DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
     ) -> Response:
+        self._require_no_follow_redirects()
         import httpx
 
         try:
@@ -308,6 +344,7 @@ class HttpxTransport(Transport):
         headers: dict[str, str] | None = None,
         timeout: float | None = None,
     ) -> Iterator[Event]:
+        self._require_no_follow_redirects()
         import httpx
 
         try:
