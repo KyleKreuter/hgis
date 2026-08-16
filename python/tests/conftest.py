@@ -7,9 +7,18 @@ data -- 1003 buildings in "Gebäude Speicherstadt", whose fields are called
 two pages are both properties of the real thing, and both are what the tests
 here would otherwise have to invent.
 
-The one file written by hand is ``view-state-with-selection.json``: setting a
-selection means writing to the server, and these tests do not write anywhere.
-Its shape is copied from a real view state.
+Two files were written by hand, and both say why:
+
+* ``view-state-with-selection.json`` -- setting a selection means writing to
+  the server, and these tests do not write anywhere. Its shape is copied from a
+  real view state.
+* ``layer-ambiguous.json`` -- five fields of the real "Straßenbaumkataster
+  Hamburg", with their real ids, names, columns and types, trimmed from
+  twenty-four to the five that matter. It carries the collision that actually
+  occurs in that layer: "Stammumfang Quelle" has the column ``stammumfang``
+  while "Stammumfang" has ``stammumfang_z``, so the word "stammumfang" names
+  two different fields. The full response could not be fetched afterwards
+  because the server had been shut down.
 """
 
 from __future__ import annotations
@@ -30,6 +39,9 @@ RESPONSES = Path(__file__).parent / "responses"
 PROJECT_ID = "019fec3a-ef0c-775c-a14f-7535e8a676eb"
 LAYER_ID = "019fecb8-6f1d-7f11-abbf-beeeb5953247"
 OTHER_LAYER_ID = "019fecc1-48a2-76b7-8732-019e83d5532a"
+
+#: The tree register, whose field names collide. See the module docstring.
+AMBIGUOUS_LAYER_ID = "019ff731-1f0c-7de5-9100-b9022e19ea3f"
 
 
 def load(name: str) -> str:
@@ -115,6 +127,8 @@ def stub_server(request: Recorded) -> Response:
 
     if path == f"/api/layers/{LAYER_ID}":
         return ok("layer.json")
+    if path == f"/api/layers/{AMBIGUOUS_LAYER_ID}":
+        return ok("layer-ambiguous.json")
     if path == f"/api/layers/{OTHER_LAYER_ID}":
         return ok("layer.json")
     if path == f"/api/layers/{LAYER_ID}/features/fids":
@@ -138,6 +152,37 @@ def stub_server(request: Recorded) -> Response:
         if field_name == "Baujahr":
             return ok("classify-baujahr.json")
         return Response(400, load("error-unknown-field.json"))
+
+    if path.startswith(f"/api/layers/{AMBIGUOUS_LAYER_ID}/"):
+        return _ambiguous_layer_statistics(request, path)
+
+    raise AssertionError(f"Unerwartete Anfrage: {request.method} {request.url}")
+
+
+def _ambiguous_layer_statistics(request: Recorded, path: str) -> Response:
+    """
+    Statistics for the tree register, and a refusal for an ambiguous name.
+
+    This is the point of that layer in the suite: a request naming
+    "stammumfang" or "kronendurchmesser" is answered the way the server will
+    answer it -- with a 400 -- so a test cannot pass by sending a word that
+    reaches two fields.
+    """
+    field_name = request.param("field")
+    if field_name and field_name.casefold() in {"stammumfang", "kronendurchmesser"}:
+        return Response(
+            400,
+            '{"detail":"Mehrdeutiges Feld: ' + field_name + '. Gemeint sein kann: '
+            'Stammumfang Quelle, Stammumfang. Verwenden Sie die Feld-Id.",'
+            '"status":400,"title":"Ungültige Anfrage"}',
+        )
+
+    if path.endswith("/classify"):
+        return ok("classify-baujahr.json")
+    if path.endswith("/values"):
+        return ok("values-strasse.json")
+    if path.endswith("/features"):
+        return _cut_to_size("features-page1.json", int(request.param("size") or 200))
 
     raise AssertionError(f"Unerwartete Anfrage: {request.method} {request.url}")
 
@@ -202,6 +247,15 @@ def layer(client: hgis.Client, transport: FakeTransport) -> hgis.Layer:
     counts only its own.
     """
     result = client.layer(LAYER_ID)
+    transport.requests.clear()
+    transport.bodies.clear()
+    return result
+
+
+@pytest.fixture
+def ambiguous_layer(client: hgis.Client, transport: FakeTransport) -> hgis.Layer:
+    """The tree register, whose field names collide. See the module docstring."""
+    result = client.layer(AMBIGUOUS_LAYER_ID)
     transport.requests.clear()
     transport.bodies.clear()
     return result

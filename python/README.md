@@ -35,10 +35,10 @@ Der Server rechnet. Python bekommt das Ergebnis.
 ```python
 # Falsch: holt 229.876 Zeilen in den Speicher
 df = layer.to_dataframe()
-gross = df[df.stammumfang > 300]
+alt = df[df.pflanzjahr < 1950]
 
-# Richtig: der Server filtert, Python bekommt 2.310 Zeilen
-gross = layer.where("stammumfang > 300").to_dataframe()
+# Richtig: der Server filtert, Python bekommt nur die Treffer
+alt = layer.where("pflanzjahr < 1950").to_dataframe()
 ```
 
 Daraus folgt die verzögerte Auswertung. `where()`, `bbox()`, `search()` und
@@ -49,7 +49,7 @@ Daraus folgt die verzögerte Auswertung. `where()`, `bbox()`, `search()` und
 ```python
 q = layer.where("pflanzjahr > 1990")       # keine Anfrage
 q = q.bbox(9.9, 53.5, 10.1, 53.6)          # keine Anfrage
-q = q.order_by("stammumfang", desc=True)   # keine Anfrage
+q = q.order_by("pflanzjahr", desc=True)    # keine Anfrage
 
 q.count()                                  # genau eine Anfrage
 ```
@@ -84,6 +84,9 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 |---|---|
 | `layer.describe()` | vollständige Beschreibung, druckbar |
 | `layer.fields()` | `list[Field]` |
+| `layer.field(name)` | ein Feld, auch nach Feld-Id |
+| `layer.ambiguous_names()` | Namen, die zwei Felder treffen |
+| `layer.reference(feld)` | die eindeutige Schreibweise eines Felds |
 | `layer.count()` | Objektzahl |
 | `layer.feature(fid)` | ein Objekt mit allen Feldern |
 | `layer.values(feld)` | Werte mit Häufigkeit |
@@ -108,9 +111,10 @@ Der Server prüft den Ausdruck gegen die Felder des Layers.
 ```python
 layer.where("pflanzjahr > 1990")
 layer.where("gattung LIKE 'Quercus%'")
-layer.where('"Kronendurchmesser" IS NOT NULL')
+layer.where('"Gattung Deutsch" IS NOT NULL')
 layer.where("bezirk IN ('Wandsbek', 'Altona')")
 layer.where("pflanzjahr > 1990 AND bezirk = 'Wandsbek'")
+layer.where("fid IN (12, 47, 108)")
 ```
 
 Setzen Sie Feldnamen mit Leerzeichen oder Umlauten in doppelte Anführungszeichen.
@@ -119,7 +123,38 @@ Setzen Sie Werte in einfache Anführungszeichen.
 Der Server versteht `= <> != < <= > >=`, `LIKE`, `ILIKE`, `IS [NOT] NULL`,
 `IN`, `AND`, `OR`, `NOT` und Klammern.
 
-`fid` ist kein Feld. Sie können nicht danach filtern.
+## Mehrdeutige Feldnamen
+
+Ein Feld hat drei Namen. Nur einer davon trifft immer genau ein Feld.
+
+| Bezeichner | Beispiel | Eindeutig? |
+|---|---|---|
+| Anzeigename | `Stammumfang` | nein |
+| Spaltenname | `stammumfang_z` | nein |
+| Feld-Id | `019ff731-1f15-7f4f-...` | ja |
+
+Ein Import kann zwei Felder erzeugen, die sich einen Namen teilen. Im
+Straßenbaumkataster trägt `Stammumfang Quelle` die Spalte `stammumfang`, und
+`Stammumfang` trägt `stammumfang_z`. Das Wort `stammumfang` trifft damit zwei
+Felder. Der Server lehnt es ab und nennt beide.
+
+Die Bibliothek hilft Ihnen dabei:
+
+```python
+layer.ambiguous_names()          # {'stammumfang', 'kronendurchmesser'}
+layer.field("stammumfang")       # UnknownNameError, nennt beide Felder und Ids
+layer.field("stammumfang_z")     # findet das Feld
+layer.reference(feld)            # die Schreibweise, die genau dieses Feld trifft
+```
+
+`describe()` markiert solche Felder und zeigt ihre Id:
+
+```
+Stammumfang (text)  mehrdeutig, Id 019ff731-1f15-7f4f-ba6a-804ecd372cd5  leer 0.5%
+```
+
+Nutzen Sie `layer.reference(feld)`, wenn Sie einen Feldnamen in einen Filter
+oder eine Sortierung schreiben. `describe()` tut das bereits von sich aus.
 
 ## Fehler nennen das Gültige
 
@@ -186,10 +221,10 @@ lässt die Statistik weg und liefert nur Namen und Typen.
 Der Server speichert die Auswahl je Layer.
 
 ```python
-gross = layer.where("stammumfang > 300").fids()
-project.select(gross)                  # der Nutzer sieht die Auswahl
+alt = layer.where("pflanzjahr < 1950").fids()
+project.select(alt)                  # der Nutzer sieht die Auswahl
 
-project.selection()                    # <hgis.Selection Layer='...' Objekte=2310>
+project.selection()              # <hgis.Selection Layer='...' Objekte=4711>
 ```
 
 `select()` macht den Layer zum aktiven Layer. Eine Auswahl in einem Layer, den
@@ -252,3 +287,6 @@ python -m pytest -m "not live"                        # ohne
 - Kein Live-Kanal, keine Ereignisse.
 - `to_dataframe()` überträgt GeoJSON. Arrow und GeoParquet sind eine Frage der
   Geschwindigkeit. Sie kommen später.
+
+Die Bibliothek fragt nie mehr als 1000 Zeilen je Seite an. Das ist die
+Obergrenze des Servers. Er lehnt einen größeren Wert ab.

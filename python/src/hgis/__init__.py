@@ -9,9 +9,9 @@ Read hGIS from Python.
 
     print(layer.describe())
 
-    big = layer.where("stammumfang > 300").bbox(9.9, 53.5, 10.1, 53.6)
-    print(big.count())
-    project.select(big.fids())
+    alt = layer.where("pflanzjahr < 1950").bbox(9.9, 53.5, 10.1, 53.6)
+    print(alt.count())
+    project.select(alt.fids())
 
 The one rule worth knowing: the server does the work. ``where``, ``bbox``,
 ``search`` and ``order_by`` describe a restriction and send nothing; ``count``,

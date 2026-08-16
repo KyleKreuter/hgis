@@ -335,3 +335,122 @@ def test_the_view_reports_where_the_map_stands(project) -> None:
     assert view.center[0] == pytest.approx(10.006136398575336)
     assert view.basemap == "osm"
     assert "Zoom=15.11" in repr(view)
+
+
+# --- ambiguous field names -------------------------------------------------
+#
+# Neither source names nor column names are unique. In the real tree register
+# "Stammumfang Quelle" carries the column `stammumfang` while "Stammumfang"
+# carries `stammumfang_z`, so the word "stammumfang" names two fields. The
+# server resolves such a name one way for a filter and another for a sort,
+# which is how a query quietly answers about the wrong column.
+
+
+def test_fields_carry_their_id(layer) -> None:
+    """The one reference that cannot collide."""
+    assert all(item.id for item in layer.fields())
+    assert layer.field("Höhe").id == "019fecb8-6f22-725a-ad67-57e4211fb2fc"
+
+
+def test_a_field_is_found_by_id(ambiguous_layer) -> None:
+    """Where the name is ambiguous, the id is the only way in."""
+    found = ambiguous_layer.field("019ff731-1f15-7f4f-ba6a-804ecd372cd5")
+    assert found.name == "Stammumfang"
+    assert found.column == "stammumfang_z"
+
+
+def test_colliding_names_are_recognised(ambiguous_layer) -> None:
+    """Both collisions in that layer, and nothing else."""
+    assert ambiguous_layer.ambiguous_names() == {"stammumfang", "kronendurchmesser"}
+
+
+def test_an_ambiguous_name_is_refused_with_both_candidates(ambiguous_layer) -> None:
+    """
+    Picking one would be a guess that looks like an answer.
+
+    The message names both fields and their ids, the same way the server's own
+    errors name what would have worked.
+    """
+    with pytest.raises(hgis.UnknownNameError) as error:
+        ambiguous_layer.field("stammumfang")
+
+    message = str(error.value)
+    assert "Mehrdeutiges Feld: stammumfang" in message
+    assert "Stammumfang Quelle (019ff731-1f15-7eb4-9118-e72706ced2ba)" in message
+    assert "Stammumfang (019ff731-1f15-7f4f-ba6a-804ecd372cd5)" in message
+    assert "Feld-Id" in message
+
+
+def test_an_unambiguous_name_still_resolves(ambiguous_layer) -> None:
+    """Only the colliding spellings are refused, not the whole layer."""
+    assert ambiguous_layer.field("BaumID").column == "baumid"
+    assert ambiguous_layer.field("stammumfang_z").name == "Stammumfang"
+    assert ambiguous_layer.field("Stammumfang Quelle").column == "stammumfang"
+
+
+def test_the_unique_reference_avoids_the_collision(ambiguous_layer) -> None:
+    """
+    The spelling that names exactly one field: the source name where it is
+    unique, otherwise the column name.
+    """
+    by_name = {item.name: item for item in ambiguous_layer.fields()}
+
+    assert ambiguous_layer.reference(by_name["BaumID"]) == "BaumID"
+    # "Stammumfang Quelle" is unique as a source name, even though its column
+    # is not.
+    assert ambiguous_layer.reference(by_name["Stammumfang Quelle"]) == "Stammumfang Quelle"
+    # "Stammumfang" is not; its column is.
+    assert ambiguous_layer.reference(by_name["Stammumfang"]) == "stammumfang_z"
+
+
+def test_describe_asks_about_one_field_at_a_time(ambiguous_layer, transport) -> None:
+    """
+    Every statistics request names a field that cannot be mistaken.
+
+    Sending the ambiguous word would describe one field twice and the other
+    never -- and on a newer server it is refused outright.
+    """
+    ambiguous_layer.describe()
+
+    asked = [
+        request.param("field")
+        for request in transport.requests
+        if request.param("field")
+    ]
+    assert "stammumfang" not in asked
+    assert "kronendurchmesser" not in asked
+    assert "Stammumfang Quelle" in asked
+    assert "stammumfang_z" in asked
+    assert len(asked) == len(set(asked)) == 5
+
+
+def test_describe_marks_ambiguous_fields_with_their_id(ambiguous_layer) -> None:
+    """
+    So the line an agent reads carries the reference that reaches one field.
+
+    Without it, a description of this layer would name two fields "the same"
+    and leave no way to tell a filter which one is meant.
+    """
+    description = ambiguous_layer.describe(stats=False)
+    text = str(description)
+
+    marked = [item for item in description.fields if item.ambiguous]
+    assert {item.name for item in marked} == {"Stammumfang", "Kronendurchmesser"}
+    assert "mehrdeutig, Id 019ff731-1f15-7f4f-ba6a-804ecd372cd5" in text
+    # A unique name is not cluttered with an id it does not need.
+    assert not next(f for f in description.fields if f.name == "BaumID").ambiguous
+
+
+def test_describe_never_asks_for_more_rows_than_allowed(layer, transport) -> None:
+    """
+    A sample size above the ceiling is refused with a 400.
+
+    Clamping here costs nothing; letting it through would turn a harmless
+    argument into a failed description.
+    """
+    layer.describe(stats=False, sample=5000)
+    assert transport.requests[0].param("size") == "1000"
+
+    transport.requests.clear()
+    layer.describe(stats=False, sample=0)
+    assert transport.requests[0].param("size") == "1"

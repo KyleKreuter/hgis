@@ -7,7 +7,7 @@ from dataclasses import field as dataclass_field
 from typing import TYPE_CHECKING, Any, Iterator
 
 from .errors import ApiError
-from .query import Feature, Query, _column_to_name, _to_feature
+from .query import PAGE_SIZE, Feature, Query, _column_to_name, _to_feature
 
 if TYPE_CHECKING:
     from .client import Client
@@ -25,13 +25,21 @@ class Field:
     """
     One attribute of a layer.
 
-    :param name: what the UI shows and what a filter should use -- the source
-        name, as it came out of the imported file
+    Three of these name the same field, and only one of them always names it
+    alone. Neither the source name nor the column name is guaranteed unique:
+    an import can produce "Stammumfang Quelle" with the column ``stammumfang``
+    beside "Stammumfang" with the column ``stammumfang_z``, and then the word
+    "stammumfang" matches both. The id is the identifier that cannot collide.
+
+    :param id: this field's own identifier, unique by construction
+    :param name: what the UI shows -- the source name, as it came out of the
+        imported file. Usually what a filter should use
     :param column: the SQL column, which is how it is keyed in a raw feature
         response. Filters accept this spelling too
     :param type: the PostgreSQL type, e.g. ``text``, ``bigint``
     """
 
+    id: str
     name: str
     column: str
     type: str
@@ -133,18 +141,55 @@ class Layer:
 
     def field(self, name: str) -> Field:
         """
-        One field by source name or column name, matched case-insensitively.
+        One field by id, source name or column name, matched case-insensitively.
 
-        :raises UnknownNameError: naming the fields that do exist
+        A name that fits two fields is refused rather than resolved. An import
+        can produce "Stammumfang Quelle" with the column ``stammumfang`` beside
+        "Stammumfang" with the column ``stammumfang_z``, and then "stammumfang"
+        names both. Picking one would be a guess that looks like an answer --
+        and the two would give different results.
+
+        :raises UnknownNameError: naming the fields that do exist, or -- for an
+            ambiguous name -- both candidates and their ids
         """
         from .errors import UnknownNameError
 
         wanted = name.casefold()
         for item in self.fields():
-            if wanted in (item.name.casefold(), item.column.casefold()):
+            if wanted == item.id:
                 return item
+
+        matches = [
+            item
+            for item in self.fields()
+            if wanted in (item.name.casefold(), item.column.casefold())
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            candidates = ", ".join(f"{item.name} ({item.id})" for item in matches)
+            raise UnknownNameError(
+                f"Mehrdeutiges Feld: {name}. Gemeint sein kann: {candidates}. "
+                "Verwenden Sie die Feld-Id."
+            )
         available = ", ".join(item.name for item in self.fields())
         raise UnknownNameError(f"Unbekanntes Feld: {name}. Verfügbar: {available}.")
+
+    def ambiguous_names(self) -> set[str]:
+        """
+        The lowercased spellings that fit more than one field of this layer.
+
+        Neither source names nor column names are unique on their own, and a
+        name matching both kinds across two fields is the case that bites: the
+        server resolves it one way for a filter and another for a sort. Ask
+        this before building a filter from a name a person typed, or read the
+        answer out of :meth:`describe`, which marks such fields with their id.
+        """
+        seen: dict[str, int] = {}
+        for item in self.fields():
+            for spelling in {item.name.casefold(), item.column.casefold()}:
+                seen[spelling] = seen.get(spelling, 0) + 1
+        return {spelling for spelling, count in seen.items() if count > 1}
 
     def refresh(self) -> "Layer":
         """Read this layer again, discarding the cached fields."""
@@ -178,15 +223,21 @@ class Layer:
         if "fields" not in self._data:
             self.refresh()
 
+        # Clamped here, not at the server: a size above the ceiling or below 1
+        # is refused with a 400, and a sample size is not worth an error.
         page = self._client.get(
-            f"/api/layers/{self.id}/features", size=max(1, sample), geometry=False
+            f"/api/layers/{self.id}/features",
+            size=max(1, min(sample, PAGE_SIZE)),
+            geometry=False,
         )
         total = page.get("totalCount")
         names = _column_to_name(self.fields())
         rows = [_to_feature(row, names) for row in page.get("features", [])]
 
+        ambiguous = self.ambiguous_names()
         summaries = [
-            self._describe_field(item, stats=stats, top=top) for item in self.fields()
+            self._describe_field(item, stats=stats, top=top, ambiguous=ambiguous)
+            for item in self.fields()
         ]
 
         return LayerDescription(
@@ -200,37 +251,65 @@ class Layer:
             sample=rows,
         )
 
-    def _describe_field(self, item: Field, *, stats: bool, top: int) -> "FieldSummary":
-        """One field's statistics, or just its name and type when stats are off."""
-        if not stats:
-            return FieldSummary(name=item.name, column=item.column, type=item.type)
+    def reference(self, item: Field, ambiguous: set[str] | None = None) -> str:
+        """
+        The spelling that names exactly this field and no other.
 
+        The source name where it is unique, otherwise the column name, and the
+        id when neither is. Use it whenever a field name is put into a filter,
+        a sort or an endpoint's ``field`` parameter -- a name that fits two
+        fields resolves one way for a filter and another for a sort, which is
+        how a query silently answers about the wrong column.
+
+        :param ambiguous: a precomputed :meth:`ambiguous_names`, to avoid
+            recomputing it once per field
+        """
+        collisions = self.ambiguous_names() if ambiguous is None else ambiguous
+        if item.name.casefold() not in collisions:
+            return item.name
+        if item.column.casefold() not in collisions:
+            return item.column
+        return item.id
+
+    def _describe_field(
+        self, item: Field, *, stats: bool, top: int, ambiguous: set[str]
+    ) -> "FieldSummary":
+        """One field's statistics, or just its name and type when stats are off."""
+        unique = item.name.casefold() not in ambiguous
+        base = dict(
+            id=item.id, name=item.name, column=item.column, type=item.type,
+            ambiguous=not unique,
+        )
+        if not stats:
+            return FieldSummary(**base)
+
+        reference = self.reference(item, ambiguous)
         try:
             if item.is_numeric:
-                return self._numeric_summary(item)
-            return self._value_summary(item, top)
+                return self._numeric_summary(item, base, reference)
+            return self._value_summary(item, base, reference, top)
         except ApiError as error:
             # One column the server will not summarise must not lose the other
             # twenty-three. The reason is kept, not swallowed.
-            return FieldSummary(
-                name=item.name, column=item.column, type=item.type, note=str(error)
-            )
+            return FieldSummary(**base, note=str(error))
 
-    def _numeric_summary(self, item: Field) -> "FieldSummary":
+    def _numeric_summary(
+        self, item: Field, base: dict[str, Any], reference: str
+    ) -> "FieldSummary":
         """min, max and the empty count in one request, from /classify."""
         breaks = self._client.get(
-            f"/api/layers/{self.id}/classify", field=item.name, classes=2
+            f"/api/layers/{self.id}/classify", field=reference, classes=2
         )
         return FieldSummary(
-            name=item.name,
-            column=item.column,
-            type=item.type,
+            **base,
             null_count=breaks.get("nullCount"),
             minimum=breaks.get("min"),
             maximum=breaks.get("max"),
         )
 
-    def _value_summary(self, item: Field, top: int) -> "FieldSummary":
+    def _value_summary(
+        self, item: Field, base: dict[str, Any], reference: str, top: int
+    ) -> "FieldSummary":
         """
         The frequent values, and the empty count.
 
@@ -240,7 +319,7 @@ class Layer:
         reporting a number that is merely likely.
         """
         answer = self._client.get(
-            f"/api/layers/{self.id}/values", field=item.name, limit=max(1, top)
+            f"/api/layers/{self.id}/values", field=reference, limit=max(1, top)
         )
         values = answer.get("values") or []
         truncated = bool(answer.get("truncated"))
@@ -253,12 +332,10 @@ class Layer:
         if null_count is None and not truncated:
             null_count = 0
         if null_count is None:
-            null_count = self.where(f'"{item.name}" IS NULL').count()
+            null_count = self.where(f'"{reference}" IS NULL').count()
 
         return FieldSummary(
-            name=item.name,
-            column=item.column,
-            type=item.type,
+            **base,
             null_count=null_count,
             top_values=[
                 (entry.get("value"), entry.get("count"))
@@ -278,7 +355,7 @@ class Layer:
         """
         Restrict by a filter expression. Builds only; sends nothing.
 
-        >>> layer.where("stammumfang > 300 AND gattung LIKE 'Quercus%'")
+        >>> layer.where("pflanzjahr > 1990 AND gattung LIKE 'Quercus%'")
 
         Field names with spaces or umlauts go in double quotes, values in single
         quotes. Comparisons, LIKE/ILIKE, IS [NOT] NULL, IN, AND, OR, NOT and
@@ -362,6 +439,9 @@ class FieldSummary:
     """
     One field as :meth:`Layer.describe` found it.
 
+    :param id: the field's identifier, the one reference that never collides
+    :param ambiguous: this field's name also fits another field of the layer.
+        Then only the id, or the column name, names it alone
     :param null_count: objects with no value here, or None when not gathered
     :param minimum: smallest value, numeric fields only
     :param maximum: largest value, numeric fields only
@@ -370,9 +450,11 @@ class FieldSummary:
     :param note: why the statistics are missing, when the server refused them
     """
 
+    id: str
     name: str
     column: str
     type: str
+    ambiguous: bool = False
     null_count: int | None = None
     minimum: float | None = None
     maximum: float | None = None
@@ -437,6 +519,10 @@ class LayerDescription:
     def _field_line(self, item: FieldSummary) -> str:
         """One field on one line: name, type, emptiness, range."""
         parts = [f"{item.name} ({item.type})"]
+        if item.ambiguous:
+            # The name alone would reach two fields, so the line that an agent
+            # reads has to carry the reference that reaches one.
+            parts.append(f"mehrdeutig, Id {item.id}")
         share = item.null_fraction(self.feature_count)
         if share is not None:
             parts.append(f"leer {share * 100:.1f}%")
@@ -451,7 +537,7 @@ class LayerDescription:
 
 
 def _to_field(item: dict[str, Any]) -> Field:
-    return Field(item["sourceName"], item["columnName"], item["dataType"])
+    return Field(item["id"], item["sourceName"], item["columnName"], item["dataType"])
 
 
 def _base_type(type_name: str) -> str:

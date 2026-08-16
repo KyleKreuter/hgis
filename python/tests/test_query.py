@@ -100,9 +100,9 @@ def test_iterating_pages_past_the_thousand_row_ceiling(layer, transport) -> None
     """
     1003 objects arrive as 1000 plus 3, not as 1000.
 
-    The server caps a page at 1000 and currently does so silently, so a
-    library that asked once and stopped would report a layer that ends early
-    -- and would look right while doing it.
+    The server caps a page at 1000, so a library that asked once and stopped
+    would report a layer that ends early -- and would look right while doing
+    it.
     """
     features = list(layer)
 
@@ -118,10 +118,10 @@ def test_iterating_pages_past_the_thousand_row_ceiling(layer, transport) -> None
 
 def test_iteration_never_asks_for_more_than_the_server_allows(layer, transport) -> None:
     """
-    The ceiling is 1000 and it is enforced by clamping, not by refusal.
-
-    Asking for more would come back quietly shortened, which reads exactly
-    like a short page and would end the walk one page early.
+    The ceiling is 1000. Above it the server answers 400, and an older one
+    clamped silently instead -- a page that came back quietly shortened reads
+    exactly like a short page and would end the walk early. Neither failure is
+    worth risking, so nothing here ever asks for more.
     """
     list(layer)
     for request in transport.requests:

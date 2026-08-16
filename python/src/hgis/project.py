@@ -170,8 +170,8 @@ class Project:
         every sort and every saved query are read and written back unchanged,
         because the endpoint replaces the state wholesale.
 
-        >>> big = layer.where("stammumfang > 300").fids()
-        >>> project.select(big)
+        >>> alt = layer.where("pflanzjahr < 1950").fids()
+        >>> project.select(alt)
 
         :param fids: object ids; an empty list clears the selection
         :param layer: a layer, its name or its id; the active layer when omitted

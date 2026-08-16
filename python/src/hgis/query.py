@@ -33,9 +33,11 @@ from .errors import MissingDependencyError
 if TYPE_CHECKING:
     from .layer import Layer
 
-#: Rows per page while iterating. The server's ceiling is 1000 and it currently
-#: clamps silently, so this never asks for more -- a request that came back
-#: quietly shortened would look like a layer that ends early.
+#: Rows per page while iterating, and the largest ``size`` this library ever
+#: sends. The server's ceiling is 1000. Asking for more is refused with a 400
+#: -- and on an older server it was clamped silently instead, which looked
+#: exactly like a layer that ends early. Neither is worth risking, so nothing
+#: here ever asks for more.
 PAGE_SIZE = 1000
 
 
