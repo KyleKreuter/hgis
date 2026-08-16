@@ -59,6 +59,7 @@ class Recorded:
 
     method: str
     url: str
+    headers: dict[str, str] = field(default_factory=dict)
 
     @property
     def path(self) -> str:
@@ -89,9 +90,14 @@ class FakeTransport(Transport):
     bodies: list[Any] = field(default_factory=list)
 
     def request(
-        self, method: str, url: str, json: Any = None, timeout: float = 30.0
+        self,
+        method: str,
+        url: str,
+        json: Any = None,
+        timeout: float = 30.0,
+        headers: dict[str, str] | None = None,
     ) -> Response:
-        recorded = Recorded(method, url)
+        recorded = Recorded(method, url, dict(headers or {}))
         self.requests.append(recorded)
         self.bodies.append(json)
         return self.handler(recorded)

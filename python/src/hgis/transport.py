@@ -105,6 +105,7 @@ class Transport:
         url: str,
         json: Any = None,
         timeout: float = DEFAULT_TIMEOUT,
+        headers: dict[str, str] | None = None,
     ) -> Response:
         """
         Perform one HTTP request.
@@ -113,6 +114,7 @@ class Transport:
         :param url: absolute URL, query included
         :param json: body to send as ``application/json``, or None
         :param timeout: seconds to wait
+        :param headers: extra request headers, or None
         :raises TransportError: when no answer arrives. A 4xx or 5xx *is* an
             answer and comes back as a :class:`Response`; turning it into an
             error is the client's job, because only the client knows the
@@ -148,11 +150,14 @@ class HttpxTransport(Transport):
         url: str,
         json: Any = None,
         timeout: float = DEFAULT_TIMEOUT,
+        headers: dict[str, str] | None = None,
     ) -> Response:
         import httpx
 
         try:
-            response = self._client.request(method, url, json=json, timeout=timeout)
+            response = self._client.request(
+                method, url, json=json, timeout=timeout, headers=headers
+            )
         except httpx.HTTPError as error:
             raise TransportError(f"{url} ist nicht erreichbar: {error}") from error
         return Response(response.status_code, response.text)
@@ -184,6 +189,7 @@ class PyodideTransport(Transport):
         url: str,
         json: Any = None,
         timeout: float = DEFAULT_TIMEOUT,
+        headers: dict[str, str] | None = None,
     ) -> Response:
         try:
             from js import XMLHttpRequest  # type: ignore[import-not-found]
@@ -195,6 +201,8 @@ class PyodideTransport(Transport):
 
         request = XMLHttpRequest.new()
         request.open(method, url, False)  # False: synchronous
+        for name, value in (headers or {}).items():
+            request.setRequestHeader(name, value)
         body = None
         if json is not None:
             request.setRequestHeader("Content-Type", "application/json")

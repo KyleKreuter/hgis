@@ -69,6 +69,17 @@ class UnknownNameError(HgisError, LookupError):
     """
 
 
+class InvalidClientIdError(HgisError, ValueError):
+    """
+    The client name does not fit what the server accepts.
+
+    Also a :class:`ValueError`, because that is what a bad constructor argument
+    is. Raised when the client is built rather than when it first writes: a
+    name that cannot travel is a mistake in the calling program, and finding it
+    at the first write means finding it late.
+    """
+
+
 class ReadOnlyError(HgisError):
     """
     A request that would change data, which this stage does not do.

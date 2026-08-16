@@ -64,6 +64,7 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 | Aufruf | Ergebnis |
 |---|---|
 | `hgis.connect(url)` | `Client`, Standard `http://localhost:8080` |
+| `hgis.connect(url, client_id=...)` | benennt den Schreiber, siehe unten |
 | `client.projects()` | `list[Project]` |
 | `client.project(name_oder_kennung)` | `Project` |
 | `client.layer(kennung)` | `Layer` |
@@ -184,6 +185,51 @@ Alle Fehler erben von `hgis.HgisError`.
 | `UnknownNameError` | Kein Projekt oder Layer trägt diesen Namen. |
 | `MissingDependencyError` | Ein wahlfreies Paket fehlt. |
 | `ReadOnlyError` | Die Anfrage würde Daten ändern. Diese Stufe liest nur. |
+| `InvalidClientIdError` | Der Client-Name passt nicht zu dem, was der Server annimmt. |
+
+## Der Client-Name
+
+Der Live-Kanal (`GET /api/events`) meldet, dass sich der Arbeitsstand eines
+Projekts geändert hat. Er nennt dabei den Namen des Schreibers.
+
+Wer seinen eigenen Namen liest, kennt den Stand schon und ignoriert die
+Meldung. Deshalb schickt die Bibliothek beim Schreiben den Kopf
+`X-Hgis-Client` mit.
+
+```python
+client = hgis.connect()
+client.client_id                       # 'hgis-python-2d2dc2ed1874'
+
+client = hgis.connect(client_id="agent-a")
+```
+
+Sie setzen den Namen auf drei Wegen. Der obere gewinnt:
+
+| Weg | Beispiel |
+|---|---|
+| Parameter | `hgis.connect(client_id="agent-a")` |
+| Umgebungsvariable | `HGIS_CLIENT_ID=agent-a` |
+| Vorgabewert | je Prozess neu erzeugt |
+
+**Geben Sie zwei gleichzeitig laufenden Programmen zwei Namen.** Sonst hält
+jedes die Änderung des anderen für sein eigenes Echo und übergeht sie. Dann
+geht eine echte Änderung verloren.
+
+Der Vorgabewert ist deshalb zufällig und nicht fest. Er bleibt über die
+Laufzeit des Prozesses gleich.
+
+Erlaubt sind 1 bis 64 Zeichen aus Buchstaben, Ziffern, Bindestrich und
+Unterstrich. Die Bibliothek prüft den Namen, sobald Sie den Client bauen.
+
+```python
+>>> hgis.connect(client_id="mit leerzeichen")
+hgis.errors.InvalidClientIdError: Ungültiger Client-Name: 'mit leerzeichen'.
+Erlaubt sind 1 bis 64 Zeichen aus Buchstaben, Ziffern, Bindestrich und
+Unterstrich.
+```
+
+Der Kopf reist nur beim Schreiben mit. Ein Lesevorgang erzeugt kein Ereignis,
+also gibt es dort kein Echo.
 
 ## Diese Stufe schreibt nicht
 

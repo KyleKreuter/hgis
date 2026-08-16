@@ -2,14 +2,75 @@
 
 from __future__ import annotations
 
+import os
 import re
+import uuid
 from typing import TYPE_CHECKING, Any, Iterable
 from urllib.parse import urlsplit
 
-from .errors import ApiError, NotFoundError, ReadOnlyError, UnknownNameError
+from .errors import (
+    ApiError,
+    InvalidClientIdError,
+    NotFoundError,
+    ReadOnlyError,
+    UnknownNameError,
+)
 from .transport import DEFAULT_TIMEOUT, Response, Transport, build_url, default_transport
 
 DEFAULT_BASE_URL = "http://localhost:8080"
+
+# --- naming this client ---------------------------------------------------
+#
+# The live channel (GET /api/events) reports that a project's working state
+# changed, and repeats the name of whoever wrote it. A client that finds its own
+# name there already knows the state and can leave the event alone. Without a
+# name, it reads back what it just wrote.
+#
+# The header name is written once, here. It is still under review on the server
+# side, so it has to be changeable in one place rather than five.
+
+#: The header the server reads. See ClientId.HEADER in the backend.
+CLIENT_HEADER = "X-Hgis-Client"
+
+#: What the server accepts, mirrored from ClientId.ALLOWED. Checked here so a
+#: bad name fails in Python rather than as a 400 on the first write.
+_CLIENT_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+#: Environment variable for naming this process from outside.
+CLIENT_ID_VARIABLE = "HGIS_CLIENT_ID"
+
+#: This process's name, made once at import.
+#:
+#: Random rather than fixed, and that is the point: two agents running at the
+#: same time under one name would each take the other's change for their own
+#: echo and ignore it. A real change would then be swallowed, which is worse
+#: than processing one twice.
+_PROCESS_CLIENT_ID = f"hgis-python-{uuid.uuid4().hex[:12]}"
+
+
+def default_client_id() -> str:
+    """
+    The name this process writes under.
+
+    ``HGIS_CLIENT_ID`` when set, otherwise a random per-process name. Set the
+    variable when something outside needs to recognise this program's writes --
+    an agent runner naming its workers, say. Keep it different per process.
+    """
+    return os.environ.get(CLIENT_ID_VARIABLE) or _PROCESS_CLIENT_ID
+
+
+def _check_client_id(client_id: str) -> str:
+    """
+    :raises InvalidClientIdError: naming the character set the server allows
+    """
+    stripped = client_id.strip()
+    if not _CLIENT_ID_PATTERN.fullmatch(stripped):
+        raise InvalidClientIdError(
+            f"Ungültiger Client-Name: {client_id!r}. Erlaubt sind 1 bis 64 Zeichen "
+            "aus Buchstaben, Ziffern, Bindestrich und Unterstrich."
+        )
+    return stripped
+
 
 #: Page size for the project browser. The server allows 1 to 100.
 _PROJECT_PAGE_SIZE = 100
@@ -73,9 +134,10 @@ class ReadOnlyGuard(Transport):
         url: str,
         json: Any = None,
         timeout: float = DEFAULT_TIMEOUT,
+        headers: dict[str, str] | None = None,
     ) -> Response:
         _check_allowed(method, url)
-        return self.inner.request(method, url, json=json, timeout=timeout)
+        return self.inner.request(method, url, json=json, timeout=timeout, headers=headers)
 
 
 def connect(
@@ -83,6 +145,7 @@ def connect(
     *,
     transport: Transport | None = None,
     timeout: float = DEFAULT_TIMEOUT,
+    client_id: str | None = None,
 ) -> "Client":
     """
     Connect to an hGIS server.
@@ -96,8 +159,11 @@ def connect(
     :param base_url: where the server listens
     :param transport: substitute the HTTP floor, see :mod:`hgis.transport`
     :param timeout: seconds to wait per request
+    :param client_id: the name this program writes under, so it can recognise
+        its own change on the live channel. Defaults to ``HGIS_CLIENT_ID`` or a
+        random per-process name. Give two programs running at once two names.
     """
-    return Client(base_url, transport=transport, timeout=timeout)
+    return Client(base_url, transport=transport, timeout=timeout, client_id=client_id)
 
 
 class Client:
@@ -115,8 +181,14 @@ class Client:
         *,
         transport: Transport | None = None,
         timeout: float = DEFAULT_TIMEOUT,
+        client_id: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        # Checked now, not at the first write: a name that cannot travel is a
+        # mistake in the calling program, and the first write may be minutes away.
+        self.client_id = _check_client_id(
+            client_id if client_id is not None else default_client_id()
+        )
         floor = transport if transport is not None else default_transport()
         # Wrapped even when the caller supplied the floor: a substituted
         # transport is for testing or authentication, not for lifting the guard.
@@ -124,7 +196,7 @@ class Client:
         self._timeout = timeout
 
     def __repr__(self) -> str:
-        return f"<hgis.Client {self.base_url}>"
+        return f"<hgis.Client {self.base_url} als {self.client_id}>"
 
     # --- the two lookups ---------------------------------------------------
 
@@ -216,6 +288,9 @@ class Client:
         and per layer its sort, query and selection. See
         :meth:`hgis.project.Project.select`, which is how to call this.
 
+        Carries :data:`CLIENT_HEADER` with this client's name, so the live
+        channel can report who wrote and this program can skip its own echo.
+
         :param state: the complete state; the endpoint replaces it wholesale
         """
         self._send("PUT", f"/api/projects/{project_id}/view-state", json=state)
@@ -228,7 +303,13 @@ class Client:
         json: Any = None,
     ) -> Any:
         url = build_url(self.base_url, path, params)
-        response = self._transport.request(method, url, json=json, timeout=self._timeout)
+        # The one place that decides which requests carry the client name.
+        # Only writes: a read produces no event, so there is no echo to
+        # recognise and nothing for the server to pass on.
+        headers = None if method.upper() == "GET" else {CLIENT_HEADER: self.client_id}
+        response = self._transport.request(
+            method, url, json=json, timeout=self._timeout, headers=headers
+        )
         if response.status >= 400:
             raise _to_error(response, path)
         if not response.text.strip():
