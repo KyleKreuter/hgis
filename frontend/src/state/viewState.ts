@@ -138,6 +138,9 @@ export function planSelectionWrite(
  * CONTRACT.md rule 4: an explicit address always wins, the saved state only fills in
  * when the address is silent. Returns `null` when there is nothing to restore either
  * way (the address already names a layer, or none was ever saved).
+ *
+ * <p>This is about *opening* a project. Once it is open, the address no longer blocks:
+ * a change to the saved active layer moves the view, see {@link activeLayerJumpTarget}.
  */
 export function shouldRestoreActiveLayer(
   urlLayerId: string | undefined,
@@ -145,6 +148,62 @@ export function shouldRestoreActiveLayer(
 ): string | null {
   if (urlLayerId !== undefined) return null
   return document.activeLayerId
+}
+
+/** What {@link activeLayerJumpTarget} needs to know. */
+export interface ActiveLayerJump {
+  /**
+   * The saved active layer as this client last knew it, or `undefined` before it has
+   * read one. Comparing against it is what turns a reported *state* into the *change*
+   * this client has not seen yet -- the channel never reports changes, and it must not:
+   * deriving one here is possible precisely because the current state can always be
+   * read again.
+   */
+  known: string | null | undefined
+  /** The saved active layer as it now stands. */
+  stored: string | null
+  /** The layer this client currently has open, from the address. */
+  open: string | null
+}
+
+/**
+ * The layer the view has to move to, or `null` for "stay".
+ *
+ * Three reasons not to move, and each one matters:
+ *
+ * <ul>
+ * <li><b>Nothing to compare against.</b> Before this client has read the saved state
+ *     once, every value looks new, and the first event would move a view that was never
+ *     asked to move.
+ * <li><b>The saved layer did not change.</b> An event about a *selection* carries the
+ *     unchanged active layer with it. Moving on that would drag a user off the layer
+ *     their address explicitly named, without anyone having switched anything.
+ * <li><b>Already there.</b> Someone switched to the layer this client has open anyway.
+ * </ul>
+ *
+ * <p>A fourth case needs no line of its own: a saved active layer of `null` means "none
+ * open", which is not a destination -- and it falls out as `null` here on its own, since
+ * that is what would be returned. A guard for it would read well and change nothing,
+ * which is worse than no guard: nothing could ever tell whether it still worked.
+ */
+export function activeLayerJumpTarget({ known, stored, open }: ActiveLayerJump): string | null {
+  if (known === undefined) return null
+  if (stored === known) return null
+  if (stored === open) return null
+  return stored
+}
+
+/**
+ * The layer a jump's way back should lead to, or `null` when there is none worth offering.
+ *
+ * @param chosen the layer the user last opened themselves. It survives a whole chain of
+ *   jumps, which is the point: after A -> B -> C the way back is still A, not B.
+ * @param jumpedTo where the jump just landed. Equal to `chosen` when someone moved the
+ *   view away and then back again -- offering a way back to where the user already is
+ *   would be an empty gesture.
+ */
+export function layerJumpBackTarget(chosen: string | null, jumpedTo: string): string | null {
+  return chosen !== null && chosen !== jumpedTo ? chosen : null
 }
 
 /**

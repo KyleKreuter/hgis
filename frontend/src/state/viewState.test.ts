@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   EMPTY_VIEW_STATE,
   SELECTION_SAVE_LIMIT,
+  activeLayerJumpTarget,
+  layerJumpBackTarget,
   layerStateOf,
   planSelectionWrite,
   queryOf,
@@ -128,5 +130,60 @@ describe('document round trip', () => {
     const tooLong = 'x'.repeat(2500)
     const document = withQuery(EMPTY_VIEW_STATE, 'layer-1', queryOf('search', tooLong))
     expect(layerStateOf(document, 'layer-1').query?.text).toHaveLength(2000)
+  })
+})
+
+/**
+ * Wohin die Ansicht springt, wenn jemand anders den aktiven Layer umstellt -- und die
+ * vier Faelle, in denen sie es nicht tut.
+ */
+describe('activeLayerJumpTarget', () => {
+  it('springt auf den Layer, den jemand anders geoeffnet hat', () => {
+    expect(activeLayerJumpTarget({ known: 'a', stored: 'b', open: 'a' })).toBe('b')
+  })
+
+  it('springt auch, wenn dieses Fenster gerade gar keinen Layer offen hat', () => {
+    expect(activeLayerJumpTarget({ known: 'a', stored: 'b', open: null })).toBe('b')
+  })
+
+  it('springt nicht ohne Vergleichswert', () => {
+    // Vor der ersten Lesung saehe jeder Wert neu aus, und das erste Ereignis wuerde eine
+    // Ansicht bewegen, die nie darum gebeten hat.
+    expect(activeLayerJumpTarget({ known: undefined, stored: 'b', open: 'a' })).toBeNull()
+  })
+
+  it('springt nicht, wenn der aktive Layer unveraendert ist', () => {
+    // Der haeufigste Fall: ein Ereignis ueber eine Auswahl traegt den unveraenderten
+    // aktiven Layer mit. Ohne diese Zeile risse es den Nutzer von seiner Adresse weg.
+    expect(activeLayerJumpTarget({ known: 'b', stored: 'b', open: 'a' })).toBeNull()
+  })
+
+  it('springt nicht auf "kein Layer" -- das ist kein Ziel', () => {
+    expect(activeLayerJumpTarget({ known: 'a', stored: null, open: 'a' })).toBeNull()
+  })
+
+  it('springt nicht dorthin, wo dieses Fenster schon ist', () => {
+    expect(activeLayerJumpTarget({ known: 'a', stored: 'b', open: 'b' })).toBeNull()
+  })
+
+  it('springt, nachdem der gespeicherte Layer erst auf niemanden und dann woandershin zeigte', () => {
+    // known folgt dem gespeicherten Wert auch dann, wenn nicht gesprungen wurde.
+    expect(activeLayerJumpTarget({ known: null, stored: 'b', open: 'a' })).toBe('b')
+  })
+})
+
+describe('layerJumpBackTarget', () => {
+  it('fuehrt zu dem Layer, den der Nutzer selbst zuletzt geoeffnet hat', () => {
+    expect(layerJumpBackTarget('a', 'b')).toBe('a')
+  })
+
+  it('bietet nichts an, wenn der Sprung dort landet, wo der Nutzer ohnehin war', () => {
+    // Kommt vor: jemand holt die Ansicht weg und gleich wieder zurueck. Ein Knopf
+    // "Zurueck zu A", waehrend man auf A steht, ist eine leere Geste.
+    expect(layerJumpBackTarget('a', 'a')).toBeNull()
+  })
+
+  it('bietet nichts an, wenn der Nutzer nie selbst einen Layer geoeffnet hat', () => {
+    expect(layerJumpBackTarget(null, 'b')).toBeNull()
   })
 })

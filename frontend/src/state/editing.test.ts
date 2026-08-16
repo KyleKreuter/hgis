@@ -203,3 +203,96 @@ describe('edit buffer', () => {
     expect(store().redoStack).toHaveLength(0)
   })
 })
+
+/**
+ * Die angefangene Zeichnung: Arbeit, die noch in keinem Puffer steht. Sie zaehlt nicht
+ * als Aenderung -- sonst laege der Zaehler der Werkzeugleiste -- aber jede Frage nach
+ * "geht dabei etwas verloren" muss sie kennen.
+ */
+describe('sketching', () => {
+  beforeEach(() => {
+    store().end()
+  })
+
+  it('ist keine Aenderung -- der Zaehler bleibt bei null', () => {
+    store().begin('layer-a')
+    store().setSketching(true)
+
+    expect(store().sketching).toBe(true)
+    expect(countChanges(store().buffer)).toBe(0)
+  })
+
+  it('faellt weg, wenn eine Sitzung beginnt', () => {
+    store().setSketching(true)
+    store().begin('layer-a')
+
+    expect(store().sketching).toBe(false)
+  })
+
+  it('faellt weg, wenn die Sitzung endet', () => {
+    // Bliebe es stehen, waere jeder Waechter dauerhaft blockiert -- fuer ein Werkzeug,
+    // das gar nicht mehr da ist.
+    store().begin('layer-a')
+    store().setSketching(true)
+    store().end()
+
+    expect(store().sketching).toBe(false)
+  })
+
+  it('meldet denselben Wert ohne neuen Zustand', () => {
+    // `DrawController` rechnet den Wert bei jeder Aenderung von terra-draw neu aus, und
+    // das sind viele: ein gleicher Wert darf kein Rendern ausloesen.
+    store().begin('layer-a')
+    store().setSketching(true)
+    const vorher = useEditing.getState()
+    store().setSketching(true)
+
+    expect(useEditing.getState()).toBe(vorher)
+  })
+})
+
+/**
+ * `reset` leert den Puffer von aussen -- und das Zeichenwerkzeug haelt eine eigene Kopie
+ * jeder Form, die es davon nur ueber `historyNonce` erfaehrt. Ohne die Meldung blieb das
+ * Verworfene auf der Karte liegen.
+ */
+describe('reset meldet sich beim Zeichenwerkzeug', () => {
+  beforeEach(() => {
+    store().end()
+  })
+
+  it('erhoeht historyNonce, damit die Zeichenflaeche nachzieht', () => {
+    store().begin('layer-a')
+    store().addFeature(POINT)
+    const vorher = store().historyNonce
+
+    store().reset()
+
+    expect(store().historyNonce).toBe(vorher + 1)
+    expect(countChanges(store().buffer)).toBe(0)
+  })
+
+  it('meldet sich auch dann, wenn der Puffer schon leer war', () => {
+    // Verwerfen bei leerem Puffer kostet nichts, und ein zusaetzlicher Abgleich schadet
+    // nicht -- eine Ausnahme dafuer waere eine Sonderregel ohne Nutzen.
+    store().begin('layer-a')
+    const vorher = store().historyNonce
+
+    store().reset()
+
+    expect(store().historyNonce).toBe(vorher + 1)
+  })
+
+  it('zaehlt weiter und faengt nicht wieder bei null an', () => {
+    // Monoton, wie der Kommentar am Feld verlangt: ein zurueckgesetzter Wert liesse einen
+    // spaeteren Schritt mit einem frueheren zusammenfallen, und der Abgleich bliebe aus.
+    store().begin('layer-a')
+    store().addFeature(POINT)
+    store().reset()
+    const nachErstem = store().historyNonce
+    store().addFeature(POINT)
+    store().reset()
+
+    expect(store().historyNonce).toBe(nachErstem + 1)
+  })
+})

@@ -127,6 +127,37 @@ export function DrawController({
     [],
   )
 
+  /**
+   * Tells the editing session whether a shape is half-drawn.
+   *
+   * Recomputed from terra-draw's own store rather than tracked through the events that
+   * start and end a shape: those are several (create, update, finish, delete, a mode
+   * switch, Escape), and one missed transition leaves the flag stuck -- which would
+   * either block every guard forever or, worse, hide work that is really there.
+   *
+   * The test for "half-drawn" is the same one the change handler already relies on, and
+   * it is the honest one: terra-draw is holding a feature that is neither one loaded from
+   * the server nor one the buffer has taken over. That is exactly the state between the
+   * first corner and `finish`.
+   *
+   * At component level rather than inside the effect that builds terra-draw, because the
+   * buffer sync is a *different* effect and changes the surface too. Its writes bypass the
+   * change handler on purpose (`applyingFromBuffer`), so without a call from there the
+   * flag survived a discard that had emptied the surface -- and every guard stayed shut.
+   */
+  const reportSketching = useCallback(() => {
+    const draw = drawRef.current
+    if (!draw) return
+    const { buffer, setSketching } = useEditing.getState()
+    setSketching(
+      draw.getSnapshot().some((feature) => {
+        if (isHandle(feature)) return false
+        const fid = Number(feature.id)
+        return !originals.current.has(fid) && !buffer.creates[fid]
+      }),
+    )
+  }, [])
+
   useEffect(() => {
     const map = mapRef.current
     if (!map || !isLoaded) return
@@ -278,7 +309,8 @@ export function DrawController({
       // disagree neither one says so. Seeing both at once is what turned "undo does
       // nothing" into a precise cause.
       ;(window as unknown as Record<string, unknown>).__hgisBuffer = () => {
-        const { buffer, undoStack, redoStack, historyNonce: nonce } = useEditing.getState()
+        const state = useEditing.getState()
+        const { buffer, undoStack, redoStack, historyNonce: nonce } = state
         return {
           creates: Object.keys(buffer.creates).map(Number),
           updates: Object.keys(buffer.updates).map(Number),
@@ -287,6 +319,10 @@ export function DrawController({
           redoStack: redoStack.length,
           historyNonce: nonce,
           geladen: originals.current.size,
+          // A half-drawn shape is in neither of the two copies above -- it lives in
+          // terra-draw alone. Without this, "why did the guard let me through" had no
+          // answer from outside, which is what let it go unnoticed in the first place.
+          angefangen: state.sketching,
         }
       }
     }
@@ -343,6 +379,9 @@ export function DrawController({
       // never on the server -- but `addFeature` just put it in `buffer.creates`, which
       // `resolveSelectedFeature` reaches for first anyway.
       onSelectFeature(fid, null)
+      // The shape has moved from the tool into the buffer, so it is a change now and no
+      // longer a sketch. Without this the guards would stay blocked after every drawing.
+      reportSketching()
     })
 
     draw.on('select', (id) => {
@@ -360,6 +399,11 @@ export function DrawController({
       // The sync below writes into terra-draw itself and keeps every ref in step as it
       // goes. Acting on its echo here would undo the undo.
       if (applyingFromBuffer.current) return
+
+      // Before the branches below, and for every kind of change: a first corner starts a
+      // sketch, a further one keeps it, Escape and a mode switch delete it again. All of
+      // them arrive here, and all of them change the answer.
+      reportSketching()
 
       // Snap candidates are maintained for every kind of change, not just edits: a
       // feature added from anywhere -- drawn, loaded, inserted -- has to be attachable
@@ -534,21 +578,17 @@ export function DrawController({
         }
         if (editable.length === 0) return
 
-        const added = draw.addFeatures(
-          editable.map(({ feature, geometry }) => ({
-            id: feature.fid,
-            type: 'Feature' as const,
-            geometry,
-            properties: { mode: modeFor(geometry) },
-          })),
-        )
-
         // Full precision, straight from the feature API -- never the tile geometry, which
         // is quantised to the tile grid (plan section D.1).
         for (const { feature, geometry } of editable) {
           snapCandidates.current.set(feature.fid, { geometry, bounds: boundsOf(geometry) })
         }
 
+        // Recorded *before* the features reach terra-draw, not after. `addFeatures`
+        // announces every one of them through the change handler while it runs, and that
+        // handler asks `originals` whether a feature is one this controller loaded. Filled
+        // afterwards, the answer during the load is "no" for all of them -- which reads as
+        // a whole layer of half-drawn shapes and would leave `sketching` stuck on.
         for (const { feature, geometry } of editable) {
           lastGeometry.current.set(feature.fid, JSON.stringify(geometry))
           originals.current.set(feature.fid, {
@@ -558,6 +598,15 @@ export function DrawController({
             rowVersion: feature.rowVersion,
           })
         }
+
+        const added = draw.addFeatures(
+          editable.map(({ feature, geometry }) => ({
+            id: feature.fid,
+            type: 'Feature' as const,
+            geometry,
+            properties: { mode: modeFor(geometry) },
+          })),
+        )
 
         const rejected = added.filter((entry) => !entry.valid).length
         if (rejected > 0) {
@@ -588,7 +637,7 @@ export function DrawController({
       // Deliberately not ending the editing session here: leaving the mode is
       // `useEditSession`'s decision, and this cleanup also runs on a plain reload.
     }
-  }, [mapRef, isLoaded, layerId, queryClient, onSelectFeature, onSnapTarget, onSnapUnavailable, allSnapCandidates, reloadNonce])
+  }, [mapRef, isLoaded, layerId, queryClient, onSelectFeature, onSnapTarget, onSnapUnavailable, allSnapCandidates, reloadNonce, reportSketching])
 
   /**
    * Loads the marked snap sources.
@@ -738,7 +787,12 @@ export function DrawController({
     } finally {
       applyingFromBuffer.current = false
     }
-  }, [historyNonce])
+
+    // The surface just changed without the change handler seeing any of it. Whatever was
+    // half-drawn is gone with it -- a discard empties the surface, and the flag has to
+    // follow or it locks the guards on a shape that no longer exists.
+    reportSketching()
+  }, [historyNonce, reportSketching])
 
   // Switching tools must not tear the instance down: terra-draw carries the working copy,
   // and recreating it would drop everything drawn so far.
