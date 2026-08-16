@@ -897,8 +897,19 @@ function Panel({
        * way the table body itself already scrolls sideways for its columns (see the
        * scroller comment below), rather than trading a fixed-height table for a
        * growing one.
+       *
+       * The scrollbar utilities below (`scrollbar-width`/`scrollbar-color` for
+       * Firefox, `::-webkit-scrollbar*` for the rest) force a thin, always-drawn bar
+       * instead of the platform's own overlay one: an overlay scrollbar only appears on
+       * hover or while dragging, so a strip that overflows by exactly the width of
+       * "42 / 1.234" can look complete at rest -- there is no other hint. A native
+       * scrollbar only ever renders when the content actually overflows, so this never
+       * shows on a line that fits. The way out of edit mode (the X, `TableEditToolbar`)
+       * is `sticky` inside this scroller and pinned to its own right edge for the same
+       * reason: at 400px the cut used to land in the gap right after "Speichern",
+       * which hid both the counter and the X with nothing visibly clipped to notice.
        */}
-      <div className="flex h-7 shrink-0 items-center gap-2 overflow-x-auto border-b bg-muted/40 px-2">
+      <div className="flex h-7 shrink-0 items-center gap-2 overflow-x-auto border-b bg-muted/40 px-2 [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
         {/*
          * Gives way before anything else in the strip does, and all the way down to
          * nothing. Held at its full width it pushed the save button, the change counter

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Check, Pencil, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatCount } from '@/lib/format'
 import { changeCount } from './tableEditSession'
@@ -70,25 +69,37 @@ export function TableEditToolbar({ layerId, projectId, onRequestStart }: TableEd
         {isSaving ? 'Wird gespeichert…' : 'Speichern'}
       </Button>
 
-      <Separator orientation="vertical" className="h-4 data-vertical:self-center" />
-
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="size-7"
-              disabled={isSaving}
-              aria-label="Bearbeitungsmodus verlassen"
-              onClick={requestLeave}
-            >
-              <X className="size-3.5" />
-            </Button>
-          }
-        />
-        <TooltipContent>Bearbeitungsmodus verlassen</TooltipContent>
-      </Tooltip>
+      {/*
+       * sticky, not a plain flex sibling: `Panel`'s toolbar row (AttributeTable.tsx)
+       * scrolls sideways once the strip runs out of width, and the way out of edit mode
+       * must never be part of what scrolls away with it -- an edit session with
+       * unsaved changes and no visible exit is worse than the side overflow that row
+       * used to have. `sticky right-0` pins this to the scroll container's own right
+       * edge; everything before it (search field, pending count, the two buttons
+       * above) stays free to scroll underneath. The background has to be the opaque
+       * color-mix, not bg-muted/40 -- translucent here would let that scrolled content
+       * show through exactly where it overlaps, the same reasoning `HeaderCell` below
+       * already follows for its own sticky header row.
+       */}
+      <span className="sticky right-0 z-10 flex shrink-0 items-center gap-2 border-l bg-[color-mix(in_oklab,var(--muted)_40%,var(--background))] pl-2">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="size-7"
+                disabled={isSaving}
+                aria-label="Bearbeitungsmodus verlassen"
+                onClick={requestLeave}
+              >
+                <X className="size-3.5" />
+              </Button>
+            }
+          />
+          <TooltipContent>Bearbeitungsmodus verlassen</TooltipContent>
+        </Tooltip>
+      </span>
 
       <DiscardEditsDialog
         open={confirmLeave}
