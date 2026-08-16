@@ -8,6 +8,8 @@ import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.TileRenderVersion;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -46,11 +48,21 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/layers/{layerId}/tiles")
 public class TileController {
 
+	private static final Logger log = LoggerFactory.getLogger(TileController.class);
+
 	private static final MediaType MVT_MEDIA_TYPE =
 			MediaType.parseMediaType("application/vnd.mapbox-vector-tile");
 
 	/** The URL already carries the version, so a cached tile never goes stale. */
 	private static final String CACHE_CONTROL = "public, max-age=31536000, immutable";
+
+	/**
+	 * Set only when {@link MvtService.RenderedTile#truncated()} is true, never to
+	 * {@code "false"} -- a header a caller has to remember to check for the string
+	 * {@code "false"} is one most callers get wrong at least once. Absence is the
+	 * negative answer.
+	 */
+	private static final String TRUNCATED_HEADER = "X-Tile-Truncated";
 
 	private static final int MAX_ZOOM = 24;
 
@@ -104,13 +116,25 @@ public class TileController {
 		List<MvtService.ClipMask> masks = layer.effectiveMasks(projectMasks).stream()
 				.map(mask -> new MvtService.ClipMask(mask.getTableName(), mask.getClipMode()))
 				.toList();
-		byte[] mvt = mvtService.renderTile(layer.getTableName(), layer.getSrid(),
+		MvtService.RenderedTile rendered = mvtService.renderTile(layer.getTableName(), layer.getSrid(),
 				styleService.tileColumns(layer), masks, z, x, y);
+		byte[] mvt = rendered.mvt();
+
+		if (rendered.truncated()) {
+			// Discoverable two ways on purpose (MvtService.RenderedTile): the header for a
+			// client that chooses to look, this line for whoever is watching the log --
+			// neither one is guaranteed to be watched on any single request.
+			log.warn("Kachel gekuerzt: Layer {} z={} x={} y={} traegt mehr als {} Objekte",
+					layer.getId(), z, x, y, mvtService.maxFeaturesPerTile());
+		}
 
 		ResponseEntity.BodyBuilder response = ResponseEntity
 				.status(mvt == null ? HttpStatus.NO_CONTENT : HttpStatus.OK)
 				.header(HttpHeaders.ETAG, etag)
 				.header(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL);
+		if (rendered.truncated()) {
+			response.header(TRUNCATED_HEADER, "true");
+		}
 
 		if (mvt == null) {
 			return response.build();

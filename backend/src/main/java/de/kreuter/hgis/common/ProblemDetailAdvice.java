@@ -12,6 +12,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -118,6 +119,31 @@ public class ProblemDetailAdvice {
 	private static String firstLine(String message) {
 		int newline = message.indexOf('\n');
 		return newline < 0 ? message : message.substring(0, newline);
+	}
+
+	/**
+	 * The client is gone before a response finished writing -- a browser that scrolled
+	 * away mid-tile-fetch and aborted the request is the ordinary case, not a server
+	 * fault (tiles: CONTRACT.md tile size finding). Spring wraps it, whichever write
+	 * failed, in this one type, so one handler covers it for every endpoint.
+	 *
+	 * <p>Two things a generic {@code Exception} handler would get wrong here. First, the
+	 * stack trace: it is Tomcat's write plumbing underneath a broken socket, not a fault
+	 * in this code, so it is logged at info and without one -- an {@code ERROR} full of
+	 * frames for an ordinary disconnect is exactly the noise that buries a real fault
+	 * next to it. Second, and the reason this handler returns {@code void} rather than a
+	 * {@link ProblemDetail} like every other one here: by the time this fires, the
+	 * response has typically already committed a content type from the failed write --
+	 * {@code application/vnd.mapbox-vector-tile} for a tile -- and no converter turns a
+	 * {@code ProblemDetail} into that. Trying anyway does not reach the client (the
+	 * socket is already gone) and only replaces this clear cause in the log with
+	 * Spring's own "no converter for preset Content-Type" failure. A {@code void} return
+	 * is Spring's own signal that the response needs nothing further, so that second
+	 * failure never happens.
+	 */
+	@ExceptionHandler(AsyncRequestNotUsableException.class)
+	public void handleClientGone(AsyncRequestNotUsableException ex) {
+		log.info("Antwort nicht mehr zustellbar, Client hat die Verbindung beendet: {}", ex.getMessage());
 	}
 
 	@ExceptionHandler(Exception.class)

@@ -5,6 +5,7 @@ import de.kreuter.hgis.common.SqlIdentifier;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
@@ -36,19 +37,104 @@ import org.springframework.stereotype.Service;
 @Service
 public class MvtService {
 
+	/**
+	 * How many features one tile may carry at most (this class's answer to the "4,35 MB
+	 * fuer eine Kachel" finding). A {@code LIMIT} inside {@code candidates} below, not a
+	 * client-side truncation of the finished tile: cutting the SQL result set is what
+	 * keeps the oversized case from ever reaching {@code ST_AsMVT}, {@code ST_AsMVTGeom}
+	 * or the wire in the first place.
+	 *
+	 * <p>230.000 simple points measured 4.350.410 bytes -- about 19 bytes each. This
+	 * limit keeps that same worst case, and any layer with real attributes on top,
+	 * comfortably under 2 MB rather than picking the smallest number that still looks
+	 * safe: a tile that renders visibly incomplete (see {@link #truncated}) is always
+	 * the caller's cue to zoom in, so there is little to gain from limiting harder than
+	 * this and only lost detail to show for it.
+	 */
+	static final int DEFAULT_MAX_FEATURES_PER_TILE = 50_000;
+
+	/**
+	 * Answered alongside the tile bytes: the {@code LIMIT} above cuts silently in SQL, so
+	 * without this a truncated tile and a complete one would be byte-for-byte
+	 * indistinguishable to a caller. A limit that only shrinks the response without ever
+	 * saying so is the expensive kind of bug (CONTRACT.md) -- the map looks finished and
+	 * is not. {@link de.kreuter.hgis.tiles.TileController} turns {@link #truncated()}
+	 * into a response header a client can act on; either way it also reaches the log,
+	 * since nobody necessarily looks at the header on any single request.
+	 */
+	public record RenderedTile(byte[] mvt, boolean truncated) {}
+
+	/**
+	 * The tie-break {@code candidates} falls back to once {@code ST_Area + ST_Length}
+	 * ties -- which, for a point layer, is every row, always: neither function means
+	 * anything for a point, so the whole ranking used to fall straight through to
+	 * {@code fid}. {@code fid} is {@code GENERATED ALWAYS AS IDENTITY}, i.e. insertion
+	 * order, and nothing about ingest ever shuffles that -- a source sorted by district,
+	 * the ordinary shape of a government export, keeps that order into the table. The
+	 * result was not a thinned-out layer, it was one district kept whole and its
+	 * neighbour dropped whole: reviewed and reproduced with two 20.000-point "Bezirke"
+	 * in one tile, limit 5.000 -- 5.000 from the first, 0 from the second.
+	 *
+	 * <p>This scatters {@code fid} instead of using it directly: {@code (fid * A) mod M}
+	 * with {@code M = 2^31 - 1} (a Mersenne prime) and {@code A = 2654435761}, the Knuth
+	 * multiplicative-hashing constant ({@code 2^32} times the golden ratio's fractional
+	 * part, rounded to the nearest prime -- the standard choice for scattering small,
+	 * sequential integers, used for exactly that in hash tables and noise functions).
+	 * Multiplying by a unit modulo a prime is a bijection, so this loses no fids -- but
+	 * bijective alone would not have been enough. An earlier version of this multiplied
+	 * by {@code 16807} instead (the classic Park-Miller generator constant) and measured
+	 * as 2.500/2.500 in theory, 5.000/0 in the review's own reproduction: {@code 16807} is
+	 * so small relative to {@code M} that {@code fid * 16807} does not wrap {@code M} at
+	 * all across any realistic table's fid range, leaving the map linear -- and therefore
+	 * exactly the insertion order it was meant to break up -- in every practical case. The
+	 * review's own two-district table pins that regression down; see the class's test
+	 * {@code MvtServiceSpatialClumpingTest}, which fails on {@code 16807} and passes on
+	 * {@code 2654435761}. {@code A}'s size relative to {@code M} is what actually matters:
+	 * large enough that a single increment of {@code fid} already wraps {@code M}, so
+	 * neighbouring fids -- and anything correlated with them, like a spatial clump -- land
+	 * far apart in the ranking. Measured on the review's exact scenario (two 20.000-point
+	 * districts, one tile, limit 5.000): 2.499/2.501.
+	 *
+	 * <p>{@code (fid + 1) mod M} first keeps every fid inside the map's domain without
+	 * ever overflowing {@code bigint} -- the multiply that follows is then at most
+	 * {@code (M - 1) * A}, about {@code 5.7 * 10^18}, comfortably short of {@code bigint}'s
+	 * {@code 2^63 - 1} (about {@code 9.2 * 10^18}) -- and steers clear of {@code fid = -1},
+	 * the one value the bijection sends to {@code 0} regardless of {@code A}.
+	 *
+	 * <p>Plain arithmetic on purpose, not {@code hashtext} or {@code hashint8}: those are
+	 * PostgreSQL-internal hash functions explicitly reserved to change between major
+	 * versions (why {@code pg_upgrade} can demand a {@code REINDEX} of a hash index), so
+	 * two servers a version apart could truncate the very same tile into two different,
+	 * equally valid selections -- silently, since nothing about that changes {@code
+	 * dataVersion}, {@code styleVersion} or the tile's {@code ETag}. {@code +}, {@code *}
+	 * and {@code %} on {@code bigint} carry no such reservation; this expression means
+	 * exactly the same thing on any PostgreSQL version, past or future.
+	 *
+	 * <p>The trailing plain {@code l.fid} exists only for a total order: two fids can
+	 * share a scattered value if they are exactly {@code M} apart, a gap no real layer
+	 * reaches, so this never changes which rows a tile shows -- only, in that one
+	 * unreachable case, which order ties would otherwise leave unresolved.
+	 */
+	private static final String SPATIAL_SCATTER = "((l.fid + 1) % 2147483647) * 2654435761 % 2147483647";
+
 	private static final String TILE_QUERY = """
 			WITH bounds AS (
 			  SELECT ST_TileEnvelope(:z, :x, :y) AS merc,
 			         %s AS native
-			)
-			SELECT ST_AsMVT(tile, 'layer', 4096, 'geom', 'fid')
-			FROM (
+			)%s,
+			candidates AS MATERIALIZED (
 			  SELECT l.fid,%s
-			         ST_AsMVTGeom(ST_Transform(l.geom, 3857), b.merc, 4096, 64, true) AS geom
-			  FROM %s l, bounds b
-			  WHERE l.geom && b.native
-			) AS tile
-			WHERE tile.geom IS NOT NULL
+			         ST_AsMVTGeom(ST_Transform(%s, 3857), b.merc, 4096, 64, true) AS geom
+			  FROM %s
+			  WHERE %s
+			  ORDER BY (ST_Area(l.geom) + ST_Length(l.geom)) DESC, %s, l.fid
+			  LIMIT :tileLimit
+			)
+			SELECT
+			  (SELECT ST_AsMVT(t, 'layer', 4096, 'geom', 'fid')
+			     FROM (SELECT * FROM candidates LIMIT :maxFeatures) t
+			     WHERE t.geom IS NOT NULL) AS mvt,
+			  (SELECT count(*) FROM candidates) > :maxFeatures AS truncated
 			""";
 
 	/**
@@ -89,15 +175,27 @@ public class MvtService {
 
 	private final JdbcClient jdbc;
 	private final ProjectionDomain projectionDomain;
+	private final int maxFeaturesPerTile;
 
+	@Autowired
 	MvtService(JdbcClient jdbc, ProjectionDomain projectionDomain) {
-		this.jdbc = jdbc;
-		this.projectionDomain = projectionDomain;
+		this(jdbc, projectionDomain, DEFAULT_MAX_FEATURES_PER_TILE);
 	}
 
 	/**
-	 * Renders one tile. Returns {@code null} when the tile has no features -- callers
-	 * turn that into a 204, never an empty byte array with a 200.
+	 * Lets a test trigger {@link RenderedTile#truncated()} with a handful of rows
+	 * instead of {@link #DEFAULT_MAX_FEATURES_PER_TILE}. Never used by Spring: the
+	 * constructor above is the only one it can pick without ambiguity.
+	 */
+	MvtService(JdbcClient jdbc, ProjectionDomain projectionDomain, int maxFeaturesPerTile) {
+		this.jdbc = jdbc;
+		this.projectionDomain = projectionDomain;
+		this.maxFeaturesPerTile = maxFeaturesPerTile;
+	}
+
+	/**
+	 * Renders one tile. {@link RenderedTile#mvt()} is {@code null} when the tile has no
+	 * features -- callers turn that into a 204, never an empty byte array with a 200.
 	 *
 	 * @param attributeColumns column names to carry as tile properties, resolved from the
 	 *                         layer's style through {@code layer_field}; never a name that
@@ -109,16 +207,24 @@ public class MvtService {
 	 *                         caller decides which masks apply to this particular layer;
 	 *                         passing one here always clips, regardless of z-index.
 	 */
-	public byte[] renderTile(String tableName, int srid, Collection<String> attributeColumns,
+	public RenderedTile renderTile(String tableName, int srid, Collection<String> attributeColumns,
 			List<ClipMask> masks, int z, int x, int y) {
-		byte[] mvt = jdbc.sql(query(tableName, attributeColumns, masks, srid, z, x, y))
+		RenderedTile result = jdbc.sql(query(tableName, attributeColumns, masks, srid, z, x, y))
 				.param("z", z)
 				.param("x", x)
 				.param("y", y)
 				.param("srid", srid)
-				.query(byte[].class)
+				.param("tileLimit", maxFeaturesPerTile + 1)
+				.param("maxFeatures", maxFeaturesPerTile)
+				.query((rs, rowNum) -> new RenderedTile(rs.getBytes("mvt"), rs.getBoolean("truncated")))
 				.single();
-		return (mvt == null || mvt.length == 0) ? null : mvt;
+		byte[] mvt = result.mvt();
+		return (mvt == null || mvt.length == 0) ? new RenderedTile(null, result.truncated()) : result;
+	}
+
+	/** What {@link RenderedTile#truncated()} was measured against -- for a log line only. */
+	public int maxFeaturesPerTile() {
+		return maxFeaturesPerTile;
 	}
 
 	/**
@@ -135,13 +241,18 @@ public class MvtService {
 				.param("x", x)
 				.param("y", y)
 				.param("srid", srid)
+				.param("tileLimit", maxFeaturesPerTile + 1)
+				.param("maxFeatures", maxFeaturesPerTile)
 				.query(String.class)
 				.single();
 	}
 
 	/**
-	 * Builds the query for {@code masks}. Unclipped when {@code masks} is empty, exactly
-	 * {@link #TILE_QUERY}. Otherwise builds it from parts (CONTRACT.md phase 21):
+	 * Builds the query for {@code masks}, always through {@link #TILE_QUERY}: an empty
+	 * {@code masks} list leaves {@code ctes} empty and {@code from}/{@code where}/
+	 * {@code geom} at their unclipped defaults below, which is exactly the query this
+	 * method ran before CONTRACT.md phase 19 introduced clip masks at all -- {@code
+	 * candidates}' ranking and {@code LIMIT} aside. Otherwise built from parts (phase 21):
 	 *
 	 * <ul>
 	 *   <li>The two {@code *Whole} modes filter, they do not cut geometry, and each keeps
@@ -168,9 +279,6 @@ public class MvtService {
 		String attributes = selectedAttributes(attributeColumns);
 		String layerTable = SqlIdentifier.quoteLayerTable(tableName);
 		String nativeBounds = nativeBounds(srid, z, x, y);
-		if (masks.isEmpty()) {
-			return TILE_QUERY.formatted(nativeBounds, attributes, layerTable);
-		}
 
 		StringBuilder ctes = new StringBuilder();
 		StringBuilder from = new StringBuilder(layerTable).append(" l, bounds b");
@@ -207,21 +315,7 @@ public class MvtService {
 			}
 		}
 
-		return """
-				WITH bounds AS (
-				  SELECT ST_TileEnvelope(:z, :x, :y) AS merc,
-				         %s AS native
-				)%s
-				SELECT ST_AsMVT(tile, 'layer', 4096, 'geom', 'fid')
-				FROM (
-				  SELECT l.fid,%s
-				         ST_AsMVTGeom(ST_Transform(%s, 3857), b.merc, 4096, 64, true) AS geom
-				  FROM %s
-				  WHERE %s
-				) AS tile
-				WHERE tile.geom IS NOT NULL
-				"""
-				.formatted(nativeBounds, ctes, attributes, geom, from, where);
+		return TILE_QUERY.formatted(nativeBounds, ctes, attributes, geom, from, where, SPATIAL_SCATTER);
 	}
 
 	/**

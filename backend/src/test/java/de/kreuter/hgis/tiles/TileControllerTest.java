@@ -148,7 +148,7 @@ class TileControllerTest {
 	void offeredValuesMatchTheTypeInTheTile() throws Exception {
 		byte[] mvt = mvtService.renderTile(testLayer.tableName(), 25832,
 				List.of(LayerTableFixture.CATEGORY_COLUMN, LayerTableFixture.NUMERIC_COLUMN), List.of(),
-				testLayer.zoom(), testLayer.tileX(), testLayer.tileY());
+				testLayer.zoom(), testLayer.tileX(), testLayer.tileY()).mvt();
 		Map<String, Object> inTile = MvtTileDecoder.decode(mvt).get(0).features().get(0).properties();
 
 		assertThat(firstValue(LayerTableFixture.CATEGORY_COLUMN).isString())
