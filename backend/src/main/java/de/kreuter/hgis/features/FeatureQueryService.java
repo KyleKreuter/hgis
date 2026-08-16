@@ -100,7 +100,7 @@ public class FeatureQueryService {
 
 		// Fetching one extra row is what answers "is there more" without a second query
 		// and without counting: if the extra row shows up, there is a next page.
-		int size = Math.clamp(query.size(), 1, MAX_PAGE_SIZE);
+		int size = requirePageSize(query.size());
 		String sql = "SELECT " + selectList(fields, query.includeGeometry())
 				+ " FROM " + table + " f"
 				+ where
@@ -405,15 +405,37 @@ public class FeatureQueryService {
 		return value;
 	}
 
-	private LayerField resolveSortField(String sort, List<LayerField> fields) {
-		if (sort == null || sort.isBlank() || sort.equalsIgnoreCase("fid")) {
-			return null;
+	/**
+	 * The page size, or a rejection.
+	 *
+	 * <p>Clamping is what this used to do, and it answered a request for 5.000 rows with
+	 * 1.000 and nothing that said so. A person might stop at a number that looks too round;
+	 * a program takes the page for the whole answer and computes on a fifth of it. The
+	 * ceiling itself is right and stays -- only its silence is gone.
+	 *
+	 * @throws BadRequestException when the size is outside 1..{@link #MAX_PAGE_SIZE}
+	 */
+	private static int requirePageSize(int size) {
+		if (size < 1 || size > MAX_PAGE_SIZE) {
+			throw new BadRequestException("size muss zwischen 1 und " + MAX_PAGE_SIZE
+					+ " liegen. Angefragt waren " + size + ".");
 		}
-		return fields.stream()
-				.filter(field -> field.getSourceName().equalsIgnoreCase(sort)
-						|| field.getColumnName().equalsIgnoreCase(sort))
-				.findFirst()
-				.orElseThrow(() -> new BadRequestException("Unbekanntes Sortierfeld: " + sort));
+		return size;
+	}
+
+	/**
+	 * The field to sort by, or null for the fid alone.
+	 *
+	 * <p>The rule lives in {@link QueryFields}, shared with the filter expression: this and
+	 * {@link FilterParser} used to resolve the same name to different fields whenever one
+	 * field's display name was another's column name, so a filter and a sort written with
+	 * the same word read different columns without saying so.
+	 *
+	 * <p>Still reports "Unbekanntes Sortierfeld", which {@code frontend/src/table/
+	 * sortValidity.ts} matches on to fall back to unsorted when the field was deleted.
+	 */
+	private LayerField resolveSortField(String sort, List<LayerField> fields) {
+		return QueryFields.requireSortField(sort, fields);
 	}
 
 	/**
