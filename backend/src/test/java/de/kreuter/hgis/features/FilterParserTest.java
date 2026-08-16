@@ -391,6 +391,100 @@ class FilterParserTest {
 		}
 	}
 
+	/**
+	 * Ordering a text column against a number is the quiet wrong answer one layer below the
+	 * ambiguous name: PostgreSQL compares character by character, so '9' sorts after '10'.
+	 * On the Straßenbaumkataster's "8 m"-style column that turned "crowns wider than 10 m"
+	 * into 225.657 of 229.876 rows, where the honest count is 73.890.
+	 */
+	@Nested
+	@DisplayName("a text column is not ordered against a number")
+	class TextAgainstNumber {
+
+		@ParameterizedTest
+		@ValueSource(strings = { "name > 10", "name >= 10", "name < 10", "name <= 10" })
+		void refusesEveryOrderingOperator(String expression) {
+			assertThatThrownBy(() -> parse(expression))
+					.isInstanceOf(BadRequestException.class)
+					.hasMessageContaining("ist vom Typ text");
+		}
+
+		/**
+		 * The escape, and the reason only the bare number is refused: quotes are where the
+		 * intent is legible. Whoever writes them is asking for a text comparison.
+		 */
+		@Test
+		void servesTheSameComparisonWhenTheValueIsQuoted() {
+			ParsedFilter filter = parse("name > '10'");
+
+			assertThat(filter.sql()).isEqualTo("\"name\" > :f0");
+			assertThat(filter.parameters()).containsEntry("f0", "10");
+		}
+
+		@Test
+		void namesTheNumericFieldsOfTheLayer() {
+			assertThatThrownBy(() -> parse("name > 10"))
+					.hasMessageContaining("Zahlenfelder dieses Layers: fid, Gebäudehöhe, einwohner")
+					.hasMessageContaining("Hochkommas");
+		}
+
+		/**
+		 * These fixtures are unsaved and carry no id, so the list is bare names here. That
+		 * the id travels with a saved field is proved against the database, in
+		 * {@code FeatureQueryServiceTest.namesTheNumericFieldIdWhenRefusingATextComparison}.
+		 */
+		@Test
+		void omitsAnIdWhereThereIsNone() {
+			assertThatThrownBy(() -> parse("name > 10")).hasMessageNotContaining("Id ");
+		}
+
+		@Test
+		void leavesNumericColumnsAlone() {
+			assertThat(parse("einwohner > 10").sql()).isEqualTo("\"einwohner\" > :f0");
+			assertThat(parse("\"Gebäudehöhe\" >= 10").sql()).isEqualTo("\"gebaeudehoehe\" >= :f0");
+			assertThat(parse("fid < 10").sql()).isEqualTo("\"fid\" < :f0");
+		}
+
+		/**
+		 * The four operator classes that stay open, one test each. None of them implies an
+		 * order, so none of them can produce the wrong ordering above -- and closing them
+		 * later "for symmetry" would break filters that are correct today.
+		 */
+		@Test
+		void keepsEqualityAgainstANumber() {
+			ParsedFilter filter = parse("name = 10");
+
+			assertThat(filter.sql()).isEqualTo("\"name\" = :f0");
+			assertThat(filter.parameters()).containsEntry("f0", "10");
+		}
+
+		@Test
+		void keepsInequalityAgainstANumber() {
+			assertThat(parse("name <> 10").sql()).isEqualTo("\"name\" <> :f0");
+			assertThat(parse("name != 10").sql()).isEqualTo("\"name\" <> :f0");
+		}
+
+		@Test
+		void keepsInAgainstNumbers() {
+			ParsedFilter filter = parse("name IN (10, 20)");
+
+			assertThat(filter.sql()).isEqualTo("\"name\" IN (:f0, :f1)");
+			assertThat(filter.parameters()).containsValues("10", "20");
+		}
+
+		@Test
+		void keepsLikeAgainstANumber() {
+			assertThat(parse("name LIKE 10").sql()).isEqualTo("\"name\" LIKE :f0");
+		}
+
+		@Test
+		void stillReportsAMissingValueRatherThanThisError() {
+			assertThatThrownBy(() -> parse("name > "))
+					.isInstanceOf(BadRequestException.class)
+					.hasMessageContaining("Wert erwartet");
+		}
+	}
+
 	@Nested
 	@DisplayName("type mismatches are reported, not passed to PostgreSQL")
 	class Types {

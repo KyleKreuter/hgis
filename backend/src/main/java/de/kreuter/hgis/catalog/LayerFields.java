@@ -78,6 +78,17 @@ public final class LayerFields {
 	}
 
 	/**
+	 * Whether this name, on its own, means exactly one field of the layer.
+	 *
+	 * <p>Same lookup as {@link #require}, asked as a question instead of as a demand. It is
+	 * what lets a message spend a field id only where the name does not carry: naming a field
+	 * is the short answer, and the id is the one that survives a collision.
+	 */
+	public static boolean resolvesUniquely(String name, List<LayerField> fields) {
+		return matching(name, fields).size() == 1;
+	}
+
+	/**
 	 * The field a stored style names.
 	 *
 	 * <p>By column name only, and deliberately not through {@link #require}: a style is
@@ -99,7 +110,14 @@ public final class LayerFields {
 				.findFirst();
 	}
 
-	static boolean isNumeric(LayerField field) {
+	/**
+	 * Whether a comparison or a computation may read this field as a quantity.
+	 *
+	 * <p>Public because {@code FilterParser} names the numeric fields of a layer when it
+	 * refuses to order a text column against a number, and that list has to mean the same
+	 * thing there as it does for a classification. One definition, one place.
+	 */
+	public static boolean isNumeric(LayerField field) {
 		return NUMERIC_TYPES.contains(baseType(field));
 	}
 

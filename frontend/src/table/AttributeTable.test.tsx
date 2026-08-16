@@ -63,7 +63,16 @@ function fakeViewState(document: ViewStateDocument = EMPTY_VIEW_STATE): ViewStat
   }
 }
 
-function setup() {
+/** A saved working state for layer-a, sorted by whatever `field` names. */
+function savedSort(field: string, desc = false): ViewStateDocument {
+  return {
+    version: 1,
+    activeLayerId: 'layer-a',
+    layers: { 'layer-a': { sort: { field, desc }, query: null, selection: [] } },
+  }
+}
+
+function setup(document: ViewStateDocument = EMPTY_VIEW_STATE) {
   const { calls } = stubFetch([
     { match: '/features', body: PAGE },
     { match: '/api/layers/layer-a', body: layerDetail('layer-a', 'Gebäude') },
@@ -72,7 +81,7 @@ function setup() {
   const client = testQueryClient()
   const props = {
     projectId: 'p-1',
-    viewState: fakeViewState(),
+    viewState: fakeViewState(document),
     onZoomToFeature: vi.fn(),
     onRequestEdit: vi.fn(),
   }
@@ -110,13 +119,24 @@ async function waitForLastCallWithout(calls: string[], layerId: string, paramete
   )
 }
 
+/** Whether a column header currently carries its sort arrow. */
+function hasSortArrow(header: HTMLElement): boolean {
+  return header.querySelector('svg') !== null
+}
+
 describe('AttributeTable', () => {
+  /**
+   * The field id, not the column name. A column name is only unique among columns: a layer
+   * can carry a field whose display name is another field's column name, and the server
+   * refuses such a name rather than guessing. Clicking that header did nothing at all --
+   * 400, silent fallback to unsorted, no arrow and no message.
+   */
   test('sends sort and search to the server as the user sets them', async () => {
     const { calls, user } = setup()
 
     await user.click(await screen.findByRole('button', { name: 'Baujahr' }))
     await waitFor(() =>
-      expect(featureCalls(calls, 'layer-a').some((url) => url.includes('sort=baujahr'))).toBe(true),
+      expect(featureCalls(calls, 'layer-a').some((url) => url.includes('sort=f-2'))).toBe(true),
     )
 
     await user.type(await screen.findByRole('textbox'), 'Alpha')
@@ -139,12 +159,46 @@ describe('AttributeTable', () => {
    * plain test, so neither of these can pass merely because its setup broke.
    */
 
+  /**
+   * A state saved before the switch to ids holds a column name, and the server still
+   * serves it. The arrow has to follow: comparing against the id alone would leave such a
+   * table sorted correctly and looking unsorted -- a false negative rather than a false
+   * positive, and just as misleading.
+   */
+  test('shows the arrow for a sort saved as a column name', async () => {
+    const { calls } = setup(savedSort('baujahr', true))
+
+    await waitFor(() =>
+      expect(featureCalls(calls, 'layer-a').some((url) => url.includes('sort=baujahr'))).toBe(true),
+    )
+    const header = await screen.findByRole('button', { name: 'Baujahr' })
+    await waitFor(() => expect(hasSortArrow(header)).toBe(true))
+  })
+
+  test('shows the arrow for a sort saved as a field id', async () => {
+    const { calls } = setup(savedSort('f-2'))
+
+    await waitFor(() =>
+      expect(featureCalls(calls, 'layer-a').some((url) => url.includes('sort=f-2'))).toBe(true),
+    )
+    const header = await screen.findByRole('button', { name: 'Baujahr' })
+    await waitFor(() => expect(hasSortArrow(header)).toBe(true))
+  })
+
+  /** And the negative case, so the two above cannot pass on an arrow that is always there. */
+  test('shows no arrow on a column that is not the sort field', async () => {
+    setup(savedSort('f-2'))
+
+    const other = await screen.findByRole('button', { name: 'Name' })
+    await waitFor(() => expect(hasSortArrow(other)).toBe(false))
+  })
+
   test('drops the previous layer"s sort on a layer switch', async () => {
     const { calls, switchToLayerB, user } = setup()
 
     await user.click(await screen.findByRole('button', { name: 'Baujahr' }))
     await waitFor(() =>
-      expect(featureCalls(calls, 'layer-a').some((url) => url.includes('sort=baujahr'))).toBe(true),
+      expect(featureCalls(calls, 'layer-a').some((url) => url.includes('sort=f-2'))).toBe(true),
     )
 
     switchToLayerB()

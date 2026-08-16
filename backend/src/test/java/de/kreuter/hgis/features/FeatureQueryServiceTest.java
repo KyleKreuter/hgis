@@ -435,6 +435,59 @@ class FeatureQueryServiceTest {
 		projectRepository.deleteById(collidingProject.getId());
 	}
 
+	private Project shadowedProject;
+	private Layer shadowedLayer;
+	private String shadowedTableName;
+	private UUID shadowedNumericFieldId;
+
+	/**
+	 * The same collision as above, with the roles swapped: here it is the <em>numeric</em>
+	 * field whose name means two fields.
+	 *
+	 * <p>"wert" is the display name of the bigint field and the column name of the text one.
+	 * That is what makes this fixture worth its own table: when the message about a refused
+	 * text comparison lists the numeric fields, a plain "wert" would send the reader into a
+	 * second error to find out which one was meant. This is the one case where the list has
+	 * to spend a field id.
+	 */
+	@BeforeAll
+	void createShadowedLayer() {
+		shadowedProject = projectRepository.saveAndFlush(
+				new Project("Verdeckt-Test " + UUID.randomUUID(), null, 4326, "osm"));
+
+		UUID layerId = UUID.randomUUID();
+		shadowedTableName = SqlIdentifier.tableName(layerId);
+		String table = SqlIdentifier.quoteLayerTable(shadowedTableName);
+
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid      bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom     geometry(MultiPoint, 4326) NOT NULL,
+				    wert_num bigint,
+				    wert     text
+				)
+				""".formatted(table)).update();
+		jdbc.sql("INSERT INTO " + table + " (geom, wert_num, wert) VALUES "
+				+ "(ST_Multi(ST_SetSRID(ST_MakePoint(10, 53), 4326)), 7, '7 kg')").update();
+
+		Layer newLayer = new Layer(layerId, shadowedProject, "Verdeckt", shadowedTableName,
+				"MULTIPOINT", 4326);
+		newLayer.setFeatureCount(1);
+		shadowedLayer = layerRepository.saveAndFlush(newLayer);
+
+		shadowedNumericFieldId = fieldRepository.saveAndFlush(
+				new LayerField(shadowedLayer, "wert", "wert_num", "bigint", 0)).getId();
+		fieldRepository.saveAndFlush(
+				new LayerField(shadowedLayer, "Wert (Text)", "wert", "text", 1));
+	}
+
+	@AfterAll
+	void dropShadowedLayer() {
+		jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(shadowedTableName)).update();
+		layerRepository.deleteById(shadowedLayer.getId());
+		projectRepository.deleteById(shadowedProject.getId());
+	}
+
 	private Project typeProject;
 	private Layer typeLayer;
 	private String typeTableName;
@@ -1257,6 +1310,74 @@ class FeatureQueryServiceTest {
 		assertThat(page.features().stream()
 				.map(feature -> feature.properties().get("kronendurchmesser")))
 				.containsExactly(2L, 3L, 9L, 12L);
+	}
+
+	// --- a text column is not ordered against a number -------------------------------------
+
+	/**
+	 * The same fixture carries the other half of the story. {@code kronendurchmesser_z} is
+	 * the text twin of a bigint column, and ordering it against a number is the quiet wrong
+	 * answer: on the real layer {@code > 10} counted 225.657 of 229.876 rows where 73.890 is
+	 * the honest number.
+	 */
+	@Test
+	@DisplayName("ordering a text column against a number is refused")
+	void refusesToOrderATextColumnAgainstANumber() {
+		assertThatThrownBy(() -> service.list(collidingLayer.getId(), new FeatureQueryService.Query(
+				null, false, "kronendurchmesser_z > 10", null, null, null, false, null, 100)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("ist vom Typ text");
+	}
+
+	/**
+	 * A name that means one field is the whole answer, so the message spends nothing else on
+	 * it. "Kronendurchmesser Quelle" resolves on its own -- the id would only make the list
+	 * longer to read.
+	 */
+	@Test
+	@DisplayName("the message names the numeric field by name where the name carries")
+	void namesTheNumericFieldWithoutAnIdWhereTheNameIsEnough() {
+		assertThatThrownBy(() -> service.list(collidingLayer.getId(), new FeatureQueryService.Query(
+				null, false, "kronendurchmesser_z > 10", null, null, null, false, null, 100)))
+				.hasMessageContaining("Zahlenfelder dieses Layers: fid, Kronendurchmesser Quelle.")
+				.hasMessageNotContaining("Id ");
+	}
+
+	/**
+	 * And the case where the name does not carry: here "wert" is the numeric field's display
+	 * name and the text field's column name at once. Without the id the reader would have to
+	 * provoke a second error to learn which "wert" was meant.
+	 */
+	@Test
+	@DisplayName("the message adds the id where the numeric field's own name is ambiguous")
+	void namesTheNumericFieldIdWhereTheNameDoesNotCarry() {
+		assertThatThrownBy(() -> service.list(shadowedLayer.getId(), new FeatureQueryService.Query(
+				null, false, "\"Wert (Text)\" > 10", null, null, null, false, null, 100)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessageContaining("Zahlenfelder dieses Layers: fid, wert (Id "
+						+ shadowedNumericFieldId + ").");
+	}
+
+	/** Quoted, the same comparison is a text comparison and is still served. */
+	@Test
+	@DisplayName("the quoted form still runs, and still counts four")
+	void servesTheQuotedTextComparison() {
+		FeatureDtos.Page page = service.list(collidingLayer.getId(), new FeatureQueryService.Query(
+				null, false, "kronendurchmesser_z > '10'", null, null, null, false, null, 100));
+
+		assertThat(page.totalCount()).isEqualTo(4);
+	}
+
+	@Test
+	@DisplayName("sorting by that column is untouched, and stays lexical")
+	void sortsATextColumnLexicallyAsBefore() {
+		FeatureDtos.Page page = service.list(collidingLayer.getId(),
+				query("kronendurchmesser_z", true, null, 100));
+
+		assertThat(page.features().stream()
+				.map(feature -> feature.properties().get("kronendurchmesser_z")))
+				.as("'9' before '3' before '2' before '12' -- character by character, on purpose")
+				.containsExactly("9", "3", "2", "12");
 	}
 
 	// --- fid as a filterable field --------------------------------------------------------
