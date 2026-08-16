@@ -1,12 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'vitest'
 import { renderWithQueryClient, stubElementSize, stubFetch } from '@/test/render'
 import type {
   GeoportalCatalog,
   GeoportalDatasetDetail,
   GeoportalDatasetSummary,
 } from '@/api/geoportal'
+import { useMapViewport } from '@/map/mapViewportStore'
 import { GeoportalDialog } from './GeoportalDialog'
 
 /**
@@ -154,6 +155,31 @@ describe('GeoportalDialog detail pane', () => {
     // screen afterwards, rather than the pane still showing its pre-detail state.
     expect(await screen.findByText(/Freie und Hansestadt Hamburg/)).toBeInTheDocument()
     expect(screen.getByText('Beschreibung aus dem Listeneintrag')).toBeInTheDocument()
+  })
+})
+
+describe('GeoportalDialog Kartenausschnitt bei Neigung', () => {
+  afterEach(() => {
+    // The store is a module-level singleton -- without this, a bbox set for one test
+    // would still be there for the next.
+    useMapViewport.setState({ bbox: null, zoom: null, pitchExpanded: false })
+  })
+
+  test('weist auf ein großes Gebiet hin, wenn die Neigung den Ausschnitt aufgebläht hat', async () => {
+    useMapViewport.getState().setViewport([9, 53, 11, 54], 10, true)
+    renderDialog()
+    await clickEntry(/Baumkataster/)
+
+    expect(await screen.findByText(/sehr großes Gebiet/)).toBeInTheDocument()
+  })
+
+  test('zeigt bei flacher Karte keinen Hinweis auf ein großes Gebiet', async () => {
+    useMapViewport.getState().setViewport([9, 53, 11, 54], 10, false)
+    renderDialog()
+    await clickEntry(/Baumkataster/)
+
+    await screen.findByText('Nur den aktuellen Kartenausschnitt')
+    expect(screen.queryByText(/sehr großes Gebiet/)).not.toBeInTheDocument()
   })
 })
 

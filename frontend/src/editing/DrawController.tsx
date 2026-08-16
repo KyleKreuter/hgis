@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import type { Map as MapLibreMap } from 'maplibre-gl'
 import { toast } from 'sonner'
 import {
   TerraDraw,
@@ -21,6 +22,7 @@ import {
   findSnapTarget,
   isSnapPrecisionUsable,
   isTargetInReach,
+  type Project,
   type SnapCandidate,
   type SnapTarget,
 } from './snapping'
@@ -116,6 +118,16 @@ export function DrawController({
   const applyingFromBuffer = useRef(false)
   const historyNonce = useEditing((state) => state.historyNonce)
   const lastHistoryNonce = useRef(historyNonce)
+  /**
+   * The two independent reasons snapping can be unavailable, combined into the one
+   * `onSnapUnavailable` slot the toolbar reads. Kept apart because they come from
+   * different places on different rhythms -- `loadEditableFeatures` decides the first
+   * once per load, `snapTo`/`previewSnap` decide the second on every pointer move -- and
+   * each has to be able to clear its own reason without erasing whichever the other one
+   * currently holds.
+   */
+  const tooManyObjectsReason = useRef<string | null>(null)
+  const horizonReason = useRef<string | null>(null)
 
   /** Everything snapping may attach to: this layer's features plus the marked sources. */
   const allSnapCandidates = useCallback(
@@ -147,6 +159,48 @@ export function DrawController({
     const seenGeometry = lastGeometry.current
     const loadedSnapCandidates = snapCandidates.current
 
+    /** Combines the two reasons in `tooManyObjectsReason`/`horizonReason` into the one slot `onSnapUnavailable` takes. */
+    function reportSnapAvailability() {
+      onSnapUnavailable(tooManyObjectsReason.current ?? horizonReason.current)
+    }
+
+    /**
+     * Refuses a snap whose precision cannot be trusted (see `isSnapPrecisionUsable`) and
+     * keeps `horizonReason` -- and through it the toolbar -- in step, without repeating
+     * the toast for every one of the many pointer moves spent inside the same refusal.
+     *
+     * Edge-triggered on purpose: `snapTo` fires on every pointer move while drawing or
+     * dragging, `previewSnap` on every plain `mousemove`. Announcing the reason again on
+     * each of those would not be "stated rather than silently switched off"
+     * (`EditToolbar.tsx`) any more, it would be noise loud enough that the one useful
+     * announcement -- the first -- stops standing out from it.
+     */
+    function checkPrecision(pointer: [number, number], map: MapLibreMap, project: Project): boolean {
+      const center = map.getCenter()
+      const usable = isSnapPrecisionUsable(pointer, [center.lng, center.lat], project)
+      if (!usable && horizonReason.current === null) {
+        horizonReason.current =
+          'Nahe am Horizont ist die Karte zu ungenau zum Einrasten. Neigen Sie die Karte weniger.'
+        toast.warning(horizonReason.current)
+        reportSnapAvailability()
+      } else if (usable && horizonReason.current !== null) {
+        horizonReason.current = null
+        reportSnapAvailability()
+      }
+      return usable
+    }
+
+    /**
+     * Drops a stale horizon refusal when snapping itself is off, so a reason from
+     * before the toggle cannot linger and disable the button the moment it is turned
+     * back on somewhere the pointer no longer even is.
+     */
+    function clearHorizonReason() {
+      if (horizonReason.current === null) return
+      horizonReason.current = null
+      reportSnapAvailability()
+    }
+
     /**
      * terra-draw asks this on every pointer move while drawing or dragging a vertex.
      * Returning undefined means "no snap", which is what leaves the pointer free.
@@ -154,6 +208,7 @@ export function DrawController({
     function snapTo(event: { lng: number; lat: number }, context: { project: (lng: number, lat: number) => { x: number; y: number } }) {
       if (!snapEnabledRef.current) {
         onSnapTarget(null)
+        clearHorizonReason()
         return undefined
       }
       const project = ([lng, lat]: [number, number]) => context.project(lng, lat)
@@ -164,12 +219,9 @@ export function DrawController({
       // place a vertex somewhere the user never pointed at, so it is refused rather than
       // tolerated.
       const map = mapRef.current
-      if (map) {
-        const center = map.getCenter()
-        if (!isSnapPrecisionUsable(pointer, [center.lng, center.lat], project)) {
-          onSnapTarget(null)
-          return undefined
-        }
+      if (map && !checkPrecision(pointer, map, project)) {
+        onSnapTarget(null)
+        return undefined
       }
 
       const target = findSnapTarget(pointer, allSnapCandidates(), project)
@@ -398,6 +450,7 @@ export function DrawController({
       if (!target || !snapEnabledRef.current || candidates.length === 0) {
         previewTarget.current = null
         onSnapTarget(null)
+        clearHorizonReason()
         return
       }
       const project = ([lng, lat]: [number, number]) => target.project([lng, lat])
@@ -406,8 +459,7 @@ export function DrawController({
       // Same refusal as `snapTo` -- see there for why. The point tool has no callback of
       // its own into terra-draw's snapping, so this is the only place its preview (and
       // through it, `snapPlacedPoint`) can apply the same cutoff.
-      const center = target.getCenter()
-      if (!isSnapPrecisionUsable(pointer, [center.lng, center.lat], project)) {
+      if (!checkPrecision(pointer, target, project)) {
         previewTarget.current = null
         onSnapTarget(null)
         return
@@ -466,11 +518,12 @@ export function DrawController({
           // whichever features happened to load and quietly miss the ones that did not
           // (plan section D.1 asks for the reason to be stated, not for a silent retreat).
           const reason = `Zu viele Objekte im Ausschnitt (${page.totalCount}). Zoomen Sie näher heran, um sie einzurasten.`
-          onSnapUnavailable(reason)
+          tooManyObjectsReason.current = reason
           toast.warning(reason)
         } else {
-          onSnapUnavailable(null)
+          tooManyObjectsReason.current = null
         }
+        reportSnapAvailability()
 
         // Layer columns are always multi-typed, terra-draw only knows single geometries.
         // Anything with more than one part cannot be represented as one editable feature
@@ -537,6 +590,8 @@ export function DrawController({
       externalCandidates.current = []
       previewTarget.current = null
       onSnapTarget(null)
+      tooManyObjectsReason.current = null
+      horizonReason.current = null
       onSnapUnavailable(null)
       // Deliberately not ending the editing session here: leaving the mode is
       // `useEditSession`'s decision, and this cleanup also runs on a plain reload.

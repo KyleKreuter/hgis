@@ -12,7 +12,14 @@ interface MapViewportState {
    * nothing at zoom 9, and without a word it looks like a broken import.
    */
   zoom: number | null
-  setViewport: (bbox: Bbox, zoom: number) => void
+  /**
+   * Whether `bbox` reaches far past what the current zoom level would show flat --
+   * pitch, not a deliberate zoom-out, is what grew it. See `isPitchExpanded`. Read by
+   * the Geoportal dialog so "aktueller Kartenausschnitt" can say so instead of silently
+   * filtering (or silently importing) a much larger area than the screen suggests.
+   */
+  pitchExpanded: boolean
+  setViewport: (bbox: Bbox, zoom: number, pitchExpanded: boolean) => void
 }
 
 /**
@@ -30,5 +37,6 @@ interface MapViewportState {
 export const useMapViewport = create<MapViewportState>((set) => ({
   bbox: null,
   zoom: null,
-  setViewport: (bbox, zoom) => set({ bbox, zoom }),
+  pitchExpanded: false,
+  setViewport: (bbox, zoom, pitchExpanded) => set({ bbox, zoom, pitchExpanded }),
 }))

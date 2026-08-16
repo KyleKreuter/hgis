@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useMap } from './MapContext'
 import { useMapViewport } from './mapViewportStore'
-import { viewportQueryBounds } from './viewportBounds'
+import { isPitchExpanded } from './viewportBounds'
 
 /**
  * Renders nothing. Keeps `useMapViewport`'s bbox in step with the live map, so the
@@ -23,20 +23,27 @@ export function MapViewportTracker() {
     function report() {
       const target = mapRef.current
       if (!target) return
+      // Plain `getBounds()`, deliberately: it always contains everything on screen, at
+      // any pitch, and a bbox filter must never drop something the user can see. See
+      // `isPitchExpanded` for what happens instead of shrinking it.
+      const bounds = target.getBounds()
+      const bbox: [number, number, number, number] = [
+        bounds.getWest(),
+        bounds.getSouth(),
+        bounds.getEast(),
+        bounds.getNorth(),
+      ]
       const canvas = target.getCanvas()
       const center = target.getCenter()
-      // Not `target.getBounds()` -- see `viewportQueryBounds` for why a pitched view
-      // needs its far edge pulled in before it is fit to stand for "the current view".
-      const bbox = viewportQueryBounds({
+      const zoom = target.getZoom()
+      const expanded = isPitchExpanded({
+        bbox,
         width: canvas.clientWidth,
         height: canvas.clientHeight,
         center: [center.lng, center.lat],
-        unproject: (point) => {
-          const lngLat = target.unproject(point)
-          return [lngLat.lng, lngLat.lat]
-        },
+        zoom,
       })
-      setViewport(bbox, target.getZoom())
+      setViewport(bbox, zoom, expanded)
     }
 
     report()
