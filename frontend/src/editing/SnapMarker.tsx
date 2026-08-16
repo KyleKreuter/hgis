@@ -11,6 +11,12 @@ const SOURCE_ID = 'hgis-snap-marker'
  * where the cursor was, and there is no way to tell whether that was the tool working or
  * a misplaced click. The marker is the feedback that makes it trustworthy -- and its
  * absence says just as clearly that nothing is in range.
+ *
+ * Just not, on its own, *why*: nothing in reach and "in reach, but too close to the
+ * horizon to trust" (`isSnapPrecisionUsable`) both show no marker here. `DrawController`
+ * tells the two apart through `onSnapUnavailable` instead, which the toolbar's magnet
+ * button and its tooltip read -- this component only ever renders the position, never
+ * the reason.
  */
 export function SnapMarker({ target }: { target: SnapTarget | null }) {
   const { mapRef, isLoaded } = useMap()

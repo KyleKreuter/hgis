@@ -110,6 +110,11 @@ export function GeoportalDialog({ projectId, open, onOpenChange, onLayerAdded }:
   const startImport = useStartGeoportalImport(projectId)
   const refreshAfterImport = useRefreshAfterImport(projectId)
   const viewportBbox = useMapViewport((state) => state.bbox)
+  // See `isPitchExpanded` (viewportBounds.ts): a pitched map's bbox always contains
+  // everything on screen, but that can mean an area far larger than the zoom level
+  // alone would suggest -- worth saying before the checkbox below is checked, not only
+  // after the import turns out bigger than expected.
+  const viewportPitchExpanded = useMapViewport((state) => state.pitchExpanded)
 
   const [filters, setFilters] = useState<GeoportalFilters>(defaultGeoportalFilters)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -320,6 +325,7 @@ export function GeoportalDialog({ projectId, open, onOpenChange, onLayerAdded }:
                 useMapExtent={useMapExtent}
                 onUseMapExtentChange={setUseMapExtent}
                 hasViewport={viewportBbox !== null}
+                viewportPitchExpanded={viewportPitchExpanded}
                 countFetching={count.isFetching}
                 selectFieldsEnabled={selectFieldsEnabled}
                 onSelectFieldsEnabledChange={setSelectFieldsEnabled}
@@ -644,6 +650,8 @@ interface DatasetDetailPaneProps {
   useMapExtent: boolean
   onUseMapExtentChange: (value: boolean) => void
   hasViewport: boolean
+  /** See `isPitchExpanded` -- true when the reported extent reaches well past what the zoom level alone would show. */
+  viewportPitchExpanded: boolean
   countFetching: boolean
   selectFieldsEnabled: boolean
   onSelectFieldsEnabledChange: (value: boolean) => void
@@ -673,6 +681,7 @@ function DatasetDetailPane({
   useMapExtent,
   onUseMapExtentChange,
   hasViewport,
+  viewportPitchExpanded,
   countFetching,
   selectFieldsEnabled,
   onSelectFieldsEnabledChange,
@@ -873,6 +882,11 @@ function DatasetDetailPane({
               <span>
                 Nur den aktuellen Kartenausschnitt
                 {!hasViewport && <span className="block text-muted-foreground">Karte noch nicht bereit</span>}
+                {hasViewport && viewportPitchExpanded && (
+                  <span className="block text-muted-foreground">
+                    Karte ist geneigt: der Ausschnitt umfasst ein sehr großes Gebiet
+                  </span>
+                )}
                 {useMapExtent && countFetching && (
                   <span className="block text-muted-foreground">Objektzahl wird ermittelt…</span>
                 )}

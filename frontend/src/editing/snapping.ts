@@ -278,21 +278,72 @@ function intersectSegments(first: Segment, second: Segment): [number, number] | 
 }
 
 /**
- * Size of one screen pixel in map units at the pointer's position.
+ * Size of one screen pixel in map units at the pointer's position -- the worse of the
+ * longitude and latitude directions.
  *
  * Measured by projecting two nearby coordinates rather than derived from the zoom level:
  * the scale depends on latitude in a Mercator projection, and the map is the only thing
  * that knows its own transform.
+ *
+ * Both directions, not just longitude: on a flat, unrotated map the two agree, but a
+ * pitched view foreshortens the screen far more in one direction than the other -- a
+ * point near the horizon can sit ten times closer to the pointer in longitude than in
+ * latitude. Reporting only the longitude figure understated how many map-degrees a
+ * screen pixel there was worth, which in turn undersized `toleranceInMapUnits` below
+ * and let the cheap bounds check reject a candidate the real, pixel-space distance test
+ * would have accepted -- a vertex visibly within reach that the pointer could not snap
+ * to. Taking the worse of the two keeps that check a safe overestimate instead: it may
+ * let a few more candidates through to the exact test than strictly necessary, never
+ * fewer.
  */
 function mapUnitsPerPixel(pointer: [number, number], project: Project): number {
   const step = 0.0001
   const origin = project(pointer)
-  const offset = project([pointer[0] + step, pointer[1]])
-  const pixels = Math.abs(offset.x - origin.x)
+  const lngStep = project([pointer[0] + step, pointer[1]])
+  const latStep = project([pointer[0], pointer[1] + step])
+  const lngPixels = Math.hypot(lngStep.x - origin.x, lngStep.y - origin.y)
+  const latPixels = Math.hypot(latStep.x - origin.x, latStep.y - origin.y)
 
   // Degenerate transform (zero-size map, mocked projection): fall back to a value that
   // makes the bounds check permissive rather than rejecting every candidate.
-  return pixels === 0 ? Infinity : step / pixels
+  const lngUnits = lngPixels === 0 ? Infinity : step / lngPixels
+  const latUnits = latPixels === 0 ? Infinity : step / latPixels
+  return Math.max(lngUnits, latUnits)
+}
+
+/**
+ * How much coarser the pointer's position may be than the map centre's before snapping
+ * there is refused outright, rather than merely tolerated.
+ *
+ * Measured in the browser at zoom 18 with the default 60 degree pitch ceiling: this
+ * ratio stays under 1.6 for the whole screen at 30 degrees of pitch and under 2.3 at 45
+ * -- ordinary looking-around tilts that snapping keeps working through unchanged. It
+ * only exceeds 3 within the top ~12% of the screen at the full 60 degrees, which is the
+ * sliver this cutoff is for: right at the horizon a pointer that moved twelve screen
+ * pixels -- `SNAP_TOLERANCE_PX` -- could have moved tens of metres on the ground, and a
+ * "snap" there would silently place a vertex somewhere the user never pointed at.
+ */
+const HORIZON_PRECISION_RATIO = 3
+
+/**
+ * Whether the map still resolves the pointer's position precisely enough for a snap
+ * there to mean what it looks like on screen.
+ *
+ * Takes `mapCenter` rather than assuming a flat map, because resolution is only uniform
+ * at pitch zero; the caller passes `Map.getCenter()` and this compares the pointer
+ * against it fresh on every call, which is what lets the cutoff track the map as it
+ * tilts and un-tilts.
+ */
+export function isSnapPrecisionUsable(
+  pointer: [number, number],
+  mapCenter: [number, number],
+  project: Project,
+): boolean {
+  const centerScale = mapUnitsPerPixel(mapCenter, project)
+  // Degenerate transform: let the caller's own candidate search decide instead of
+  // refusing everything on a ratio that cannot be trusted.
+  if (!Number.isFinite(centerScale) || centerScale <= 0) return true
+  return mapUnitsPerPixel(pointer, project) <= centerScale * HORIZON_PRECISION_RATIO
 }
 
 /**
