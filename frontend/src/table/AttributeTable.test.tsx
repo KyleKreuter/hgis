@@ -1,6 +1,7 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
+import { useSelection } from '@/state/selection'
 import { renderWithQueryClient, stubFetch, testQueryClient } from '@/test/render'
 import type { LayerDetail } from '@/api/layers'
 import type { FeaturePage } from '@/api/features'
@@ -58,6 +59,7 @@ function fakeViewState(document: ViewStateDocument = EMPTY_VIEW_STATE): ViewStat
     writeSort: vi.fn(),
     writeQuery: vi.fn(),
     writeSelection: vi.fn(() => true),
+    hasPendingWrite: () => false,
   }
 }
 
@@ -194,5 +196,65 @@ describe('AttributeTable', () => {
     expect(await screen.findByText('Ein Kartenbild hat keine Attribute.')).toBeInTheDocument()
     expect(screen.getByText('Attribute - Stadtplan')).toBeInTheDocument()
     expect(calls).toEqual([])
+  })
+
+  /**
+   * The two halves of one rule: a selection the user makes is saved, a selection that
+   * came from elsewhere is not.
+   *
+   * They belong together. On its own, the negative one would also pass if the table
+   * stopped saving selections altogether, or if the subscription never fired -- which is
+   * exactly the state the rule is meant to be distinguished from.
+   */
+  describe('Auswahl speichern', () => {
+    function renderWithSelection(selection: number[]) {
+      stubFetch([
+        // Before '/features': `stubFetch` matches by substring and takes the first hit,
+        // and the fids URL contains that prefix.
+        { match: '/features/fids', body: { fids: [1, 2] } },
+        { match: '/features', body: PAGE },
+        { match: '/api/layers/layer-a', body: layerDetail('layer-a', 'Gebäude') },
+      ])
+      useSelection.setState({ layerId: null, selected: new Set() })
+      const viewState = fakeViewState({
+        version: 1,
+        activeLayerId: 'layer-a',
+        layers: { 'layer-a': { sort: null, query: null, selection } },
+      })
+      renderWithQueryClient(
+        <AttributeTable
+          layerId="layer-a"
+          layerName="Gebäude"
+          layerFeatureCount={2}
+          projectId="p-1"
+          viewState={viewState}
+          onZoomToFeature={vi.fn()}
+          onRequestEdit={vi.fn()}
+        />,
+      )
+      return viewState
+    }
+
+    test('speichert eine Auswahl, die der Nutzer trifft', async () => {
+      const viewState = renderWithSelection([])
+      // Der Spaltenkopf steht erst, wenn der Layer geladen ist -- danach hängt auch die
+      // Beobachtung der Auswahl. (Zeilen prüft dieser Test nicht: jsdom rechnet kein
+      // Layout, und die virtualisierte Liste zeigt ohne Höhe gar keine.)
+      await screen.findByRole('button', { name: 'Baujahr' })
+
+      act(() => useSelection.getState().select('layer-a', [2]))
+
+      expect(viewState.writeSelection).toHaveBeenCalledWith('layer-a', [2])
+    })
+
+    test('speichert eine wiederhergestellte Auswahl nicht erneut', async () => {
+      const viewState = renderWithSelection([1])
+
+      await waitFor(() => expect(useSelection.getState().selected).toEqual(new Set([1])))
+
+      // Der Wert kam gerade vom Server. Ihn zurückzuschreiben wäre die erste Runde einer
+      // Schleife -- und über den Live-Kanal eine Antwort auf die Änderung eines anderen.
+      expect(viewState.writeSelection).not.toHaveBeenCalled()
+    })
   })
 })

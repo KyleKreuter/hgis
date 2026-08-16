@@ -32,6 +32,13 @@ export interface ViewStateWriter {
   /** Returns `false` and writes nothing when `selection` is over CONTRACT.md's "Grenze" --
    *  the caller decides how to tell the user, this only refuses to send it. */
   writeSelection: (layerId: string, selection: readonly number[]) => boolean
+  /** Whether a write of this session has not reached the server yet -- either still
+   *  waiting out `DEFER_MS`, or sent and not yet answered. While that is true, `document`
+   *  is newer than what the server would answer with, so anything reading the server back
+   *  (`state/useLiveViewState.ts`) must not apply what it finds. Deliberately a function:
+   *  it is called from callbacks outside the render cycle, which need the value as it is
+   *  at that moment, not as it was when they were created. */
+  hasPendingWrite: () => boolean
 }
 
 /**
@@ -120,5 +127,9 @@ export function useViewStateWriter(projectId: string): ViewStateWriter {
     writeSort,
     writeQuery,
     writeSelection,
+    // `pending` covers the wait before the request goes out, `isPending` the wait for the
+    // answer. Only both together describe the whole span in which the server does not yet
+    // hold what the user has already done.
+    hasPendingWrite: () => pending.current !== null || saveRef.current.isPending,
   }
 }

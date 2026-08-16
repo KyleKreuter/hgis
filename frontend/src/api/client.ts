@@ -77,8 +77,13 @@ export const api = {
    */
   postForm: <T>(path: string, form: FormData, signal?: AbortSignal) =>
     request<T>(path, { method: 'POST', body: form, signal }),
-  put: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+  /**
+   * @param headers extra headers for this one request. Only for what says something
+   *   about the caller rather than about the body -- `X-Hgis-Client`, which names the
+   *   writer so the live channel can report the change back recognisably.
+   */
+  put: <T>(path: string, body: unknown, headers?: Record<string, string>) =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(body), headers }),
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
