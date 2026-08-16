@@ -53,14 +53,17 @@ export function DeleteLayerDialog({
     if (!layer || deleteLocked) return
     try {
       const trashed = await deleteLayer.mutateAsync(layer.id)
-      // The response names what was actually moved -- more current than the count this
-      // dialog opened with whenever the two disagree, but a server still on `204` sends
-      // nothing back, so the already-known count carries the message either way.
-      const featureCount = trashed?.featureCount ?? layer.featureCount
+      // The count comes only from the response, never from `layer.featureCount` --
+      // that value was read when the dialog opened, and `layerKeys.list` refreshes on
+      // this browser's own writes only (main.tsx: staleTime 30s, no refetch-on-focus,
+      // no polling), so it can be arbitrarily stale by the time this runs, and this
+      // dialog holds its own `layer` in a `useState` that would not follow a background
+      // update anyway. A server still on `204` sends nothing back; the count-less
+      // message is then the honest one, not a guess dressed up as a fact.
       toast.success(
-        isMapImageLayer(layer)
-          ? `Layer „${layer.name}" in den Papierkorb verschoben`
-          : `Layer „${layer.name}" mit ${formatCount(featureCount)} ${featureCount === 1 ? 'Objekt' : 'Objekten'} in den Papierkorb verschoben`,
+        !isMapImageLayer(layer) && trashed
+          ? `Layer „${layer.name}" mit ${formatCount(trashed.featureCount)} ${trashed.featureCount === 1 ? 'Objekt' : 'Objekten'} in den Papierkorb verschoben`
+          : `Layer „${layer.name}" in den Papierkorb verschoben`,
       )
       onDeleted(layer.id)
       onOpenChange(false)

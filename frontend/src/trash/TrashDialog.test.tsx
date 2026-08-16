@@ -57,21 +57,36 @@ describe('TrashDialog', () => {
     expect(screen.getByText('–')).toBeInTheDocument()
   })
 
-  test('stellt einen Layer über POST /api/layers/{id}/restore wieder her', async () => {
+  // Prüfstand-Befund: der ursprüngliche Test prüfte nur, dass der Request rausging, nie
+  // eine Wirkung danach -- ein `onSuccess`, das durch ein `throw` ersetzt wurde, blieb
+  // grün. `restored` lässt den Trash-Mock nach dem Restore wirklich `[]` liefern statt
+  // wie zuvor bei jedem Aufruf denselben Eintrag zurückzugeben; ohne das würde der
+  // durch `onSuccess` ausgelöste Refetch die gerade entfernte Zeile sofort wieder
+  // auffüllen, und die Prüfung unten hinge vom Zufall der Poll-Zeitpunkte ab.
+  test('entfernt die Zeile, sobald Wiederherstellen erfolgreich war', async () => {
+    let restored = false
     const { requests } = stubFetch([
-      { match: '/api/projects/p-1/trash', body: [makeEntry()] },
-      { match: '/api/layers/l-1/restore', body: {} },
+      { match: '/api/projects/p-1/trash', body: () => (restored ? [] : [makeEntry()]) },
+      {
+        match: '/api/layers/l-1/restore',
+        body: () => {
+          restored = true
+          return {}
+        },
+      },
     ])
     renderWithQueryClient(<TrashDialog projectId="p-1" open onOpenChange={vi.fn()} />)
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Layer „Gebäude" wiederherstellen' }))
 
-    await waitFor(() =>
-      expect(requests.some((r) => r.url.includes('/api/layers/l-1/restore'))).toBe(true),
-    )
     const restoreRequest = requests.find((r) => r.url.includes('/restore'))
     expect(restoreRequest?.init?.method).toBe('POST')
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Layer „Gebäude" wiederherstellen' }),
+      ).not.toBeInTheDocument(),
+    )
   })
 
   test('endgültig löschen fragt erst nach und nennt die Objektzahl', async () => {

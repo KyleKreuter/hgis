@@ -40,12 +40,15 @@ export function PurgeLayerDialog({ entry, projectId, onOpenChange }: PurgeLayerD
     purging.current = true
     try {
       const purged = await purgeLayer.mutateAsync(entry.id)
-      // Same fallback as `DeleteLayerDialog.handleDelete`: the response names what was
-      // actually dropped, the entry this dialog opened with is what a server still on
-      // `204` leaves us.
-      const featureCount = purged?.featureCount ?? entry.featureCount
+      // Same reasoning as `DeleteLayerDialog.handleDelete`: the count comes only from
+      // the response, never from `entry.featureCount` -- that was read when the
+      // Papierkorb was last (re)loaded and can be stale by the time this runs, same as
+      // there. A server still on `204` sends nothing back; the count-less message is
+      // then the honest one.
       toast.success(
-        `Layer „${entry.name}" mit ${formatCount(featureCount)} ${featureCount === 1 ? 'Objekt' : 'Objekten'} endgültig gelöscht`,
+        purged
+          ? `Layer „${entry.name}" mit ${formatCount(purged.featureCount)} ${purged.featureCount === 1 ? 'Objekt' : 'Objekten'} endgültig gelöscht`
+          : `Layer „${entry.name}" endgültig gelöscht`,
       )
       onOpenChange(false)
     } catch {

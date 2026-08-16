@@ -52,7 +52,18 @@ export function stubElementSize({ width = 400, height = 600 } = {}) {
 export interface StubRoute {
   /** Matched with `String.includes` against the request URL, first match wins. */
   match: string
-  body: unknown
+  /**
+   * A fixed body, or a function evaluated fresh on every matching request.
+   *
+   * Needed to test that a write is actually reflected downstream, not just that it was
+   * sent: a mutation's own success handler often invalidates a listing and triggers a
+   * background refetch of it, and a fixed body would answer that refetch with the exact
+   * fixture the test opened with -- silently undoing the effect being tested for and
+   * leaving a false pass, or a flaky one if an assertion happens to run before the
+   * refetch lands. A function can close over a flag another route's function sets, so
+   * the listing genuinely reflects what the write route was told to do.
+   */
+  body: unknown | (() => unknown)
   status?: number
   /**
    * Answers after this many real ms instead of on the next microtask. Default: none.
@@ -90,10 +101,11 @@ export function stubFetch(routes: StubRoute[]) {
       return Promise.reject(new Error(`No stub route for ${url}`))
     }
     const status = route.status ?? 200
+    const body = typeof route.body === 'function' ? (route.body as () => unknown)() : route.body
     const response = {
       ok: status >= 200 && status < 300,
       status,
-      json: () => Promise.resolve(route.body),
+      json: () => Promise.resolve(body),
     } as Response
     if (!route.delayMs) return Promise.resolve(response)
     return new Promise<Response>((resolve) => setTimeout(() => resolve(response), route.delayMs))
