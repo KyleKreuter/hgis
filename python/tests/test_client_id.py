@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import os
 import re
+import signal
+import threading
+import time
 
 import pytest
 
@@ -322,3 +325,190 @@ def test_the_name_is_still_stable_without_a_fork(monkeypatch) -> None:
 
     client = hgis.connect("http://stub")
     assert client.client_id == client.client_id
+
+
+# --- across threads --------------------------------------------------------
+#
+# The same failure as the fork one, a level down and inside a single process.
+# Several threads can find the name unset at once; each then computes its own --
+# uuid4 reads the operating system's randomness and lets other threads run while
+# it waits -- and each writes over the last, having already returned what it
+# made. One process then writes under several names.
+#
+# Without letting the threads go at the same instant, none of this shows: the
+# first caller wins long before the second arrives. Hence the barrier.
+
+THREADS = 32
+
+
+def _all_at_once(work, count: int = THREADS) -> list:
+    """Run ``work()`` in ``count`` threads released at the same instant."""
+    barrier = threading.Barrier(count)
+    results: list = []
+    guard = threading.Lock()
+
+    def run() -> None:
+        barrier.wait()
+        value = work()
+        with guard:
+            results.append(value)
+
+    threads = [threading.Thread(target=run) for _ in range(count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(results) == count, "Nicht jeder Thread hat geliefert."
+    return results
+
+
+@pytest.fixture
+def unnamed_process(monkeypatch):
+    """No name from outside, and nothing computed yet."""
+    monkeypatch.delenv(CLIENT_ID_VARIABLE, raising=False)
+    monkeypatch.setattr(hgis.client, "_generated", None)
+
+
+@pytest.mark.parametrize("attempt", range(10))
+def test_threads_starting_together_get_one_name(unnamed_process, attempt) -> None:
+    """
+    The reported failure, as a test.
+
+    Repeated ten times, because a race that shows up sometimes is a race that
+    passes sometimes. Measured against the code before the lock: two to five
+    names per run, and roughly three runs in five caught it -- so one attempt
+    would have been a coin toss and ten make a miss unlikely.
+    """
+    names = _all_at_once(default_client_id)
+    assert len(set(names)) == 1, f"{len(set(names))} Namen unter {THREADS} Threads"
+
+
+@pytest.mark.parametrize("attempt", range(3))
+def test_clients_built_together_write_under_one_name(unnamed_process, attempt) -> None:
+    """
+    The practical shape of it: an agent parallelising over a thread pool.
+
+    Two names among those clients means one takes the other's change for a
+    stranger's and handles it twice.
+    """
+    names = _all_at_once(lambda: hgis.connect("http://stub").client_id, count=24)
+    assert len(set(names)) == 1, f"{len(set(names))} Namen unter 24 Clients"
+
+
+def test_the_name_does_not_change_under_repeated_reads(unnamed_process) -> None:
+    """
+    Each thread has to keep its own answer as well.
+
+    A thread that read early and never asked again would carry a name that was
+    overwritten behind it -- and would not notice.
+    """
+
+    def fifty_reads() -> str:
+        seen = {default_client_id() for _ in range(50)}
+        assert len(seen) == 1, "Ein Thread hat seinen eigenen Namen gewechselt."
+        return seen.pop()
+
+    assert len(set(_all_at_once(fifty_reads))) == 1
+
+
+# --- a name from the environment is checked on every read ------------------
+
+
+def test_a_name_broken_after_the_client_was_built_is_refused(monkeypatch) -> None:
+    """
+    The environment is read on every access, so it has to be checked on every
+    access too. Reading fresh and checking once is the combination that lets an
+    unusable name out as a header.
+    """
+    monkeypatch.delenv(CLIENT_ID_VARIABLE, raising=False)
+    client = hgis.connect("http://stub")
+    assert client.client_id  # fine so far
+
+    monkeypatch.setenv(CLIENT_ID_VARIABLE, "nicht erlaubt!")
+    with pytest.raises(hgis.InvalidClientIdError):
+        client.client_id
+
+
+def test_a_name_repaired_after_the_client_was_built_is_used(monkeypatch) -> None:
+    """Reading fresh cuts both ways, and the good direction has to work too."""
+    monkeypatch.delenv(CLIENT_ID_VARIABLE, raising=False)
+    client = hgis.connect("http://stub")
+
+    monkeypatch.setenv(CLIENT_ID_VARIABLE, "spaeter-gesetzt")
+    assert client.client_id == "spaeter-gesetzt"
+
+
+def test_a_chosen_name_ignores_the_environment_entirely(monkeypatch) -> None:
+    """Passed in explicitly means the environment does not get a say later."""
+    client = hgis.connect("http://stub", client_id="agent-a")
+    monkeypatch.setenv(CLIENT_ID_VARIABLE, "nicht erlaubt!")
+    assert client.client_id == "agent-a"
+
+
+@fork_only
+def test_a_fork_while_the_lock_is_held_does_not_deadlock_the_child(
+    unnamed_process,
+) -> None:
+    """
+    The case ``_reset_after_fork`` exists for, and the only one that shows it.
+
+    A lock held by some thread at the moment of the fork stays held forever in
+    the child: the thread that would release it does not exist there. The child
+    would then block on the first call and never return -- no error, no output,
+    a worker that simply stops.
+
+    The other fork tests cannot catch this. They fork while nothing holds the
+    lock, so an inherited lock is free and everything works without the reset.
+    """
+    holding = threading.Event()
+    release = threading.Event()
+
+    def hold_the_lock() -> None:
+        with hgis.client._lock:
+            holding.set()
+            release.wait(timeout=10)
+
+    keeper = threading.Thread(target=hold_the_lock)
+    keeper.start()
+    assert holding.wait(timeout=5), "Der Thread hat die Sperre nicht genommen."
+
+    read_end, write_end = os.pipe()
+    pid = os.fork()
+    if pid == 0:
+        os.close(read_end)
+        try:
+            # Deadlocks here if the child inherited a held lock.
+            os.write(write_end, default_client_id().encode())
+        except BaseException as error:
+            os.write(write_end, f"FEHLER {error!r}".encode())
+        finally:
+            os.close(write_end)
+            os._exit(0)
+
+    os.close(write_end)
+    try:
+        deadline = time.monotonic() + 10
+        finished = False
+        while time.monotonic() < deadline:
+            waited, _ = os.waitpid(pid, os.WNOHANG)
+            if waited == pid:
+                finished = True
+                break
+            time.sleep(0.02)
+
+        if not finished:
+            os.kill(pid, signal.SIGKILL)  # our own child, started just above
+            os.waitpid(pid, 0)
+            pytest.fail(
+                "Das Kind hat sich an der geerbten Sperre aufgehängt. "
+                "os.register_at_fork muss sie erneuern."
+            )
+
+        produced = os.read(read_end, 4096).decode()
+        assert produced and not produced.startswith("FEHLER"), produced
+        assert SERVER_PATTERN.fullmatch(produced)
+    finally:
+        os.close(read_end)
+        release.set()
+        keeper.join(timeout=5)

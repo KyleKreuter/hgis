@@ -226,8 +226,16 @@ Arbeiter eines `multiprocessing.Pool` schrieben sonst unter einem Namen.
 Einen Namen, den Sie selbst gesetzt haben, behält das Kind. Sie haben ihn
 gewählt, und ein `fork` hebt Ihre Wahl nicht auf.
 
+**Mehrere Threads bekommen denselben Namen.** Die Berechnung läuft unter einer
+Sperre und wirkt nur einmal. Ohne sie berechnen mehrere Threads gleichzeitig
+je einen eigenen Namen, und ein Prozess schreibt unter mehreren.
+
 Erlaubt sind 1 bis 64 Zeichen aus Buchstaben, Ziffern, Bindestrich und
-Unterstrich. Die Bibliothek prüft den Namen, sobald Sie den Client bauen.
+Unterstrich.
+
+Die Bibliothek prüft den Namen, sobald Sie den Client bauen. Sie prüft ihn
+außerdem bei jedem Zugriff, denn Sie können `HGIS_CLIENT_ID` auch danach noch
+ändern. Ein unbrauchbarer Name geht so nie als Kopfzeile hinaus.
 
 ```python
 >>> hgis.connect(client_id="mit leerzeichen")

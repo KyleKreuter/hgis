@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 import uuid
 from typing import TYPE_CHECKING, Any, Iterable
 from urllib.parse import urljoin, urlsplit
@@ -61,28 +62,32 @@ CLIENT_ID_VARIABLE = "HGIS_CLIENT_ID"
 #: that happened to import first.
 _generated: tuple[int, str] | None = None
 
+#: Guards the line above. Threads race for it exactly like processes do: several
+#: can find it unset at once, each then computes its own name -- ``uuid4`` reads
+#: the operating system's randomness and lets other threads run while it waits
+#: -- and each writes over the last. Every one of them has already returned the
+#: name it made, so one process ends up writing under several. Measured before
+#: this lock existed: up to five names among thirty-two threads.
+_lock = threading.Lock()
 
-def default_client_id() -> str:
+
+def _reset_after_fork() -> None:
     """
-    The name this process writes under.
+    Give the child its own lock and forget the parent's name.
 
-    ``HGIS_CLIENT_ID`` when set, otherwise a random name belonging to this
-    process. Set the variable when something outside needs to recognise this
-    program's writes -- an agent runner naming its workers, say. Two programs
-    running at once need two names.
-
-    A name that came from the environment is left exactly as it is, across a
-    fork included: it was chosen deliberately, and choosing is the caller's.
+    A lock held by some thread at the moment of the fork stays held forever in
+    the child, because the thread that would release it does not exist there.
+    The child gets a fresh one instead. Clearing the name is belt and braces:
+    the pid comparison would catch it anyway, and saying it outright costs
+    nothing.
     """
-    from_environment = os.environ.get(CLIENT_ID_VARIABLE)
-    if from_environment:
-        return from_environment
+    global _lock, _generated
+    _lock = threading.Lock()
+    _generated = None
 
-    global _generated
-    pid = os.getpid()
-    if _generated is None or _generated[0] != pid:
-        _generated = (pid, f"hgis-python-{uuid.uuid4().hex[:12]}")
-    return _generated[1]
+
+if hasattr(os, "register_at_fork"):  # not on Windows
+    os.register_at_fork(after_in_child=_reset_after_fork)
 
 
 def _check_client_id(client_id: str) -> str:
@@ -96,6 +101,41 @@ def _check_client_id(client_id: str) -> str:
             "aus Buchstaben, Ziffern, Bindestrich und Unterstrich."
         )
     return stripped
+
+
+def default_client_id() -> str:
+    """
+    The name this process writes under.
+
+    ``HGIS_CLIENT_ID`` when set, otherwise a random name belonging to this
+    process. Set the variable when something outside needs to recognise this
+    program's writes -- an agent runner naming its workers, say. Two programs
+    running at once need two names.
+
+    A name that came from the environment is left exactly as it is, across a
+    fork included: it was chosen deliberately, and choosing is the caller's.
+    It is checked on every read, because it can be changed after the client
+    was built and an unusable name must not leave as a header.
+
+    Safe to call from several threads: the generated name is computed once and
+    every caller gets that one.
+
+    :raises InvalidClientIdError: when ``HGIS_CLIENT_ID`` holds a name the
+        server would refuse
+    """
+    from_environment = os.environ.get(CLIENT_ID_VARIABLE)
+    if from_environment:
+        return _check_client_id(from_environment)
+
+    global _generated
+    pid = os.getpid()
+    with _lock:
+        # Checked again in here, not only outside: without the second look, a
+        # thread that computed while another held the lock would overwrite a
+        # name already handed out.
+        if _generated is None or _generated[0] != pid:
+            _generated = (pid, f"hgis-python-{uuid.uuid4().hex[:12]}")
+        return _generated[1]
 
 
 #: Page size for the project browser. The server allows 1 to 100.
@@ -294,7 +334,9 @@ class Client:
         # parent's name into the child. See :func:`default_client_id`.
         self._client_id = _check_client_id(client_id) if client_id is not None else None
         if self._client_id is None:
-            _check_client_id(default_client_id())
+            # Reads the environment and checks it, so a bad HGIS_CLIENT_ID is
+            # caught here rather than at the first write.
+            default_client_id()
         floor = transport if transport is not None else default_transport()
         # Wrapped even when the caller supplied the floor: a substituted
         # transport is for testing or authentication, not for lifting the guard.
