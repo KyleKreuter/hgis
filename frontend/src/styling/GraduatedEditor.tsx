@@ -227,7 +227,9 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
         <ScrollArea className="max-h-56">
           <ul className="grid gap-0.5 py-1">
             {classes.map((styleClass, index) => (
-              <li key={index} className="flex items-center gap-1.5">
+              // min-w-0: same fix as the matching `<li>` in `CategorizedEditor`, same
+              // reason -- see the comment there.
+              <li key={index} className="flex min-w-0 items-center gap-1.5">
                 <ColorInput
                   value={primaryColorOf(styleClass.symbol)}
                   onChange={(color, options) => setClassColor(index, color, options)}

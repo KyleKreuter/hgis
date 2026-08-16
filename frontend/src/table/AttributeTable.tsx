@@ -885,7 +885,16 @@ function Panel({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-muted/40 px-2">
+      {/*
+       * min-h-7, not h-7: once the title has given up all its width and `FilterBar` has
+       * shrunk to its own floor (see there), a save/discard session in `TableEditToolbar`
+       * still would not fit -- those buttons must not wrap word-by-word (CONTRACT.md,
+       * "Aktionsmenü-Einträge... nie umbrechen" applies to any button label here just the
+       * same). `flex-wrap` lets the strip itself grow a second line instead, the same
+       * trade `WorkspaceLayout`'s own header makes under the identical squeeze: a few
+       * pixels off the table below buys a toolbar that never spills past the panel edge.
+       */}
+      <div className="flex min-h-7 shrink-0 flex-wrap items-center gap-2 border-b bg-muted/40 px-2">
         {/*
          * Gives way before anything else in the strip does, and all the way down to
          * nothing. Held at its full width it pushed the save button, the change counter
