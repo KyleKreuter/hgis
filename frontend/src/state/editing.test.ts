@@ -250,3 +250,49 @@ describe('sketching', () => {
     expect(useEditing.getState()).toBe(vorher)
   })
 })
+
+/**
+ * `reset` leert den Puffer von aussen -- und das Zeichenwerkzeug haelt eine eigene Kopie
+ * jeder Form, die es davon nur ueber `historyNonce` erfaehrt. Ohne die Meldung blieb das
+ * Verworfene auf der Karte liegen.
+ */
+describe('reset meldet sich beim Zeichenwerkzeug', () => {
+  beforeEach(() => {
+    store().end()
+  })
+
+  it('erhoeht historyNonce, damit die Zeichenflaeche nachzieht', () => {
+    store().begin('layer-a')
+    store().addFeature(POINT)
+    const vorher = store().historyNonce
+
+    store().reset()
+
+    expect(store().historyNonce).toBe(vorher + 1)
+    expect(countChanges(store().buffer)).toBe(0)
+  })
+
+  it('meldet sich auch dann, wenn der Puffer schon leer war', () => {
+    // Verwerfen bei leerem Puffer kostet nichts, und ein zusaetzlicher Abgleich schadet
+    // nicht -- eine Ausnahme dafuer waere eine Sonderregel ohne Nutzen.
+    store().begin('layer-a')
+    const vorher = store().historyNonce
+
+    store().reset()
+
+    expect(store().historyNonce).toBe(vorher + 1)
+  })
+
+  it('zaehlt weiter und faengt nicht wieder bei null an', () => {
+    // Monoton, wie der Kommentar am Feld verlangt: ein zurueckgesetzter Wert liesse einen
+    // spaeteren Schritt mit einem frueheren zusammenfallen, und der Abgleich bliebe aus.
+    store().begin('layer-a')
+    store().addFeature(POINT)
+    store().reset()
+    const nachErstem = store().historyNonce
+    store().addFeature(POINT)
+    store().reset()
+
+    expect(store().historyNonce).toBe(nachErstem + 1)
+  })
+})

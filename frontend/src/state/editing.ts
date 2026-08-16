@@ -262,7 +262,22 @@ export const useEditing = create<EditingState>((set, get) => {
       })
     },
 
-    reset: () => set({ buffer: EMPTY_BUFFER, undoStack: [], redoStack: [] }),
+    /**
+     * Empties the buffer -- "Verwerfen", and after a successful save.
+     *
+     * Bumps {@link EditingState.historyNonce} for the same reason undo and the toolbar's
+     * delete do: the change starts outside the drawing tool, which holds its own copy of
+     * every shape and cannot see it. Without the bump the tool kept what was discarded --
+     * the counter said "keine Änderungen" while the shape still sat on the map, and the
+     * next stray click made that ghost look like a fresh, half-drawn one.
+     */
+    reset: () =>
+      set((state) => ({
+        buffer: EMPTY_BUFFER,
+        undoStack: [],
+        redoStack: [],
+        historyNonce: state.historyNonce + 1,
+      })),
 
     setSketching: (sketching) => set((state) => (state.sketching === sketching ? state : { sketching })),
   }

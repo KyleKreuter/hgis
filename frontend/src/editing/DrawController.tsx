@@ -127,6 +127,37 @@ export function DrawController({
     [],
   )
 
+  /**
+   * Tells the editing session whether a shape is half-drawn.
+   *
+   * Recomputed from terra-draw's own store rather than tracked through the events that
+   * start and end a shape: those are several (create, update, finish, delete, a mode
+   * switch, Escape), and one missed transition leaves the flag stuck -- which would
+   * either block every guard forever or, worse, hide work that is really there.
+   *
+   * The test for "half-drawn" is the same one the change handler already relies on, and
+   * it is the honest one: terra-draw is holding a feature that is neither one loaded from
+   * the server nor one the buffer has taken over. That is exactly the state between the
+   * first corner and `finish`.
+   *
+   * At component level rather than inside the effect that builds terra-draw, because the
+   * buffer sync is a *different* effect and changes the surface too. Its writes bypass the
+   * change handler on purpose (`applyingFromBuffer`), so without a call from there the
+   * flag survived a discard that had emptied the surface -- and every guard stayed shut.
+   */
+  const reportSketching = useCallback(() => {
+    const draw = drawRef.current
+    if (!draw) return
+    const { buffer, setSketching } = useEditing.getState()
+    setSketching(
+      draw.getSnapshot().some((feature) => {
+        if (isHandle(feature)) return false
+        const fid = Number(feature.id)
+        return !originals.current.has(fid) && !buffer.creates[fid]
+      }),
+    )
+  }, [])
+
   useEffect(() => {
     const map = mapRef.current
     if (!map || !isLoaded) return
@@ -294,30 +325,6 @@ export function DrawController({
           angefangen: state.sketching,
         }
       }
-    }
-
-    /**
-     * Tells the editing session whether a shape is half-drawn.
-     *
-     * Recomputed from terra-draw's own store rather than tracked through the events that
-     * start and end a shape: those are several (create, update, finish, delete, a mode
-     * switch, Escape), and one missed transition leaves the flag stuck -- which would
-     * either block every guard forever or, worse, hide work that is really there.
-     *
-     * The test for "half-drawn" is the same one the update handler below already relies
-     * on, and it is the honest one: terra-draw is holding a feature that is neither one
-     * loaded from the server nor one the buffer has taken over. That is exactly the state
-     * between the first corner and `finish`.
-     */
-    function reportSketching() {
-      const { buffer, setSketching } = useEditing.getState()
-      setSketching(
-        draw.getSnapshot().some((feature) => {
-          if (isHandle(feature)) return false
-          const fid = Number(feature.id)
-          return !originals.current.has(fid) && !buffer.creates[fid]
-        }),
-      )
     }
 
     /**
@@ -630,7 +637,7 @@ export function DrawController({
       // Deliberately not ending the editing session here: leaving the mode is
       // `useEditSession`'s decision, and this cleanup also runs on a plain reload.
     }
-  }, [mapRef, isLoaded, layerId, queryClient, onSelectFeature, onSnapTarget, onSnapUnavailable, allSnapCandidates, reloadNonce])
+  }, [mapRef, isLoaded, layerId, queryClient, onSelectFeature, onSnapTarget, onSnapUnavailable, allSnapCandidates, reloadNonce, reportSketching])
 
   /**
    * Loads the marked snap sources.
@@ -780,7 +787,12 @@ export function DrawController({
     } finally {
       applyingFromBuffer.current = false
     }
-  }, [historyNonce])
+
+    // The surface just changed without the change handler seeing any of it. Whatever was
+    // half-drawn is gone with it -- a discard empties the surface, and the flag has to
+    // follow or it locks the guards on a shape that no longer exists.
+    reportSketching()
+  }, [historyNonce, reportSketching])
 
   // Switching tools must not tear the instance down: terra-draw carries the working copy,
   // and recreating it would drop everything drawn so far.
