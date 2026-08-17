@@ -126,7 +126,7 @@ public class MvtService {
 			)%s,
 			candidates AS MATERIALIZED (
 			  SELECT l.fid,%s
-			         ST_AsMVTGeom(ST_Transform(%s, 3857), b.merc, 4096, 64, true) AS geom
+			         ST_AsMVTGeom(ST_Transform(%s, 3857), b.merc, 4096, %s, true) AS geom
 			  FROM %s
 			  WHERE %s
 			  ORDER BY (ST_Area(l.geom) + ST_Length(l.geom)) DESC, %s, l.fid
@@ -138,6 +138,67 @@ public class MvtService {
 			     WHERE t.geom IS NOT NULL) AS mvt,
 			  (SELECT count(*) FROM candidates) > :maxFeatures AS truncated
 			""";
+
+	/**
+	 * {@code ST_AsMVTGeom}'s ordinary buffer -- the tile-local units (of {@code 4096}) a
+	 * feature may reach past its own tile's edge and still be carried in that tile's data.
+	 * The whole reason a buffer exists at all: two neighbours can each draw a little past
+	 * their own edge, so a line or polygon cut by a tile boundary shows no hairline seam
+	 * from rounding, and so a symbol layer's collision pass can see what the next tile
+	 * over is about to place near the same edge. Both reasons are about drawing something
+	 * that continues, or interacts, across the seam -- see {@link #HEATMAP_BUFFER} for the
+	 * one renderer that does neither.
+	 */
+	private static final String ORDINARY_BUFFER = "64";
+
+	/**
+	 * The buffer a heatmap tile renders with instead -- {@code 0}, none at all. Found on
+	 * review, after the seam and near-duplicate fixes above already accounted for every
+	 * point this class itself hands to {@code ST_AsMVTGeom}: a point that lands within the
+	 * ordinary buffer of a tile boundary is carried in <em>both</em> neighbouring tiles'
+	 * data, at each tile's own correct local coordinates, and that is normally invisible
+	 * -- MapLibre's line and polygon layers draw with a stencil that clips each tile to
+	 * its own screen quad, so the buffered copy plays no visible part.
+	 *
+	 * <p>MapLibre's heatmap layer does not do that. Traced through {@code maplibre-gl}
+	 * 6.2.0: {@code WorkerTile.parse} hands every feature from the tile straight to {@code
+	 * CircleBucket.populate} with no {@code 0..extent} filter in that path at all (the one
+	 * clip like that in the whole bundle sits in the overzoom code, a different path);
+	 * heatmap and circle layers share that one bucket; and {@code prepareHeatmapFlat} draws
+	 * with {@code StencilMode.disabled}, {@code DepthMode.disabled} and additive blending
+	 * ({@code [gl.ONE, gl.ONE]}). Two neighbouring tiles' buffered copies of the same point
+	 * therefore both draw, at the same screen position, and the additive blend sums their
+	 * density instead of drawing it once -- a bright rim along every tile boundary a
+	 * feature's buffer reaches, on the one renderer that turns "drawn twice" into "counted
+	 * twice". {@code drawCircles} carries the identical {@code StencilMode.disabled} -- this
+	 * is not a heatmap-specific bug in MapLibre, it is behaviour the circle renderer always
+	 * had, invisible there only because ordinary (non-additive) blending makes two
+	 * overlapping copies of the same dot look exactly like one.
+	 *
+	 * <p>Neither of {@link #ORDINARY_BUFFER}'s own two reasons rescues this: a heatmap
+	 * point never continues across a seam the way a line or polygon edge does -- there is
+	 * nothing to draw a hairline gap in -- and a heatmap has no collision layout for a
+	 * neighbouring tile's symbols to avoid. A declarative MapLibre {@code filter} cannot
+	 * apply this on the client instead: a style filter reads a feature's own properties,
+	 * never the tile-local vertex position that decides whether a copy is a duplicate. Nor
+	 * can a smaller GeoJSON-source {@code buffer}: that option only exists for {@code
+	 * geojson} sources, and a vector tile's buffer is already baked into the PBF bytes this
+	 * class itself produces, before MapLibre ever sees them -- which is exactly why the fix
+	 * belongs here and not in the style.
+	 *
+	 * <p>Buffer {@code 0} does not trade the near-duplicate for a gap: {@link
+	 * #interpolatedLinePoints} and {@link #heatmapGeometryExpression} generate points, they
+	 * never rely on a feature straddling a tile's own edge to be found at all (unlike a
+	 * polygon or a line, which the {@code b.native} clip -- a wholly separate expression
+	 * from this buffer -- already cuts to the tile before a heatmap point is ever placed).
+	 * Measured directly against {@code ST_AsMVTGeom} at a real tile boundary in Web
+	 * Mercator: the double-counted band shrinks from roughly 300 m wide at buffer 64
+	 * (about 180 m of real ground at 53,55° N, after Mercator's own {@code cos(lat)}
+	 * scaling) to about 2 m at buffer 0 -- a residual from rounding onto the {@code 4096}
+	 * integer grid, not from the buffer, which has nothing left to shrink -- and at no
+	 * scanned position does <em>neither</em> tile claim the point.
+	 */
+	private static final String HEATMAP_BUFFER = "0";
 
 	/**
 	 * How finely the tile envelope is sampled before it is transformed, in Web Mercator
@@ -361,7 +422,8 @@ public class MvtService {
 			}
 		}
 
-		return TILE_QUERY.formatted(nativeBounds, ctes, attributes, geom, from, where, SPATIAL_SCATTER);
+		String buffer = heatmap ? HEATMAP_BUFFER : ORDINARY_BUFFER;
+		return TILE_QUERY.formatted(nativeBounds, ctes, attributes, geom, buffer, from, where, SPATIAL_SCATTER);
 	}
 
 	/**

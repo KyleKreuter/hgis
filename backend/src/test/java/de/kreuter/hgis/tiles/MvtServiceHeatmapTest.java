@@ -472,8 +472,10 @@ class MvtServiceHeatmapTest {
 
 		String tableName = createTable("geom geometry(MultiLineString, 25832) NOT NULL, wert integer");
 		// 280 m part: 20 m on tile A's side, 260 m on tile B's -- the arc-length midpoint
-		// necessarily falls 120 m into tile B, well past the tile buffer's own reach (64
-		// units, roughly 90 m at this zoom).
+		// necessarily falls 120 m into tile B, well past even the old ordinary buffer's
+		// reach (see MvtService#ORDINARY_BUFFER, roughly 90 m at this zoom) -- and the
+		// heatmap branch renders without a buffer at all now (MvtService#HEATMAP_BUFFER),
+		// so this holds by construction rather than by clearing a margin.
 		insertLineNative(tableName, boundaryX - 20, midY, boundaryX + 260, midY, "wert", 1);
 
 		List<MvtTileDecoder.Feature> featuresA = featuresOf(mvtService.renderTile(tableName, 25832, List.of(),
@@ -483,6 +485,74 @@ class MvtServiceHeatmapTest {
 
 		assertThat(featuresA).as("die kuerzere Seite (20 m von 280 m) zeigt nichts").isEmpty();
 		assertThat(featuresB).as("die laengere Seite (260 m von 280 m) zeigt den Mittelpunkt").hasSize(1);
+	}
+
+	/**
+	 * The double-counting finding (review after this class's earlier fixes were already
+	 * merged): {@code ST_AsMVTGeom}'s ordinary buffer (see {@code MvtService#ORDINARY_BUFFER})
+	 * carries a point within reach of a tile boundary in <em>both</em> neighbouring tiles'
+	 * data -- harmless for every other renderer, since each tile draws clipped to its own
+	 * screen quad, but MapLibre's heatmap layer draws with stencilling disabled and additive
+	 * blending, so both buffered copies land on screen and sum. A bright rim along every tile
+	 * boundary a feature's buffer reached -- confirmed in the MapLibre source, not merely
+	 * suspected (see {@code MvtService#HEATMAP_BUFFER}'s own note).
+	 *
+	 * <p>This is the exact placement the review used to demonstrate it: a 60 m part (well
+	 * under the ~305,7 m spacing at z=12, so the fallback places its one point at the part's
+	 * own midpoint), that midpoint 30 m before the boundary -- deep inside the old buffer's
+	 * ~90 m reach, so this would have shown in both tiles before {@code
+	 * MvtService#HEATMAP_BUFFER}. {@link #aShortPartFarFromABoundaryStillRendersNormally} is
+	 * this test's own control: the same part, only far from any boundary, proves that what
+	 * changed here is proximity to the seam and nothing else about how a short part renders.
+	 */
+	@Test
+	@DisplayName("a short part near a tile boundary no longer double-counts across tiles")
+	void aShortPartNearATileBoundaryNoLongerDuplicatesAcrossTiles() {
+		int z = 12;
+		int[] tileA = tileAt(z);
+		int x = tileA[1];
+		int y = tileA[2];
+		double[] bounds = nativeBounds(z, x, y);
+		double boundaryX = bounds[2]; // xmax -- the shared edge with tile (z, x+1, y)
+		double midY = (bounds[1] + bounds[3]) / 2;
+
+		String tableName = createTable("geom geometry(MultiLineString, 25832) NOT NULL, wert integer");
+		// 60 m part, midpoint 30 m before the boundary (its far end reaching exactly to it).
+		insertLineNative(tableName, boundaryX - 60, midY, boundaryX, midY, "wert", 1);
+
+		List<MvtTileDecoder.Feature> featuresA = featuresOf(mvtService.renderTile(tableName, 25832, List.of(),
+				List.of(), GeometryType.MULTILINESTRING, true, z, x, y).mvt());
+		List<MvtTileDecoder.Feature> featuresB = featuresOf(mvtService.renderTile(tableName, 25832, List.of(),
+				List.of(), GeometryType.MULTILINESTRING, true, z, x + 1, y).mvt());
+
+		assertThat(featuresA).as("die Kachel, in der der Mittelpunkt liegt, zeigt genau einen Punkt").hasSize(1);
+		assertThat(featuresB).as("die Nachbarkachel zeigt ihn nicht zusaetzlich -- kein Doppelzaehlen mehr")
+				.isEmpty();
+	}
+
+	/** The control for {@link #aShortPartNearATileBoundaryNoLongerDuplicatesAcrossTiles}. */
+	@Test
+	@DisplayName("the same short part, far from any boundary, still renders exactly once")
+	void aShortPartFarFromABoundaryStillRendersNormally() {
+		int z = 12;
+		int[] tileA = tileAt(z);
+		int x = tileA[1];
+		int y = tileA[2];
+		double[] bounds = nativeBounds(z, x, y);
+		double boundaryX = bounds[2];
+		double midY = (bounds[1] + bounds[3]) / 2;
+
+		String tableName = createTable("geom geometry(MultiLineString, 25832) NOT NULL, wert integer");
+		// The same 60 m part, this time 2000 m from the boundary -- far outside even the
+		// old buffer's reach, comfortably inside tile A on both counts.
+		insertLineNative(tableName, boundaryX - 2000 - 60, midY, boundaryX - 2000, midY, "wert", 1);
+
+		List<MvtTileDecoder.Feature> features = featuresOf(mvtService.renderTile(tableName, 25832, List.of(),
+				List.of(), GeometryType.MULTILINESTRING, true, z, x, y).mvt());
+
+		assertThat(features)
+				.as("2000 m von jeder Kachelgrenze entfernt zeigt die Kachel weiterhin genau einen Punkt")
+				.hasSize(1);
 	}
 
 	/**
