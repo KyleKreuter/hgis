@@ -98,7 +98,12 @@ public class LayerStyleService {
 	 * likewise live in {@code classes[].symbol} -- so this catalogue closes a real gap
 	 * without breaking anything that already exists.
 	 */
-	private static final Set<String> COLOR_RAMPS = Set.of(
+	/*
+	 * Package-private, not private, for one reason only: ColorRampCatalogueTest holds this
+	 * set against the frontend's own `colorRamps.json`, the file both stacks read from. It
+	 * is not an extension point -- nothing outside this class should resolve a ramp name.
+	 */
+	static final Set<String> COLOR_RAMPS = Set.of(
 			"blues", "reds", "greens", "greys", "diverging", "inferno", "viridis");
 
 	/**

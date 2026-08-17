@@ -1,4 +1,5 @@
 import type { GeometryType } from '@/api/layers'
+import colorRamps from './colorRamps.json'
 import type {
   FillSymbol,
   LabelStyle,
@@ -158,25 +159,26 @@ export interface ColorRamp {
   stops: readonly string[]
 }
 
-export const COLOR_RAMPS: readonly ColorRamp[] = [
-  { id: 'blues', label: 'Blau', stops: ['#eff5fb', '#6baed6', '#08306b'] },
-  { id: 'reds', label: 'Rot', stops: ['#fff2ec', '#f16913', '#7f2704'] },
-  { id: 'greens', label: 'Grün', stops: ['#f1f8ee', '#74c476', '#00441b'] },
-  { id: 'greys', label: 'Grau', stops: ['#f5f5f5', '#404040', '#0a0a0a'] },
-  { id: 'diverging', label: 'Divergierend', stops: ['#2166ac', '#f7f7f7', '#b2182b'] },
-  /**
-   * `inferno`/`viridis`: matplotlib's own colourmaps, sampled at 0/.25/.5/.75/1 (its
-   * reference implementation, not a hand-mixed approximation -- verified against
-   * `matplotlib.colormaps['inferno'|'viridis']` directly). Five stops rather than the
-   * three every other ramp above uses on purpose: both paths curve, inferno sharply so --
-   * it swings through violet and a distinct orange "ember" band between its black start
-   * and yellow end -- and a 3-point linear mix cuts that corner completely (checked: the
-   * worst single-channel deviation against the real curve runs to 125 of 255 at three
-   * stops, versus 35 at five).
-   */
-  { id: 'inferno', label: 'Inferno', stops: ['#000004', '#57106e', '#bc3754', '#f98e09', '#fcffa4'] },
-  { id: 'viridis', label: 'Viridis', stops: ['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'] },
-]
+/**
+ * The catalogue lives in `colorRamps.json`, not in this file, for one reason: the backend
+ * keeps the same list (`LayerStyleService.COLOR_RAMPS`) and rejects a ramp outside it. Two
+ * hand-maintained copies of one list drift -- that is exactly how `"inferno"`, the value
+ * this project's own contract, README and docstrings all named, came to paint a *blue*
+ * heatmap. A test reads the JSON below and holds the server's own catalogue against it;
+ * parsing JSON needs no guesswork, whereas reading ids out of TypeScript source with a
+ * regular expression fails silently the moment a formatter touches the file.
+ *
+ * The annotation is load-bearing: a JSON import is structurally typed but never `readonly`,
+ * and `satisfies` alone would *not* restore that -- it checks compatibility without
+ * changing the variable's type, leaving `stops.push(...)` compiling happily.
+ *
+ * `inferno`/`viridis` carry five stops where every other ramp uses three. That is
+ * deliberate: both curve, inferno sharply so -- it swings through violet and a distinct
+ * orange "ember" band between its black start and yellow end -- and a 3-point linear mix
+ * cuts that corner completely. Measured against `matplotlib.colormaps` directly, the worst
+ * single-channel deviation runs to 125 of 255 at three stops, versus 35 at five.
+ */
+export const COLOR_RAMPS: readonly ColorRamp[] = colorRamps
 
 /**
  * The catalogue's ids alone, in the order `COLOR_RAMPS` lists them. What a caller outside

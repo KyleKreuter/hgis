@@ -15,6 +15,8 @@
       "@/*": ["./src/*"]
     },
     "allowImportingTsExtensions": true,
+    /* `styling/colorRamps.json` is the one catalogue both stacks read; see defaults.ts. */
+    "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,

@@ -1,0 +1,17 @@
+[
+  { "id": "blues", "label": "Blau", "stops": ["#eff5fb", "#6baed6", "#08306b"] },
+  { "id": "reds", "label": "Rot", "stops": ["#fff2ec", "#f16913", "#7f2704"] },
+  { "id": "greens", "label": "Grün", "stops": ["#f1f8ee", "#74c476", "#00441b"] },
+  { "id": "greys", "label": "Grau", "stops": ["#f5f5f5", "#404040", "#0a0a0a"] },
+  { "id": "diverging", "label": "Divergierend", "stops": ["#2166ac", "#f7f7f7", "#b2182b"] },
+  {
+    "id": "inferno",
+    "label": "Inferno",
+    "stops": ["#000004", "#57106e", "#bc3754", "#f98e09", "#fcffa4"]
+  },
+  {
+    "id": "viridis",
+    "label": "Viridis",
+    "stops": ["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"]
+  }
+]
