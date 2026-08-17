@@ -202,6 +202,13 @@ kennen sollten:
 Der Server legt die Punkte nicht auf die Stützpunkte der Linie. Sonst zeigte die Karte,
 wie fein jemand digitalisiert hat, und nicht den Sachverhalt.
 
+Das Gewicht rechnet das Programm vom Nullpunkt aus, nicht vom kleinsten vorkommenden
+Wert. Ein Segment von 0,5 km trägt neben einem von 6,2 km also rund acht Prozent bei und
+nicht nichts. Bei Feldern, deren Werte weit über null beginnen — Jahreszahlen etwa —
+liegen die Gewichte dadurch dicht beieinander, und die Heatmap zeigt eher die Verteilung
+der Objekte als ihre Unterschiede. Enthält ein Feld negative Werte, rechnet das Programm
+wie bisher vom kleinsten Wert aus; der kleinste Wert trägt dann nichts bei.
+
 ### Einen Bereich zuschneiden
 
 Ein Flächenlayer lässt sich als Maske verwenden. Er wirkt auf alle Layer, die im
