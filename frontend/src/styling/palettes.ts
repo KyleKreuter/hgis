@@ -38,11 +38,16 @@ export function paletteColors(paletteId: string, count: number): string[] {
  * own colour in `symbol`, so an unresolved name can never make the map itself lie, and
  * `paletteLabel` (`labels.ts`) already shows an unresolved name raw rather than
  * translating it away, so the picker does not lie either. Only the *stored* renderer
- * could: the moment "Farben neu verteilen" (`CategorizedEditor.tsx`'s `recolor`) repaints
- * every category from `DEFAULT_RAMP` while leaving the old, unresolved name in
- * `renderer.palette`, the style claims a palette the colours on screen no longer match.
- * `recolor` writes this resolved id back instead of the name it was given, so the stored
- * state always names the palette that was actually painted.
+ * could: the moment a control repaints every category/class from `DEFAULT_RAMP` while
+ * leaving the old, unresolved name in `renderer.palette`/`.ramp`, the style claims a
+ * palette the colours on screen no longer match. Every place that can turn a `palette`/
+ * `ramp` string into fresh colours and write the result back -- `CategorizedEditor.tsx`'s
+ * `recolor` and `request`, `GraduatedEditor.tsx`'s `request` -- writes this resolved id
+ * back instead of the name it was given, so the stored state always names the palette
+ * that was actually painted. `SymbologyPanel.tsx`'s `switchRenderer` needs none of this:
+ * `convertRenderer` never carries a `palette`/`ramp` value over a renderer-type switch,
+ * so `initialCategorizedPalette`/`initialGraduatedControls` only ever default a *missing*
+ * value there, never revalidate one that is merely wrong.
  */
 export function resolvePaletteId(paletteId: string): string {
   return paletteId === DEFAULT_CATEGORY_PALETTE ? paletteId : resolveRamp(paletteId).id

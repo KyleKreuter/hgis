@@ -78,9 +78,18 @@ export function CategorizedEditor({
    * (`GraduatedEditor`'s equivalent, fixed alongside this one, CONTRACT.md package B1).
    * `existingCategories` is passed in rather than read off `categories` above because
    * `selectField` needs to say "empty" before `renderer` itself reflects that.
+   *
+   * `nextPalette` is resolved before either use, same as `recolor` above and for the
+   * same reason: `selectField` passes the current `palette` state along unchanged, and
+   * that state can hold a name `initialCategorizedPalette` never validated (team review,
+   * package 3 addendum). Without resolving here, a field change on such a style would
+   * repaint every category from `DEFAULT_RAMP` while writing the old, unresolved name
+   * back into `renderer.palette` -- the same gap `recolor` closed, reachable through a
+   * different control.
    */
   async function request(nextField: string, nextPalette: string, existingCategories: StyleCategory[]) {
     if (!nextField) return
+    const resolved = resolvePaletteId(nextPalette)
     setValues((previous) => ({ ...previous, isFetching: true, isError: false }))
     try {
       const { categories: fresh, result } = await requestCategorizedCategories(
@@ -88,12 +97,13 @@ export function CategorizedEditor({
         layerId,
         geometryType,
         nextField,
-        nextPalette,
+        resolved,
         existingCategories,
         renderer.fallbackSymbol,
       )
       setValues({ isFetching: false, isError: false, data: result })
-      onChange({ ...renderer, field: nextField, palette: nextPalette, categories: fresh })
+      setPalette(resolved)
+      onChange({ ...renderer, field: nextField, palette: resolved, categories: fresh })
     }
     catch {
       setValues((previous) => ({ ...previous, isFetching: false, isError: true }))

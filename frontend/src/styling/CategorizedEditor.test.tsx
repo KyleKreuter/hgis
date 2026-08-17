@@ -1,7 +1,8 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { renderWithQueryClient } from '@/test/render'
+import type { LayerField } from '@/api/layers'
+import { renderWithQueryClient, stubFetch } from '@/test/render'
 import { CategorizedEditor } from './CategorizedEditor'
 import { defaultSymbolFor, withPrimaryColor } from './defaults'
 import { DEFAULT_RAMP, paletteColors } from './palettes'
@@ -11,6 +12,13 @@ function makeCategories(): StyleCategory[] {
   return [
     { value: 'a', label: 'A', symbol: withPrimaryColor(defaultSymbolFor('MULTIPOLYGON'), '#111111') },
     { value: 'b', label: 'B', symbol: withPrimaryColor(defaultSymbolFor('MULTIPOLYGON'), '#222222') },
+  ]
+}
+
+function makeFields(): LayerField[] {
+  return [
+    { id: 'f-alt', sourceName: 'Alt', columnName: 'alt', dataType: 'text' },
+    { id: 'f-neu', sourceName: 'Neu', columnName: 'neu', dataType: 'text' },
   ]
 }
 
@@ -74,5 +82,46 @@ describe('CategorizedEditor „Farben neu verteilen“ (team review, package 3 a
 
     const written = onChange.mock.calls[0][0] as Extract<Renderer, { type: 'categorized' }>
     expect(written.palette).toBe('reds')
+  })
+})
+
+/**
+ * Team review, package 3 addendum, second occurrence of the same class: `selectField`
+ * calls `request(field, palette, [])`, replaying the very same `palette` state as the
+ * shuffle button above -- a field change on a style with an unresolved `palette` used to
+ * repaint the fresh categories from `DEFAULT_RAMP` while writing the old, unresolved name
+ * back into `renderer.palette` unchanged, exactly as the shuffle button did before its fix.
+ */
+describe('CategorizedEditor Feldwechsel (team review, package 3 addendum)', () => {
+  it('schreibt bei einem unbekannten, gespeicherten Palettennamen den tatsächlich benutzten Namen zurück', async () => {
+    const renderer: Extract<Renderer, { type: 'categorized' }> = {
+      type: 'categorized',
+      field: 'alt',
+      categories: makeCategories(),
+      fallbackSymbol: defaultSymbolFor('MULTIPOLYGON'),
+      palette: 'brewer-set2',
+    }
+    const onChange = vi.fn()
+    stubFetch([
+      {
+        match: '/values',
+        body: { field: 'neu', values: [{ value: 'x', count: 3 }, { value: 'y', count: 1 }], truncated: false },
+      },
+    ])
+
+    renderWithQueryClient(
+      <CategorizedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={renderer} fields={makeFields()} onChange={onChange} />,
+    )
+
+    // Erste Combobox der Reihe ist das Feld -- `Row`s eigenes Label ist nicht per
+    // `htmlFor`/`aria-labelledby` verknüpft, daher über die Reihenfolge statt den Namen.
+    await userEvent.click(screen.getAllByRole('combobox')[0])
+    await userEvent.click(await screen.findByRole('option', { name: 'Neu' }))
+
+    await waitFor(() => {
+      const last = onChange.mock.calls.at(-1)?.[0] as Extract<Renderer, { type: 'categorized' }>
+      expect(last.palette).toBe(DEFAULT_RAMP)
+      expect(last.palette).not.toBe('brewer-set2')
+    })
   })
 })
