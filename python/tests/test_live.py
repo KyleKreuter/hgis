@@ -112,9 +112,9 @@ def test_the_read_only_floor_lets_reads_through() -> None:
 @pytest.fixture(autouse=True, scope="module")
 def _every_client_built_here_must_be_read_only():
     """
-    Refuse any :class:`hgis.Client` built anywhere in this file's test run
-    whose transport is not :class:`_ReadOnlyFloor` -- the moment it is
-    built, before it can make its first request.
+    Refuse any :class:`hgis.Client` built while a test in this module is
+    running whose transport is not :class:`_ReadOnlyFloor` -- the moment it
+    is built, before it can make its first request.
 
     An earlier version of this safety net read the file's own syntax tree
     and looked for ``hgis.connect(...)`` / ``hgis.Client(...)`` written out
@@ -125,13 +125,28 @@ def _every_client_built_here_must_be_read_only():
     reached a live, unguarded client without tripping it.
 
     This checks the effect instead of the syntax: every one of those paths,
-    however written, ends at the same :meth:`hgis.Client.__init__` -- there
-    is exactly one constructor, and nothing downstream of it can be routed
-    around. Wrapping that one place catches all three, and anything else
-    reflection could invent, without needing to have thought of it first.
+    however written, calls the same :meth:`hgis.Client.__init__` -- there is
+    exactly one constructor, and nothing a test's own code does downstream
+    of it can be routed around. Two things this does *not* cover, named
+    rather than left for the next person to assume are handled:
 
-    Scoped to this module and undone in ``finally``, so it never reaches a
-    test in another file.
+    * **Module-level code.** A ``client = hgis.connect(URL)`` written
+      directly at this file's top level, outside any function, runs while
+      pytest is still collecting this file -- before this fixture's setup
+      has had any test to run around, and so before it has installed
+      anything. Demonstrated separately, and closed the other way this file
+      already knows: see
+      ``test_no_module_level_statement_in_this_file_builds_a_client`` below,
+      which reads the syntax tree for exactly the statements collection
+      would run, rather than trying to patch something that is not there
+      yet to patch.
+    * **``hgis.Client.__new__`` called directly**, with attributes set by
+      hand instead of going through ``__init__`` at all. Not a plausible
+      accident the way the two syntax tricks above are -- not something
+      either check in this file is built to catch.
+
+    Scoped to this module's own test run and undone in ``finally``, so it
+    never reaches a test in another file.
     """
     original_init = hgis.Client.__init__
 
@@ -168,6 +183,56 @@ def test_a_client_not_built_on_the_read_only_floor_is_refused() -> None:
         aliased_connect(URL, timeout=5)
     with pytest.raises(AssertionError, match="_ReadOnlyFloor"):
         getattr(hgis, "connect")(URL, timeout=5)
+
+
+def test_no_module_level_statement_in_this_file_builds_a_client() -> None:
+    """
+    The gap the fixture above names but does not close: its patch is
+    installed by fixture *setup*, which pytest only runs around a test call.
+    A ``client = hgis.connect(URL)`` written directly at this file's top
+    level -- outside any function, a plausible slip while editing this file,
+    not a deliberate bypass the way an aliased import or reflection is --
+    would run while pytest is still collecting this module, before any
+    fixture exists to catch it.
+
+    Confirmed: with the fixture's patch installed by hand *before* import
+    instead of relying on fixture setup, a module-level ``hgis.connect(...)``
+    added to a copy of this file still reached a real, unguarded client --
+    the same result as if no check existed at all.
+
+    So this reads the syntax tree instead, and only for what collection
+    would actually run: direct, module-level statements. A call inside a
+    function or class body does not count here -- it only runs once called,
+    which is what the runtime check above already covers, regardless of the
+    syntax used to reach it.
+    """
+    import ast
+    from pathlib import Path
+
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"), filename=__file__)
+
+    def _name(node: ast.expr) -> str | None:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        return None
+
+    # Only statements that run immediately, while pytest collects this
+    # module -- not the body of a function or class, which runs later, if
+    # ever, and only when called, exactly the case the runtime check above
+    # already handles regardless of how the call is written.
+    definitions = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    for statement in tree.body:
+        if isinstance(statement, definitions):
+            continue
+        for node in ast.walk(statement):
+            if isinstance(node, ast.Call) and _name(node.func) in ("connect", "Client"):
+                pytest.fail(
+                    f"Zeile {node.lineno}: ein hgis.Client wird auf Modulebene "
+                    "gebaut -- das läuft schon beim Einsammeln dieser Datei, "
+                    "bevor irgendeine Fixture etwas patchen könnte."
+                )
 
 
 #: A layer worth testing against holds more than one page, so paging is

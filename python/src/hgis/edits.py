@@ -9,6 +9,7 @@ it is the one shape this stage refuses to offer. See :meth:`hgis.layer.Layer.edi
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -107,32 +108,82 @@ def _decomposes_into_single_characters(value: Any) -> bool:
     standard library's own example: it wraps a real ``str`` rather than
     subclassing one, so ``isinstance(value, str)`` misses it, yet
     ``list(UserString("123"))`` is ``['1', '2', '3']``, exactly the break
-    this whole check exists to catch.
+    this whole check exists to catch. A custom class with only ``__iter__``
+    defined, no ``__getitem__`` at all, is the same break by a third route --
+    see :func:`_first_character_if_it_looks_like_one` for how that is caught
+    too.
 
-    Checks the effect, not the type: for ``str`` and everything that behaves
+    Never raises: ``value`` is foreign code, its ``__getitem__``, ``__iter__``,
+    ``__next__`` or ``__eq__`` can raise anything at all, and this function's
+    job is to catch the classic scalar-passed-as-a-list mixup, not to referee
+    whatever else foreign code does wrong. An exception from any of those
+    says nothing reliable either way, so it is treated like every other
+    inconclusive case here: not flagged.
+    """
+    try:
+        return _first_character_if_it_looks_like_one(value)
+    except Exception:
+        return False
+
+
+def _first_character_if_it_looks_like_one(value: Any) -> bool:
+    """
+    The check :func:`_decomposes_into_single_characters` guards against
+    exceptions from; see there for why nothing here needs its own
+    ``try``/``except``.
+
+    Checks the effect, not the type. For ``str`` and everything that behaves
     like it, indexing one element (``value[0]``) and slicing that same one
     element (``value[0:1]``) come back equal, because there is no separate
     "character" type standing between the two. An actual collection never
     has that property -- ``[1, 2, 3][0]`` is ``1``, ``[1, 2, 3][0:1]`` is
     ``[1]``, and ``1 == [1]`` is false for every real collection, not only
     lists. Compared with ``is True`` rather than trusted as a plain bool,
-    because a NumPy array answers ``==`` element-wise: a single-element
-    ``numpy.ndarray`` would otherwise pass this check by returning an array
-    holding one ``True`` instead of the ``bool`` a real match returns, and be
-    mistaken for one of these when it is only a collection with one entry.
+    because a NumPy array (and a pandas ``Series``) answers ``==``
+    element-wise: a single-element ``numpy.ndarray`` would otherwise pass
+    this check by returning an array holding one ``True`` instead of the
+    ``bool`` a real match returns, and be mistaken for one of these when it
+    is only a collection with one entry.
 
-    A value with no ``__getitem__`` at all -- a generator, a ``set``, a
-    ``dict`` -- fails on the first line and is left alone. Indexing rather
-    than ``next(iter(value))`` is deliberate: consuming from an iterator to
-    peek at it would silently drop that first item for whatever reads
-    ``value`` next; a one-shot iterator simply is not subscriptable, so this
-    never touches it.
+    A ``TypeError`` here means ``value`` has no ``__getitem__`` at all --
+    that alone does not mean it is safe: a custom class defining only
+    ``__iter__`` decomposes exactly the same way ``str`` does, just without
+    the index/slice pair above to compare. ``IndexError`` and ``KeyError``
+    are different: they mean ``value`` *does* support ``__getitem__`` --
+    empty sequences, and a ``dict`` (which has one, keyed rather than
+    positional), both land here -- and neither is this bug, so both return
+    False directly rather than falling through to the check below.
+
+    The fallback distinguishes an **iterator** from an **iterable that is
+    not one**. An iterator (a generator, or anything with ``__next__``)
+    consumes itself as it is read, so peeking at its first element would
+    silently drop that element for whatever reads ``value`` next -- left
+    alone entirely, the same protection the index-based check above already
+    gave a plain generator. An iterable that is *not* an iterator hands back
+    a fresh iterator every time ``__iter__`` is called, so looking at its
+    first element here does not touch ``value`` itself; anything else --
+    not iterable at all -- is left alone the same way.
+
+    Only ``str`` is checked for on this path, not the byte-value family
+    :data:`_SCALAR_ITERABLES` already covers by type: there is no
+    ``__iter__``-only stand-in for ``bytes`` in the standard library the way
+    ``UserString`` stands in for ``str``, and reusing this shape for
+    "iterates into plain ints" would also catch a real ``__iter__``-only
+    collection of small integers, which must stay accepted.
     """
     try:
         first, one_slice = value[0], value[0:1]
-    except (TypeError, IndexError, KeyError):
+    except TypeError:
+        pass  # no __getitem__ at all -- try the Iterable fallback below
+    except (IndexError, KeyError):
+        return False  # __getitem__ exists; this particular lookup does not
+    else:
+        return (first == one_slice) is True
+
+    if isinstance(value, Iterator) or not isinstance(value, Iterable):
         return False
-    return (first == one_slice) is True
+    first = next(iter(value), None)
+    return isinstance(first, str) and len(first) == 1
 
 
 def _reject_scalar_iterable(name: str, value: Any) -> None:

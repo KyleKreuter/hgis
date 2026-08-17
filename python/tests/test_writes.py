@@ -486,6 +486,62 @@ def test_delete_features_rejects_a_string_that_is_not_a_str() -> None:
     assert transport.count == 0
 
 
+def test_delete_features_rejects_an_iterable_with_no_getitem_at_all() -> None:
+    """
+    A third route to the same break: a custom class defining only
+    ``__iter__`` -- the more modern, more common way to write an iterable,
+    and one with no ``__getitem__`` to compare an index against a slice
+    with. ``UserString`` has one; this does not.
+    """
+
+    class CharsOnlyIterable:
+        def __iter__(self):
+            return iter("123")
+
+    def handle(request: object) -> Response:  # pragma: no cover - must not run
+        raise AssertionError("Das haette nichts senden duerfen.")
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    with pytest.raises(hgis.InvalidArgumentError):
+        layer.delete_features(CharsOnlyIterable())
+
+    assert transport.count == 0
+
+
+def test_delete_features_leaves_a_broken_getitem_alone_rather_than_crashing() -> None:
+    """
+    The check has to inspect a value it does not control to tell a scalar
+    from a collection -- and a foreign ``__getitem__`` can raise anything,
+    not only the ``TypeError``/``IndexError``/``KeyError`` a well-behaved one
+    would. This must not turn into an exception from deep inside the check
+    itself; an inconclusive value is treated the same as one confirmed not
+    to be this bug, and the caller sees whatever ``int(fid)`` -- the actual
+    place a fid is used -- says about it instead.
+    """
+
+    class BrokenGetitem:
+        def __getitem__(self, item):
+            raise ValueError("weder TypeError noch IndexError noch KeyError")
+
+        def __iter__(self):
+            return iter([7])
+
+    def handle(request: object) -> Response:
+        return Response(
+            200, '{"createdFids":{},"updated":0,"deleted":1,"dataVersion":1,"featureCount":1}'
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.delete_features(BrokenGetitem())
+
+    assert transport.count == 1
+    assert transport.bodies[-1]["deletes"] == [7]
+
+
 @pytest.mark.parametrize("fids", [[123], (123,), {123}, frozenset({123}), range(120, 124)])
 def test_delete_features_accepts_real_collections(fids) -> None:
     """The check above must not be so tight that an ordinary collection fails."""
