@@ -8,10 +8,15 @@ import type { LayerStyle } from './types'
  * filter parser follows: an identifier is never taken on trust). Such an intermediate
  * state is previewed on the map and simply not saved; the first request goes out once a
  * field has been chosen.
+ *
+ * `heatmap` is exempt from that check: its field is optional by contract, and a
+ * field-less heatmap (density mode) is a complete, persistable style in its own right --
+ * not a placeholder waiting for a selection the way `categorized`/`graduated` are.
  */
 export function isPersistable(style: LayerStyle | null): boolean {
   if (style === null) return true
-  if (style.renderer.type !== 'single' && !style.renderer.field) return false
+  const { renderer } = style
+  if (renderer.type !== 'single' && renderer.type !== 'heatmap' && !renderer.field) return false
   if (style.labels?.enabled && !style.labels.field) return false
   return true
 }

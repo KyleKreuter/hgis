@@ -1,8 +1,23 @@
+import { createExpression } from '@maplibre/maplibre-gl-style-spec'
 import { describe, expect, it, vi } from 'vitest'
 import type { AddLayerObject, VectorSourceSpecification } from 'maplibre-gl'
 import type { LayerSummary, MapImageLayerSummary } from '@/api/layers'
 import type { LayerStyle } from '@/styling/types'
 import { type AppliedLayer, type MapLike, syncMapLayers } from './syncLayers'
+
+/**
+ * Ausgewertet mit MapLibres eigenem Interpreter, nicht nur an der Struktur der
+ * `heatmap-weight`-Expression geprüft -- ein Vergleich, der wie die Struktur aussieht,
+ * ist genau das, woran der ursprüngliche `to-number`/`null`-Fehler vorbeigeschlüpft ist
+ * (team review, package 2; derselbe Helfer wie in `styleToMapLibre.test.ts`).
+ */
+function evaluateHeatmapWeight(expression: unknown, properties: Record<string, unknown>): number {
+  const parsed = createExpression(expression, 'heatmap-weight')
+  if (parsed.result !== 'success') {
+    throw new Error(`Expression konnte nicht geparst werden: ${JSON.stringify(parsed.value)}`)
+  }
+  return parsed.value.evaluate({ zoom: 10 }, { type: 'Point', properties }) as number
+}
 
 interface FakeSource {
   spec: VectorSourceSpecification
@@ -556,5 +571,72 @@ describe('syncMapLayers mit Kartenbildern', () => {
         '&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg&TRANSPARENT=TRUE',
     ])
     expect(map.removeSource).not.toHaveBeenCalled()
+  })
+})
+
+describe('syncMapLayers heatmap-Gewichtung', () => {
+  function heatmapLayer(overrides: Partial<LayerSummary> = {}): LayerSummary {
+    return makeLayer({
+      style: {
+        version: 1,
+        renderer: { type: 'heatmap', field: 'laut_wert', radius: 30, intensity: 1, ramp: 'blues' },
+        opacity: 1,
+      } satisfies LayerStyle,
+      ...overrides,
+    })
+  }
+
+  /**
+   * `fieldRanges` -- `MapLayerSync`'s own fetch, threaded through `syncMapLayers` ->
+   * `specsFor` -> `styleToMapLibre` -- is what turns a raw field value into a weight
+   * MapLibre can read as 0..1. Exercised end to end here, not just in
+   * `styleToMapLibre.test.ts`, so a break anywhere along that chain shows up.
+   */
+  it('normiert heatmap-weight über die mitgegebene Feldspanne', () => {
+    const { map, layers } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+
+    syncMapLayers(map, [heatmapLayer()], applied, new Map([['layer-1', { min: 0, max: 70 }]]))
+
+    const spec = layers.get('hgis-layer-layer-1-render') as AddLayerObject & { paint?: Record<string, unknown> }
+    const weight = spec.paint?.['heatmap-weight']
+    // Struktur *und* Auswertung geprüft, mit Absicht beides: `applyProperties` weiter
+    // oben in dieser Datei entscheidet über `isSameValue` (`JSON.stringify`-Vergleich),
+    // ob `setPaintProperty` für `heatmap-weight` überhaupt aufgerufen wird -- eine
+    // strukturell andere, aber gleich auswertende Expression sähe für diesen Vergleich
+    // wie eine echte Änderung aus und löste bei jedem Sync unnötig einen erneuten
+    // `setPaintProperty`-Aufruf aus. Nur der Strukturvergleich faengt das, keine
+    // Auswertung -- deshalb bleibt er stehen, nicht als Redundanz zur Auswertung darunter.
+    expect(weight).toEqual([
+      'case',
+      ['==', ['get', 'laut_wert'], null],
+      0,
+      ['interpolate', ['linear'], ['to-number', ['get', 'laut_wert'], 0], 0, 0, 70, 1],
+    ])
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 35 })).toBe(0.5)
+    expect(evaluateHeatmapWeight(weight, {})).toBe(0)
+  })
+
+  it('fällt ohne mitgegebene Spanne auf ein konstantes Gewicht zurück, statt den Layer zu verlieren', () => {
+    const { map, layers } = createFakeMap()
+    const applied = new Map<string, AppliedLayer>()
+
+    syncMapLayers(map, [heatmapLayer()], applied)
+
+    const spec = layers.get('hgis-layer-layer-1-render') as AddLayerObject & { paint?: Record<string, unknown> }
+    expect(spec.paint?.['heatmap-weight']).toBe(1)
+  })
+
+  it('faerbt diagnostisch, sobald MapLayerSync die Spanne als bestaetigt fehlend meldet', () => {
+    const errored = createFakeMap()
+    syncMapLayers(errored.map, [heatmapLayer()], new Map<string, AppliedLayer>(), new Map([['layer-1', 'error']]))
+    const failed = errored.layers.get('hgis-layer-layer-1-render') as AddLayerObject & { paint?: Record<string, unknown> }
+
+    const resolved = createFakeMap()
+    syncMapLayers(resolved.map, [heatmapLayer()], new Map<string, AppliedLayer>(), new Map([['layer-1', { min: 0, max: 70 }]]))
+    const working = resolved.layers.get('hgis-layer-layer-1-render') as AddLayerObject & { paint?: Record<string, unknown> }
+
+    expect(failed.paint?.['heatmap-weight']).toBe(1)
+    expect(failed.paint?.['heatmap-color']).not.toEqual(working.paint?.['heatmap-color'])
   })
 })

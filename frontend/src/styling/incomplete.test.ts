@@ -215,6 +215,19 @@ describe('unvollständige Symbole', () => {
     ])
   })
 
+  it('füllt einen Heatmap-Renderer ohne radius/intensity/ramp auf, statt den Layer zu verlieren', () => {
+    for (const geometryType of GEOMETRY_TYPES) {
+      const specs = styleToMapLibre(
+        asStyle({ version: 1, renderer: { type: 'heatmap', field: null }, opacity: 1 }),
+        makeLayer(geometryType),
+        'hgis-layer-layer-1',
+      )
+
+      expect(specs.length).toBeGreaterThan(0)
+      expect(undefinedProperties(specs), geometryType).toEqual([])
+    }
+  })
+
   it('beschriftet mit vollständigem Paint, auch wenn nur Feld und Schalter gesetzt sind', () => {
     const specs = styleToMapLibre(
       asStyle({

@@ -318,8 +318,16 @@ export interface ClassifyResult {
   method: ClassifyMethod
   /** n+1 values: the lower bound of every class, plus the maximum. */
   breaks: number[]
-  min: number
-  max: number
+  /**
+   * `null` when the column has no value to report a range over -- every object's value
+   * is missing, or the layer has no objects at all. Nullable on purpose (team review,
+   * package 2 -- a heatmap layer with no objects surfaced this: the field used to be
+   * typed as plain `number`, and `Intl.NumberFormat` silently formats `null` as `"0"`,
+   * which is how a heatmap legend used to end up claiming a range of "0 bis 0" that the
+   * data never had).
+   */
+  min: number | null
+  max: number | null
   /** Objects without a value -- they fall to the fallback symbol, not into a class. */
   nullCount: number
 }

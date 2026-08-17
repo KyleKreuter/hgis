@@ -15,6 +15,7 @@ import {
 import { Row, Section } from './controls'
 import { defaultStyleFor } from './defaults'
 import { GraduatedEditor } from './GraduatedEditor'
+import { HeatmapEditor } from './HeatmapEditor'
 import { LabelEditor } from './LabelEditor'
 import { RENDERER_LABELS, labelOf } from './labels'
 import { convertRenderer } from './renderer'
@@ -167,6 +168,10 @@ export function SymbologyPanel({ layer, projectId }: SymbologyPanelProps) {
             fields={fields}
             onChange={setRenderer}
           />
+        )}
+
+        {style.renderer.type === 'heatmap' && (
+          <HeatmapEditor layerId={layer.id} renderer={style.renderer} fields={fields} onChange={setRenderer} />
         )}
 
         <Row label="Deckkraft">

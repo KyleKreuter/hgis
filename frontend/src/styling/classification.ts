@@ -189,6 +189,119 @@ export async function requestGraduatedClasses(
   return { classes: withSharedSymbol(fresh, shared), result }
 }
 
+/**
+ * `min`/`max` for one numeric field, guaranteed finite -- what a heatmap renderer
+ * normalises `heatmap-weight` against (`styleToMapLibre`), and what its legend labels
+ * its two ends with (`HeatmapEditor`).
+ *
+ * Deliberately not a projection of `ClassifyResult` (whose own `min`/`max` are
+ * `number | null` -- an empty column has no range to report): this type exists so
+ * everything downstream of `resolveRangeState` can read `.min`/`.max` as plain numbers
+ * without re-checking nullability at every use. `resolveRangeState` is the one place
+ * that conversion happens; nothing else constructs a `FieldRange`.
+ */
+export interface FieldRange {
+  min: number
+  max: number
+}
+
+/**
+ * What `MapLayerSync` (`heatmapFieldRanges.ts`) and `HeatmapEditor`'s own legend know
+ * about a heatmap's weight field range at render time -- and the reason `styleToMapLibre`
+ * needs any state logic here at all where `categorized`/`graduated` need none: their
+ * classes are computed once and stored in the style itself, self-sufficient from then
+ * on, while a heatmap's `field` is only ever a column name -- the range has to be
+ * re-fetched live on every map render, so "the fetch has not settled" and "the fetch
+ * will never settle" are both real states something has to render for.
+ *
+ * `undefined` while the request has not settled yet, or for a renderer that never needed
+ * one (no field -- density mode).
+ *
+ * Two distinct flavours of "will never settle", not one, because they call for different
+ * advice (`heatmapFieldRanges.ts`'s `useHeatmapRangeErrorToasts`): `'error'` is a request
+ * that failed outright -- a network problem, worth a retry, "laden Sie die Seite neu" is
+ * honest advice. `'invalid'` is a request that *succeeded* with a `ClassifyResult` that is
+ * not a real range at all -- `min`/`max` came back `null` (a layer with no objects, or
+ * every object missing the field), non-finite, or reversed (`min > max`, which the real
+ * `/classify` endpoint cannot produce -- both bounds come from the same SQL aggregation
+ * over the same column, and SQL guarantees `min <= max` -- but costs one line to rule out
+ * for good rather than trust). Reloading a page changes nothing about `'invalid'`: the
+ * exact same query, same key, would answer the exact same way -- telling a user to reload
+ * for a data problem is advice that cannot help. Both used to collapse into a single
+ * `'error'` and a single unconditional "laden Sie die Seite neu", which is precisely
+ * backwards for the `'invalid'` half (team review, package 2).
+ *
+ * `range.max > range.min` alone would read `null > null` (coerced to `0 > 0`) as plain
+ * `false` and land silently in the same bucket as "loading" -- exactly the bug that used
+ * to leave a heatmap's own legend claiming a range of "0 bis 0" no data ever produced.
+ * A resolved `FieldRange` otherwise.
+ *
+ * `undefined` and `'error'`/`'invalid'` are deliberately not the same thing to
+ * `styleToMapLibre`: the first is `heatmapWeight`'s existing "count everyone equally, a
+ * transient state that self-heals" fallback; the other two additionally swap
+ * `heatmap-color` for a diagnostic pattern no ramp in `COLOR_RAMPS` can produce, because a
+ * heatmap that will never learn its field's range would otherwise render exactly like
+ * density mode forever -- a result that looks finished and is not. `styleToMapLibre`
+ * itself does not need to tell `'error'` and `'invalid'` apart -- both get the same
+ * diagnostic treatment -- only the toast's wording does.
+ */
+export type FieldRangeState = FieldRange | 'error' | 'invalid' | undefined
+
+// The `/classify` request every field-range lookup shares. `breaks` is never read here
+// -- only `min`/`max` are -- so any valid (method, classes) pair would do; fixing one
+// keeps every caller (the panel's own legend, `MapLayerSync`'s weight normalisation) on
+// the same cache entry (`layerClassifyQuery`'s 5-minute `staleTime`) instead of paying
+// for the same column scan twice.
+const RANGE_METHOD: ClassifyMethod = 'quantile'
+const RANGE_CLASS_COUNT = 2
+
+/** The field-range counterpart to `layerClassifyQuery`/`layerValuesQuery` above. */
+export function heatmapFieldRangeQuery(layerId: string, field: string) {
+  return layerClassifyQuery(layerId, field, RANGE_METHOD, RANGE_CLASS_COUNT)
+}
+
+/**
+ * One query result, narrowed to the two members `resolveRangeState` reads --
+ * structural on purpose so this stays independent of exactly which `useQueries`/
+ * `useQuery` result type the installed TanStack Query version infers.
+ */
+export interface RangeQueryResult {
+  isError: boolean
+  data: Pick<ClassifyResult, 'min' | 'max'> | undefined
+}
+
+/**
+ * Turns one `/classify` query's result into the four states `FieldRangeState`
+ * distinguishes -- the one place a raw, nullable `ClassifyResult` becomes `'error'`,
+ * `'invalid'`, or a `FieldRange` guaranteed finite and correctly ordered. Shared by
+ * `MapLayerSync` (`heatmapFieldRanges.ts`, the map's own weight normalisation) and
+ * `HeatmapEditor`'s legend, so both agree on what "the range is unavailable" means --
+ * before this they did not: the legend read its own query's `data` directly and had no
+ * notion of failure at all, which is how it ended up formatting a `null` `min`/`max` with
+ * `Intl.NumberFormat` (silently `"0"`) into a plausible-looking but fabricated
+ * "0 bis 0" (team review, package 2).
+ *
+ * A request that failed outright is `'error'`. Everything that *succeeded* with a
+ * `ClassifyResult` that is not usable as a range is `'invalid'`: non-finite (or `null`)
+ * `min`/`max`, and a reversed pair (`min > max`) -- the real `/classify` endpoint cannot
+ * produce the latter (`min`/`max` come from one SQL aggregation over one column, and SQL
+ * guarantees `min <= max`), but ruling it out here costs one comparison against trusting
+ * an invariant this function has no way to verify. Without either check,
+ * `range.max > range.min` alone would read `null > null` (coerced to `0 > 0`) or a
+ * reversed pair as plain `false` and land silently in the same bucket as "still loading".
+ */
+export function resolveRangeState(result: RangeQueryResult | undefined): FieldRangeState {
+  if (result?.isError) return 'error'
+  const data = result?.data
+  if (!data) return undefined
+  // Narrowed out of `number | null` explicitly, in its own check: `Number.isFinite` is
+  // not a type guard as far as TypeScript is concerned, so it does not narrow `data.min`/
+  // `data.max` for the `min > max` comparison right after it -- this is what does.
+  if (data.min === null || data.max === null) return 'invalid'
+  if (!Number.isFinite(data.min) || !Number.isFinite(data.max) || data.min > data.max) return 'invalid'
+  return { min: data.min, max: data.max }
+}
+
 export interface CategorizedClassification {
   categories: StyleCategory[]
   result: FieldValuesResult

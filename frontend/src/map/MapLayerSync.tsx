@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import { layerListQuery } from '@/api/layers'
+import { useHeatmapFieldRanges } from './heatmapFieldRanges'
 import { useMap } from './MapContext'
 import { type AppliedLayer, syncMapLayers } from './syncLayers'
 
@@ -23,6 +24,7 @@ interface MapLayerSyncProps {
 export function MapLayerSync({ projectId }: MapLayerSyncProps) {
   const { mapRef, isLoaded } = useMap()
   const { data: layers } = useQuery(layerListQuery(projectId))
+  const fieldRanges = useHeatmapFieldRanges(layers ?? [])
   const appliedRef = useRef(new Map<string, AppliedLayer>())
   // Bookkeeping is only valid for the map instance it was recorded against. React
   // 19 StrictMode's double-invoke of MapCanvas's effect cannot outrun this in
@@ -39,8 +41,8 @@ export function MapLayerSync({ projectId }: MapLayerSyncProps) {
       lastMapRef.current = map
     }
 
-    syncMapLayers(map, layers ?? [], appliedRef.current)
-  }, [mapRef, isLoaded, layers])
+    syncMapLayers(map, layers ?? [], appliedRef.current, fieldRanges)
+  }, [mapRef, isLoaded, layers, fieldRanges])
 
   return null
 }

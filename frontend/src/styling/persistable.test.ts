@@ -26,6 +26,16 @@ describe('isPersistable', () => {
     expect(isPersistable(categorized('art'))).toBe(true)
   })
 
+  it('lässt eine Heatmap ohne Feld durch -- das Feld ist optional, nicht nur noch nicht gewählt', () => {
+    const heatmap = (field: string | null): LayerStyle => ({
+      ...BASE,
+      renderer: { type: 'heatmap', field, radius: 30, intensity: 1, ramp: 'blues' },
+    })
+
+    expect(isPersistable(heatmap(null))).toBe(true)
+    expect(isPersistable(heatmap('laut_wert'))).toBe(true)
+  })
+
   it('hält eine eingeschaltete Beschriftung ohne Feld zurück', () => {
     expect(isPersistable({ ...BASE, labels: defaultLabels('') })).toBe(false)
     expect(isPersistable({ ...BASE, labels: defaultLabels('name') })).toBe(true)

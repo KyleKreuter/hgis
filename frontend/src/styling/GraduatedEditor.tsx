@@ -19,6 +19,7 @@ import { ColorInput, NumberInput, Row } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
 import { isNumericField } from './fields'
 import { PaletteSelect } from './PaletteSelect'
+import { resolvePaletteId } from './palettes'
 import { METHOD_LABELS, labelOf } from './labels'
 import { SymbolEditor } from './SymbolEditor'
 import type { LayerSymbol, Renderer, StyleClass } from './types'
@@ -76,9 +77,19 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
    * actually changing something (CONTRACT.md, package B1). `existingClasses` is passed
    * in rather than read off `classes` above because `selectField` needs to say "empty"
    * before `renderer` itself reflects that.
+   *
+   * `nextRamp` is resolved before either use. Only `selectRamp` ever passes an already-
+   * resolved value (straight from `PaletteSelect`); `selectField`, `selectMethod` and
+   * `selectClassCount` all pass the current `ramp` state unchanged, and that state can
+   * hold a name `initialGraduatedControls` never validated -- it only defaults a
+   * *missing* `renderer.ramp`, not one naming a ramp since renamed or removed (team
+   * review, package 3 addendum, the `CategorizedEditor`/`palette` counterpart to this).
+   * Without resolving here, any of those three controls would repaint every class from
+   * `DEFAULT_RAMP` while writing the old, unresolved name back into `renderer.ramp`.
    */
   async function request(nextField: string, nextMethod: ClassifyMethod, nextClassCount: number, nextRamp: string, existingClasses: StyleClass[]) {
     if (!nextField) return
+    const resolved = resolvePaletteId(nextRamp)
     setClassify((previous) => ({ ...previous, isFetching: true, isError: false }))
     try {
       const { classes: fresh, result } = await requestGraduatedClasses(
@@ -88,12 +99,13 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
         nextField,
         nextMethod,
         nextClassCount,
-        nextRamp,
+        resolved,
         existingClasses,
         renderer.fallbackSymbol,
       )
       setClassify({ isFetching: false, isError: false, data: result })
-      onChange({ ...renderer, field: nextField, method: nextMethod, classCount: nextClassCount, ramp: nextRamp, classes: fresh })
+      setRamp(resolved)
+      onChange({ ...renderer, field: nextField, method: nextMethod, classCount: nextClassCount, ramp: resolved, classes: fresh })
     }
     catch {
       setClassify((previous) => ({ ...previous, isFetching: false, isError: true }))

@@ -21,7 +21,7 @@ import { ColorInput, Row } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
 import { formatCategoryValue } from './fields'
 import { PaletteSelect } from './PaletteSelect'
-import { paletteColors } from './palettes'
+import { paletteColors, resolvePaletteId } from './palettes'
 import { SymbolEditor } from './SymbolEditor'
 import type { LayerSymbol, Renderer, StyleCategory } from './types'
 
@@ -78,9 +78,18 @@ export function CategorizedEditor({
    * (`GraduatedEditor`'s equivalent, fixed alongside this one, CONTRACT.md package B1).
    * `existingCategories` is passed in rather than read off `categories` above because
    * `selectField` needs to say "empty" before `renderer` itself reflects that.
+   *
+   * `nextPalette` is resolved before either use, same as `recolor` above and for the
+   * same reason: `selectField` passes the current `palette` state along unchanged, and
+   * that state can hold a name `initialCategorizedPalette` never validated (team review,
+   * package 3 addendum). Without resolving here, a field change on such a style would
+   * repaint every category from `DEFAULT_RAMP` while writing the old, unresolved name
+   * back into `renderer.palette` -- the same gap `recolor` closed, reachable through a
+   * different control.
    */
   async function request(nextField: string, nextPalette: string, existingCategories: StyleCategory[]) {
     if (!nextField) return
+    const resolved = resolvePaletteId(nextPalette)
     setValues((previous) => ({ ...previous, isFetching: true, isError: false }))
     try {
       const { categories: fresh, result } = await requestCategorizedCategories(
@@ -88,12 +97,13 @@ export function CategorizedEditor({
         layerId,
         geometryType,
         nextField,
-        nextPalette,
+        resolved,
         existingCategories,
         renderer.fallbackSymbol,
       )
       setValues({ isFetching: false, isError: false, data: result })
-      onChange({ ...renderer, field: nextField, palette: nextPalette, categories: fresh })
+      setPalette(resolved)
+      onChange({ ...renderer, field: nextField, palette: resolved, categories: fresh })
     }
     catch {
       setValues((previous) => ({ ...previous, isFetching: false, isError: true }))
@@ -106,12 +116,24 @@ export function CategorizedEditor({
     void request(field, palette, [])
   }
 
+  /**
+   * Writes back `resolvePaletteId(paletteId)`, not `paletteId` itself: called both from
+   * `PaletteSelect` (always a name from its own list, already resolved) and from the
+   * "Farben neu verteilen" button below, which replays whatever `palette` currently holds
+   * -- and a style saved before this palette existed, or naming one since renamed or
+   * removed, seeds that state with a name `paletteColors` cannot place
+   * (`initialCategorizedPalette`, `classification.ts`). Pressing the button then repaints
+   * every category from `DEFAULT_RAMP` regardless; without resolving here, `renderer.palette`
+   * would go on claiming the old, unresolved name while the categories on screen no longer
+   * match it (team review, package 3 addendum).
+   */
   function recolor(paletteId: string) {
-    setPalette(paletteId)
-    const colors = paletteColors(paletteId, categories.length)
+    const resolved = resolvePaletteId(paletteId)
+    setPalette(resolved)
+    const colors = paletteColors(resolved, categories.length)
     onChange({
       ...renderer,
-      palette: paletteId,
+      palette: resolved,
       categories: categories.map((category, index) => ({
         ...category,
         symbol: withPrimaryColor(category.symbol, colors[index]),

@@ -1,8 +1,16 @@
+import { createExpression } from '@maplibre/maplibre-gl-style-spec'
 import { describe, expect, it } from 'vitest'
-import type { CircleLayerSpecification, FillLayerSpecification, LineLayerSpecification } from 'maplibre-gl'
+import type {
+  CircleLayerSpecification,
+  FillLayerSpecification,
+  HeatmapLayerSpecification,
+  LineLayerSpecification,
+  SymbolLayerSpecification,
+} from 'maplibre-gl'
 import type { GeometryType, VectorLayerSummary } from '@/api/layers'
 import { CIRCLE_PAINT, FILL_PAINT, LINE_PAINT } from '@/map/layerSpecs'
-import { defaultStyleFor } from './defaults'
+import type { FieldRangeState } from './classification'
+import { COLOR_RAMPS, defaultStyleFor } from './defaults'
 import { styleToMapLibre } from './styleToMapLibre'
 import type { LayerStyle } from './types'
 
@@ -369,5 +377,297 @@ describe('styleToMapLibre Ausdrücke', () => {
 
     expect((spec as FillLayerSpecification).paint?.['fill-opacity']).toBe(0.5)
     expect((spec as FillLayerSpecification).paint?.['fill-color']).toBeInstanceOf(Array)
+  })
+})
+
+describe('styleToMapLibre heatmap', () => {
+  function heatmapStyle(
+    overrides: Partial<Extract<LayerStyle['renderer'], { type: 'heatmap' }>> = {},
+  ): LayerStyle {
+    return {
+      version: 1,
+      renderer: { type: 'heatmap', field: null, radius: 30, intensity: 1, ramp: 'blues', ...overrides },
+      opacity: 1,
+    }
+  }
+
+  function heatmapPaintOf(
+    style: LayerStyle,
+    layer: VectorLayerSummary = makeLayer(),
+    fieldRange?: FieldRangeState,
+  ): NonNullable<HeatmapLayerSpecification['paint']> {
+    const [spec] = styleToMapLibre(style, layer, SOURCE_ID, fieldRange)
+    return (spec as HeatmapLayerSpecification).paint ?? {}
+  }
+
+  it('zählt ohne Feld jedes Objekt gleich -- konstantes Gewicht 1', () => {
+    expect(heatmapPaintOf(heatmapStyle())['heatmap-weight']).toBe(1)
+  })
+
+  it('normiert das Gewicht auf 0..1, wenn ein Feld und dessen Spanne vorliegen', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 0, max: 70 })
+    const weight = paint['heatmap-weight']
+
+    // Die Struktur allein sagt nichts darüber, ob die Expression auch richtig rechnet --
+    // ein Vergleich, der wie die Struktur aussieht, war genau das, woran der
+    // ursprüngliche Fehler vorbeigeschlüpft ist (team review, package 2). Sie bleibt
+    // trotzdem stehen, absichtlich neben der Auswertung, nicht statt ihr: `syncLayers.ts`
+    // entscheidet über `isSameValue`/`applyProperties` per `JSON.stringify`-Vergleich,
+    // ob `setPaintProperty` für ein geändertes Paint-Attribut überhaupt aufgerufen wird
+    // -- zwei strukturell verschiedene, aber gleich auswertende Expressions sähen für
+    // diesen Vergleich wie eine Änderung aus und lösten bei jedem Sync unnötig einen
+    // erneuten `setPaintProperty`-Aufruf aus, obwohl sich am Ergebnis nichts geändert
+    // hat. Das faengt nur ein Strukturvergleich, keine Auswertung.
+    expect(weight).toEqual([
+      'case',
+      ['==', ['get', 'laut_wert'], null],
+      0,
+      ['interpolate', ['linear'], ['to-number', ['get', 'laut_wert'], 0], 0, 0, 70, 1],
+    ])
+    // `evaluateHeatmapWeight` steht weiter unten, definiert vor der Ausführung dieses Tests.
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 35 })).toBe(0.5)
+  })
+
+  it('fällt auf ein konstantes Gewicht zurück, solange die Spanne des Feldes noch nicht geladen ist', () => {
+    // Kein fieldRange übergeben -- der Zustand, bevor MapLayerSync die Antwort von
+    // heatmapFieldRangeQuery hat.
+    expect(heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }))['heatmap-weight']).toBe(1)
+  })
+
+  it('fällt auf ein konstantes Gewicht zurück, wenn jedes Objekt denselben Wert trägt', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 5, max: 5 })
+
+    expect(paint['heatmap-weight']).toBe(1)
+  })
+
+  /**
+   * Team-Review nach package 2: eine Expression, die richtig aussieht, ist nicht
+   * dasselbe wie eine, die richtig rechnet. Ausgewertet mit MapLibres eigenem
+   * Interpreter (`@maplibre/maplibre-gl-style-spec`'s `createExpression`), nicht nur an
+   * der erzeugten Struktur geprüft -- genau das hätte den ursprünglichen Fehler
+   * gefunden: `to-number`s zweites Argument (der Fallback) wird nur für einen Wert
+   * erreicht, der nicht in eine Zahl umgewandelt werden kann, z. B. eine Zeichenkette --
+   * für ein fehlendes Feld liefert `['get', field]` `null`, und MapLibres `Coercion`
+   * bricht die `'number'`-Umwandlung dafür sofort mit `0` ab, *bevor* der Fallback
+   * überhaupt betrachtet wird. Ohne einen expliziten `!has`-Zweig davor landete dieses
+   * `0` im `interpolate` und wurde je nach Vorzeichen der Spanne zu 0, zur Mitte oder --
+   * bei einer rein negativen Spanne -- zum Maximalgewicht.
+   */
+  function evaluateHeatmapWeight(expression: unknown, properties: Record<string, unknown>): number {
+    const parsed = createExpression(expression, 'heatmap-weight')
+    if (parsed.result !== 'success') {
+      throw new Error(`Expression konnte nicht geparst werden: ${JSON.stringify(parsed.value)}`)
+    }
+    // `type` here is MapLibre's own geometry-kind discriminator, not GeoJSON's -- a
+    // heatmap tile carries points, and no expression here reads the geometry anyway.
+    return parsed.value.evaluate({ zoom: 10 }, { type: 'Point', properties }) as number
+  }
+
+  it('gewichtet ein Objekt ohne Feldwert immer mit 0 -- unabhängig vom Vorzeichen der Spanne', () => {
+    const positiveRange = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 10, max: 100 })
+    const straddlingRange = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: -50, max: 70 })
+    const negativeRange = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: -100, max: -10 })
+
+    expect(evaluateHeatmapWeight(positiveRange['heatmap-weight'], {})).toBe(0)
+    expect(evaluateHeatmapWeight(straddlingRange['heatmap-weight'], {})).toBe(0)
+    // Der eigentliche Fund: bei rein negativer Spanne wurde ein Objekt ohne Wert vorher
+    // zum hellsten Punkt der Karte (Gewicht 1) statt zum dunkelsten.
+    expect(evaluateHeatmapWeight(negativeRange['heatmap-weight'], {})).toBe(0)
+  })
+
+  /**
+   * Team-Review nach der `!has`-Behebung: "ohne Feldwert" hat zwei Ausprägungen, die eine
+   * echte Kachel beide erzeugen kann -- die Eigenschaft fehlt (die einzige, die
+   * PostGIS/`ST_AsMVT` heute tatsächlich schreibt, siehe der Kommentar an
+   * `heatmapWeight`), oder sie ist vorhanden und trägt `null` (denkbar bei einer
+   * künftigen Quelle, z. B. GeoJSON). Der vorherige Test prüfte nur `{}`; ein Schutz, der
+   * sich auf eine Kachel-Eigenschaft verlässt statt auf die Auswertung, hätte diesen
+   * zweiten Fall unbemerkt durchgelassen.
+   */
+  it('gewichtet ein vorhandenes, aber null-wertiges Feld genauso mit 0', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: -100, max: -10 })
+
+    expect(evaluateHeatmapWeight(paint['heatmap-weight'], { laut_wert: null })).toBe(0)
+  })
+
+  /**
+   * Team-Review: MapLibres `==` gegen `null` ist strikt, keine JavaScript-Koartion --
+   * geprueft an einer Spanne, in der ein echter Wert 0 und ein fehlender Wert sonst
+   * dieselbe Zahl ergeben haetten (0..70 oben faellt dafuer nicht: dort landet ein
+   * fehlender Wert zufaellig auch bei Gewicht 0, was nichts ueber die Bedingung selbst
+   * beweist). Bei -10..10 trennen sich beide Faelle: ein echter Messwert 0 -- bei einem
+   * Laermpegel ein gueltiger Wert -- muss in die Mitte interpolieren, nicht auf 0 fallen.
+   */
+  it('unterscheidet einen echten Wert 0 von einem fehlenden Wert', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: -10, max: 10 })
+    const weight = paint['heatmap-weight']
+
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 0 })).toBe(0.5)
+    expect(evaluateHeatmapWeight(weight, { laut_wert: null })).toBe(0)
+    expect(evaluateHeatmapWeight(weight, {})).toBe(0)
+  })
+
+  it('interpoliert einen vorhandenen Wert weiterhin korrekt zwischen den Rändern', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 0, max: 70 })
+    const weight = paint['heatmap-weight']
+
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 0 })).toBe(0)
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 35 })).toBe(0.5)
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 70 })).toBe(1)
+  })
+
+  it('klammert Radius und Intensität an ihre Grenzen', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ radius: 500, intensity: 20 }))
+
+    expect(paint['heatmap-radius']).toBe(100)
+    expect(paint['heatmap-intensity']).toBe(5)
+  })
+
+  it('setzt heatmap-opacity nur, wenn sie von 1 abweicht', () => {
+    const opaque = heatmapPaintOf({ ...heatmapStyle(), opacity: 1 })
+    const halved = heatmapPaintOf({ ...heatmapStyle(), opacity: 0.5 })
+
+    expect(opaque['heatmap-opacity']).toBeUndefined()
+    expect(halved['heatmap-opacity']).toBe(0.5)
+  })
+
+  it('färbt über heatmap-density, nicht über das Feld -- transparenter Anfang, deckende Spitze', () => {
+    const color = heatmapPaintOf(heatmapStyle({ ramp: 'blues' }))['heatmap-color'] as unknown[]
+
+    expect(color[0]).toBe('interpolate')
+    expect(color[2]).toEqual(['heatmap-density'])
+    expect(color[3]).toBe(0)
+    expect(color[4]).toMatch(/^rgba\(\d+, \d+, \d+, 0\)$/)
+    expect(color[color.length - 2]).toBe(1)
+  })
+
+  /**
+   * `inferno`/`viridis` (package 3) laufen durch dieselbe Funktion wie jede andere Rampe
+   * -- kein Sonderfall dafür nötig, dass ihr erster Stützpunkt (`#000004`) fast Schwarz
+   * ist: `toTransparent` liest nur `stops[0]` und setzt dessen Alpha auf 0, unabhängig
+   * davon, wie dunkel die Farbe selbst ist. Ein sichtbares "erstes Band" nach dem
+   * transparenten Start (fast Schwarz, undurchsichtig) ist bei `inferno` beabsichtigt --
+   * niedrige Dichte bleibt fast unsichtbar, genau wie bei jedem inferno-basierten
+   * Heatmap-Plot -- nicht ein Zeichen für einen kaputten Verlauf.
+   */
+  it.each(['inferno', 'viridis'] as const)(
+    'färbt %s wie jede andere Rampe -- transparenter Anfang, deckende Spitze',
+    (ramp) => {
+      const color = heatmapPaintOf(heatmapStyle({ ramp }))['heatmap-color'] as unknown[]
+
+      expect(color[0]).toBe('interpolate')
+      expect(color[3]).toBe(0)
+      expect(color[4]).toMatch(/^rgba\(\d+, \d+, \d+, 0\)$/)
+      expect(color[color.length - 2]).toBe(1)
+      // Nicht nur "irgendein #rrggbb": das Diagnosemuster (unten) endet zufällig auch auf
+      // einem transparenten Start und einer deckenden, gültigen Hex-Farbe -- die obigen
+      // vier Prüfungen allein würden also nicht bemerken, wenn `inferno`/`viridis` aus dem
+      // Katalog verschwänden und still auf die Warndarstellung fielen (per Mutationsprobe
+      // gefunden, package 3). Der letzte Halt muss deshalb exakt der eigene Endpunkt der
+      // Rampe sein, nicht irgendeine plausible Farbe.
+      const catalogRamp = COLOR_RAMPS.find((candidate) => candidate.id === ramp)!
+      expect(color[color.length - 1]).toBe(catalogRamp.stops[catalogRamp.stops.length - 1])
+    },
+  )
+
+  /**
+   * Team-Review (package 3): `COLOR_RAMPS.find(...) ?? COLOR_RAMPS[0]` liess einen
+   * Tippfehler im Rampen-Namen lautlos auf `blues` fallen -- eine blaue Heatmap, die
+   * aussieht, als hätte jemand bewusst Blau gewählt. Ein unbekannter Name bekommt jetzt
+   * dieselbe Warndarstellung wie eine bestätigt fehlende Feldspanne (`heatmapErrorColorRamp`,
+   * s.u.) statt einer echten Rampe.
+   */
+  it('faellt bei einem unbekannten Rampen-Namen auf das Diagnosemuster zurueck, nicht lautlos auf blues', () => {
+    const unknown = heatmapPaintOf(heatmapStyle({ ramp: 'nicht-im-katalog' }))['heatmap-color']
+    const blues = heatmapPaintOf(heatmapStyle({ ramp: 'blues' }))['heatmap-color']
+
+    expect(unknown).not.toEqual(blues)
+    // Grau ist ein gültiger Katalogeintrag -- dieselbe Begründung wie beim Rampentest der
+    // fehlenden Feldspanne unten: die Diagnosefarbe darf keiner echten Rampe gleichen.
+    expect(JSON.stringify(unknown)).not.toContain('#404040')
+  })
+
+  it('zeigt bei einem unbekannten Rampen-Namen exakt dasselbe Muster wie eine bestätigt fehlende Feldspanne', () => {
+    const unknownRamp = heatmapPaintOf(heatmapStyle({ ramp: 'nicht-im-katalog' }))['heatmap-color']
+    const failedRange = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'blues' }), makeLayer(), 'error')['heatmap-color']
+
+    expect(unknownRamp).toEqual(failedRange)
+  })
+
+  /**
+   * Der eine Fall, den der reine Farbvergleich oben nicht zeigt: ein kaputter Rampen-Name
+   * darf das Gewicht -- und damit, ob ein Feld überhaupt normiert wird -- nicht
+   * beeinträchtigen. Nur die Farbe ist eine Diagnose, die Dichte/das Gewicht bleiben
+   * unverändert richtig.
+   */
+  it('normiert das Gewicht weiterhin korrekt, wenn nur der Rampen-Name unbekannt ist', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'nicht-im-katalog' }), makeLayer(), { min: 0, max: 70 })
+
+    expect(evaluateHeatmapWeight(paint['heatmap-weight'], { laut_wert: 35 })).toBe(0.5)
+  })
+
+  /**
+   * Team-Review nach package 2: "lädt noch" und "wird nie kommen" sahen vorher gleich
+   * aus -- beide fielen auf ein konstantes Gewicht *und* die normale Rampe zurück, eine
+   * Karte, die aussieht, als hätte die Normierung funktioniert, obwohl sie es nicht hat.
+   * `'error'` bekommt deshalb eine eigene Farbe, das Gewicht bleibt bei beiden gleich.
+   */
+  it.each(['error', 'invalid'] as const)(
+    'faerbt bei bestaetigt fehlender Spanne (%s) diagnostisch statt mit der gewaehlten Rampe',
+    (state) => {
+      const working = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'greys' }), makeLayer(), { min: 0, max: 70 })
+      const failed = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'greys' }), makeLayer(), state)
+
+      expect(failed['heatmap-color']).not.toEqual(working['heatmap-color'])
+      // Grau ist ein gültiger Katalogeintrag (`greys`) -- die Diagnosefarbe darf ihm daher
+      // nicht gleichen, sonst waere sie fuer genau die Person unsichtbar, die Grau mag.
+      expect(JSON.stringify(failed['heatmap-color'])).not.toContain('#404040')
+    },
+  )
+
+  it.each(['error', 'invalid'] as const)(
+    'faellt bei bestaetigt fehlender Spanne (%s) trotzdem auf ein konstantes Gewicht zurueck, nicht auf 0',
+    (state) => {
+      // Ein unsichtbarer Layer waere kein Signal, nur ein weiteres Symptom -- die Karte
+      // zeigt weiterhin ehrlich, wo die Objekte liegen.
+      expect(heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), state)['heatmap-weight']).toBe(1)
+    },
+  )
+
+  it('faerbt "error" und "invalid" auf der Karte gleich -- sie unterscheiden sich nur im Toast-Text', () => {
+    const asError = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), 'error')
+    const asInvalid = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), 'invalid')
+
+    expect(asError).toEqual(asInvalid)
+  })
+
+  it('rendert einen GEOMETRY-Layer als einen einzigen Punkt-Sublayer statt der Dreifach-Aufteilung', () => {
+    const specs = styleToMapLibre(heatmapStyle(), makeLayer({ geometryType: 'GEOMETRY' }), SOURCE_ID)
+
+    expect(specs.map((spec) => spec.id)).toEqual(['hgis-layer-layer-1-render'])
+    expect(specs[0].type).toBe('heatmap')
+  })
+
+  it('erzwingt Punkt-Platzierung für Beschriftungen -- die Kachel liefert nur Punkte', () => {
+    const style: LayerStyle = {
+      ...heatmapStyle(),
+      labels: {
+        enabled: true,
+        field: 'name',
+        size: 12,
+        color: '#262626',
+        haloColor: '#ffffff',
+        haloWidth: 1.5,
+        minZoom: 10,
+        allowOverlap: false,
+      },
+    }
+
+    const specs = styleToMapLibre(style, makeLayer({ geometryType: 'MULTILINESTRING' }), SOURCE_ID)
+    const label = specs[specs.length - 1] as SymbolLayerSpecification
+
+    expect(specs.map((spec) => spec.id)).toEqual(['hgis-layer-layer-1-render', 'hgis-layer-layer-1-label'])
+    expect(label.type).toBe('symbol')
+    expect(label.layout?.['symbol-placement']).toBe('point')
   })
 })
