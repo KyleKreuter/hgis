@@ -399,8 +399,19 @@ public class EditService {
 	 * three has a {@link BigDecimal} representation, so they can never come back through
 	 * {@link BigDecimal#BigDecimal(String)} below; matched case-insensitively (PostgreSQL
 	 * itself is) and wrapped as a {@link NumericLiteral} instead.
+	 *
+	 * <p>The sign is deliberately only optional in front of {@code inf}/{@code infinity},
+	 * not {@code nan}: PostgreSQL itself accepts {@code +Inf}/{@code -Inf}/{@code
+	 * +Infinity}/{@code -Infinity} but rejects {@code +NaN}/{@code -NaN} outright ({@code
+	 * invalid input syntax for type numeric}). A review of an earlier version of this
+	 * pattern -- {@code [+-]?(nan|inf(inity)?)}, sign in front of the whole alternation --
+	 * found exactly that gap: it wrapped a signed NaN as a {@link NumericLiteral} anyway,
+	 * so the {@code CAST} in {@link #placeholderFor} reached PostgreSQL and failed there
+	 * instead of here, surfacing as a bare 500 with no {@link BadRequestException} to
+	 * translate it -- a narrower version of the exact failure this whole method exists to
+	 * prevent.
 	 */
-	private static final Pattern SPECIAL_NUMERIC_LITERAL = Pattern.compile("(?i)^[+-]?(nan|inf(inity)?)$");
+	private static final Pattern SPECIAL_NUMERIC_LITERAL = Pattern.compile("(?i)^(nan|[+-]?inf(inity)?)$");
 
 	/**
 	 * Marks a value that {@link #placeholderFor} has to bind through an explicit

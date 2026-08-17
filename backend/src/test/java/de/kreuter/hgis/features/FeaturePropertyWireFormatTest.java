@@ -325,6 +325,99 @@ class FeaturePropertyWireFormatTest {
 		assertThat(body).as("names the field by its source name").contains("Ganzzahl");
 	}
 
+	/**
+	 * PostgreSQL rejects a signed {@code NaN} outright ({@code invalid input syntax for
+	 * type numeric}), unlike the four signed spellings of Infinity {@link
+	 * #acceptsEverySignedSpellingOfInfinity} below confirms all work. A review of an
+	 * earlier version of {@code EditService.SPECIAL_NUMERIC_LITERAL} found it did not draw
+	 * that line -- its sign applied to the whole {@code nan|infinity} alternation, so
+	 * {@code "+NaN"}/{@code "-NaN"} were wrapped and handed to PostgreSQL's own {@code
+	 * CAST}, which then failed with no {@link de.kreuter.hgis.common.BadRequestException}
+	 * to translate it: a bare 500, in place of the clean 400 every other unparsable number
+	 * on this endpoint gets, {@code "abc"} included.
+	 */
+	@Test
+	@DisplayName("+NaN and -NaN are a 400 naming the field, not a raw 500 from PostgreSQL's own rejection")
+	void rejectsASignedNanWith400NotA500() throws Exception {
+		for (String signedNan : List.of("+NaN", "-NaN")) {
+			MockHttpServletResponse response = putProperties(filledFid, "{\"numcol\":\"" + signedNan + "\"}");
+
+			assertThat(response.getStatus())
+					.as("%s must get the same clean 400 an ordinary unparsable number does", signedNan)
+					.isEqualTo(400);
+			String body = response.getContentAsString(StandardCharsets.UTF_8);
+			assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+			assertThat(body).as("names the field by its source name").contains("Betrag");
+		}
+	}
+
+	/**
+	 * The counterpart to {@link #rejectsASignedNanWith400NotA500}: tightening the pattern
+	 * to exclude a signed NaN must not also, by accident, exclude one of the four signed
+	 * spellings of Infinity PostgreSQL does accept.
+	 *
+	 * <p>Deliberately its own layer with a plain, unconstrained {@code numeric} column,
+	 * not {@link #filledFid}'s {@code numcol numeric(12,2)}: a scale-constrained column
+	 * rejects every spelling of Infinity outright with its own, unrelated {@code numeric
+	 * field overflow} (Infinity fits no finite precision/scale, unlike NaN, which that
+	 * constraint exempts) -- a pre-existing gap this method is not about and must not be
+	 * mistaken for a failure of the pattern under test here.
+	 */
+	@Test
+	@DisplayName("all four signed spellings of Infinity are still accepted")
+	void acceptsEverySignedSpellingOfInfinity() throws Exception {
+		Project infProject = projectRepository.saveAndFlush(
+				new Project("Vorzeichen-Unendlich-Test " + UUID.randomUUID(), null, 25832, "osm"));
+		UUID infLayerId = UUID.randomUUID();
+		String infTableName = SqlIdentifier.tableName(infLayerId);
+		try {
+			jdbc.sql("""
+					CREATE TABLE %s (
+					    fid    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+					    geom   geometry(MultiPolygon, 25832) NOT NULL,
+					    numcol numeric
+					)
+					""".formatted(SqlIdentifier.quoteLayerTable(infTableName))).update();
+			Layer infLayer = layerRepository.saveAndFlush(
+					new Layer(infLayerId, infProject, "Vorzeichen-Unendlich", infTableName, "MULTIPOLYGON", 25832));
+			fieldRepository.saveAndFlush(new LayerField(infLayer, "Betrag", "numcol", "numeric", 0));
+
+			for (String spelling : List.of("+Inf", "-Inf", "+Infinity", "-Infinity")) {
+				long fid = jdbc.sql("INSERT INTO " + SqlIdentifier.quoteLayerTable(infTableName)
+								+ " (geom) VALUES (ST_Multi(ST_MakeEnvelope(0, 0, 10, 10, 25832))) RETURNING fid")
+						.query(Long.class)
+						.single();
+
+				MockHttpServletResponse response = mockMvc.perform(post(
+								"/api/layers/" + infLayer.getId() + "/edits")
+								.contentType(MediaType.APPLICATION_JSON)
+								.content("{\"updates\":[{\"fid\":" + fid + ",\"properties\":"
+										+ "{\"numcol\":\"" + spelling + "\"}}]}"))
+						.andReturn().getResponse();
+				assertThat(response.getStatus())
+						.as("%s must still be accepted -- PostgreSQL itself allows it", spelling)
+						.isEqualTo(200);
+
+				// PostgreSQL normalises every signed spelling to "Infinity"/"-Infinity" on
+				// readback, and Jackson writes a non-finite double as a quoted JSON string
+				// rather than the bare, invalid JSON token -- so this is a plain string
+				// comparison, not a numeric one.
+				MockHttpServletResponse getResponse = mockMvc.perform(
+								get("/api/layers/" + infLayer.getId() + "/features/" + fid))
+						.andReturn().getResponse();
+				JsonNode numcol = JSON.readTree(getResponse.getContentAsString(StandardCharsets.UTF_8))
+						.get("properties").get("numcol");
+				String expected = spelling.startsWith("-") ? "-Infinity" : "Infinity";
+				assertThat(numcol.asString()).as("%s reads back normalised", spelling).isEqualTo(expected);
+			}
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(infTableName)).update();
+			layerRepository.findById(infLayerId).ifPresent(layerRepository::delete);
+			projectRepository.deleteById(infProject.getId());
+		}
+	}
+
 	@Test
 	@DisplayName("an unparsable date is a 400 naming the field, not a generic 500")
 	void rejectsATypeMismatchedDateWith400() throws Exception {
