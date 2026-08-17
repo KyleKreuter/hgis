@@ -240,15 +240,16 @@ function clamp(value: number, min: number, max: number): number {
  */
 function heatmapWeight(field: string | null, range: FieldRange | undefined): PaintValue<number> {
   if (!field || !range || !(range.max > range.min)) return 1
+  const low = normalisationFloor(range)
   return [
     'case',
     // An object without this field is not the same thing as one whose value happens to
     // be low -- and MapLibre's own `to-number` does not draw that line the way its
-    // signature suggests. Its fallback argument (here `range.min`) only fires for a
-    // value that fails `Number(...)`, e.g. a non-numeric string; `['get', field]`
-    // evaluating to `null` (a missing property, *or* one explicitly holding `null`)
-    // short-circuits the whole coercion to a literal `0` *before* the fallback is ever
-    // consulted (`@maplibre/maplibre-gl-style-spec`'s `Coercion.evaluate`, the
+    // signature suggests. Its fallback argument (here `low`, see `normalisationFloor`)
+    // only fires for a value that fails `Number(...)`, e.g. a non-numeric string; `['get',
+    // field]` evaluating to `null` (a missing property, *or* one explicitly holding
+    // `null`) short-circuits the whole coercion to a literal `0` *before* the fallback is
+    // ever consulted (`@maplibre/maplibre-gl-style-spec`'s `Coercion.evaluate`, the
     // `'number'` case). Fed straight into `interpolate`, that stray `0` reads as
     // wherever `0` happens to fall in *this* field's range -- the low end for an
     // all-positive range by coincidence, the hottest point of the map for an
@@ -278,13 +279,64 @@ function heatmapWeight(field: string | null, range: FieldRange | undefined): Pai
     [
       'interpolate',
       ['linear'],
-      ['to-number', ['get', field], range.min],
-      range.min,
+      ['to-number', ['get', field], low],
+      low,
       0,
       range.max,
       1,
     ],
   ] as unknown as ExpressionSpecification
+}
+
+/**
+ * The value that maps to weight 0 -- `range.min` stretched the scale from the field's own
+ * observed minimum, which reads as "the same thing `null` gets" (team review, package 3
+ * addendum): normalising `laenge_km`'s 0,503..6,167 against its own minimum gave the
+ * *shortest real flight segment in the dataset* -- not a missing value, the one this
+ * stretch exists to show -- exactly the weight `heatmapWeight` hands out for "no value at
+ * all" two branches above. An object that has a value must never look like one that does
+ * not.
+ *
+ * Anchored at 0 instead whenever every value in the range is already non-negative: for a
+ * ratio-scale quantity -- a length, a share, a count, every field this has been used on so
+ * far -- 0 is not just another number, it is the point the quantity itself calls
+ * "nothing", the reading `CONTRACT.md`'s own example ("ein Feld mit Werten von 0 bis 70")
+ * already assumes. Anchoring there instead of at the sample's minimum is what lets a
+ * genuine minimum read as "a little" rather than "nothing": `laenge_km`'s shortest segment
+ * now gets 0,503 / 6,167 ≈ 8 % weight, `anteil_prozent`'s smallest share 4,6 / 55,2 ≈ 8 %
+ * -- present on the map, distinguishable from a null, at the cost this trades in on
+ * purpose (next paragraph).
+ *
+ * The cost: two values close together but far from zero -- 1000 and 1005, say -- normalise
+ * to 1000/1005 ≈ 0,995 and 1,0, indistinguishable on the map, where a min-anchored stretch
+ * would have shown the full 0..1 spread between them. Both anchors have a price; this one
+ * is chosen because the alternative's price is not occasional but structural -- a
+ * min-anchored stretch puts *some* real value at weight 0 for every single field it is
+ * ever used on, the sample's minimum always coincides with the stretch's own zero end by
+ * construction, where the "values cluster far from zero" cost above only bites a field
+ * whose meaningful range does not start near 0 in the first place (a temperature in
+ * Kelvin, an id, a year -- not a length or a share).
+ *
+ * Left unanchored (at `range.min`, the previous behaviour, unchanged) whenever the range
+ * reaches below 0: 0 stops being a usable floor the moment a value can go below it, since
+ * mapping a negative value to a negative weight is outside what MapLibre's `heatmap-weight`
+ * accepts ("typically 0 to 1") and clamping it to 0 would reintroduce the exact confusion
+ * this function exists to remove, now between "at or below zero" and "no value" instead of
+ * between "the sample's minimum" and "no value". A field whose meaningful weight can go
+ * negative (a balance, a deviation from an expected value) is a genuinely different
+ * question -- does a large negative value mean "very little heat" or "heat of the opposite
+ * kind"? -- with no answer this function can give on its own; it is left as it was rather
+ * than guessed at (team review, package 3 addendum -- flagged, not solved here).
+ *
+ * Confirmed the hard way, not just argued: forcing 0 unconditionally (mutation testing
+ * this fix) does not merely mis-weight a range whose `max` is itself negative -- it makes
+ * `heatmapWeight`'s own `interpolate` unparseable. `interpolate`'s stops must strictly
+ * ascend, and `0, ..., max` descends the moment `max < 0`. A negative-only range does not
+ * just deserve the old anchor; with a floor of 0 it could not produce a valid expression
+ * at all.
+ */
+function normalisationFloor(range: FieldRange): number {
+  return range.min >= 0 ? 0 : range.min
 }
 
 /** Same sample count `PaletteSelect`'s own preview swatch uses, so a ramp looks the same
