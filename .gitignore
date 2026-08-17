@@ -61,3 +61,6 @@ venv/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+
+# Screenshots aus Browserpruefungen, im Projektstamm abgelegt
+/*.png
