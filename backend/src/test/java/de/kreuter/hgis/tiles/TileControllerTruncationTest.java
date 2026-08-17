@@ -63,6 +63,7 @@ class TileControllerTruncationTest {
 	@DisplayName("a truncated tile carries the X-Tile-Truncated header")
 	void truncatedTileCarriesTheHeader() throws Exception {
 		given(mvtService.renderTile(any(), org.mockito.ArgumentMatchers.anyInt(), any(), any(),
+				any(), org.mockito.ArgumentMatchers.anyBoolean(),
 				org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt(),
 				org.mockito.ArgumentMatchers.anyInt()))
 				.willReturn(new MvtService.RenderedTile(new byte[] { 1, 2, 3 }, true));
@@ -76,6 +77,7 @@ class TileControllerTruncationTest {
 	@DisplayName("a complete tile carries no X-Tile-Truncated header at all")
 	void completeTileCarriesNoTruncationHeader() throws Exception {
 		given(mvtService.renderTile(any(), org.mockito.ArgumentMatchers.anyInt(), any(), any(),
+				any(), org.mockito.ArgumentMatchers.anyBoolean(),
 				org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt(),
 				org.mockito.ArgumentMatchers.anyInt()))
 				.willReturn(new MvtService.RenderedTile(new byte[] { 1, 2, 3 }, false));

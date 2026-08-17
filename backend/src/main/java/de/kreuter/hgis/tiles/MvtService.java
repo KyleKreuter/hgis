@@ -1,9 +1,11 @@
 package de.kreuter.hgis.tiles;
 
+import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.common.ProjectionDomain;
 import de.kreuter.hgis.common.SqlIdentifier;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -151,6 +153,25 @@ public class MvtService {
 	private static final int SEGMENT_METRES = 100_000;
 
 	/**
+	 * WGS84's semi-major axis in metres -- the sphere Web Mercator (EPSG:3857) projects
+	 * onto. The textbook constant behind {@code 2 * pi * r}, the world's circumference at
+	 * the equator; the same value underlies the 156543.033928 m/pixel figure documented in
+	 * {@link de.kreuter.hgis.wms.MapLayerService#SCALE_DENOMINATOR_AT_ZOOM_0}.
+	 */
+	private static final double WEB_MERCATOR_EARTH_RADIUS_METRES = 6_378_137.0;
+
+	/**
+	 * How many heatmap points a line spanning a whole tile's width gets, independent of
+	 * zoom -- see {@link #heatmapPointSpacingMetres} for how that turns into an actual
+	 * spacing. Chosen against the contract's default {@code radius} of 30 screen points at
+	 * a tile rendered around 512 CSS pixels wide: 512 / 32 = 16 screen points between
+	 * points, comfortably inside one radius, so neighbouring points' kernels overlap into a
+	 * continuous glow instead of visible, separate blobs -- while still keeping the point
+	 * count bounded no matter how long the underlying line actually is.
+	 */
+	private static final int HEATMAP_POINTS_ACROSS_TILE = 32;
+
+	/**
 	 * The stand-in for a tile envelope that cannot be expressed in the layer's CRS: a box so
 	 * large that {@code l.geom && b.native} is true for every row.
 	 *
@@ -197,6 +218,9 @@ public class MvtService {
 	 * Renders one tile. {@link RenderedTile#mvt()} is {@code null} when the tile has no
 	 * features -- callers turn that into a 204, never an empty byte array with a 200.
 	 *
+	 * <p>Equivalent to calling the five-argument-longer overload with {@code heatmap} false
+	 * and no geometry type -- every existing caller that never renders a heatmap tile.
+	 *
 	 * @param attributeColumns column names to carry as tile properties, resolved from the
 	 *                         layer's style through {@code layer_field}; never a name that
 	 *                         came out of the style document itself
@@ -209,7 +233,23 @@ public class MvtService {
 	 */
 	public RenderedTile renderTile(String tableName, int srid, Collection<String> attributeColumns,
 			List<ClipMask> masks, int z, int x, int y) {
-		RenderedTile result = jdbc.sql(query(tableName, attributeColumns, masks, srid, z, x, y))
+		return renderTile(tableName, srid, attributeColumns, masks, null, false, z, x, y);
+	}
+
+	/**
+	 * As above, for a layer whose style renders as a heatmap (CONTRACT.md heatmap
+	 * package): the tile then carries points -- one per point feature unchanged, one per
+	 * polygon, several evenly spaced along each line -- instead of the layer's own
+	 * geometry. See {@link #heatmapGeometryExpression} for why and how.
+	 *
+	 * @param geometryType the layer's geometry type; read only when {@code heatmap} is
+	 *                     true, so {@code null} is fine otherwise
+	 * @param heatmap      whether the layer's current style is a heatmap renderer
+	 */
+	public RenderedTile renderTile(String tableName, int srid, Collection<String> attributeColumns,
+			List<ClipMask> masks, GeometryType geometryType, boolean heatmap, int z, int x, int y) {
+		RenderedTile result = jdbc
+				.sql(query(tableName, attributeColumns, masks, geometryType, heatmap, srid, z, x, y))
 				.param("z", z)
 				.param("x", x)
 				.param("y", y)
@@ -234,8 +274,14 @@ public class MvtService {
 	 */
 	String explainTile(String tableName, int srid, Collection<String> attributeColumns,
 			List<ClipMask> masks, int z, int x, int y) {
+		return explainTile(tableName, srid, attributeColumns, masks, null, false, z, x, y);
+	}
+
+	/** As above, for the heatmap-aware query -- see the matching {@code renderTile} overload. */
+	String explainTile(String tableName, int srid, Collection<String> attributeColumns,
+			List<ClipMask> masks, GeometryType geometryType, boolean heatmap, int z, int x, int y) {
 		String sql = "EXPLAIN (ANALYZE, FORMAT JSON) "
-				+ query(tableName, attributeColumns, masks, srid, z, x, y);
+				+ query(tableName, attributeColumns, masks, geometryType, heatmap, srid, z, x, y);
 		return jdbc.sql(sql)
 				.param("z", z)
 				.param("x", x)
@@ -275,7 +321,7 @@ public class MvtService {
 	 * </ul>
 	 */
 	private String query(String tableName, Collection<String> attributeColumns, List<ClipMask> masks,
-			int srid, int z, int x, int y) {
+			GeometryType geometryType, boolean heatmap, int srid, int z, int x, int y) {
 		String attributes = selectedAttributes(attributeColumns);
 		String layerTable = SqlIdentifier.quoteLayerTable(tableName);
 		String nativeBounds = nativeBounds(srid, z, x, y);
@@ -283,7 +329,7 @@ public class MvtService {
 		StringBuilder ctes = new StringBuilder();
 		StringBuilder from = new StringBuilder(layerTable).append(" l, bounds b");
 		StringBuilder where = new StringBuilder("l.geom && b.native");
-		String geom = "l.geom";
+		String geom = heatmap ? heatmapGeometryExpression(geometryType, z, from) : "l.geom";
 
 		int cteIndex = 0;
 		for (ClipMask mask : masks) {
@@ -316,6 +362,119 @@ public class MvtService {
 		}
 
 		return TILE_QUERY.formatted(nativeBounds, ctes, attributes, geom, from, where, SPATIAL_SCATTER);
+	}
+
+	/**
+	 * The geometry a heatmap tile renders instead of {@code l.geom} (CONTRACT.md heatmap
+	 * package, "Punkte im Kachelweg") -- MapLibre's heatmap layer only draws points, so a
+	 * line or polygon layer has to be turned into some before it reaches the client. What
+	 * that becomes depends on {@code geometryType}:
+	 *
+	 * <ul>
+	 *   <li>{@code MULTIPOINT} needs no change at all -- it already is what a heatmap
+	 *       draws.</li>
+	 *   <li>{@code MULTIPOLYGON} (and {@code GEOMETRY}, grouped with it exactly as
+	 *       {@link LayerStyleService#defaultSymbolFor} already groups them) becomes one
+	 *       point per feature via {@code ST_PointOnSurface} -- never {@code ST_Centroid},
+	 *       whose result for a U-shaped or ring-shaped outline can fall outside the
+	 *       polygon entirely.</li>
+	 *   <li>{@code MULTILINESTRING} becomes several points, evenly spaced along the line
+	 *       -- see {@link #interpolatedLinePoints}.</li>
+	 * </ul>
+	 *
+	 * @param from appended to when the geometry needs more than a scalar substitution --
+	 *             {@code MULTILINESTRING} joins in a {@code LATERAL} row source, which
+	 *             {@code MULTIPOINT} and {@code MULTIPOLYGON} do not need
+	 */
+	private String heatmapGeometryExpression(GeometryType geometryType, int z, StringBuilder from) {
+		return switch (geometryType) {
+			case MULTIPOINT -> "l.geom";
+			case MULTIPOLYGON, GEOMETRY -> "ST_PointOnSurface(l.geom)";
+			case MULTILINESTRING -> interpolatedLinePoints(z, from);
+		};
+	}
+
+	/**
+	 * Explodes each line feature into several point rows -- not one row with a multipoint
+	 * geometry, on purpose: {@link #DEFAULT_MAX_FEATURES_PER_TILE} and the {@code candidates}
+	 * {@code LIMIT} above are calibrated per row (roughly 19 bytes each, see that constant's
+	 * own note), and a heatmap point is exactly that size. One row per point is what makes
+	 * that limit mean the same thing for a heatmap tile as for any other -- see the class's
+	 * own report for the measured point counts this produces per tile at z=8/12/16 and how
+	 * they compare to the limit.
+	 *
+	 * <p>Built as two nested {@code LATERAL ST_Dump}s rather than one call on {@code l.geom}
+	 * directly, for two reasons found by testing this against a real PostGIS:
+	 *
+	 * <ul>
+	 *   <li>{@code ST_LineInterpolatePoints} only accepts a plain {@code LINESTRING}, and
+	 *       {@code l.geom} is always the multi form. The first dump -- of
+	 *       {@code ST_CollectionExtract(ST_Intersection(l.geom, b.native), 2)} rather than
+	 *       of {@code l.geom} itself -- does two things at once: it splits the multi
+	 *       geometry into plain linestrings, and it first clips each one to the tile.
+	 *       Without that clip, a long line (a river, a road) would be walked along its
+	 *       <em>entire</em> length for every tile its bounding box merely touches, most of
+	 *       the resulting points immediately discarded by {@code ST_AsMVTGeom} -- exactly
+	 *       the "millions of points" failure mode the contract warns against, just moved
+	 *       from a too-fine spacing to a too-long line. {@code ST_CollectionExtract(..., 2)}
+	 *       is what keeps this safe against every shape {@code ST_Intersection} can hand
+	 *       back at a tile edge, proven against a real PostGIS: a line only grazing the
+	 *       tile boundary intersects to a bare {@code POINT}, and {@code
+	 *       ST_LineInterpolatePoints} errors outright ("1st arg isn't a line") if that
+	 *       reaches it directly. {@code ST_CollectionExtract} turns that {@code POINT} (or
+	 *       a {@code GEOMETRYCOLLECTION EMPTY}, or a {@code NULL} in the degenerate case of
+	 *       a not-yet-existing mask) into an empty {@code LINESTRING}, which dumps to zero
+	 *       rows rather than raising an error -- so a tile that happens to catch a line
+	 *       exactly at its edge renders instead of failing.</li>
+	 *   <li>The second dump turns the {@code MULTIPOINT} {@code ST_LineInterpolatePoints}
+	 *       returns into one row per point, for the row-budget reason above.</li>
+	 * </ul>
+	 *
+	 * <p>{@code fraction} is the spacing as a share of each linestring's own length, capped
+	 * at 1.0 via {@code LEAST}: {@code ST_LineInterpolatePoints} errors on a fraction above
+	 * 1 (also proven against a real PostGIS), which a spacing wider than a short line's own
+	 * length would otherwise produce. Capped, a short line still gets exactly one point, at
+	 * its far end, rather than none. {@code NULLIF(ST_Length(...), 0)} guards the same way
+	 * against a zero-length (degenerate, single-point-in-disguise) line: {@code LEAST}
+	 * ignores a {@code NULL} argument rather than propagating it, so the division's {@code
+	 * NULL} collapses back to the same fraction-1.0, one-point fallback.
+	 *
+	 * <p>Every point produced this way carries its parent line's own attribute values
+	 * unchanged, including the weight field -- see the class's own report for why that
+	 * value is <em>not</em> divided by the point count.
+	 */
+	private static String interpolatedLinePoints(int z, StringBuilder from) {
+		String spacing = String.format(Locale.ROOT, "%.6f", heatmapPointSpacingMetres(z));
+		from.append(",\n  LATERAL ST_Dump(ST_CollectionExtract(ST_Intersection(l.geom, b.native), 2)) AS ln")
+				.append(",\n  LATERAL ST_Dump(ST_LineInterpolatePoints(ln.geom, LEAST(1.0, ")
+				.append(spacing)
+				.append(" / NULLIF(ST_Length(ln.geom), 0)))) AS pt");
+		return "pt.geom";
+	}
+
+	/**
+	 * The distance between heatmap points along a line, in the layer's own storage-CRS
+	 * metres (the same assumption {@link #SEGMENT_METRES} already rests on for this class:
+	 * a layer's storage CRS is a projected, metric one).
+	 *
+	 * <p>A fixed metre figure would fail either half of the contract's own warning -- too
+	 * fine at a low zoom (millions of points), too coarse at a high one (an invisible
+	 * trickle) -- because the same real-world distance covers a wildly different number of
+	 * screen pixels depending on zoom. This instead keeps {@link #HEATMAP_POINTS_ACROSS_TILE}
+	 * roughly constant per tile at every zoom: a tile's ground width at the equator halves
+	 * with each zoom level ({@code 2 * pi * r / 2^z}), so dividing that by a fixed point
+	 * count yields a spacing that shrinks in step -- coarse where a tile spans a lot of
+	 * ground, fine where it spans little.
+	 *
+	 * <p>Deliberately the equatorial width, not one adjusted for the tile's actual latitude:
+	 * {@link #SEGMENT_METRES} and {@link #tileFootprint} already accept the same
+	 * simplification elsewhere in this class, and the resulting few-percent distortion
+	 * towards the poles changes how many points a line gets, never whether the query is
+	 * correct.
+	 */
+	private static double heatmapPointSpacingMetres(int z) {
+		double tileWidthMetres = 2 * Math.PI * WEB_MERCATOR_EARTH_RADIUS_METRES / Math.scalb(1.0, z);
+		return tileWidthMetres / HEATMAP_POINTS_ACROSS_TILE;
 	}
 
 	/**

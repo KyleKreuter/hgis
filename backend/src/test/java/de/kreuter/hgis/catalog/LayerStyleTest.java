@@ -626,9 +626,135 @@ class LayerStyleTest {
 	@Test
 	void rejectsAnUnknownRendererType() throws Exception {
 		patchStyle("""
-				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner" } } }
+				{ "style": { "renderer": { "type": "pie", "field": "einwohner" } } }
 				""").andExpect(status().isBadRequest());
 	}
+
+	// --- heatmap ------------------------------------------------------------------------
+
+	@Test
+	@DisplayName("a heatmap renderer needs no field at all -- every point then counts equally")
+	void acceptsAHeatmapRendererWithoutAField() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap" } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.type").value("heatmap"))
+				.andExpect(jsonPath("$.style.renderer.field").doesNotExist());
+
+		assertThat(styleService.tileColumns(reload())).isEmpty();
+	}
+
+	@Test
+	@DisplayName("a heatmap renderer's numeric weight field is canonicalised and carried to the tile")
+	void acceptsAHeatmapRendererWithANumericField() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "Einwohner",
+				  "radius": 40, "intensity": 2.0, "ramp": "inferno" } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.field").value("einwohner"))
+				.andExpect(jsonPath("$.style.renderer.radius").value(40.0))
+				.andExpect(jsonPath("$.style.renderer.intensity").value(2.0))
+				.andExpect(jsonPath("$.style.renderer.ramp").value("inferno"));
+
+		assertThat(styleService.tileColumns(reload())).containsExactly("einwohner");
+	}
+
+	@Test
+	@DisplayName("a heatmap renderer refuses a text field as its weight")
+	void rejectsAHeatmapRendererOverATextField() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "nutzungsart" } } }
+				""").andExpect(status().isBadRequest());
+	}
+
+	@Test
+	@DisplayName("a heatmap renderer refuses symbol, categories, classes, fallbackSymbol, method, classCount, palette")
+	void rejectsAHeatmapRendererCarryingClassificationMembers() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap",
+				  "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner",
+				  "categories": [ { "value": 1 } ] } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner",
+				  "classes": [ { "min": 0, "max": 10 } ] } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap",
+				  "fallbackSymbol": { "kind": "fill", "fillColor": "#e74c3c" } } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner",
+				  "method": "quantile" } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner",
+				  "classCount": 5 } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap",
+				  "palette": "categorical" } } }
+				""").andExpect(status().isBadRequest());
+	}
+
+	@Test
+	@DisplayName("radius and intensity are range-checked")
+	void rejectsRadiusAndIntensityOutsideTheirRanges() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "radius": 0 } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "radius": 101 } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "intensity": 0.05 } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "intensity": 5.1 } } }
+				""").andExpect(status().isBadRequest());
+	}
+
+	@Test
+	@DisplayName("switching a heatmap's weight field raises style_version, recolouring the ramp does not")
+	void changingTheHeatmapWeightFieldInvalidatesTiles() throws Exception {
+		long unstyled = styleVersion();
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner", "ramp": "viridis" } } }
+				""").andExpect(status().isOk());
+		long weighted = styleVersion();
+		assertThat(weighted).isGreaterThan(unstyled);
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner", "ramp": "inferno" } } }
+				""").andExpect(status().isOk());
+		assertThat(styleVersion())
+				.as("ein anderer Farbverlauf braucht keine neuen Kacheln")
+				.isEqualTo(weighted);
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "gebaeudehoehe", "ramp": "inferno" } } }
+				""").andExpect(status().isOk());
+		assertThat(styleVersion()).isGreaterThan(weighted);
+	}
+
+	// Deleting a heatmap's weight field is covered where the fixtures for it already
+	// live, alongside the same proof for categorized/graduated and labels fields:
+	// LayerFieldDeleteControllerTest#removingTheHeatmapWeightFieldFallsBackToSingle.
 
 	@Test
 	void rejectsAFieldTheLayerDoesNotHave() throws Exception {

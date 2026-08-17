@@ -44,7 +44,16 @@ public class LayerStyleService {
 	private static final Pattern HEX_COLOR = Pattern.compile("^#[0-9a-fA-F]{6}$");
 
 	private static final Set<String> RENDERER_TYPES = Set.of(
-			StyleDtos.RENDERER_SINGLE, StyleDtos.RENDERER_CATEGORIZED, StyleDtos.RENDERER_GRADUATED);
+			StyleDtos.RENDERER_SINGLE, StyleDtos.RENDERER_CATEGORIZED, StyleDtos.RENDERER_GRADUATED,
+			StyleDtos.RENDERER_HEATMAP);
+
+	/** {@code radius}'s bounds -- screen points, contract: 1..100, default 30. */
+	private static final double MIN_HEATMAP_RADIUS = 1;
+	private static final double MAX_HEATMAP_RADIUS = 100;
+
+	/** {@code intensity}'s bounds -- a plain multiplier, contract: 0.1..5.0, default 1.0. */
+	private static final double MIN_HEATMAP_INTENSITY = 0.1;
+	private static final double MAX_HEATMAP_INTENSITY = 5.0;
 
 	private static final Set<String> SYMBOL_KINDS = Set.of(
 			StyleDtos.SYMBOL_MARKER, StyleDtos.SYMBOL_LINE, StyleDtos.SYMBOL_FILL);
@@ -134,6 +143,24 @@ public class LayerStyleService {
 	}
 
 	/**
+	 * Whether the layer currently renders as a heatmap -- point density, weighted by an
+	 * optional numeric field, rather than the layer's own geometry drawn as symbols.
+	 *
+	 * <p>{@link de.kreuter.hgis.tiles.MvtService} asks this, not the renderer type itself,
+	 * because it must not know the style schema -- the tile path only ever gets a yes/no
+	 * plus the layer's geometry type, the same separation {@link #tileColumns(Layer)}
+	 * already keeps between "what the style means" and "what the tile carries".
+	 */
+	public boolean isHeatmap(Layer layer) {
+		if (layer.getStyle() == null) {
+			return false;
+		}
+		StyleDtos.Style style = readStored(layer.getStyle());
+		return style != null && style.renderer() != null
+				&& StyleDtos.RENDERER_HEATMAP.equals(style.renderer().type());
+	}
+
+	/**
 	 * The same set, for a style that is not (or not yet) the layer's stored one -- which is
 	 * how an update decides whether {@code style_version} has to move.
 	 */
@@ -145,11 +172,14 @@ public class LayerStyleService {
 		}
 
 		StyleDtos.Renderer renderer = style.renderer();
-		if (renderer != null && classifies(renderer.type())) {
+		if (renderer != null && carriesFieldToTile(renderer.type())) {
 			// By column name, which is what a validated style stores, and skipping an
 			// unresolvable one rather than throwing: this runs on the tile path, and a
 			// style that no longer matches its layer must degrade to the plain tile, not
 			// turn every tile request into a 500 (see LayerFields.byColumnName).
+			//
+			// For heatmap, field is optional -- byColumnName(null, ...) is empty, so an
+			// unweighted heatmap (every point counts equally) pulls in no attribute at all.
 			LayerFields.byColumnName(renderer.field(), fields)
 					.ifPresent(field -> columns.add(field.getColumnName()));
 		}
@@ -175,7 +205,7 @@ public class LayerStyleService {
 		}
 
 		StyleDtos.Renderer renderer = style.renderer();
-		boolean usedByRenderer = renderer != null && classifies(renderer.type())
+		boolean usedByRenderer = renderer != null && carriesFieldToTile(renderer.type())
 				&& columnName.equals(renderer.field());
 
 		StyleDtos.Labels labels = style.labels();
@@ -245,10 +275,11 @@ public class LayerStyleService {
 			StyleDtos.Symbol symbol = renderer.symbol() != null ? renderer.symbol()
 					: renderer.fallbackSymbol() != null ? renderer.fallbackSymbol()
 					: defaultSymbolFor(geometryType);
-			// method, classCount, ramp and palette describe a classification -- dropped along
-			// with it, not carried over onto a renderer type that no longer has one.
+			// method, classCount, ramp, palette, radius and intensity describe a
+			// classification or a heatmap -- dropped along with it, not carried over onto
+			// a renderer type that no longer has any use for them.
 			renderer = new StyleDtos.Renderer(
-					StyleDtos.RENDERER_SINGLE, symbol, null, null, null, null, null, null, null, null);
+					StyleDtos.RENDERER_SINGLE, symbol, null, null, null, null, null, null, null, null, null, null);
 		}
 		if (labelsHit) {
 			labels = new StyleDtos.Labels(false, null, labels.size(), labels.color(), labels.haloColor(),
@@ -300,6 +331,9 @@ public class LayerStyleService {
 		if (type.equals(StyleDtos.RENDERER_SINGLE) && renderer.symbol() == null) {
 			throw new BadRequestException("Ein Einzelsymbol-Renderer braucht ein symbol");
 		}
+		if (type.equals(StyleDtos.RENDERER_HEATMAP)) {
+			requireNoClassificationMembers(renderer);
+		}
 
 		// The field is validated whenever it is present, not only when the current type
 		// uses it: a UI that keeps the previous classification around while the user tries
@@ -307,15 +341,21 @@ public class LayerStyleService {
 		String field = null;
 		if (renderer.field() != null && !renderer.field().isBlank()) {
 			LayerField resolved = LayerFields.require(renderer.field(), fields);
-			if (type.equals(StyleDtos.RENDERER_GRADUATED) && !LayerFields.isNumeric(resolved)) {
+			boolean needsNumeric = type.equals(StyleDtos.RENDERER_GRADUATED)
+					|| type.equals(StyleDtos.RENDERER_HEATMAP);
+			if (needsNumeric && !LayerFields.isNumeric(resolved)) {
+				String reason = type.equals(StyleDtos.RENDERER_HEATMAP) ? "Gewichtung" : "Klasseneinteilung";
 				throw new BadRequestException("Feld " + resolved.getSourceName() + " ist vom Typ "
-						+ resolved.getDataType() + ". Klasseneinteilung ist für diesen Feldtyp nicht möglich.");
+						+ resolved.getDataType() + ". " + reason + " ist für diesen Feldtyp nicht möglich.");
 			}
 			field = resolved.getColumnName();
 		}
 		else if (classifies(type)) {
 			throw new BadRequestException("Der Renderer-Typ " + type + " braucht ein Feld");
 		}
+
+		requireRange(renderer.radius(), MIN_HEATMAP_RADIUS, MAX_HEATMAP_RADIUS, "radius");
+		requireRange(renderer.intensity(), MIN_HEATMAP_INTENSITY, MAX_HEATMAP_INTENSITY, "intensity");
 
 		return new StyleDtos.Renderer(
 				type,
@@ -327,7 +367,25 @@ public class LayerStyleService {
 				validateMethod(renderer.method()),
 				validateClassCount(renderer.classCount()),
 				validateDisplayName(renderer.ramp(), "ramp"),
-				validateDisplayName(renderer.palette(), "palette"));
+				validateDisplayName(renderer.palette(), "palette"),
+				renderer.radius(),
+				renderer.intensity());
+	}
+
+	/**
+	 * The contract's rule for a heatmap renderer: {@code symbol}, {@code categories},
+	 * {@code classes}, {@code fallbackSymbol}, {@code method}, {@code classCount} and
+	 * {@code palette} describe how a classification or a single symbol draws geometry --
+	 * none of that applies once the renderer draws density instead, so a document mixing
+	 * the two is refused rather than silently thinning down to the parts heatmap uses.
+	 */
+	private static void requireNoClassificationMembers(StyleDtos.Renderer renderer) {
+		if (renderer.symbol() != null || renderer.categories() != null || renderer.classes() != null
+				|| renderer.fallbackSymbol() != null || renderer.method() != null
+				|| renderer.classCount() != null || renderer.palette() != null) {
+			throw new BadRequestException("Beim Renderer-Typ heatmap dürfen symbol, categories, classes, "
+					+ "fallbackSymbol, method, classCount und palette nicht gesetzt sein");
+		}
 	}
 
 	/**
@@ -463,6 +521,17 @@ public class LayerStyleService {
 	private static boolean classifies(String rendererType) {
 		return StyleDtos.RENDERER_CATEGORIZED.equals(rendererType)
 				|| StyleDtos.RENDERER_GRADUATED.equals(rendererType);
+	}
+
+	/**
+	 * Whether this renderer type's {@code field}, when present, has to travel to the tile
+	 * as an attribute -- classifying types plus heatmap, whose {@code field} is a weight
+	 * rather than a classification but is read from the tile the same way
+	 * ({@code ["get", field]}). Unlike {@link #classifies}, this says nothing about
+	 * whether the field is required: heatmap's is optional, see {@link #validateRenderer}.
+	 */
+	private static boolean carriesFieldToTile(String rendererType) {
+		return classifies(rendererType) || StyleDtos.RENDERER_HEATMAP.equals(rendererType);
 	}
 
 	private static void requireColor(String value, String what) {
