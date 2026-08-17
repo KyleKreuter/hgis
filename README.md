@@ -28,6 +28,7 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Beim Zeichnen auf Stützpunkte, Schnittpunkte und Kanten einrasten
 - Layer einheitlich, kategorisiert oder abgestuft darstellen. Die Farbe wechselt dabei je
   Klasse. Größe und Strichbreite gelten für alle Klassen gleich
+- Layer als Heatmap darstellen, wahlweise nach einem Zahlenfeld gewichtet
 - Kartenobjekte anhand ihrer Felder beschriften
 - Strecken und Flächen in der Karte messen, mit laufender Anzeige beim Zeichnen
 - Hintergrundkarte für Projekt oder einzelnen Layer wählen: OpenStreetMap, eine helle
@@ -174,6 +175,32 @@ Objekte gibt es die Deckkraft in der Symbologie. Bei „Keine Hintergrundkarte�
 Regler, denn es gibt nichts zu regeln. Eine Karte mit verringerter Deckkraft lässt den
 Anwendungshintergrund durchscheinen. Im dunklen Erscheinungsbild sieht sie deshalb anders
 aus als im hellen.
+
+### Heatmap
+
+Eine Heatmap zeigt, wo sich Objekte häufen. Sie ist die vierte Darstellungsart, neben
+Einzelsymbol, Kategorien und Abstufung, und sie steht auf jedem Layer zur Verfügung.
+
+Ohne weitere Angabe zählt jedes Objekt gleich. Wählen Sie ein Zahlenfeld als Gewicht,
+zählt ein Objekt mit hohem Wert stärker. Hat ein Layer keine Zahlenfelder, bleibt die
+Heatmap trotzdem wählbar; sie zeigt dann die Dichte. Dazu stellen Sie den Radius ein
+(Einflussbereich eines Punkts in Bildschirmpunkten), die Intensität und den Farbverlauf.
+Eine Legende nennt, was das schwächste und das stärkste Ende bedeuten.
+
+**Linien und Flächen werden dafür zu Punkten.** Der Server legt auf jede Linie Punkte in
+gleichmäßigem Abstand und setzt in jede Fläche einen Punkt. Das hat zwei Folgen, die Sie
+kennen sollten:
+
+- Eine lange Linie trägt mehr bei als eine kurze. Das ist gewollt: Ein Straßenzug von
+  sechs Kilometern soll schwerer wiegen als einer von fünfhundert Metern.
+- Beim Hineinzoomen rücken die Punkte nicht enger zusammen, sondern es werden mehr. Auf
+  dem Bildschirm bleibt ihr Abstand gleich, die Glättung innerhalb einer Linie also auch.
+  Der Abstand zwischen zwei getrennten Objekten ist dagegen eine feste Entfernung im
+  Gelände. Beim Hineinzoomen wächst er auf dem Bildschirm, und aus einem durchgehenden
+  Band werden einzelne Flecken.
+
+Der Server legt die Punkte nicht auf die Stützpunkte der Linie. Sonst zeigte die Karte,
+wie fein jemand digitalisiert hat, und nicht den Sachverhalt.
 
 ### Einen Bereich zuschneiden
 
