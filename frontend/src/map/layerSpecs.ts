@@ -53,15 +53,20 @@ export function buildTileUrl(
  *
  * Both `addLayerToMap` (creation order) and `applyOrder` (moveLayer order) rely on
  * this array being bottom-to-top so polygons never obscure lines or points.
+ *
+ * `options.heatmap` forces the single-id path even for a GEOMETRY layer: a
+ * heatmap-styled layer always renders as points, whatever `geometryType` says -- the
+ * server turns polygons and lines into points before the tile is built (renderer
+ * contract) -- so it never needs the three-way split (`styleToMapLibre`'s heatmap branch).
  */
 export function layerIdsFor(
   layerId: string,
   geometryType: GeometryType,
-  options: { labeled?: boolean } = {},
+  options: { labeled?: boolean; heatmap?: boolean } = {},
 ): string[] {
   const base = sourceIdFor(layerId)
   const geometryIds =
-    geometryType === 'GEOMETRY'
+    geometryType === 'GEOMETRY' && !options.heatmap
       ? [`${base}-polygon`, `${base}-line`, `${base}-point`]
       : [`${base}-render`]
   return options.labeled ? [...geometryIds, `${base}-label`] : geometryIds

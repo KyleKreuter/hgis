@@ -7,6 +7,7 @@ import type {
   VectorSourceSpecification,
 } from 'maplibre-gl'
 import { isMapImageLayer, isVectorLayer, type LayerSummary } from '@/api/layers'
+import type { FieldRange } from '@/styling/classification'
 import { styleToMapLibre } from '@/styling/styleToMapLibre'
 import { buildTileUrl, sourceIdFor } from './layerSpecs'
 import { raiseOverlays } from './overlays'
@@ -95,13 +96,22 @@ function addToMap(map: MapLike, layer: LayerSummary, tileUrl: string, specs: Lay
  * The tile/GetMap address and the MapLibre layer objects for one catalog layer --
  * split out of the main loop below because each of the two kinds needs its own pair of
  * builders, and `isMapImageLayer`/`isVectorLayer` only narrow the branch they gate.
+ *
+ * @param fieldRange the heatmap weight field's range, when this layer has one --
+ *   `undefined` otherwise, including for every non-heatmap layer. Threaded straight
+ *   through to `styleToMapLibre`, see the comment on its own parameter for why this
+ *   function does not fetch it itself.
  */
-function specsFor(layer: LayerSummary, sourceId: string): { tileUrl: string; specs: LayerSpecification[] } {
+function specsFor(
+  layer: LayerSummary,
+  sourceId: string,
+  fieldRange: FieldRange | undefined,
+): { tileUrl: string; specs: LayerSpecification[] } {
   if (isMapImageLayer(layer)) {
     return { tileUrl: buildWmsGetMapUrl(layer.wms), specs: [wmsLayerSpec(layer, sourceId)] }
   }
   if (isVectorLayer(layer)) {
-    return { tileUrl: buildTileUrl(layer), specs: styleToMapLibre(layer.style ?? null, layer, sourceId) }
+    return { tileUrl: buildTileUrl(layer), specs: styleToMapLibre(layer.style ?? null, layer, sourceId, fieldRange) }
   }
   // Unreachable: `isMapImageLayer`/`isVectorLayer` are exact complements of `kind`.
   // Kept rather than asserted past, so a third `kind` the backend might one day add
@@ -221,8 +231,19 @@ function isSameValue(a: unknown, b: unknown): boolean {
  * GEOMETRY layer's sublayers stacked polygon -> line -> point -> label -- and then
  * lifts the overlays (selection, measurement) back above all of it, since that same
  * reorder would otherwise bury them under the data on every visibility toggle.
+ *
+ * @param fieldRanges heatmap weight field ranges, keyed by layer id -- `MapLayerSync`
+ *   is what actually fetches these (`useHeatmapFieldRanges`, `classification.ts`'s
+ *   `heatmapFieldRangeQuery`); this function only threads them through to
+ *   `styleToMapLibre`. Defaults to empty so a caller with no heatmap layers, and every
+ *   existing test, can leave it out entirely.
  */
-export function syncMapLayers(map: MapLike, layers: LayerSummary[], applied: Map<string, AppliedLayer>): void {
+export function syncMapLayers(
+  map: MapLike,
+  layers: LayerSummary[],
+  applied: Map<string, AppliedLayer>,
+  fieldRanges: Map<string, FieldRange> = new Map(),
+): void {
   const desired = new Map(layers.map((layer) => [layer.id, layer]))
 
   for (const [layerId, state] of applied) {
@@ -234,7 +255,7 @@ export function syncMapLayers(map: MapLike, layers: LayerSummary[], applied: Map
 
   for (const layer of layers) {
     const sourceId = sourceIdFor(layer.id)
-    const { tileUrl, specs } = specsFor(layer, sourceId)
+    const { tileUrl, specs } = specsFor(layer, sourceId, fieldRanges.get(layer.id))
     const existing = applied.get(layer.id)
 
     if (!existing) {

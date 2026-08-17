@@ -189,6 +189,27 @@ export async function requestGraduatedClasses(
   return { classes: withSharedSymbol(fresh, shared), result }
 }
 
+/**
+ * `min`/`max` for one numeric field -- what a heatmap renderer normalises
+ * `heatmap-weight` against (`styleToMapLibre`), and what its legend labels its two
+ * ends with (`HeatmapEditor`). A plain projection of `ClassifyResult`, which already
+ * carries both alongside `breaks`.
+ */
+export type FieldRange = Pick<ClassifyResult, 'min' | 'max'>
+
+// The `/classify` request every field-range lookup shares. `breaks` is never read here
+// -- only `min`/`max` are -- so any valid (method, classes) pair would do; fixing one
+// keeps every caller (the panel's own legend, `MapLayerSync`'s weight normalisation) on
+// the same cache entry (`layerClassifyQuery`'s 5-minute `staleTime`) instead of paying
+// for the same column scan twice.
+const RANGE_METHOD: ClassifyMethod = 'quantile'
+const RANGE_CLASS_COUNT = 2
+
+/** The field-range counterpart to `layerClassifyQuery`/`layerValuesQuery` above. */
+export function heatmapFieldRangeQuery(layerId: string, field: string) {
+  return layerClassifyQuery(layerId, field, RANGE_METHOD, RANGE_CLASS_COUNT)
+}
+
 export interface CategorizedClassification {
   categories: StyleCategory[]
   result: FieldValuesResult

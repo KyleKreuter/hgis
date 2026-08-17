@@ -86,6 +86,14 @@ export function defaultLabels(field: string): LabelStyle {
 export const DEFAULT_LABELS = defaultLabels('')
 
 /**
+ * `radius`/`intensity` a fresh heatmap renderer starts from -- the same values
+ * MapLibre's own `heatmap-radius`/`heatmap-intensity` default to, so switching to
+ * "Heatmap" for the first time does not jump the moment a slider is first touched.
+ */
+export const DEFAULT_HEATMAP_RADIUS = 30
+export const DEFAULT_HEATMAP_INTENSITY = 1
+
+/**
  * The colour a symbol is identified by -- what a legend swatch and a colour picker show.
  *
  * Falls back rather than returning what it was given: the member is optional in the
@@ -185,7 +193,9 @@ function mixHex(from: string, to: string, amount: number): string {
   return `#${[0, 1, 2].map((index) => channel(index).toString(16).padStart(2, '0')).join('')}`
 }
 
-function parseHex(color: string): [number, number, number] {
+/** Exported for `styleToMapLibre`'s `heatmap-color` -- density 0 needs a transparent
+ *  version of the ramp's own first colour, not a second hand-picked one. */
+export function parseHex(color: string): [number, number, number] {
   const value = Number.parseInt(color.slice(1), 16)
   return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff]
 }

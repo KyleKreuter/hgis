@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LayerField } from '@/api/layers'
-import { defaultStyleFor, primaryColorOf } from './defaults'
+import { defaultStyleFor, defaultSymbolFor, primaryColorOf } from './defaults'
 import { convertRenderer } from './renderer'
 import type { LayerStyle } from './types'
 
@@ -44,9 +44,51 @@ describe('convertRenderer', () => {
   it('verwirft ein Textfeld beim Wechsel auf abgestuft -- /classify würde 400 antworten', () => {
     const style: LayerStyle = {
       ...BASE,
-      renderer: { type: 'categorized', field: 'nutzungsart', categories: [], fallbackSymbol: BASE.renderer.type === 'single' ? BASE.renderer.symbol : BASE.renderer.fallbackSymbol },
+      // BASE is always `single` (`defaultStyleFor`), so its symbol is a plain fallback here.
+      renderer: { type: 'categorized', field: 'nutzungsart', categories: [], fallbackSymbol: defaultSymbolFor('MULTIPOLYGON') },
     }
 
     expect(convertRenderer(style, 'graduated', 'MULTIPOLYGON', FIELDS)).toMatchObject({ field: '' })
+  })
+
+  it('startet eine Heatmap ohne Feld (Dichte), solange keins gewählt ist', () => {
+    const heatmap = convertRenderer(BASE, 'heatmap', 'MULTIPOLYGON', FIELDS)
+
+    expect(heatmap).toMatchObject({ type: 'heatmap', field: null, radius: 30, intensity: 1 })
+  })
+
+  it('behält ein numerisches Feld beim Wechsel auf Heatmap', () => {
+    const style: LayerStyle = {
+      ...BASE,
+      renderer: { type: 'graduated', field: 'gebaeudehoehe', classes: [], fallbackSymbol: defaultSymbolFor('MULTIPOLYGON') },
+    }
+
+    expect(convertRenderer(style, 'heatmap', 'MULTIPOLYGON', FIELDS)).toMatchObject({ field: 'gebaeudehoehe' })
+  })
+
+  it('verwirft ein Textfeld beim Wechsel auf Heatmap -- die Gewichtung braucht ein Zahlenfeld', () => {
+    const style: LayerStyle = {
+      ...BASE,
+      renderer: { type: 'categorized', field: 'nutzungsart', categories: [], fallbackSymbol: defaultSymbolFor('MULTIPOLYGON') },
+    }
+
+    expect(convertRenderer(style, 'heatmap', 'MULTIPOLYGON', FIELDS)).toMatchObject({ field: null })
+  })
+
+  it('nimmt beim Verlassen der Heatmap das Standardsymbol mit -- eine Heatmap hat keins eigenes', () => {
+    const style: LayerStyle = { ...BASE, renderer: { type: 'heatmap', field: null, radius: 30, intensity: 1, ramp: 'blues' } }
+    const back = convertRenderer(style, 'single', 'MULTIPOLYGON', FIELDS)
+
+    expect(back.type).toBe('single')
+    expect(back.type === 'single' && primaryColorOf(back.symbol)).toBe(primaryColorOf(defaultSymbolFor('MULTIPOLYGON')))
+  })
+
+  it('behält das gewählte Feld beim Wechsel von Heatmap auf abgestuft', () => {
+    const style: LayerStyle = {
+      ...BASE,
+      renderer: { type: 'heatmap', field: 'gebaeudehoehe', radius: 30, intensity: 1, ramp: 'blues' },
+    }
+
+    expect(convertRenderer(style, 'graduated', 'MULTIPOLYGON', FIELDS)).toMatchObject({ field: 'gebaeudehoehe' })
   })
 })

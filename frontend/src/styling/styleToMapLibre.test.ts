@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { CircleLayerSpecification, FillLayerSpecification, LineLayerSpecification } from 'maplibre-gl'
+import type {
+  CircleLayerSpecification,
+  FillLayerSpecification,
+  HeatmapLayerSpecification,
+  LineLayerSpecification,
+  SymbolLayerSpecification,
+} from 'maplibre-gl'
 import type { GeometryType, VectorLayerSummary } from '@/api/layers'
 import { CIRCLE_PAINT, FILL_PAINT, LINE_PAINT } from '@/map/layerSpecs'
 import { defaultStyleFor } from './defaults'
@@ -369,5 +375,111 @@ describe('styleToMapLibre Ausdrücke', () => {
 
     expect((spec as FillLayerSpecification).paint?.['fill-opacity']).toBe(0.5)
     expect((spec as FillLayerSpecification).paint?.['fill-color']).toBeInstanceOf(Array)
+  })
+})
+
+describe('styleToMapLibre heatmap', () => {
+  function heatmapStyle(
+    overrides: Partial<Extract<LayerStyle['renderer'], { type: 'heatmap' }>> = {},
+  ): LayerStyle {
+    return {
+      version: 1,
+      renderer: { type: 'heatmap', field: null, radius: 30, intensity: 1, ramp: 'blues', ...overrides },
+      opacity: 1,
+    }
+  }
+
+  function heatmapPaintOf(
+    style: LayerStyle,
+    layer: VectorLayerSummary = makeLayer(),
+    fieldRange?: { min: number; max: number },
+  ): NonNullable<HeatmapLayerSpecification['paint']> {
+    const [spec] = styleToMapLibre(style, layer, SOURCE_ID, fieldRange)
+    return (spec as HeatmapLayerSpecification).paint ?? {}
+  }
+
+  it('zählt ohne Feld jedes Objekt gleich -- konstantes Gewicht 1', () => {
+    expect(heatmapPaintOf(heatmapStyle())['heatmap-weight']).toBe(1)
+  })
+
+  it('normiert das Gewicht auf 0..1, wenn ein Feld und dessen Spanne vorliegen', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 0, max: 70 })
+
+    expect(paint['heatmap-weight']).toEqual([
+      'interpolate',
+      ['linear'],
+      ['to-number', ['get', 'laut_wert'], 0],
+      0,
+      0,
+      70,
+      1,
+    ])
+  })
+
+  it('fällt auf ein konstantes Gewicht zurück, solange die Spanne des Feldes noch nicht geladen ist', () => {
+    // Kein fieldRange übergeben -- der Zustand, bevor MapLayerSync die Antwort von
+    // heatmapFieldRangeQuery hat.
+    expect(heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }))['heatmap-weight']).toBe(1)
+  })
+
+  it('fällt auf ein konstantes Gewicht zurück, wenn jedes Objekt denselben Wert trägt', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 5, max: 5 })
+
+    expect(paint['heatmap-weight']).toBe(1)
+  })
+
+  it('klammert Radius und Intensität an ihre Grenzen', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ radius: 500, intensity: 20 }))
+
+    expect(paint['heatmap-radius']).toBe(100)
+    expect(paint['heatmap-intensity']).toBe(5)
+  })
+
+  it('setzt heatmap-opacity nur, wenn sie von 1 abweicht', () => {
+    const opaque = heatmapPaintOf({ ...heatmapStyle(), opacity: 1 })
+    const halved = heatmapPaintOf({ ...heatmapStyle(), opacity: 0.5 })
+
+    expect(opaque['heatmap-opacity']).toBeUndefined()
+    expect(halved['heatmap-opacity']).toBe(0.5)
+  })
+
+  it('färbt über heatmap-density, nicht über das Feld -- transparenter Anfang, deckende Spitze', () => {
+    const color = heatmapPaintOf(heatmapStyle({ ramp: 'blues' }))['heatmap-color'] as unknown[]
+
+    expect(color[0]).toBe('interpolate')
+    expect(color[2]).toEqual(['heatmap-density'])
+    expect(color[3]).toBe(0)
+    expect(color[4]).toMatch(/^rgba\(\d+, \d+, \d+, 0\)$/)
+    expect(color[color.length - 2]).toBe(1)
+  })
+
+  it('rendert einen GEOMETRY-Layer als einen einzigen Punkt-Sublayer statt der Dreifach-Aufteilung', () => {
+    const specs = styleToMapLibre(heatmapStyle(), makeLayer({ geometryType: 'GEOMETRY' }), SOURCE_ID)
+
+    expect(specs.map((spec) => spec.id)).toEqual(['hgis-layer-layer-1-render'])
+    expect(specs[0].type).toBe('heatmap')
+  })
+
+  it('erzwingt Punkt-Platzierung für Beschriftungen -- die Kachel liefert nur Punkte', () => {
+    const style: LayerStyle = {
+      ...heatmapStyle(),
+      labels: {
+        enabled: true,
+        field: 'name',
+        size: 12,
+        color: '#262626',
+        haloColor: '#ffffff',
+        haloWidth: 1.5,
+        minZoom: 10,
+        allowOverlap: false,
+      },
+    }
+
+    const specs = styleToMapLibre(style, makeLayer({ geometryType: 'MULTILINESTRING' }), SOURCE_ID)
+    const label = specs[specs.length - 1] as SymbolLayerSpecification
+
+    expect(specs.map((spec) => spec.id)).toEqual(['hgis-layer-layer-1-render', 'hgis-layer-layer-1-label'])
+    expect(label.type).toBe('symbol')
+    expect(label.layout?.['symbol-placement']).toBe('point')
   })
 })

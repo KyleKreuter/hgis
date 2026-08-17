@@ -8,7 +8,7 @@
 
 import type { ClassifyMethod } from '@/api/layers'
 
-export type RendererType = 'single' | 'categorized' | 'graduated'
+export type RendererType = 'single' | 'categorized' | 'graduated' | 'heatmap'
 
 /**
  * `shape` is fixed to `circle` in the MVP -- MapLibre cannot draw squares or triangles
@@ -86,6 +86,23 @@ export type Renderer =
       classCount?: number
       /** Which named ramp produced `classes`' colours, the graduated counterpart to `palette` above. */
       ramp?: string
+    }
+  | {
+      type: 'heatmap'
+      /**
+       * `column_name` of a numeric field to weigh points by, or `null` to count every
+       * point equally (density mode -- the renderer contract's "field optional"). Unlike
+       * `categorized`/`graduated`, `null` here is a genuine, persisted end state rather
+       * than a placeholder for "not chosen yet", which is why it is typed distinctly
+       * instead of reusing their `''` sentinel (see `renderer.ts`, `persistable.ts`).
+       */
+      field: string | null
+      /** Influence radius in screen points, 1..100 (renderer contract). */
+      radius: number
+      /** Multiplier, 0.1..5.0 (renderer contract). */
+      intensity: number
+      /** Named colour ramp, the same catalogue `graduated`'s `ramp` draws from. */
+      ramp: string
     }
 
 export interface LabelStyle {

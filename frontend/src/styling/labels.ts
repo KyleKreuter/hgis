@@ -19,6 +19,7 @@ export const RENDERER_LABELS: readonly (readonly [RendererType, string])[] = [
   ['single', 'Einzelsymbol'],
   ['categorized', 'Kategorisiert'],
   ['graduated', 'Abgestuft'],
+  ['heatmap', 'Heatmap'],
 ]
 
 export const METHOD_LABELS: readonly (readonly [ClassifyMethod, string])[] = [
