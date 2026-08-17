@@ -165,6 +165,18 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState }: HeatmapLegend
         )}
         {hasField && !isFetching && typeof rangeState !== 'object' && <span>Spanne nicht verfügbar</span>}
       </div>
+      {/*
+       * Für jemanden, der beim Symptom anfängt ("meine Heatmap ist fast leer"), nicht
+       * für jemanden, der die Ursache schon vermutet -- der ausführliche Grund dafür
+       * steht als Kommentar an `heatmapWeight` (`styleToMapLibre.ts`), hierher gehört
+       * nur der kurze, jargonfreie Hinweis, wo er tatsächlich gesucht wird (team review,
+       * package 2).
+       */}
+      {hasField && (
+        <p className="pt-1 text-xs text-muted-foreground">
+          Ein einzelner sehr hoher oder sehr niedriger Wert kann die Karte fast leer wirken lassen.
+        </p>
+      )}
     </div>
   )
 }

@@ -406,13 +406,19 @@ describe('styleToMapLibre heatmap', () => {
 
   it('normiert das Gewicht auf 0..1, wenn ein Feld und dessen Spanne vorliegen', () => {
     const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 0, max: 70 })
+    const weight = paint['heatmap-weight']
 
-    expect(paint['heatmap-weight']).toEqual([
+    expect(weight).toEqual([
       'case',
-      ['!', ['has', 'laut_wert']],
+      ['==', ['get', 'laut_wert'], null],
       0,
       ['interpolate', ['linear'], ['to-number', ['get', 'laut_wert'], 0], 0, 0, 70, 1],
     ])
+    // Die Struktur allein sagt nichts darüber, ob sie auch richtig rechnet -- ein
+    // Vergleich, der wie die Struktur aussieht, war genau das, woran der ursprüngliche
+    // Fehler vorbeigeschlüpft ist (team review, package 2). `evaluateHeatmapWeight`
+    // steht weiter unten, definiert vor der Ausführung dieses Tests.
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 35 })).toBe(0.5)
   })
 
   it('fällt auf ein konstantes Gewicht zurück, solange die Spanne des Feldes noch nicht geladen ist', () => {
@@ -460,6 +466,21 @@ describe('styleToMapLibre heatmap', () => {
     // Der eigentliche Fund: bei rein negativer Spanne wurde ein Objekt ohne Wert vorher
     // zum hellsten Punkt der Karte (Gewicht 1) statt zum dunkelsten.
     expect(evaluateHeatmapWeight(negativeRange['heatmap-weight'], {})).toBe(0)
+  })
+
+  /**
+   * Team-Review nach der `!has`-Behebung: "ohne Feldwert" hat zwei Ausprägungen, die eine
+   * echte Kachel beide erzeugen kann -- die Eigenschaft fehlt (die einzige, die
+   * PostGIS/`ST_AsMVT` heute tatsächlich schreibt, siehe der Kommentar an
+   * `heatmapWeight`), oder sie ist vorhanden und trägt `null` (denkbar bei einer
+   * künftigen Quelle, z. B. GeoJSON). Der vorherige Test prüfte nur `{}`; ein Schutz, der
+   * sich auf eine Kachel-Eigenschaft verlässt statt auf die Auswertung, hätte diesen
+   * zweiten Fall unbemerkt durchgelassen.
+   */
+  it('gewichtet ein vorhandenes, aber null-wertiges Feld genauso mit 0', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: -100, max: -10 })
+
+    expect(evaluateHeatmapWeight(paint['heatmap-weight'], { laut_wert: null })).toBe(0)
   })
 
   it('interpoliert einen vorhandenen Wert weiterhin korrekt zwischen den Rändern', () => {

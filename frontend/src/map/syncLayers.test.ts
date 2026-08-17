@@ -1,8 +1,23 @@
+import { createExpression } from '@maplibre/maplibre-gl-style-spec'
 import { describe, expect, it, vi } from 'vitest'
 import type { AddLayerObject, VectorSourceSpecification } from 'maplibre-gl'
 import type { LayerSummary, MapImageLayerSummary } from '@/api/layers'
 import type { LayerStyle } from '@/styling/types'
 import { type AppliedLayer, type MapLike, syncMapLayers } from './syncLayers'
+
+/**
+ * Ausgewertet mit MapLibres eigenem Interpreter, nicht nur an der Struktur der
+ * `heatmap-weight`-Expression geprüft -- ein Vergleich, der wie die Struktur aussieht,
+ * ist genau das, woran der ursprüngliche `to-number`/`null`-Fehler vorbeigeschlüpft ist
+ * (team review, package 2; derselbe Helfer wie in `styleToMapLibre.test.ts`).
+ */
+function evaluateHeatmapWeight(expression: unknown, properties: Record<string, unknown>): number {
+  const parsed = createExpression(expression, 'heatmap-weight')
+  if (parsed.result !== 'success') {
+    throw new Error(`Expression konnte nicht geparst werden: ${JSON.stringify(parsed.value)}`)
+  }
+  return parsed.value.evaluate({ zoom: 10 }, { type: 'Point', properties }) as number
+}
 
 interface FakeSource {
   spec: VectorSourceSpecification
@@ -584,12 +599,15 @@ describe('syncMapLayers heatmap-Gewichtung', () => {
     syncMapLayers(map, [heatmapLayer()], applied, new Map([['layer-1', { min: 0, max: 70 }]]))
 
     const spec = layers.get('hgis-layer-layer-1-render') as AddLayerObject & { paint?: Record<string, unknown> }
-    expect(spec.paint?.['heatmap-weight']).toEqual([
+    const weight = spec.paint?.['heatmap-weight']
+    expect(weight).toEqual([
       'case',
-      ['!', ['has', 'laut_wert']],
+      ['==', ['get', 'laut_wert'], null],
       0,
       ['interpolate', ['linear'], ['to-number', ['get', 'laut_wert'], 0], 0, 0, 70, 1],
     ])
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 35 })).toBe(0.5)
+    expect(evaluateHeatmapWeight(weight, {})).toBe(0)
   })
 
   it('fällt ohne mitgegebene Spanne auf ein konstantes Gewicht zurück, statt den Layer zu verlieren', () => {

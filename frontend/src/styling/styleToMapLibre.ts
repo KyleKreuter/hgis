@@ -246,15 +246,26 @@ function heatmapWeight(field: string | null, range: FieldRange | undefined): Pai
     // be low -- and MapLibre's own `to-number` does not draw that line the way its
     // signature suggests. Its fallback argument (here `range.min`) only fires for a
     // value that fails `Number(...)`, e.g. a non-numeric string; `['get', field]`
-    // evaluating to `null` (the property is absent from the tile) short-circuits the
-    // whole coercion to a literal `0` *before* the fallback is ever consulted
-    // (`@maplibre/maplibre-gl-style-spec`'s `Coercion.evaluate`, the `'number'` case).
-    // Fed straight into `interpolate`, that stray `0` reads as wherever `0` happens to
-    // fall in *this* field's range -- the low end for an all-positive range by
-    // coincidence, the hottest point of the map for an all-negative one. `!has` catches
-    // the absence itself, before `to-number` ever gets a say, and routes it to an
-    // explicit, chosen weight instead of an accidental one.
-    ['!', ['has', field]],
+    // evaluating to `null` (a missing property, *or* one explicitly holding `null`)
+    // short-circuits the whole coercion to a literal `0` *before* the fallback is ever
+    // consulted (`@maplibre/maplibre-gl-style-spec`'s `Coercion.evaluate`, the
+    // `'number'` case). Fed straight into `interpolate`, that stray `0` reads as
+    // wherever `0` happens to fall in *this* field's range -- the low end for an
+    // all-positive range by coincidence, the hottest point of the map for an
+    // all-negative one.
+    //
+    // `['==', ['get', field], null]` catches the absence itself, before `to-number`
+    // ever gets a say, and routes it to an explicit, chosen weight instead of an
+    // accidental one. Deliberately not `['!', ['has', field]]`: `has` only tells whether
+    // the *key* exists on the feature, and this project's own tiles happen to omit the
+    // key entirely for a `NULL` column value -- PostGIS's `ST_AsMVT` drops the property
+    // rather than encoding an explicit null, confirmed by decoding the protobuf bytes of
+    // a two-feature test tile, one `NULL`, one `42.0` (team review, package 2). `get`
+    // returns `null` for *both* a missing key and a present key whose value is `null`,
+    // so checking its result directly does not depend on that encoding choice holding --
+    // a future tile source (a GeoJSON layer, say) that *does* write an explicit
+    // `{"field": null}` would still be caught the same way.
+    ['==', ['get', field], null],
     // Absent counts as "contributes nothing" -- the heatmap equivalent of not being
     // drawn at all, since a weight of 0 adds no density regardless of how many such
     // points overlap. Chosen over excluding the point via a layer `filter`: this is one
