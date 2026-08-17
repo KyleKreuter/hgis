@@ -197,6 +197,29 @@ public class MvtService {
 	 * scaling) to about 2 m at buffer 0 -- a residual from rounding onto the {@code 4096}
 	 * integer grid, not from the buffer, which has nothing left to shrink -- and at no
 	 * scanned position does <em>neither</em> tile claim the point.
+	 *
+	 * <p><strong>How narrow the case actually is, measured rather than assumed.</strong> An
+	 * ordinary raster point cannot reach a neighbour's buffer at all, and for two reasons
+	 * that both hold independently: it is interpolated along {@code ln.geom}, which is
+	 * already {@code ST_Intersection(part.geom, b.native)} and therefore cannot extend past
+	 * its own unbuffered tile edge; and {@code WHERE l.geom && b.native} tests bounding
+	 * boxes against the <em>unbuffered</em> envelope, so a row whose geometry lies outside
+	 * never reaches {@code ST_AsMVTGeom} to be buffered in the first place. A whole layer
+	 * summed across every tile that carries data came to exactly its ungrouped total, and a
+	 * point placed deliberately 30 m inside the buffer reach appeared in one tile only.
+	 *
+	 * <p>The fallback midpoint from {@link #interpolatedLinePoints} is the single exception,
+	 * precisely because it is built differently: it comes from {@code part.geom}, the
+	 * <em>unclipped</em> whole line, so a line short enough to need it and close enough to a
+	 * boundary reaches both tiles' {@code ST_AsMVTGeom}, and there the buffer does apply.
+	 * So this is not the bright rim along every boundary that it first looked like -- it is
+	 * one narrow case. The fix stays because it costs one format argument and closes that
+	 * case without opening a gap, not because the case is common. And how often it is hit
+	 * turns out not to depend on zoom alone but on the ratio of a dataset's extent to the
+	 * tile size: a line has to be shorter than one point spacing (which grows with the tile)
+	 * <em>and</em> lie near a boundary, and a geographically compact dataset stops having
+	 * boundaries at all once it fits inside a single tile. A dataset that stays spread out
+	 * across many tiles at low zoom has no such reprieve.
 	 */
 	private static final String HEATMAP_BUFFER = "0";
 
