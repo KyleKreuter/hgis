@@ -195,58 +195,152 @@ class MvtServiceHeatmapTest {
 
 	/**
 	 * The report's point-count measurement, at all three zoom levels the contract asks
-	 * for: one line spanning (almost) the full width of its tile, at z=8, z=12 and z=16,
-	 * around Hamburg's latitude (53.55°N, {@link #CENTER_LAT}) -- this project's actual
-	 * domain, not the equator.
+	 * for -- corrected after review: the first version of this test scaled the line's own
+	 * length to ~98% of each zoom's tile width, which made the point count a tautology of
+	 * the spacing formula itself ({@code spacing = tileWidth(z) / 32}, so a
+	 * {@code tileWidth(z)}-sized line always divides into ~32 points, at any {@code z}, by
+	 * construction -- the test proved nothing about the real behaviour of a real, fixed
+	 * line). This version fixes the line's length at exactly 2000 native metres,
+	 * independent of {@code z}, near Hamburg's latitude ({@link #CENTER_LAT}).
 	 *
-	 * <p>Measured: <strong>18 points at z=8, 18 at z=12, 18 at z=16</strong> -- flat
-	 * across every zoom, which is the point of deriving the spacing from the tile's own
-	 * ground width rather than a fixed metre figure (see {@code
-	 * MvtService#heatmapPointSpacingMetres}). 18, not {@code HEATMAP_POINTS_ACROSS_TILE}
-	 * (32, {@code MvtService}), because that constant is calibrated against the
-	 * <em>equatorial</em> tile width on purpose (see that field's own javadoc) while this
-	 * line runs through 53.55°N, where a Web Mercator tile's real ground width is only
-	 * {@code cos(53.55°) ≈ 0.594} of the equatorial figure -- 32 * 0.594 * 0.98 (the
-	 * 1%..99% margin below) ≈ 18.6, {@code floor}ed by {@code ST_LineInterpolatePoints}
-	 * to 18. That is the safe direction: fewer points than the equatorial target, never
-	 * more, so the simplification never risks the "millions of points" failure mode --
-	 * only a slightly coarser heatmap towards the poles.
+	 * <p>Measured: <strong>1 point at z=8, 6 at z=12, 19 at z=16</strong> -- three different
+	 * regimes, not one straight line of growth:
 	 *
-	 * <p>Every one of them sits far under {@code DEFAULT_MAX_FEATURES_PER_TILE} (50.000):
-	 * at 18 rows per full-width line, roughly 2.700 such lines would have to cross the
-	 * same tile before that limit -- calibrated for roughly 19-byte point rows, see that
-	 * constant's own note -- came anywhere near truncating it.
+	 * <ul>
+	 *   <li>z=8: the tile is enormous (real ground width, at this latitude, roughly 93 km) --
+	 *       the 2000 m line sits far inside it, entirely unclipped, but is itself shorter
+	 *       than one spacing unit (about 2900 m here), so it gets exactly one point, the
+	 *       same "too short for even one grid step" floor {@link
+	 *       #aShortLineStillGetsOnePoint} checks directly.</li>
+	 *   <li>z=12: still unclipped (tile width here is roughly 5,8 km, comfortably over
+	 *       2000 m) -- this is the one regime where the point count is pure {@code
+	 *       length / spacing}, and it is where the real, non-tautological growth shows: 6
+	 *       points, {@code floor(2000 / 306.8m)}.</li>
+	 *   <li>z=16: the tile's real ground width has shrunk to roughly 363 m -- <em>less</em>
+	 *       than the 2000 m line -- so the tile now shows only the clipped fragment that
+	 *       fits inside it, at the same per-tile-width density any full-width line gets at
+	 *       this zoom (matching the roughly 18 points a full-tile-width line measured at
+	 *       z=16 in an earlier version of this class). Zooming in far enough turns "a fixed
+	 *       line" and "a full-tile-width line" into the same question.</li>
+	 * </ul>
+	 *
+	 * <p>The line's <em>total</em>, undivided weight grows the same way (100 at z=8, 600 at
+	 * z=12, 1.900 at z=16 -- a 19x span end to end), which sounds alarming until the actual
+	 * invariant this package holds is named correctly:
+	 *
+	 * <p><strong>The right invariant is density per screen pixel, not total real-world
+	 * mass.</strong> A tile always renders at a roughly fixed number of CSS pixels wide
+	 * (512, conventionally), and {@code spacing = tileWidth(z) / HEATMAP_POINTS_ACROSS_TILE}
+	 * (32) means the point spacing in <em>screen</em> pixels is {@code 512 / 32 = 16px} at
+	 * every zoom, by construction -- {@code tileWidth(z)} cancels out of that ratio. With an
+	 * undivided weight, the amount of "heat" per screen pixel along the line therefore stays
+	 * constant across zoom: the same real street looks equally intense at any zoom level,
+	 * which is what a screen-space heatmap (MapLibre's {@code heatmap-radius} is itself a
+	 * screen-pixel figure, not a world one) should do. Zooming in reveals more of the line on
+	 * screen and therefore more points and more total heat -- exactly like zooming into any
+	 * other point-sampled rendering reveals more samples -- it does not mean the same stretch
+	 * of street becomes "louder". Had the weight instead been divided by the point count
+	 * (mass-conserving, keeping the *real-world total* constant instead), the per-screen-pixel
+	 * density would have <em>dropped</em> as the point count grew with zoom -- the heatmap
+	 * would visibly fade out the closer one zooms into the very place it is meant to
+	 * highlight, which is the actually wrong behaviour for this renderer.
+	 *
+	 * <p>{@link #lineCrossingATileBoundaryProducesTheSameGridOnBothSides} is the other half
+	 * of the zoom story: it is not only the point count that must behave sensibly, but the
+	 * point <em>positions</em> across a tile boundary.
 	 */
 	@Test
-	@DisplayName("a full-tile-width line carries about 18 points at z=8, z=12 and z=16 alike, near Hamburg's latitude")
-	void heatmapPointSpacingScalesWithZoom() {
+	@DisplayName("a fixed 2000 m line carries more points at higher zoom, its total weight growing with it")
+	void fixedLengthLineGetsMorePointsAtHigherZoom() {
+		double[] anchor = nativePoint(CENTER_LON, CENTER_LAT);
+		int previousCount = 0;
 		for (int z : new int[] { 8, 12, 16 }) {
 			String tableName = createTable("geom geometry(MultiLineString, 25832) NOT NULL, wert integer");
 			int[] tile = tileAt(z);
-			double[] bounds = tileLonLatBounds(tile[0], tile[1], tile[2]);
-			double lat = (bounds[1] + bounds[3]) / 2;
-			// 1%..99% of the tile's own width: just inside the envelope on both sides, so
-			// the line is not lost to floating-point rounding at the tile boundary itself.
-			insertLine(tableName, lerp(bounds[0], bounds[2], 0.01), lat,
-					lerp(bounds[0], bounds[2], 0.99), lat, "wert", 11);
+			insertLineNative(tableName, anchor[0] - 1000, anchor[1], anchor[0] + 1000, anchor[1], "wert", 100);
 
 			byte[] mvt = mvtService.renderTile(tableName, 25832, List.of("wert"), List.of(),
 					GeometryType.MULTILINESTRING, true, tile[0], tile[1], tile[2]).mvt();
 			List<MvtTileDecoder.Feature> features = MvtTileDecoder.decode(mvt).get(0).features();
 
-			// 18 measured at every one of the three zoom levels (see the method javadoc for
-			// the maths); a few points of slack for ST_Segmentize/ST_Transform's own distortion.
 			assertThat(features.size())
-					.as("z=%d: Punkte je Kachel bei einer Linie ueber die volle Kachelbreite", z)
-					.isBetween(14, 24);
-			assertThat(50_000 / features.size())
-					.as("z=%d: so viele Linien dieser Laenge muessten sich eine Kachel teilen, "
-							+ "bevor die Kuerzungsgrenze greift", z)
-					.isGreaterThan(1_000);
+					.as("z=%d: eine feste 2000-m-Linie muss bei hoeherem Zoom mehr Punkte tragen", z)
+					.isGreaterThan(previousCount);
+			previousCount = features.size();
 			// Every point still carries the line's own, undivided weight (this package's
 			// decision, documented on MvtService#interpolatedLinePoints and in the report).
-			assertThat(features).allSatisfy(feature -> assertThat(feature.properties()).containsEntry("wert", 11L));
+			assertThat(features).allSatisfy(feature -> assertThat(feature.properties()).containsEntry("wert", 100L));
 		}
+		assertThat(previousCount)
+				.as("bei z=16 muessen mehrere hundert Punkte je Linie noch weit unter der Kuerzungsgrenze bleiben")
+				.isLessThan(1_000);
+	}
+
+	/**
+	 * The seam finding (review after the first version of this package): the first version
+	 * of {@code MvtService#interpolatedLinePoints} started every clipped piece's own point
+	 * sequence at fraction 0 relative to <em>that piece's own</em> length, so two tiles
+	 * clipping the very same line disagreed on where the points fall -- measured on two
+	 * real, adjacent tiles at z=12: 158,7 m before the boundary to the last point, a further
+	 * 305,7 m (a whole spacing unit) after it to the next, a combined 464,5 m gap, about 1,5x
+	 * the ordinary spacing.
+	 *
+	 * <p>Reproduced here the same way it was found -- two real, adjacent tiles, the last
+	 * point of the western one and the first point of the eastern one -- except this
+	 * measures the gap in each tile's own local MVT coordinates (0..4096) rather than native
+	 * metres: combining both tiles' local x axes into one avoids any unit conversion, and
+	 * the comparison against this tile's own <em>ordinary</em> point spacing (measured the
+	 * same way, from two points that are not at the boundary) is exactly what tells a
+	 * healed seam from the 1,5x gap that found this bug in the first place.
+	 *
+	 * <p>Measured after the fix: {@code ordinaryGap = 215} local units, {@code boundaryGap =
+	 * 216} -- a ratio of 1,005, not 1,5. The realignment in {@code
+	 * MvtService#interpolatedLinePoints} (grid measured from each clipped piece's position
+	 * along the <em>whole original line</em>, not from its own clipped start) closes the
+	 * seam to within MVT's own integer rounding.
+	 */
+	@Test
+	@DisplayName("a line crossing a real tile boundary produces the same point grid on both sides -- no seam gap")
+	void lineCrossingATileBoundaryProducesTheSameGridOnBothSides() {
+		String tableName = createTable("geom geometry(MultiLineString, 25832) NOT NULL, wert integer");
+		int z = 12;
+		int[] tileA = tileAt(z);
+		int x = tileA[1];
+		int y = tileA[2];
+		double[] boundsA = tileLonLatBounds(z, x, y);
+		double[] boundsB = tileLonLatBounds(z, x + 1, y);
+		double lat = (boundsA[1] + boundsA[3]) / 2;
+
+		// Crosses the shared meridian between tile (z,x,y) and (z,x+1,y), well inside each
+		// tile on either side -- several points expected on both sides of the boundary.
+		insertLine(tableName, lerp(boundsA[0], boundsA[2], 0.2), lat, lerp(boundsB[0], boundsB[2], 0.8), lat,
+				"wert", 1);
+
+		List<MvtTileDecoder.Feature> featuresA = MvtTileDecoder.decode(
+				mvtService.renderTile(tableName, 25832, List.of(), List.of(),
+						GeometryType.MULTILINESTRING, true, z, x, y).mvt())
+				.get(0).features();
+		List<MvtTileDecoder.Feature> featuresB = MvtTileDecoder.decode(
+				mvtService.renderTile(tableName, 25832, List.of(), List.of(),
+						GeometryType.MULTILINESTRING, true, z, x + 1, y).mvt())
+				.get(0).features();
+
+		List<Long> xsA = featuresA.stream().map(f -> f.rings().get(0).get(0)[0]).sorted().toList();
+		List<Long> xsB = featuresB.stream().map(f -> f.rings().get(0).get(0)[0]).sorted().toList();
+		assertThat(xsA).as("mindestens zwei Punkte in der westlichen Kachel, um den normalen Abstand zu messen")
+				.hasSizeGreaterThanOrEqualTo(2);
+		assertThat(xsB).as("mindestens ein Punkt in der oestlichen Kachel").isNotEmpty();
+
+		long ordinaryGap = xsA.get(xsA.size() - 1) - xsA.get(xsA.size() - 2);
+		// Both tile-local x axes (each 0..4096, east is increasing x) combined into one:
+		// the distance from the last point in A to the tile edge, plus the distance from
+		// the tile edge to the first point in B.
+		long boundaryGap = (4096 - xsA.get(xsA.size() - 1)) + xsB.get(0);
+
+		assertThat((double) boundaryGap / ordinaryGap)
+				.as("die Naht an der Kachelgrenze darf nicht breiter sein als der normale Punktabstand "
+						+ "(vorher: etwa das 1,5-fache -- boundaryGap=%d, ordinaryGap=%d)", boundaryGap, ordinaryGap)
+				.isBetween(0.8, 1.15);
 	}
 
 	/**
@@ -276,11 +370,9 @@ class MvtServiceHeatmapTest {
 	/**
 	 * A line crossing the tile boundary twice, so the clip-then-dump step in
 	 * {@code MvtService#interpolatedLinePoints} really does hand two separate pieces to
-	 * {@code ST_LineInterpolatePoints} rather than one -- the "several disjoint pieces"
-	 * half of the robustness this package's SQL was tested against directly (the other
-	 * half, a line only grazing the tile edge, was proven against a real PostGIS during
-	 * development and is documented on that method; engineering an exact tangency through
-	 * the full tile-envelope transform in a JUnit test is impractical).
+	 * the point generator rather than one -- the "several disjoint pieces" half of this
+	 * package's clip robustness. {@link #aLineTouchingTheTileBoundaryOnlyAtAPointStillRenders}
+	 * is the other half: a line that only grazes the edge.
 	 */
 	@Test
 	@DisplayName("a line leaving and re-entering the tile still renders, in two separately spaced pieces")
@@ -307,6 +399,69 @@ class MvtServiceHeatmapTest {
 		List<MvtTileDecoder.Feature> features = MvtTileDecoder.decode(mvt).get(0).features();
 		assertThat(features).isNotEmpty();
 		assertThat(features).allSatisfy(feature -> assertThat(feature.properties()).containsEntry("wert", 3L));
+	}
+
+	/**
+	 * A line that touches the tile's own clip boundary tangentially, at exactly one point,
+	 * rather than crossing it -- the case that first motivated
+	 * {@code ST_CollectionExtract} in {@code MvtService#interpolatedLinePoints}, found
+	 * against a real PostGIS during development and reproduced here through the actual tile
+	 * pipeline: {@link #nativeBoundsRing} queries the exact boundary
+	 * {@code MvtService#nativeBounds} clips against, and the fixture line is built from that
+	 * real geometry's own corner, not an approximation of it -- extending the two edges that
+	 * meet there past the corner, a standard construction that stays outside a convex
+	 * polygon on both sides while touching it at that one point.
+	 *
+	 * <p>Without {@code ST_CollectionExtract}, {@code ST_Intersection} of this line with the
+	 * boundary reduces to a bare {@code POINT} (proven separately, directly in SQL, in the
+	 * assertion below), and {@code ST_LineInterpolatePoint} raises "1st arg isn't a line" the
+	 * moment that reaches it -- turning the whole tile request into a 500. With it, the tile
+	 * renders, empty: a single tangent point carries no length to place a heatmap point
+	 * along.
+	 */
+	@Test
+	@DisplayName("a line touching the tile boundary at exactly one point still renders, without an SQL error")
+	void aLineTouchingTheTileBoundaryOnlyAtAPointStillRenders() {
+		String tableName = createTable("geom geometry(MultiLineString, 25832) NOT NULL, wert integer");
+		int[] tile = tileAt(12);
+		double[][] ring = parseLineStringWkt(nativeBoundsRing(tile[0], tile[1], tile[2]));
+		// A genuine corner: the ring is closed (point 0 == point length-1), so its two
+		// immediate neighbours are index 1 and index length-2. ST_Segmentize only ever adds
+		// points *along* an edge, never replacing a corner, so index 0 is still one.
+		double[] vertex = ring[0];
+		double[] previous = ring[ring.length - 2];
+		double[] next = ring[1];
+
+		// Extends both edges meeting at the corner past the corner itself: for a convex
+		// polygon, a point past either endpoint of an edge lies outside the polygon, since
+		// the whole interior sits on one side of that edge's supporting line.
+		double p1x = vertex[0] + (vertex[0] - previous[0]) * 2;
+		double p1y = vertex[1] + (vertex[1] - previous[1]) * 2;
+		double p2x = vertex[0] + (vertex[0] - next[0]) * 2;
+		double p2y = vertex[1] + (vertex[1] - next[1]) * 2;
+
+		jdbc.sql(("INSERT INTO %s (geom, wert) VALUES (ST_Multi(ST_SetSRID(ST_MakeLine(ARRAY["
+				+ "ST_MakePoint(:p1x, :p1y), ST_MakePoint(:vx, :vy), ST_MakePoint(:p2x, :p2y)]), 25832)), :wert)")
+				.formatted(SqlIdentifier.quoteLayerTable(tableName)))
+				.param("p1x", p1x).param("p1y", p1y)
+				.param("vx", vertex[0]).param("vy", vertex[1])
+				.param("p2x", p2x).param("p2y", p2y)
+				.param("wert", 1)
+				.update();
+
+		String intersectionType = jdbc.sql("SELECT ST_GeometryType(ST_Intersection(l.geom, "
+				+ "ST_Transform(ST_Segmentize(ST_TileEnvelope(:z, :x, :y), 100000), 25832))) AS t "
+				+ "FROM " + SqlIdentifier.quoteLayerTable(tableName) + " l")
+				.param("z", tile[0]).param("x", tile[1]).param("y", tile[2])
+				.query(String.class).single();
+		assertThat(intersectionType)
+				.as("die Testlinie muss den Kachelrand nur tangential in einem Punkt beruehren")
+				.isEqualTo("ST_Point");
+
+		byte[] mvt = mvtService.renderTile(tableName, 25832, List.of("wert"), List.of(),
+				GeometryType.MULTILINESTRING, true, tile[0], tile[1], tile[2]).mvt();
+
+		assertThat(mvt).as("leere statt fehlschlagende Kachel bei einer nur tangential beruehrenden Linie").isNull();
 	}
 
 	// --- an unweighted heatmap -- every point counts equally ---------------------------
@@ -358,6 +513,53 @@ class MvtServiceHeatmapTest {
 				.param("lon0", lon0).param("lat0", lat0).param("lon1", lon1).param("lat1", lat1)
 				.param("wert", weight)
 				.update();
+	}
+
+	/** A line given directly in the layer's own native SRID -- no WGS84 roundtrip, exact metres. */
+	private void insertLineNative(String tableName, double x0, double y0, double x1, double y1,
+			String weightColumn, int weight) {
+		jdbc.sql(("INSERT INTO %s (geom, " + weightColumn + ") VALUES "
+				+ "(ST_Multi(ST_SetSRID(ST_MakeLine(ST_MakePoint(:x0, :y0), ST_MakePoint(:x1, :y1)), 25832)), :wert)")
+				.formatted(SqlIdentifier.quoteLayerTable(tableName)))
+				.param("x0", x0).param("y0", y0).param("x1", x1).param("y1", y1).param("wert", weight)
+				.update();
+	}
+
+	/** The native-SRID coordinate of a WGS84 point, for building geometry with an exact native length. */
+	private double[] nativePoint(double lon, double lat) {
+		return jdbc.sql("SELECT ST_X(t) AS x, ST_Y(t) AS y FROM "
+						+ "(SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 25832) AS t) s")
+				.param("lon", lon).param("lat", lat)
+				.query((rs, rowNum) -> new double[] { rs.getDouble("x"), rs.getDouble("y") })
+				.single();
+	}
+
+	/**
+	 * The native-CRS boundary polygon a tile's own query clips against -- the exact
+	 * expression {@code MvtService#nativeBounds} builds for a tile within
+	 * {@code ProjectionDomain}'s coverage. Queried directly (not reimplemented) so a test
+	 * that needs to touch this boundary on purpose -- see
+	 * {@link #aLineTouchingTheTileBoundaryOnlyAtAPointStillRenders} -- works from the same
+	 * geometry the production query actually clips against, not an approximation of it.
+	 */
+	private String nativeBoundsRing(int z, int x, int y) {
+		return jdbc.sql("SELECT ST_AsText(ST_ExteriorRing(ST_Transform("
+						+ "ST_Segmentize(ST_TileEnvelope(:z, :x, :y), 100000), 25832))) AS ring")
+				.param("z", z).param("x", x).param("y", y)
+				.query(String.class).single();
+	}
+
+	/** {@code x, y} pairs of a WKT {@code LINESTRING(...)}, in ring order. */
+	private static double[][] parseLineStringWkt(String wkt) {
+		String inner = wkt.substring(wkt.indexOf('(') + 1, wkt.lastIndexOf(')'));
+		String[] pairs = inner.split(",");
+		double[][] points = new double[pairs.length][2];
+		for (int i = 0; i < pairs.length; i++) {
+			String[] xy = pairs[i].trim().split("\\s+");
+			points[i][0] = Double.parseDouble(xy[0]);
+			points[i][1] = Double.parseDouble(xy[1]);
+		}
+		return points;
 	}
 
 	private void insertSquare(String tableName, double[] bounds, String weightColumn, int weight) {

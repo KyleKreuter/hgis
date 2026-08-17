@@ -400,44 +400,76 @@ public class MvtService {
 	 * {@code LIMIT} above are calibrated per row (roughly 19 bytes each, see that constant's
 	 * own note), and a heatmap point is exactly that size. One row per point is what makes
 	 * that limit mean the same thing for a heatmap tile as for any other -- see the class's
-	 * own report for the measured point counts this produces per tile at z=8/12/16 and how
-	 * they compare to the limit.
+	 * own report for the measured point counts this produces and how they compare to the
+	 * limit.
 	 *
-	 * <p>Built as two nested {@code LATERAL ST_Dump}s rather than one call on {@code l.geom}
-	 * directly, for two reasons found by testing this against a real PostGIS:
+	 * <p>Five {@code LATERAL} steps, each named for what it adds:
 	 *
-	 * <ul>
-	 *   <li>{@code ST_LineInterpolatePoints} only accepts a plain {@code LINESTRING}, and
-	 *       {@code l.geom} is always the multi form. The first dump -- of
-	 *       {@code ST_CollectionExtract(ST_Intersection(l.geom, b.native), 2)} rather than
-	 *       of {@code l.geom} itself -- does two things at once: it splits the multi
-	 *       geometry into plain linestrings, and it first clips each one to the tile.
-	 *       Without that clip, a long line (a river, a road) would be walked along its
-	 *       <em>entire</em> length for every tile its bounding box merely touches, most of
-	 *       the resulting points immediately discarded by {@code ST_AsMVTGeom} -- exactly
-	 *       the "millions of points" failure mode the contract warns against, just moved
-	 *       from a too-fine spacing to a too-long line. {@code ST_CollectionExtract(..., 2)}
-	 *       is what keeps this safe against every shape {@code ST_Intersection} can hand
-	 *       back at a tile edge, proven against a real PostGIS: a line only grazing the
-	 *       tile boundary intersects to a bare {@code POINT}, and {@code
-	 *       ST_LineInterpolatePoints} errors outright ("1st arg isn't a line") if that
-	 *       reaches it directly. {@code ST_CollectionExtract} turns that {@code POINT} (or
-	 *       a {@code GEOMETRYCOLLECTION EMPTY}, or a {@code NULL} in the degenerate case of
-	 *       a not-yet-existing mask) into an empty {@code LINESTRING}, which dumps to zero
-	 *       rows rather than raising an error -- so a tile that happens to catch a line
-	 *       exactly at its edge renders instead of failing.</li>
-	 *   <li>The second dump turns the {@code MULTIPOINT} {@code ST_LineInterpolatePoints}
-	 *       returns into one row per point, for the row-budget reason above.</li>
-	 * </ul>
+	 * <ol>
+	 *   <li>{@code part}: {@code ST_Dump(l.geom)} -- {@code l.geom} is always the multi
+	 *       form, and both {@code ST_LineLocatePoint} and {@code ST_LineInterpolatePoint}
+	 *       below only accept a plain {@code LINESTRING}. Splitting first, before clipping,
+	 *       is what lets step 3 measure a clipped piece's position against the <em>whole</em>
+	 *       original part rather than against whatever fragment this one tile happens to
+	 *       see -- the point this whole method exists to fix, below.</li>
+	 *   <li>{@code ln}: {@code ST_Dump(ST_CollectionExtract(ST_Intersection(part.geom,
+	 *       b.native), 2))} -- clips that one part to the tile and splits the result into
+	 *       plain linestrings again, since a clip can produce several disjoint pieces (a
+	 *       line leaving and re-entering the tile). Without the clip, a long line (a river,
+	 *       a road) would be walked along its <em>entire</em> length for every tile its
+	 *       bounding box merely touches, most of the resulting points immediately discarded
+	 *       by {@code ST_AsMVTGeom} -- exactly the "millions of points" failure mode the
+	 *       contract warns against, just moved from a too-fine spacing to a too-long line.
+	 *       {@code ST_CollectionExtract(..., 2)} is what keeps this safe against every shape
+	 *       {@code ST_Intersection} can hand back at a tile edge, proven against a real
+	 *       PostGIS: a line only grazing the tile boundary -- tangent to a corner or an edge
+	 *       -- intersects to a bare {@code POINT}, and {@code ST_LineInterpolatePoint} errors
+	 *       outright ("1st arg isn't a line") if that reaches it directly.
+	 *       {@code ST_CollectionExtract} turns that {@code POINT} (or a
+	 *       {@code GEOMETRYCOLLECTION EMPTY}, or a {@code NULL} in the degenerate case of a
+	 *       not-yet-existing mask) into an empty {@code LINESTRING}, which dumps to zero rows
+	 *       rather than raising an error -- so a tile that happens to catch a line exactly at
+	 *       its edge renders instead of failing.</li>
+	 *   <li>{@code phase}: how far this clipped piece's own start point sits along the whole
+	 *       original {@code part} ({@code ST_LineLocatePoint(part.geom, ST_StartPoint(
+	 *       ln.geom)) * ST_Length(part.geom)}), in the layer's own metres.</li>
+	 *   <li>{@code raster}: {@code clip_len} (this piece's own length) and
+	 *       {@code first_offset} -- the distance, from this piece's own start, to the next
+	 *       point on a grid measured from the <em>whole part's</em> start, spacing apart.
+	 *       {@code first_offset = spacing - (phase mod spacing)}, written with
+	 *       {@code FLOOR} since SQL has no {@code mod} for {@code double precision}.</li>
+	 *   <li>{@code pt}: one row per point, at local fractions {@code (first_offset +
+	 *       gs * spacing) / clip_len} for {@code gs} from a {@code generate_series}, plus a
+	 *       fallback row at fraction 1.0 -- this piece's far end -- for the case
+	 *       {@code first_offset > clip_len}, when the piece is too short to reach even one
+	 *       grid point on its own. Without that fallback a short piece (a short line, or the
+	 *       last sliver of a long one inside one tile) would vanish rather than show one
+	 *       point, the same guarantee the single-{@code LEAST} version of this method used to
+	 *       give directly.</li>
+	 * </ol>
 	 *
-	 * <p>{@code fraction} is the spacing as a share of each linestring's own length, capped
-	 * at 1.0 via {@code LEAST}: {@code ST_LineInterpolatePoints} errors on a fraction above
-	 * 1 (also proven against a real PostGIS), which a spacing wider than a short line's own
-	 * length would otherwise produce. Capped, a short line still gets exactly one point, at
-	 * its far end, rather than none. {@code NULLIF(ST_Length(...), 0)} guards the same way
-	 * against a zero-length (degenerate, single-point-in-disguise) line: {@code LEAST}
-	 * ignores a {@code NULL} argument rather than propagating it, so the division's {@code
-	 * NULL} collapses back to the same fraction-1.0, one-point fallback.
+	 * <p><strong>Why the grid is measured from the whole part, not from each clipped
+	 * piece's own start</strong> -- found on the review that followed this method's first
+	 * version, which did exactly that (fraction as a share of {@code ln.geom}'s own length,
+	 * points at {@code n * fraction}): every tile then started its own point sequence at
+	 * fraction 0 relative to whatever fragment of the line it happened to see, so two
+	 * neighbouring tiles' fragments of the very same line agreed on no shared point at all.
+	 * Measured on two real, adjacent tiles at z=12: the last point before the boundary sat
+	 * 158,7 m before it, the first point after sat a full spacing unit (305,7 m) after it --
+	 * a combined gap of 464,5 m, about one and a half times the ordinary spacing, at every
+	 * tile edge a line crosses. Anchoring the grid to {@code part.geom} -- the same geometry
+	 * on both sides of the boundary, since a feature's row and its full geometry do not
+	 * change from one tile to the next -- gives both tiles' clips the same answer for
+	 * "how far from the part's own start is the next grid point", so they agree on where the
+	 * points fall and the seam closes. Confirmed the same way the gap was found: two real,
+	 * adjacent tiles, this time producing the same point positions across the shared edge
+	 * (see {@code MvtServiceHeatmapTest#lineCrossingATileBoundaryProducesTheSameGridOnBothSides}).
+	 *
+	 * <p>When a part is not clipped at all -- the ordinary case, a line entirely inside one
+	 * tile -- {@code phase} is 0 and {@code first_offset} collapses to exactly {@code
+	 * spacing}, which reproduces the original, unaligned formula's own points exactly: {@code
+	 * n * spacing} for every {@code n} up to {@code floor(length / spacing)}. The realignment
+	 * only ever changes anything for a piece that a tile boundary actually cut.
 	 *
 	 * <p>Every point produced this way carries its parent line's own attribute values
 	 * unchanged, including the weight field -- see the class's own report for why that
@@ -445,10 +477,22 @@ public class MvtService {
 	 */
 	private static String interpolatedLinePoints(int z, StringBuilder from) {
 		String spacing = String.format(Locale.ROOT, "%.6f", heatmapPointSpacingMetres(z));
-		from.append(",\n  LATERAL ST_Dump(ST_CollectionExtract(ST_Intersection(l.geom, b.native), 2)) AS ln")
-				.append(",\n  LATERAL ST_Dump(ST_LineInterpolatePoints(ln.geom, LEAST(1.0, ")
-				.append(spacing)
-				.append(" / NULLIF(ST_Length(ln.geom), 0)))) AS pt");
+		from.append(",\n  LATERAL ST_Dump(l.geom) AS part")
+				.append(",\n  LATERAL ST_Dump(ST_CollectionExtract(ST_Intersection(part.geom, b.native), 2)) AS ln")
+				.append(",\n  LATERAL (SELECT ST_LineLocatePoint(part.geom, ST_StartPoint(ln.geom))")
+				.append(" * ST_Length(part.geom) AS clip_start) AS phase")
+				.append(",\n  LATERAL (SELECT ST_Length(ln.geom) AS clip_len, ")
+				.append(spacing).append(" - (phase.clip_start - ").append(spacing)
+				.append(" * FLOOR(phase.clip_start / ").append(spacing).append(")) AS first_offset) AS raster")
+				.append(",\n  LATERAL (")
+				.append("SELECT ST_LineInterpolatePoint(ln.geom, LEAST(1.0, ")
+				.append("(raster.first_offset + gs * ").append(spacing).append(") / NULLIF(raster.clip_len, 0))) AS geom ")
+				.append("FROM generate_series(0, FLOOR((raster.clip_len - raster.first_offset) / ")
+				.append(spacing).append(")::int) AS gs")
+				.append(" UNION ALL ")
+				.append("SELECT ST_LineInterpolatePoint(ln.geom, 1.0) AS geom ")
+				.append("WHERE raster.first_offset > raster.clip_len")
+				.append(") AS pt");
 		return "pt.geom";
 	}
 
@@ -468,9 +512,14 @@ public class MvtService {
 	 *
 	 * <p>Deliberately the equatorial width, not one adjusted for the tile's actual latitude:
 	 * {@link #SEGMENT_METRES} and {@link #tileFootprint} already accept the same
-	 * simplification elsewhere in this class, and the resulting few-percent distortion
-	 * towards the poles changes how many points a line gets, never whether the query is
-	 * correct.
+	 * simplification elsewhere in this class. The distortion this trades away is not the
+	 * few percent that phrase might suggest -- a Web Mercator tile's real ground width at
+	 * latitude {@code lat} is {@code cos(lat)} of the equatorial figure this method uses, and
+	 * at Hamburg's 53,55° that is {@code cos(53,55°) ≈ 0,594}: measured directly (see the
+	 * class's own report), a full-tile-width line there carries about 18 points, not the 32
+	 * {@link #HEATMAP_POINTS_ACROSS_TILE} targets at the equator. That changes how many
+	 * points a line gets -- and always in the safe direction, fewer rather than more, since
+	 * {@code cos(lat) <= 1} everywhere -- never whether the query is correct.
 	 */
 	private static double heatmapPointSpacingMetres(int z) {
 		double tileWidthMetres = 2 * Math.PI * WEB_MERCATOR_EARTH_RADIUS_METRES / Math.scalb(1.0, z);
