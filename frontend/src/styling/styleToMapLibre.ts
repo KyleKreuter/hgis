@@ -297,9 +297,22 @@ const HEATMAP_COLOR_STEPS = 6
  * intensity, and is the one heatmap paint property that is never data-driven off a
  * feature property directly. Density 0 fades to fully transparent rather than to a fixed
  * "empty" colour, so switching ramps never needs a second colour picked just for that.
+ *
+ * An unknown `rampId` (a stored style predating a ramp that has since been renamed or
+ * removed, or one a future client wrote that this build does not yet know) used to fall
+ * back to `COLOR_RAMPS[0]` -- `blues` -- silently. That is indistinguishable from someone
+ * having deliberately chosen blue, on the map and in every legend swatch alike; nothing
+ * about the result says the name did not resolve. It gets `heatmapErrorColorRamp`'s hazard
+ * stripes instead, the same diagnostic pattern a confirmed-broken field range already
+ * falls back to (below) -- both are "this heatmap's colour cannot be trusted right now",
+ * and a single unmistakable pattern for that is worth more than two a viewer would have to
+ * learn to tell apart. Whoever opens the panel next to it still sees the stored (invalid)
+ * name in `renderer.ramp` and can fix it there; the map itself only needs to refuse to
+ * look like a legitimate choice.
  */
 function heatmapColorRamp(rampId: string): ExpressionSpecification {
-  const ramp = COLOR_RAMPS.find((candidate) => candidate.id === rampId) ?? COLOR_RAMPS[0]
+  const ramp = COLOR_RAMPS.find((candidate) => candidate.id === rampId)
+  if (!ramp) return heatmapErrorColorRamp()
   const colors = sampleRamp(ramp, HEATMAP_COLOR_STEPS)
   const stops = colors.flatMap((color, index) => [
     index / (colors.length - 1),
@@ -314,11 +327,13 @@ function toTransparent(hex: string): string {
 }
 
 /**
- * The colour a heatmap falls back to once its weight field's range is *confirmed*
- * unavailable (`FieldRangeState`'s `'error'`) -- not while it is merely still loading,
- * which stays on the ordinary ramp via `heatmapColorRamp`. Without this, a heatmap whose
- * range request fails permanently (the field was deleted, the layer has no objects, the
- * request itself errors) would render with a constant weight *and* an ordinary colour --
+ * The colour a heatmap falls back to whenever its ordinary ramp cannot be trusted --
+ * either its weight field's range is *confirmed* unavailable (`FieldRangeState`'s
+ * `'error'`/`'invalid'`, checked in `heatmapPaint` below), not while it is merely still
+ * loading, which stays on the ordinary ramp via `heatmapColorRamp`; or `renderer.ramp`
+ * itself does not name a ramp in `COLOR_RAMPS` (`heatmapColorRamp`'s own fallback, e.g. a
+ * stored style referencing a ramp that has since been renamed or removed). Without this, a
+ * heatmap in either state would render with a constant weight *and* an ordinary colour --
  * indistinguishable from a deliberately chosen density-mode heatmap, forever, with no way
  * to tell "finished" from "broken" short of opening the panel (team review, package 2).
  *

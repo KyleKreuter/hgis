@@ -10,7 +10,7 @@ import type {
 import type { GeometryType, VectorLayerSummary } from '@/api/layers'
 import { CIRCLE_PAINT, FILL_PAINT, LINE_PAINT } from '@/map/layerSpecs'
 import type { FieldRangeState } from './classification'
-import { defaultStyleFor } from './defaults'
+import { COLOR_RAMPS, defaultStyleFor } from './defaults'
 import { styleToMapLibre } from './styleToMapLibre'
 import type { LayerStyle } from './types'
 
@@ -539,6 +539,71 @@ describe('styleToMapLibre heatmap', () => {
     expect(color[3]).toBe(0)
     expect(color[4]).toMatch(/^rgba\(\d+, \d+, \d+, 0\)$/)
     expect(color[color.length - 2]).toBe(1)
+  })
+
+  /**
+   * `inferno`/`viridis` (package 3) laufen durch dieselbe Funktion wie jede andere Rampe
+   * -- kein Sonderfall dafür nötig, dass ihr erster Stützpunkt (`#000004`) fast Schwarz
+   * ist: `toTransparent` liest nur `stops[0]` und setzt dessen Alpha auf 0, unabhängig
+   * davon, wie dunkel die Farbe selbst ist. Ein sichtbares "erstes Band" nach dem
+   * transparenten Start (fast Schwarz, undurchsichtig) ist bei `inferno` beabsichtigt --
+   * niedrige Dichte bleibt fast unsichtbar, genau wie bei jedem inferno-basierten
+   * Heatmap-Plot -- nicht ein Zeichen für einen kaputten Verlauf.
+   */
+  it.each(['inferno', 'viridis'] as const)(
+    'färbt %s wie jede andere Rampe -- transparenter Anfang, deckende Spitze',
+    (ramp) => {
+      const color = heatmapPaintOf(heatmapStyle({ ramp }))['heatmap-color'] as unknown[]
+
+      expect(color[0]).toBe('interpolate')
+      expect(color[3]).toBe(0)
+      expect(color[4]).toMatch(/^rgba\(\d+, \d+, \d+, 0\)$/)
+      expect(color[color.length - 2]).toBe(1)
+      // Nicht nur "irgendein #rrggbb": das Diagnosemuster (unten) endet zufällig auch auf
+      // einem transparenten Start und einer deckenden, gültigen Hex-Farbe -- die obigen
+      // vier Prüfungen allein würden also nicht bemerken, wenn `inferno`/`viridis` aus dem
+      // Katalog verschwänden und still auf die Warndarstellung fielen (per Mutationsprobe
+      // gefunden, package 3). Der letzte Halt muss deshalb exakt der eigene Endpunkt der
+      // Rampe sein, nicht irgendeine plausible Farbe.
+      const catalogRamp = COLOR_RAMPS.find((candidate) => candidate.id === ramp)!
+      expect(color[color.length - 1]).toBe(catalogRamp.stops[catalogRamp.stops.length - 1])
+    },
+  )
+
+  /**
+   * Team-Review (package 3): `COLOR_RAMPS.find(...) ?? COLOR_RAMPS[0]` liess einen
+   * Tippfehler im Rampen-Namen lautlos auf `blues` fallen -- eine blaue Heatmap, die
+   * aussieht, als hätte jemand bewusst Blau gewählt. Ein unbekannter Name bekommt jetzt
+   * dieselbe Warndarstellung wie eine bestätigt fehlende Feldspanne (`heatmapErrorColorRamp`,
+   * s.u.) statt einer echten Rampe.
+   */
+  it('faellt bei einem unbekannten Rampen-Namen auf das Diagnosemuster zurueck, nicht lautlos auf blues', () => {
+    const unknown = heatmapPaintOf(heatmapStyle({ ramp: 'nicht-im-katalog' }))['heatmap-color']
+    const blues = heatmapPaintOf(heatmapStyle({ ramp: 'blues' }))['heatmap-color']
+
+    expect(unknown).not.toEqual(blues)
+    // Grau ist ein gültiger Katalogeintrag -- dieselbe Begründung wie beim Rampentest der
+    // fehlenden Feldspanne unten: die Diagnosefarbe darf keiner echten Rampe gleichen.
+    expect(JSON.stringify(unknown)).not.toContain('#404040')
+  })
+
+  it('zeigt bei einem unbekannten Rampen-Namen exakt dasselbe Muster wie eine bestätigt fehlende Feldspanne', () => {
+    const unknownRamp = heatmapPaintOf(heatmapStyle({ ramp: 'nicht-im-katalog' }))['heatmap-color']
+    const failedRange = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'blues' }), makeLayer(), 'error')['heatmap-color']
+
+    expect(unknownRamp).toEqual(failedRange)
+  })
+
+  /**
+   * Der eine Fall, den der reine Farbvergleich oben nicht zeigt: ein kaputter Rampen-Name
+   * darf das Gewicht -- und damit, ob ein Feld überhaupt normiert wird -- nicht
+   * beeinträchtigen. Nur die Farbe ist eine Diagnose, die Dichte/das Gewicht bleiben
+   * unverändert richtig.
+   */
+  it('normiert das Gewicht weiterhin korrekt, wenn nur der Rampen-Name unbekannt ist', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'nicht-im-katalog' }), makeLayer(), { min: 0, max: 70 })
+
+    expect(evaluateHeatmapWeight(paint['heatmap-weight'], { laut_wert: 35 })).toBe(0.5)
   })
 
   /**

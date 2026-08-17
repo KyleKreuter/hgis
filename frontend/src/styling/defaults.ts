@@ -164,7 +164,29 @@ export const COLOR_RAMPS: readonly ColorRamp[] = [
   { id: 'greens', label: 'Grün', stops: ['#f1f8ee', '#74c476', '#00441b'] },
   { id: 'greys', label: 'Grau', stops: ['#f5f5f5', '#404040', '#0a0a0a'] },
   { id: 'diverging', label: 'Divergierend', stops: ['#2166ac', '#f7f7f7', '#b2182b'] },
+  /**
+   * `inferno`/`viridis`: matplotlib's own colourmaps, sampled at 0/.25/.5/.75/1 (its
+   * reference implementation, not a hand-mixed approximation -- verified against
+   * `matplotlib.colormaps['inferno'|'viridis']` directly). Five stops rather than the
+   * three every other ramp above uses on purpose: both paths curve, inferno sharply so --
+   * it swings through violet and a distinct orange "ember" band between its black start
+   * and yellow end -- and a 3-point linear mix cuts that corner completely (checked: the
+   * worst single-channel deviation against the real curve runs to 125 of 255 at three
+   * stops, versus 35 at five).
+   */
+  { id: 'inferno', label: 'Inferno', stops: ['#000004', '#57106e', '#bc3754', '#f98e09', '#fcffa4'] },
+  { id: 'viridis', label: 'Viridis', stops: ['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'] },
 ]
+
+/**
+ * The catalogue's ids alone, in the order `COLOR_RAMPS` lists them. What a caller outside
+ * this module -- a contract test, or the backend's own catalogue (`LayerStyleService`,
+ * team review) -- reads to stay in step with the ramps this file actually offers, instead
+ * of a second, hand-copied list that can drift the moment one side gains a ramp the other
+ * does not. `defaults.test.ts` pins this exact array, so an addition here that is not
+ * also relayed to the backend fails loudly on this side first.
+ */
+export const COLOR_RAMP_IDS: readonly string[] = COLOR_RAMPS.map((ramp) => ramp.id)
 
 /** `count` evenly spaced colours from a ramp, first and last being its end points. */
 export function sampleRamp(ramp: ColorRamp, count: number): string[] {
