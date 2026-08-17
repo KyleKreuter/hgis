@@ -549,9 +549,51 @@ public class MvtService {
 	 * same {@code WHERE}, the same way it already discards any other point outside the tile.
 	 * Confirmed against the same scan that found the bug: scanning the same boundary-crossing
 	 * line's start position no longer produces a fallback point in the short-remainder tile at
-	 * all (see {@code MvtServiceHeatmapTest#aBoundaryCutRemainderProducesNoNearDuplicate}),
+	 * all (see {@code MvtServiceHeatmapTest#aShortRemainderNeverProducesANearDuplicateAtTheTileBoundary}),
 	 * while {@link MvtServiceHeatmapTest#aShortLineStillGetsOnePoint} -- a part that is short
 	 * end to end, not merely left short by a cut -- keeps its one point exactly as before.
+	 *
+	 * <p><strong>What a straddling short part does to the tile it does not fall in</strong> --
+	 * asked on review: a part shorter than one spacing unit whose two ends sit on opposite
+	 * sides of a tile boundary still has its midpoint fall on exactly one side, so the
+	 * question is what the other tile's own candidate row -- it evaluates this same fallback
+	 * too, and computes the identical midpoint -- does with a point that is not its own.
+	 * Confirmed directly in SQL against a real tile pair at z=12: a 280 m part with only 20 m
+	 * on tile A's side and 260 m on tile B's, its midpoint 120 m into B, produces a candidate
+	 * row in <em>both</em> tiles' queries, but {@code ST_AsMVTGeom(..., 4096, 64, true)} keeps
+	 * it only where it belongs -- tile A's copy clips to {@code NULL} and is filtered by the
+	 * final {@code WHERE t.geom IS NOT NULL} the same as any other out-of-tile point, tile B
+	 * renders it at its own correct local coordinates. For a straight part this can never go
+	 * the other way: the arc-length midpoint of a straight line is also its spatial bisector,
+	 * so whichever side carries the majority of the part's length is necessarily also the side
+	 * the midpoint falls on -- "most of the part is in B but the midpoint is in A" is not a
+	 * shape a straight part can take. Also confirmed: a midpoint close enough to the boundary
+	 * (within the tile buffer, {@code 64} units -- roughly 90 m at z=12) is handed back by
+	 * <em>both</em> tiles' {@code ST_AsMVTGeom}, once at its real, in-bounds local coordinates
+	 * and once past the far tile's own edge inside its buffer margin. That is not new here --
+	 * an ordinary point feature 10 m past this same boundary was confirmed to do the same
+	 * (the buffer arguments in {@link #TILE_QUERY} are the same four literals for every
+	 * geometry this class ever renders, heatmap or not) -- and it is the buffer's whole job:
+	 * MVT reserves it precisely so a renderer can draw a little past a tile's own edge without
+	 * a seam, and a standard vector-tile client clips its actual drawing to each tile's real
+	 * extent regardless of what the buffer margin carries.
+	 *
+	 * <p><strong>More than two visits to the same point</strong> -- also asked on review: the
+	 * verification above chooses between at most two candidates, {@code loc.t1} and the next
+	 * occurrence strictly after it. A part visiting the exact same coordinate a third time
+	 * defeats it silently -- confirmed directly in SQL with a nine-vertex part crossing itself
+	 * three times at the origin (arc-length positions 10 m, 44,14 m and 78,28 m along an
+	 * 88,28 m part): the piece departing from the third visit gets phase 44,14, the second
+	 * visit's position, not its own true 78,28 -- the verification picks the least-wrong of
+	 * the two candidates it has, not the right one it does not. This is not the same failure
+	 * Befund B named: that one struck <em>any</em> ordinary self-crossing (a meander crossing
+	 * itself once, the common case for a river or a trail), silently and on every occurrence;
+	 * this residual needs the very same coordinate visited a third time, which needs the part
+	 * to cross itself at least twice more at that exact spot -- geometrically possible, far
+	 * rarer, and its symptom is bounded to the one small piece departing from that third visit
+	 * getting a plausible but not-quite-aligned raster phase, not a wrong location, a
+	 * duplicate, or a crash. Left as it stands rather than generalised to arbitrarily many
+	 * visits -- see the class's own report for why.
 	 *
 	 * <p>Every point produced this way carries its parent line's own attribute values
 	 * unchanged, including the weight field -- see the class's own report for why that

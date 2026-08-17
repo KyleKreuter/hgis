@@ -443,6 +443,49 @@ class MvtServiceHeatmapTest {
 	}
 
 	/**
+	 * Asked on review, after {@link #aShortRemainderNeverProducesANearDuplicateAtTheTileBoundary}:
+	 * the fallback's rescue point now sits at {@code part.geom}'s own midpoint, a fixed
+	 * location independent of which tile is asking -- so a part that is itself short
+	 * end to end (unlike that test's long part with a short remainder) but straddles a tile
+	 * boundary evaluates the fallback in <em>both</em> tiles, computing the identical
+	 * midpoint each time. What keeps that from showing twice: {@code ST_AsMVTGeom} clips each
+	 * tile's copy to its own extent, so only the tile the midpoint actually falls in keeps it.
+	 *
+	 * <p>Deliberately asymmetric (20 m on one side, 260 m on the other, well under the
+	 * ~305,7 m spacing at z=12) rather than centred: for a straight part -- the case this
+	 * whole package renders -- the arc-length midpoint is also the spatial bisector, so the
+	 * side carrying the majority of the length is always the side the midpoint falls on. The
+	 * minority side showing nothing is therefore not a coin flip that could go either way; it
+	 * is the same "majority side keeps the point" outcome every time, confirmed directly in
+	 * SQL against a real tile pair before writing this test.
+	 */
+	@Test
+	@DisplayName("a short part straddling a tile boundary shows once, in the tile holding its majority")
+	void aShortPartStraddlingATileBoundaryShowsInExactlyOneTile() {
+		int z = 12;
+		int[] tileA = tileAt(z);
+		int x = tileA[1];
+		int y = tileA[2];
+		double[] bounds = nativeBounds(z, x, y);
+		double boundaryX = bounds[2]; // xmax -- the shared edge with tile (z, x+1, y)
+		double midY = (bounds[1] + bounds[3]) / 2;
+
+		String tableName = createTable("geom geometry(MultiLineString, 25832) NOT NULL, wert integer");
+		// 280 m part: 20 m on tile A's side, 260 m on tile B's -- the arc-length midpoint
+		// necessarily falls 120 m into tile B, well past the tile buffer's own reach (64
+		// units, roughly 90 m at this zoom).
+		insertLineNative(tableName, boundaryX - 20, midY, boundaryX + 260, midY, "wert", 1);
+
+		List<MvtTileDecoder.Feature> featuresA = featuresOf(mvtService.renderTile(tableName, 25832, List.of(),
+				List.of(), GeometryType.MULTILINESTRING, true, z, x, y).mvt());
+		List<MvtTileDecoder.Feature> featuresB = featuresOf(mvtService.renderTile(tableName, 25832, List.of(),
+				List.of(), GeometryType.MULTILINESTRING, true, z, x + 1, y).mvt());
+
+		assertThat(featuresA).as("die kuerzere Seite (20 m von 280 m) zeigt nichts").isEmpty();
+		assertThat(featuresB).as("die laengere Seite (260 m von 280 m) zeigt den Mittelpunkt").hasSize(1);
+	}
+
+	/**
 	 * The self-crossing finding (review after the seam fix above): {@code
 	 * ST_LineLocatePoint(part.geom, point)} finds the closest point on the curve and returns
 	 * only <em>one</em> fraction -- correct as long as every point on the part occurs at
