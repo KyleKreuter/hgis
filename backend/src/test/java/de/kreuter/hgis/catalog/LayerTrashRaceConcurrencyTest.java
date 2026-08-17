@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import de.kreuter.hgis.TestcontainersConfiguration;
+import de.kreuter.hgis.catalog.dto.LayerDtos;
 import de.kreuter.hgis.common.ConflictException;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.SqlIdentifier;
@@ -36,6 +37,16 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * <p>{@link LayerRepository#findByIdForUpdate} is what these tests are about: without
  * it, the operation under test never waits at all, and both scenarios below finish
  * with a false success instead of a proper conflict.
+ *
+ * <p>{@link #plainReadIsNotBlockedByAConcurrentPurgesLock} proves the opposite side of the
+ * same lock: it must guard writers against each other without becoming something an
+ * ordinary read waits on too. {@code LayerService#get} -- the path {@code GET
+ * /api/layers/{id}} takes -- goes through the plain, unlocked {@code findById} on
+ * purpose, and PostgreSQL's MVCC reads never need the row lock to see a consistent
+ * snapshot. That stays true only as long as nobody "hardens" the guard from {@code
+ * SELECT ... FOR UPDATE} to something stronger later for some case that seems to need
+ * it -- exactly the kind of change that would leave a read stalled behind an in-flight
+ * purge without a single existing test noticing.
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
@@ -176,6 +187,34 @@ class LayerTrashRaceConcurrencyTest {
 		assertThatThrownBy(() -> layerService.purge(other.getId(), null))
 				.isInstanceOf(ConflictException.class);
 		layerRepository.delete(other);
+	}
+
+	@Test
+	@DisplayName("a plain read of a layer being purged does not wait on the purge's row lock")
+	void plainReadIsNotBlockedByAConcurrentPurgesLock() throws Exception {
+		try (Connection purgeConnection = dataSource.getConnection()) {
+			purgeConnection.setAutoCommit(false);
+			// Plays purge's own effect by hand, exactly like the two races above: the row
+			// lock is taken here and held open, uncommitted.
+			try (PreparedStatement lock = purgeConnection.prepareStatement(
+					"SELECT * FROM gis_meta.layer WHERE id = ? FOR UPDATE")) {
+				lock.setObject(1, layer.getId());
+				lock.executeQuery();
+			}
+
+			long start = System.nanoTime();
+			// An ordinary read -- LayerService#get, the same path GET /api/layers/{id}
+			// takes -- while the purge lock above is still held and uncommitted.
+			LayerDtos.Detail detail = layerService.get(layer.getId());
+			long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+
+			assertThat(detail.name()).isEqualTo("Wettlauf");
+			assertThat(elapsedMs)
+					.as("a plain read must return immediately, not wait for the purge lock to release")
+					.isLessThan(2000);
+
+			purgeConnection.rollback();
+		}
 	}
 
 	// --- the other side of each race, played on a connection of its own ----------------
