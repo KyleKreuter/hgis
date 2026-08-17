@@ -52,6 +52,21 @@ from .errors import (
 from .layer import Field, FieldSummary, Layer, LayerDescription, TrashEntry
 from .project import Project, Selection, View
 from .query import Feature, Query
+from .style import (
+    RENDERER_CATEGORIZED,
+    RENDERER_GRADUATED,
+    RENDERER_HEATMAP,
+    RENDERER_SINGLE,
+    SYMBOL_FILL,
+    SYMBOL_LINE,
+    SYMBOL_MARKER,
+    Category,
+    ClassBreak,
+    Labels,
+    Renderer,
+    Style,
+    Symbol,
+)
 from .transport import Event, HttpxTransport, PyodideTransport, Response, Transport
 
 __version__ = "0.1.0"
@@ -77,6 +92,20 @@ __all__ = [
     "NewFeature",
     "FeatureUpdate",
     "EditResult",
+    # style, see hgis.layer.Layer.style and .set_style
+    "Style",
+    "Renderer",
+    "Symbol",
+    "Category",
+    "ClassBreak",
+    "Labels",
+    "RENDERER_SINGLE",
+    "RENDERER_CATEGORIZED",
+    "RENDERER_GRADUATED",
+    "RENDERER_HEATMAP",
+    "SYMBOL_MARKER",
+    "SYMBOL_LINE",
+    "SYMBOL_FILL",
     # errors
     "HgisError",
     "ApiError",
