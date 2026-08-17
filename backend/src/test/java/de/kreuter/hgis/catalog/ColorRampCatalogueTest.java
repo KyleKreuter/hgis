@@ -57,6 +57,29 @@ class ColorRampCatalogueTest {
 				.exists();
 
 		JsonNode catalogue = new ObjectMapper().readTree(Files.readString(FRONTEND_CATALOGUE));
+
+		/*
+		 * Named separately rather than folded into the mapping below: a missing `id` would
+		 * otherwise surface as a NullPointerException out of `.asString()`, and whoever reads
+		 * the CI log gets a stack trace where this test's whole purpose is to say, in one
+		 * sentence, that the two catalogues disagree.
+		 */
+		for (JsonNode ramp : catalogue) {
+			assertThat(ramp.get("id"))
+					.withFailMessage("A ramp in colorRamps.json has no `id`: %s", ramp)
+					.isNotNull();
+			assertThat(ramp.propertyNames())
+					.withFailMessage(
+							"""
+							A ramp in colorRamps.json carries a key this project does not read: %s
+							`ColorRamp` in defaults.ts declares id, label and stops, and nothing else acts
+							on anything further. TypeScript will not catch this on its own -- its excess
+							property check applies to fresh object literals, not to a typed JSON import --
+							so an invented key would sit there looking meaningful and doing nothing.""",
+							ramp)
+					.containsExactlyInAnyOrder("id", "label", "stops");
+		}
+
 		List<String> frontendIds = catalogue.valueStream().map(ramp -> ramp.get("id").asString()).toList();
 
 		assertThat(frontendIds)
