@@ -7,6 +7,7 @@ import {
 import type { LayerStyle } from '@/styling/types'
 import { api } from './client'
 import { projectKeys } from './projects'
+import type { TrashEntry } from './trash'
 
 /**
  * MULTIPOINT | MULTILINESTRING | MULTIPOLYGON for a single geometry kind, GEOMETRY
@@ -643,10 +644,19 @@ export function useCreateMapImageLayer(projectId: string) {
   })
 }
 
+/**
+ * Moves a layer into the project's Papierkorb (contract "Schreibstufe" Paket 1
+ * `schutz`; see `DeleteLayerDialog` for the user-facing side). The response is moving
+ * from `204 No Content` to `200` with the layer's own `TrashEntry` (api/trash.ts) --
+ * built against both on purpose: `api.delete` (api/client.ts) already returns
+ * `undefined` for a `204`, so a server that has not caught up to the new contract yet
+ * still resolves cleanly, and `DeleteLayerDialog` falls back to the count it already
+ * knows from the `LayerSummary` it was opened with whenever this comes back empty.
+ */
 export function useDeleteLayer(projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (layerId: string) => api.delete<void>(`/api/layers/${layerId}`),
+    mutationFn: (layerId: string) => api.delete<TrashEntry | undefined>(`/api/layers/${layerId}`),
     onSuccess: (_result, layerId) => {
       queryClient.removeQueries({ queryKey: layerKeys.detail(layerId) })
       queryClient.setQueryData<LayerSummary[]>(layerKeys.list(projectId), (current) =>

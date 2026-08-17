@@ -50,6 +50,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { formatCount } from '@/lib/format'
 import { exportErrorMessage, useExportLayer } from '@/api/export'
+import { TrashDialog } from '@/trash'
 import {
   isVectorLayer,
   layerListQuery,
@@ -134,6 +135,7 @@ export function LayerTree({
   const [managingFields, setManagingFields] = useState<LayerSummary | null>(null)
   const [settingBasemap, setSettingBasemap] = useState<LayerSummary | null>(null)
   const [deleting, setDeleting] = useState<LayerSummary | null>(null)
+  const [trashOpen, setTrashOpen] = useState(false)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dropBefore, setDropBefore] = useState<number | null>(null)
 
@@ -164,20 +166,28 @@ export function LayerTree({
     applyMove(from, direction === -1 ? to : to + 1)
   }
 
+  // Reachable from every state below, including the two that return before the layer
+  // list itself would render -- a project can hold nothing but trashed layers, and the
+  // Papierkorb must stay reachable then too, not only once something is left on the map.
+  const trashDialog = (
+    <TrashDialog projectId={projectId} open={trashOpen} onOpenChange={setTrashOpen} />
+  )
+
   if (isPending) {
     return (
-      <Panel>
+      <Panel onOpenTrash={() => setTrashOpen(true)}>
         <div className="grid gap-1.5 p-2">
           <Skeleton className="h-6 w-full" />
           <Skeleton className="h-6 w-4/5" />
         </div>
+        {trashDialog}
       </Panel>
     )
   }
 
   if (displayed.length === 0) {
     return (
-      <Panel>
+      <Panel onOpenTrash={() => setTrashOpen(true)}>
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
           <p className="text-sm text-muted-foreground">
             Noch keine Layer in diesem Projekt.
@@ -207,12 +217,13 @@ export function LayerTree({
             </Button>
           </div>
         </div>
+        {trashDialog}
       </Panel>
     )
   }
 
   return (
-    <Panel count={displayed.length}>
+    <Panel count={displayed.length} onOpenTrash={() => setTrashOpen(true)}>
       <ScrollArea className="flex-1">
         <ul
           className="p-1"
@@ -281,16 +292,41 @@ export function LayerTree({
           if (deletedId === activeLayerId) onSelectLayer(null)
         }}
       />
+      {trashDialog}
     </Panel>
   )
 }
 
-function Panel({ children, count }: { children: React.ReactNode; count?: number }) {
+function Panel({
+  children,
+  count,
+  onOpenTrash,
+}: {
+  children: React.ReactNode
+  count?: number
+  onOpenTrash: () => void
+}) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-muted/40 px-2 text-xs font-medium tracking-wide uppercase text-muted-foreground">
         <span>Layer</span>
         {count !== undefined && <span className="tabular-nums">{count}</span>}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="ml-auto size-5 shrink-0"
+                onClick={onOpenTrash}
+                aria-label="Papierkorb öffnen"
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            }
+          />
+          <TooltipContent>Papierkorb</TooltipContent>
+        </Tooltip>
       </div>
       {children}
     </div>
