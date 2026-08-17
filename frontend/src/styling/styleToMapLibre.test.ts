@@ -408,16 +408,23 @@ describe('styleToMapLibre heatmap', () => {
     const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 0, max: 70 })
     const weight = paint['heatmap-weight']
 
+    // Die Struktur allein sagt nichts darüber, ob die Expression auch richtig rechnet --
+    // ein Vergleich, der wie die Struktur aussieht, war genau das, woran der
+    // ursprüngliche Fehler vorbeigeschlüpft ist (team review, package 2). Sie bleibt
+    // trotzdem stehen, absichtlich neben der Auswertung, nicht statt ihr: `syncLayers.ts`
+    // entscheidet über `isSameValue`/`applyProperties` per `JSON.stringify`-Vergleich,
+    // ob `setPaintProperty` für ein geändertes Paint-Attribut überhaupt aufgerufen wird
+    // -- zwei strukturell verschiedene, aber gleich auswertende Expressions sähen für
+    // diesen Vergleich wie eine Änderung aus und lösten bei jedem Sync unnötig einen
+    // erneuten `setPaintProperty`-Aufruf aus, obwohl sich am Ergebnis nichts geändert
+    // hat. Das faengt nur ein Strukturvergleich, keine Auswertung.
     expect(weight).toEqual([
       'case',
       ['==', ['get', 'laut_wert'], null],
       0,
       ['interpolate', ['linear'], ['to-number', ['get', 'laut_wert'], 0], 0, 0, 70, 1],
     ])
-    // Die Struktur allein sagt nichts darüber, ob sie auch richtig rechnet -- ein
-    // Vergleich, der wie die Struktur aussieht, war genau das, woran der ursprüngliche
-    // Fehler vorbeigeschlüpft ist (team review, package 2). `evaluateHeatmapWeight`
-    // steht weiter unten, definiert vor der Ausführung dieses Tests.
+    // `evaluateHeatmapWeight` steht weiter unten, definiert vor der Ausführung dieses Tests.
     expect(evaluateHeatmapWeight(weight, { laut_wert: 35 })).toBe(0.5)
   })
 
@@ -481,6 +488,23 @@ describe('styleToMapLibre heatmap', () => {
     const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: -100, max: -10 })
 
     expect(evaluateHeatmapWeight(paint['heatmap-weight'], { laut_wert: null })).toBe(0)
+  })
+
+  /**
+   * Team-Review: MapLibres `==` gegen `null` ist strikt, keine JavaScript-Koartion --
+   * geprueft an einer Spanne, in der ein echter Wert 0 und ein fehlender Wert sonst
+   * dieselbe Zahl ergeben haetten (0..70 oben faellt dafuer nicht: dort landet ein
+   * fehlender Wert zufaellig auch bei Gewicht 0, was nichts ueber die Bedingung selbst
+   * beweist). Bei -10..10 trennen sich beide Faelle: ein echter Messwert 0 -- bei einem
+   * Laermpegel ein gueltiger Wert -- muss in die Mitte interpolieren, nicht auf 0 fallen.
+   */
+  it('unterscheidet einen echten Wert 0 von einem fehlenden Wert', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: -10, max: 10 })
+    const weight = paint['heatmap-weight']
+
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 0 })).toBe(0.5)
+    expect(evaluateHeatmapWeight(weight, { laut_wert: null })).toBe(0)
+    expect(evaluateHeatmapWeight(weight, {})).toBe(0)
   })
 
   it('interpoliert einen vorhandenen Wert weiterhin korrekt zwischen den Rändern', () => {

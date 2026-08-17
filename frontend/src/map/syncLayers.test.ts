@@ -600,6 +600,13 @@ describe('syncMapLayers heatmap-Gewichtung', () => {
 
     const spec = layers.get('hgis-layer-layer-1-render') as AddLayerObject & { paint?: Record<string, unknown> }
     const weight = spec.paint?.['heatmap-weight']
+    // Struktur *und* Auswertung geprüft, mit Absicht beides: `applyProperties` weiter
+    // oben in dieser Datei entscheidet über `isSameValue` (`JSON.stringify`-Vergleich),
+    // ob `setPaintProperty` für `heatmap-weight` überhaupt aufgerufen wird -- eine
+    // strukturell andere, aber gleich auswertende Expression sähe für diesen Vergleich
+    // wie eine echte Änderung aus und löste bei jedem Sync unnötig einen erneuten
+    // `setPaintProperty`-Aufruf aus. Nur der Strukturvergleich faengt das, keine
+    // Auswertung -- deshalb bleibt er stehen, nicht als Redundanz zur Auswertung darunter.
     expect(weight).toEqual([
       'case',
       ['==', ['get', 'laut_wert'], null],

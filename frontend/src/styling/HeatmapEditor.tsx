@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
+import { Info } from 'lucide-react'
 import type { LayerField } from '@/api/layers'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatAttributeNumber } from '@/lib/format'
 import {
   columnNameOfField,
@@ -144,39 +146,59 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState }: HeatmapLegend
   return (
     <div className="grid gap-1 py-1">
       <div className="h-3 w-full rounded-sm" style={{ background: `linear-gradient(to right, ${colors.join(', ')})` }} />
-      <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
-        {!hasField && (
-          <>
-            <span>wenig</span>
-            <span>viel</span>
-          </>
+      <div className="flex items-center gap-1.5">
+        <div className="flex flex-1 justify-between text-xs text-muted-foreground tabular-nums">
+          {!hasField && (
+            <>
+              <span>wenig</span>
+              <span>viel</span>
+            </>
+          )}
+          {hasField && isFetching && <span>Wird geladen…</span>}
+          {/* `typeof === 'object'` rather than naming every non-`FieldRange` member of
+              `FieldRangeState` one by one: `FieldRange` is the union's only object-shaped
+              case, so this stays correct on its own if a third string state is ever added
+              (e.g. distinguishing "invalid" further), which enumerating `'error'`/`'invalid'`
+              here by name would not. */}
+          {hasField && !isFetching && typeof rangeState === 'object' && (
+            <>
+              <span>{formatAttributeNumber(rangeState.min)}</span>
+              <span>{formatAttributeNumber(rangeState.max)}</span>
+            </>
+          )}
+          {hasField && !isFetching && typeof rangeState !== 'object' && <span>Spanne nicht verfügbar</span>}
+        </div>
+        {/*
+         * Für jemanden, der beim Symptom anfängt ("meine Heatmap ist fast leer"), nicht
+         * für jemanden, der die Ursache schon vermutet -- der ausführliche Grund dafür
+         * steht als Kommentar an `heatmapWeight` (`styleToMapLibre.ts`), hier nur der
+         * kurze, jargonfreie Hinweis, an genau der Stelle, an der er gesucht wird.
+         *
+         * Ein Symbol statt eines Dauertextes: eine Erklärung, die bei jedem Öffnen des
+         * Panels als ganzer Satz dasteht -- egal ob das Feld unauffällig ist oder nicht
+         * -- wird nach dem dritten Mal überlesen, und fehlt dann genau dort, wo sie
+         * gebraucht würde (team review, package 2, wie schon bei `RectangleSelectToolbar`s
+         * Zuschnitt-Hinweis).
+         */}
+        {hasField && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  tabIndex={0}
+                  className="shrink-0 text-muted-foreground"
+                  aria-label="Hinweis zu Ausreißern in der Wertespanne"
+                >
+                  <Info className="size-3.5" />
+                </span>
+              }
+            />
+            <TooltipContent className="max-w-xs">
+              Ein einzelner sehr hoher oder sehr niedriger Wert kann die Karte fast leer wirken lassen.
+            </TooltipContent>
+          </Tooltip>
         )}
-        {hasField && isFetching && <span>Wird geladen…</span>}
-        {/* `typeof === 'object'` rather than naming every non-`FieldRange` member of
-            `FieldRangeState` one by one: `FieldRange` is the union's only object-shaped
-            case, so this stays correct on its own if a third string state is ever added
-            (e.g. distinguishing "invalid" further), which enumerating `'error'`/`'invalid'`
-            here by name would not. */}
-        {hasField && !isFetching && typeof rangeState === 'object' && (
-          <>
-            <span>{formatAttributeNumber(rangeState.min)}</span>
-            <span>{formatAttributeNumber(rangeState.max)}</span>
-          </>
-        )}
-        {hasField && !isFetching && typeof rangeState !== 'object' && <span>Spanne nicht verfügbar</span>}
       </div>
-      {/*
-       * Für jemanden, der beim Symptom anfängt ("meine Heatmap ist fast leer"), nicht
-       * für jemanden, der die Ursache schon vermutet -- der ausführliche Grund dafür
-       * steht als Kommentar an `heatmapWeight` (`styleToMapLibre.ts`), hierher gehört
-       * nur der kurze, jargonfreie Hinweis, wo er tatsächlich gesucht wird (team review,
-       * package 2).
-       */}
-      {hasField && (
-        <p className="pt-1 text-xs text-muted-foreground">
-          Ein einzelner sehr hoher oder sehr niedriger Wert kann die Karte fast leer wirken lassen.
-        </p>
-      )}
     </div>
   )
 }

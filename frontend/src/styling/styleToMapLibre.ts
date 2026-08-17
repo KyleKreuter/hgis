@@ -264,7 +264,11 @@ function heatmapWeight(field: string | null, range: FieldRange | undefined): Pai
     // returns `null` for *both* a missing key and a present key whose value is `null`,
     // so checking its result directly does not depend on that encoding choice holding --
     // a future tile source (a GeoJSON layer, say) that *does* write an explicit
-    // `{"field": null}` would still be caught the same way.
+    // `{"field": null}` would still be caught the same way. And unlike JavaScript's
+    // `==`, MapLibre's is strict here -- confirmed by evaluating the condition in
+    // isolation, not just as part of the full expression: a real `0`, `""`, `false` or
+    // `NaN` reads as `false` (team review, package 2), so a genuine measurement of zero
+    // is never mistaken for "no value" the way a looser check might read it.
     ['==', ['get', field], null],
     // Absent counts as "contributes nothing" -- the heatmap equivalent of not being
     // drawn at all, since a weight of 0 adds no density regardless of how many such
