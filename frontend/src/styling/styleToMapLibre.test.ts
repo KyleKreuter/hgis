@@ -516,6 +516,74 @@ describe('styleToMapLibre heatmap', () => {
     expect(evaluateHeatmapWeight(weight, { laut_wert: 70 })).toBe(1)
   })
 
+  /**
+   * Team-Review, package 3 addendum: das eigentliche Segment fid 14 des Layers "Anflug
+   * nach Laermzone" -- `laenge_km` 0,503 bis 6,167 ueber die 14 Segmente. Vor dem Fix
+   * normierte `heatmapWeight` gegen `range.min` selbst: das kuerzeste *echte, gemessene*
+   * Segment bekam dadurch exakt Gewicht 0 -- dieselbe Zahl, die zwei Zweige weiter oben
+   * fuer "kein Wert vorhanden" steht. Ab jetzt wird bei einer durchweg nichtnegativen
+   * Spanne gegen 0 normiert, nicht gegen das Minimum -- das kuerzeste Segment traegt jetzt
+   * sichtbar bei (~8,2 %), statt komplett zu verschwinden.
+   */
+  it('normiert eine durchweg nichtnegative Spanne gegen 0, nicht gegen das Minimum -- das kürzeste echte Segment bleibt sichtbar', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laenge_km' }), makeLayer(), { min: 0.503, max: 6.167 })
+    const weight = paint['heatmap-weight']
+
+    // Vorher exakt 0 -- ununterscheidbar vom Fehlwert-Zweig. Jetzt der Anteil des echten
+    // Werts am Abstand zu 0, nicht zu range.min.
+    expect(evaluateHeatmapWeight(weight, { laenge_km: 0.503 })).toBeCloseTo(0.503 / 6.167, 10)
+    expect(evaluateHeatmapWeight(weight, { laenge_km: 0.503 })).not.toBe(0)
+    // Das obere Ende bleibt unveraendert bei Gewicht 1 -- nur der untere Anker verschiebt
+    // sich, die Spanne bleibt 0..1.
+    expect(evaluateHeatmapWeight(weight, { laenge_km: 6.167 })).toBe(1)
+    // Ein Objekt ganz ohne Wert bleibt unterscheidbar vom kuerzesten echten Segment --
+    // genau die Verwechslung, die der Fix beseitigt.
+    expect(evaluateHeatmapWeight(weight, {})).toBe(0)
+    expect(evaluateHeatmapWeight(weight, { laenge_km: null })).toBe(0)
+  })
+
+  /** Zweites reales Feld desselben Layers, zur Gegenprobe -- derselbe Mechanismus, andere Zahlen. */
+  it('normiert anteil_prozent ebenso gegen 0 -- das kleinste echte Segment bleibt sichtbar', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'anteil_prozent' }), makeLayer(), { min: 4.6, max: 55.2 })
+    const weight = paint['heatmap-weight']
+
+    expect(evaluateHeatmapWeight(weight, { anteil_prozent: 4.6 })).toBeCloseTo(4.6 / 55.2, 10)
+    expect(evaluateHeatmapWeight(weight, { anteil_prozent: 4.6 })).not.toBe(0)
+    expect(evaluateHeatmapWeight(weight, { anteil_prozent: 55.2 })).toBe(1)
+  })
+
+  /**
+   * Eine Spanne, die bereits bei 0 beginnt, aendert sich nicht: der neue und der alte
+   * Anker fallen hier zusammen (`range.min === 0`), das ist der bestehende Test oben
+   * ("interpoliert einen vorhandenen Wert..."). Dieser Test sichert den Grenzfall direkt
+   * daneben ab: eine Spanne, die ins Negative reicht, bleibt bewusst unveraendert
+   * min-verankert -- 0 ist dort kein nutzbarer Boden, s. Kommentar an `normalisationFloor`.
+   * Das kuerzeste (bzw. hier negativste) Element bleibt in diesem Fall weiterhin bei
+   * Gewicht 0 -- ein bekannter, nicht in diesem Zug geloester Fall, keine Regression.
+   */
+  it('lässt eine ins Negative reichende Spanne unverändert min-verankert', () => {
+    const straddling = heatmapPaintOf(heatmapStyle({ field: 'delta' }), makeLayer(), { min: -50, max: 70 })
+    const negativeOnly = heatmapPaintOf(heatmapStyle({ field: 'delta' }), makeLayer(), { min: -100, max: -10 })
+
+    expect(evaluateHeatmapWeight(straddling['heatmap-weight'], { delta: -50 })).toBe(0)
+    expect(evaluateHeatmapWeight(straddling['heatmap-weight'], { delta: 70 })).toBe(1)
+    expect(evaluateHeatmapWeight(negativeOnly['heatmap-weight'], { delta: -100 })).toBe(0)
+    expect(evaluateHeatmapWeight(negativeOnly['heatmap-weight'], { delta: -10 })).toBe(1)
+  })
+
+  /**
+   * `to-number`s Fallback (fuer einen vorhandenen, aber nicht in eine Zahl umwandelbaren
+   * Wert, z. B. eine Zeichenkette) muss densselben Anker treffen wie der untere
+   * `interpolate`-Stuetzpunkt selbst -- sonst landet ein unbrauchbarer Wert nicht mehr bei
+   * Gewicht 0, sondern zufaellig irgendwo dazwischen, was ihn wie einen echten,
+   * schwachen Messwert aussehen liesse.
+   */
+  it('faellt bei einem nicht umwandelbaren Wert weiterhin auf Gewicht 0 zurück -- auch bei einer nichtnegativen Spanne', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laenge_km' }), makeLayer(), { min: 0.503, max: 6.167 })
+
+    expect(evaluateHeatmapWeight(paint['heatmap-weight'], { laenge_km: 'nicht-numerisch' })).toBe(0)
+  })
+
   it('klammert Radius und Intensität an ihre Grenzen', () => {
     const paint = heatmapPaintOf(heatmapStyle({ radius: 500, intensity: 20 }))
 
