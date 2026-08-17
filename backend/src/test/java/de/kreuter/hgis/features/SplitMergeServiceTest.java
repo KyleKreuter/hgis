@@ -250,7 +250,7 @@ class SplitMergeServiceTest {
 		long fid = insert(layer, SQUARE, "Alte Gasse", 12.5);
 
 		SplitMergeDtos.SplitResponse response =
-				service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, rowVersion(layer, fid)));
+				service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, rowVersion(layer, fid)), null);
 
 		assertThat(response.fids()).hasSize(2);
 		assertThat(response.fids().get(0))
@@ -274,7 +274,7 @@ class SplitMergeServiceTest {
 		double areaBefore = ((Number) row(layer, fid).get("area")).doubleValue();
 
 		SplitMergeDtos.SplitResponse response =
-				service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, null));
+				service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, null), null);
 
 		double areaAfter = response.fids().stream()
 				.mapToDouble(partFid -> ((Number) row(layer, partFid).get("area")).doubleValue())
@@ -290,7 +290,7 @@ class SplitMergeServiceTest {
 		long fid = insert(layer, SQUARE, null, null);
 
 		SplitMergeDtos.SplitResponse response =
-				service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, null));
+				service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, null), null);
 
 		long newFid = response.fids().get(1);
 		double originalArea = ((Number) row(layer, fid).get("area")).doubleValue();
@@ -312,7 +312,7 @@ class SplitMergeServiceTest {
 			long fid = insert(extra, UNIT_SQUARE, null, null);
 
 			SplitMergeDtos.SplitResponse response =
-					service.split(extra.getId(), fid, cut(UNIT_CUT, null));
+					service.split(extra.getId(), fid, cut(UNIT_CUT, null), null);
 
 			long newFid = response.fids().get(1);
 			double originalArea = ((Number) row(extra, fid).get("area")).doubleValue();
@@ -332,7 +332,7 @@ class SplitMergeServiceTest {
 			long fid = insert(lines, DIAGONAL, "Weg", 1.0);
 
 			SplitMergeDtos.SplitResponse response =
-					service.split(lines.getId(), fid, cut(COUNTER_DIAGONAL, rowVersion(lines, fid)));
+					service.split(lines.getId(), fid, cut(COUNTER_DIAGONAL, rowVersion(lines, fid)), null);
 
 			assertThat(response.fids()).hasSize(2);
 			for (long partFid : response.fids()) {
@@ -348,7 +348,7 @@ class SplitMergeServiceTest {
 		long fid = insert(layer, SQUARE, "Bleibt", 3.0);
 		long versionBefore = reload(layer).getDataVersion();
 
-		assertThatThrownBy(() -> service.split(layer.getId(), fid, cut(CUT_ELSEWHERE, null)))
+		assertThatThrownBy(() -> service.split(layer.getId(), fid, cut(CUT_ELSEWHERE, null), null))
 				.isInstanceOf(BadRequestException.class)
 				.hasMessage("Die Linie teilt das Objekt nicht.");
 
@@ -366,7 +366,7 @@ class SplitMergeServiceTest {
 		long fid = insertTwoPartFeature(layer);
 		assertThat(row(layer, fid).get("parts")).isEqualTo(2);
 
-		assertThatThrownBy(() -> service.split(layer.getId(), fid, cut(CUT_ELSEWHERE, null)))
+		assertThatThrownBy(() -> service.split(layer.getId(), fid, cut(CUT_ELSEWHERE, null), null))
 				.isInstanceOf(BadRequestException.class)
 				.hasMessage("Die Linie teilt das Objekt nicht.");
 
@@ -379,7 +379,7 @@ class SplitMergeServiceTest {
 		long fid = insertTwoPartFeature(layer);
 
 		SplitMergeDtos.SplitResponse response =
-				service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, null));
+				service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, null), null);
 
 		assertThat(response.fids())
 				.as("two pieces of the cut square plus the untouched far square")
@@ -393,7 +393,7 @@ class SplitMergeServiceTest {
 		withLayer("MULTIPOINT", "MultiPoint", 25832, points -> {
 			long fid = insert(points, POINT, null, null);
 
-			assertThatThrownBy(() -> service.split(points.getId(), fid, cut(DIAGONAL, null)))
+			assertThatThrownBy(() -> service.split(points.getId(), fid, cut(DIAGONAL, null), null))
 					.isInstanceOf(BadRequestException.class)
 					.hasMessage("Punkte lassen sich nicht teilen.");
 		});
@@ -406,11 +406,11 @@ class SplitMergeServiceTest {
 			long pointFid = insert(mixed, POINT, null, null);
 			long faceFid = insert(mixed, SQUARE, null, null);
 
-			assertThatThrownBy(() -> service.split(mixed.getId(), pointFid, cut(DIAGONAL, null)))
+			assertThatThrownBy(() -> service.split(mixed.getId(), pointFid, cut(DIAGONAL, null), null))
 					.isInstanceOf(BadRequestException.class)
 					.hasMessage("Punkte lassen sich nicht teilen.");
 
-			assertThat(service.split(mixed.getId(), faceFid, cut(CUT_OFF_CENTRE, null)).fids())
+			assertThat(service.split(mixed.getId(), faceFid, cut(CUT_OFF_CENTRE, null), null).fids())
 					.as("the face on the very same layer still splits")
 					.hasSize(2);
 		});
@@ -421,7 +421,7 @@ class SplitMergeServiceTest {
 	void refusesToSplitOnAStaleRowVersion() {
 		long fid = insert(layer, SQUARE, "Erst", 1.0);
 
-		assertThatThrownBy(() -> service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, "1")))
+		assertThatThrownBy(() -> service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, "1"), null))
 				.isInstanceOf(ConflictException.class)
 				.satisfies(thrown -> assertThat(((ConflictException) thrown).getCurrent())
 						.as("the UI has to be able to show what it would overwrite")
@@ -435,13 +435,13 @@ class SplitMergeServiceTest {
 	void acceptsTheCurrentRowVersion() {
 		long fid = insert(layer, SQUARE, null, null);
 
-		assertThat(service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, rowVersion(layer, fid))).fids())
+		assertThat(service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, rowVersion(layer, fid)), null).fids())
 				.hasSize(2);
 	}
 
 	@Test
 	void reportsASplitOfAFeatureThatIsGone() {
-		assertThatThrownBy(() -> service.split(layer.getId(), 999_999, cut(CUT_OFF_CENTRE, null)))
+		assertThatThrownBy(() -> service.split(layer.getId(), 999_999, cut(CUT_OFF_CENTRE, null), null))
 				.isInstanceOf(NotFoundException.class);
 	}
 
@@ -450,7 +450,7 @@ class SplitMergeServiceTest {
 	void refusesABladeThatIsNotALine() {
 		long fid = insert(layer, SQUARE, null, null);
 
-		assertThatThrownBy(() -> service.split(layer.getId(), fid, cut(POINT, null)))
+		assertThatThrownBy(() -> service.split(layer.getId(), fid, cut(POINT, null), null))
 				.isInstanceOf(BadRequestException.class)
 				.hasMessage("Die Teilungslinie muss eine Linie sein.");
 	}
@@ -460,7 +460,7 @@ class SplitMergeServiceTest {
 		long fid = insert(layer, SQUARE, null, null);
 
 		assertThatThrownBy(() -> service.split(layer.getId(), fid,
-				cut("{\"type\":\"Nonsense\",\"coordinates\":[1,2]}", null)))
+				cut("{\"type\":\"Nonsense\",\"coordinates\":[1,2]}", null), null))
 				.isInstanceOf(BadRequestException.class)
 				.hasMessageContaining("Teilungslinie");
 	}
@@ -472,7 +472,7 @@ class SplitMergeServiceTest {
 		long versionBefore = reload(layer).getDataVersion();
 
 		SplitMergeDtos.SplitResponse response =
-				service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, null));
+				service.split(layer.getId(), fid, cut(CUT_OFF_CENTRE, null), null);
 
 		Layer after = reload(layer);
 		assertThat(after.getFeatureCount()).isEqualTo(2);
@@ -496,7 +496,7 @@ class SplitMergeServiceTest {
 		long third = insert(layer, SQUARE_FAR, "Dritt", 2.0);
 
 		SplitMergeDtos.MergeResponse response =
-				service.merge(layer.getId(), mergeOf(lead, List.of(lead, second, third), layer));
+				service.merge(layer.getId(), mergeOf(lead, List.of(lead, second, third), layer), null);
 
 		assertThat(response.fid()).isEqualTo(lead);
 		assertThat(fids(layer)).containsExactly(lead);
@@ -513,13 +513,13 @@ class SplitMergeServiceTest {
 		long lead = insert(layer, SQUARE, "Führend", null);
 		long adjacent = insert(layer, SQUARE_EAST, "Nachbar", null);
 
-		service.merge(layer.getId(), mergeOf(lead, List.of(lead, adjacent), layer));
+		service.merge(layer.getId(), mergeOf(lead, List.of(lead, adjacent), layer), null);
 		assertThat(row(layer, lead).get("parts"))
 				.as("two faces sharing an edge are one face, not two in a collection")
 				.isEqualTo(1);
 
 		long far = insert(layer, SQUARE_FAR, "Fern", null);
-		service.merge(layer.getId(), mergeOf(lead, List.of(lead, far), layer));
+		service.merge(layer.getId(), mergeOf(lead, List.of(lead, far), layer), null);
 
 		Map<String, Object> merged = row(layer, lead);
 		assertThat(merged.get("geometry_type")).isEqualTo("MULTIPOLYGON");
@@ -536,7 +536,7 @@ class SplitMergeServiceTest {
 		double expected = ((Number) row(layer, lead).get("area")).doubleValue()
 				+ ((Number) row(layer, far).get("area")).doubleValue();
 
-		service.merge(layer.getId(), mergeOf(lead, List.of(lead, far), layer));
+		service.merge(layer.getId(), mergeOf(lead, List.of(lead, far), layer), null);
 
 		assertThat(((Number) row(layer, lead).get("area")).doubleValue())
 				.isCloseTo(expected, withinPercentage(1e-6));
@@ -549,7 +549,7 @@ class SplitMergeServiceTest {
 			long lead = insert(lines, DIAGONAL, "Weg", null);
 			long other = insert(lines, COUNTER_DIAGONAL, "Pfad", null);
 
-			service.merge(lines.getId(), mergeOf(lead, List.of(lead, other), lines));
+			service.merge(lines.getId(), mergeOf(lead, List.of(lead, other), lines), null);
 
 			assertThat(fids(lines)).containsExactly(lead);
 			assertThat(row(lines, lead).get("geometry_type")).isEqualTo("MULTILINESTRING");
@@ -564,7 +564,7 @@ class SplitMergeServiceTest {
 		long second = insert(layer, SQUARE_EAST, null, null);
 
 		assertThatThrownBy(() -> service.merge(layer.getId(),
-				new SplitMergeDtos.MergeRequest(List.of(first, second), 999_999L, Map.of())))
+				new SplitMergeDtos.MergeRequest(List.of(first, second), 999_999L, Map.of()), null))
 				.isInstanceOf(BadRequestException.class)
 				.hasMessage("Das führende Objekt gehört nicht zur Auswahl.");
 
@@ -579,7 +579,7 @@ class SplitMergeServiceTest {
 			long line = insert(mixed, DIAGONAL, null, null);
 
 			assertThatThrownBy(() -> service.merge(mixed.getId(),
-					new SplitMergeDtos.MergeRequest(List.of(face, line), face, Map.of())))
+					new SplitMergeDtos.MergeRequest(List.of(face, line), face, Map.of()), null))
 					.isInstanceOf(BadRequestException.class)
 					.hasMessage("Nur Objekte derselben Geometrieart lassen sich zusammenführen.");
 
@@ -595,7 +595,7 @@ class SplitMergeServiceTest {
 			long second = insert(points, "{\"type\":\"Point\",\"coordinates\":[9.99,53.55]}", null, null);
 
 			assertThatThrownBy(() -> service.merge(points.getId(),
-					new SplitMergeDtos.MergeRequest(List.of(first, second), first, Map.of())))
+					new SplitMergeDtos.MergeRequest(List.of(first, second), first, Map.of()), null))
 					.isInstanceOf(BadRequestException.class)
 					.hasMessage("Punkte lassen sich nicht zusammenführen.");
 		});
@@ -609,7 +609,7 @@ class SplitMergeServiceTest {
 			long second = insert(mixed, "{\"type\":\"Point\",\"coordinates\":[9.99,53.55]}", null, null);
 
 			assertThatThrownBy(() -> service.merge(mixed.getId(),
-					new SplitMergeDtos.MergeRequest(List.of(first, second), first, Map.of())))
+					new SplitMergeDtos.MergeRequest(List.of(first, second), first, Map.of()), null))
 					.isInstanceOf(BadRequestException.class)
 					.hasMessage("Punkte lassen sich nicht zusammenführen.");
 		});
@@ -632,7 +632,7 @@ class SplitMergeServiceTest {
 		versions.put(String.valueOf(third), "1");
 
 		assertThatThrownBy(() -> service.merge(layer.getId(),
-				new SplitMergeDtos.MergeRequest(List.of(lead, second, third), lead, versions)))
+				new SplitMergeDtos.MergeRequest(List.of(lead, second, third), lead, versions), null))
 				.isInstanceOf(ConflictException.class)
 				.satisfies(thrown -> assertThat(((ConflictException) thrown).getCurrent())
 						.containsEntry("fid", third));
@@ -652,7 +652,7 @@ class SplitMergeServiceTest {
 		long other = insert(layer, SQUARE_EAST, null, null);
 
 		assertThat(service.merge(layer.getId(),
-				new SplitMergeDtos.MergeRequest(List.of(lead, other), lead, null)).fid())
+				new SplitMergeDtos.MergeRequest(List.of(lead, other), lead, null), null).fid())
 				.isEqualTo(lead);
 	}
 
@@ -661,7 +661,7 @@ class SplitMergeServiceTest {
 		long lead = insert(layer, SQUARE, null, null);
 
 		assertThatThrownBy(() -> service.merge(layer.getId(),
-				new SplitMergeDtos.MergeRequest(List.of(lead, 999_999L), lead, Map.of())))
+				new SplitMergeDtos.MergeRequest(List.of(lead, 999_999L), lead, Map.of()), null))
 				.isInstanceOf(NotFoundException.class)
 				.hasMessageContaining("999999");
 	}
@@ -672,12 +672,12 @@ class SplitMergeServiceTest {
 		long lead = insert(layer, SQUARE, null, null);
 
 		assertThatThrownBy(() -> service.merge(layer.getId(),
-				new SplitMergeDtos.MergeRequest(List.of(lead), lead, Map.of())))
+				new SplitMergeDtos.MergeRequest(List.of(lead), lead, Map.of()), null))
 				.isInstanceOf(BadRequestException.class)
 				.hasMessageContaining("mindestens zwei");
 
 		assertThatThrownBy(() -> service.merge(layer.getId(),
-				new SplitMergeDtos.MergeRequest(List.of(lead, lead), lead, Map.of())))
+				new SplitMergeDtos.MergeRequest(List.of(lead, lead), lead, Map.of()), null))
 				.as("naming the same feature twice is still one feature")
 				.isInstanceOf(BadRequestException.class)
 				.hasMessageContaining("mindestens zwei");
@@ -692,7 +692,7 @@ class SplitMergeServiceTest {
 		}
 
 		assertThatThrownBy(() -> service.merge(layer.getId(),
-				new SplitMergeDtos.MergeRequest(tooMany, 1L, Map.of())))
+				new SplitMergeDtos.MergeRequest(tooMany, 1L, Map.of()), null))
 				.isInstanceOf(BadRequestException.class)
 				.hasMessageContaining("101");
 	}
@@ -705,7 +705,7 @@ class SplitMergeServiceTest {
 		long versionBefore = reload(layer).getDataVersion();
 
 		SplitMergeDtos.MergeResponse response =
-				service.merge(layer.getId(), mergeOf(lead, List.of(lead, other), layer));
+				service.merge(layer.getId(), mergeOf(lead, List.of(lead, other), layer), null);
 
 		Layer after = reload(layer);
 		assertThat(after.getFeatureCount()).isEqualTo(1);
@@ -721,10 +721,10 @@ class SplitMergeServiceTest {
 	void reportsAnUnknownLayer() {
 		UUID unknown = UUID.randomUUID();
 
-		assertThatThrownBy(() -> service.split(unknown, 1, cut(DIAGONAL, null)))
+		assertThatThrownBy(() -> service.split(unknown, 1, cut(DIAGONAL, null), null))
 				.isInstanceOf(NotFoundException.class);
 		assertThatThrownBy(() -> service.merge(unknown,
-				new SplitMergeDtos.MergeRequest(List.of(1L, 2L), 1L, Map.of())))
+				new SplitMergeDtos.MergeRequest(List.of(1L, 2L), 1L, Map.of()), null))
 				.isInstanceOf(NotFoundException.class);
 	}
 }

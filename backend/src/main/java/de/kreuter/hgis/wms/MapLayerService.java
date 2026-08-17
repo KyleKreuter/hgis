@@ -6,6 +6,8 @@ import de.kreuter.hgis.catalog.LayerService;
 import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
 import de.kreuter.hgis.catalog.dto.LayerDtos;
+import de.kreuter.hgis.changelog.ChangeLogAction;
+import de.kreuter.hgis.changelog.ChangeLogService;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.LayerProvenance;
 import de.kreuter.hgis.common.NotFoundException;
@@ -53,16 +55,18 @@ public class MapLayerService {
 	private final WmsCapabilitiesService capabilitiesService;
 	private final GeoportalDatasetService geoportalDatasetService;
 	private final GeometryFactory wgs84GeometryFactory;
+	private final ChangeLogService changeLog;
 
 	MapLayerService(ProjectRepository projectRepository, LayerRepository layerRepository, LayerService layerService,
 			WmsCapabilitiesService capabilitiesService, GeoportalDatasetService geoportalDatasetService,
-			GeometryFactory wgs84GeometryFactory) {
+			GeometryFactory wgs84GeometryFactory, ChangeLogService changeLog) {
 		this.projectRepository = projectRepository;
 		this.layerRepository = layerRepository;
 		this.layerService = layerService;
 		this.capabilitiesService = capabilitiesService;
 		this.geoportalDatasetService = geoportalDatasetService;
 		this.wgs84GeometryFactory = wgs84GeometryFactory;
+		this.changeLog = changeLog;
 	}
 
 	@Transactional
@@ -117,6 +121,12 @@ public class MapLayerService {
 		}
 
 		layer = layerRepository.save(layer);
+
+		// No client name: a map image is created through this endpoint alone, and it
+		// carries none today (see ClientId) -- and no feature.insert either, a map
+		// image has no payload table of its own to hold rows.
+		changeLog.record(projectId, layer.getId(), layer.getName(), ChangeLogAction.LAYER_CREATE, null, 1, null);
+
 		return layerService.getSummary(layer.getId());
 	}
 

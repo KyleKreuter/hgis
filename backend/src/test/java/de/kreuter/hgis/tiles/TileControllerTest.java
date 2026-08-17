@@ -1,6 +1,7 @@
 package de.kreuter.hgis.tiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -248,6 +249,29 @@ class TileControllerTest {
 		layer.setMinZoom(testLayer.zoom());
 		layer.setMaxZoom(testLayer.zoom());
 		layerRepository.saveAndFlush(layer);
+
+		mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt",
+						layer.getId(), testLayer.zoom(), testLayer.tileX(), testLayer.tileY()))
+				.andExpect(status().isOk());
+	}
+
+	/**
+	 * A trashed layer still serves tiles unchanged (orchestrator decision, package
+	 * "schutz", Punkt 7). CONTRACT.md's "erscheint nicht in der Karte" describes what a
+	 * client sees through the ordinary layer list, not a promise about a direct tile fetch
+	 * by id -- the same read/write split {@code TrashedLayerWriteGuardTest} already draws
+	 * for the rest of the API: {@code Layer#requireNotTrashed()} guards writes, reads (the
+	 * feature list, the detail endpoint, GeoJSON export, and now tiles) stay open. Guarding
+	 * tiles specifically would be an asymmetry, not a real protection: the same geometry
+	 * stays reachable through {@code /features} and {@code /export.geojson} on a trashed
+	 * layer either way. In practice this never surfaces, because the map drops a trashed
+	 * layer from its list and stops requesting tiles for it.
+	 */
+	@Test
+	@DisplayName("a trashed layer still serves tiles -- reads stay open, only writes are guarded (Punkt 7)")
+	void aTrashedLayerStillServesTiles() throws Exception {
+		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isOk());
 
 		mockMvc.perform(get("/api/layers/{layerId}/tiles/{z}/{x}/{y}.mvt",
 						layer.getId(), testLayer.zoom(), testLayer.tileX(), testLayer.tileY()))

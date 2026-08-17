@@ -55,6 +55,26 @@ class LayerRepositoryTest {
 	}
 
 	@Test
+	@DisplayName("a trashed layer drops out of the ordinary order but shows up in the trash")
+	void excludesTrashedLayersFromTheOrdinaryOrderButListsThemInTheTrash() {
+		Project project = projectRepository
+				.saveAndFlush(new Project("Papierkorbtest", null, 25832, "osm"));
+
+		Layer kept = layerRepository.save(newLayer(project, "bleibt", 0));
+		Layer trashed = layerRepository.save(newLayer(project, "geloescht", 1));
+		trashed.moveToTrash("tester");
+		layerRepository.flush();
+
+		assertThat(layerRepository.findByProjectOrdered(project.getId()))
+				.extracting(Layer::getId)
+				.containsExactly(kept.getId());
+
+		assertThat(layerRepository.findTrashedByProject(project.getId()))
+				.extracting(Layer::getId)
+				.containsExactly(trashed.getId());
+	}
+
+	@Test
 	@DisplayName("bumps the tile cache buster without loading the entity")
 	void bumpsDataVersion() {
 		Project project = projectRepository

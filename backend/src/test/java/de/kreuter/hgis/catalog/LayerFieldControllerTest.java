@@ -163,7 +163,7 @@ class LayerFieldControllerTest {
 		EditDtos.Request request = new EditDtos.Request(
 				List.of(), List.of(new EditDtos.Update(existingFid, null, null, Map.of("pflanzjahr", 1990))),
 				List.of(), false);
-		editService.apply(layer.getId(), request);
+		editService.apply(layer.getId(), request, null);
 
 		Integer stored = jdbc.sql(
 						"SELECT pflanzjahr FROM " + SqlIdentifier.quoteLayerTable(tableName) + " WHERE fid = :fid")

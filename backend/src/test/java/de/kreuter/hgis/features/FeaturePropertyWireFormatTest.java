@@ -325,6 +325,259 @@ class FeaturePropertyWireFormatTest {
 		assertThat(body).as("names the field by its source name").contains("Ganzzahl");
 	}
 
+	/**
+	 * The reported bug, verbatim: before {@code EditService.asBoundedInteger} existed,
+	 * {@code 3000000000} -- past {@link Integer#MAX_VALUE}, so it decodes as a {@link Long}
+	 * -- passed straight through {@link Number#intValue()}, which silently wraps instead of
+	 * throwing. The value that ended up in the database was {@code -1294967296}, with a
+	 * plain 200 OK and nothing anywhere to say the write had not done what it looked like.
+	 * Measured against the real endpoint before writing this test, not assumed.
+	 */
+	@Test
+	@DisplayName("an integer value past 32-bit range is a 400 naming the field, not a silently wrapped number")
+	void rejectsAnIntegerOverflowWith400NotSilentWraparound() throws Exception {
+		MockHttpServletResponse response = putProperties(filledFid, "{\"intcol\":3000000000}");
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+		assertThat(body).as("names the field by its source name").contains("Ganzzahl");
+
+		Object stored = jdbc.sql("SELECT intcol FROM " + table() + " WHERE fid = :fid")
+				.param("fid", filledFid).query().singleRow().get("intcol");
+		assertThat(stored).as("must keep its original value, not a wrapped one").isEqualTo(STORED_INT);
+	}
+
+	/**
+	 * The {@code bigint} counterpart: {@code 9223372036854775808} is {@link Long#MAX_VALUE}
+	 * plus one, so it decodes as a {@link java.math.BigInteger} -- Jackson's fallback once a
+	 * JSON integer no longer fits even a {@code long}. {@link Number#longValue()} on that
+	 * wraps the same way {@code intValue()} does, to {@link Long#MIN_VALUE} measured against
+	 * the real endpoint. {@code bigint} looks unreachable by an "everyday" typo the way
+	 * {@code integer} is, but it is the one column type on this endpoint no client-side
+	 * numeric type can even represent without already having lost precision, which makes it
+	 * an easy value to construct without ever intending to overflow anything.
+	 */
+	@Test
+	@DisplayName("a bigint value past 64-bit range is a 400 naming the field, not a silently wrapped number")
+	void rejectsABigintOverflowWith400NotSilentWraparound() throws Exception {
+		MockHttpServletResponse response = putProperties(filledFid, "{\"bigcol\":9223372036854775808}");
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+		assertThat(body).as("names the field by its source name").contains("Große Zahl");
+
+		Object stored = jdbc.sql("SELECT bigcol FROM " + table() + " WHERE fid = :fid")
+				.param("fid", filledFid).query().singleRow().get("bigcol");
+		assertThat(((Number) stored).longValue())
+				.as("must keep its original value, not a wrapped one").isEqualTo(STORED_BIGINT);
+	}
+
+	/**
+	 * A second, independently reachable route to the exact same failure class, found by a
+	 * later review of {@link #rejectsABigintOverflowWith400NotSilentWraparound}'s own fix:
+	 * {@code 1e30} decodes as a {@link Double}, not a {@link java.math.BigInteger}, since it
+	 * has an exponent rather than being a bare integer literal. {@link Double#longValue()}
+	 * does not wrap the way {@code int} narrowing does -- it clamps to {@link
+	 * Long#MAX_VALUE}, which happens to be exactly {@code bigint}'s own upper bound, so a
+	 * range check built on the already-clamped {@code long} let it through unchecked.
+	 * {@code integer}/{@code smallint} never showed this, because the clamp value sits well
+	 * outside their tighter ranges either way -- only {@code bigint}'s bound coincides with
+	 * the clamp itself. None of the three tests above used a decimal point or exponent, so
+	 * all three took the safe path; this one deliberately does not. Measured against the
+	 * real endpoint before writing this test, not assumed.
+	 */
+	@Test
+	@DisplayName("a bigint value in exponential notation past 64-bit range is a 400, not a value clamped to Long.MAX_VALUE")
+	void rejectsABigintOverflowInExponentialNotationWith400() throws Exception {
+		MockHttpServletResponse response = putProperties(filledFid, "{\"bigcol\":1e30}");
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+		assertThat(body).as("names the field by its source name").contains("Große Zahl");
+
+		Object stored = jdbc.sql("SELECT bigcol FROM " + table() + " WHERE fid = :fid")
+				.param("fid", filledFid).query().singleRow().get("bigcol");
+		assertThat(((Number) stored).longValue())
+				.as("must keep its original value, not one clamped to Long.MAX_VALUE")
+				.isEqualTo(STORED_BIGINT);
+	}
+
+	/**
+	 * {@code smallint} is a different shape of the same gap: before this fix it shared
+	 * {@code integer}'s {@code intValue()} conversion, so a value like {@code 40000} --
+	 * outside {@code smallint}'s real range but a perfectly ordinary {@code int} -- was
+	 * never wrapped, only handed to PostgreSQL as-is. PostgreSQL already rejected it (
+	 * {@code numeric field overflow}, the {@code ProblemDetailAdvice} handler this package
+	 * added earlier), so this was never silent data corruption the way {@code integer}/
+	 * {@code bigint} were -- but the rejection carried no field name, because
+	 * {@code ProblemDetailAdvice} cannot know which column of a multi-column statement
+	 * overflowed. Catching it here, before the statement is even built, recovers that name.
+	 *
+	 * <p>Its own layer with a dedicated {@code smallint} column: the shared fixture this
+	 * class otherwise uses has none.
+	 */
+	@Test
+	@DisplayName("a smallint value past 16-bit range is a 400 naming the field")
+	void rejectsASmallintOverflowWith400NamingTheField() throws Exception {
+		Project smallintProject = projectRepository.saveAndFlush(
+				new Project("Smallint-Test " + UUID.randomUUID(), null, 25832, "osm"));
+		UUID smallintLayerId = UUID.randomUUID();
+		String smallintTableName = SqlIdentifier.tableName(smallintLayerId);
+		try {
+			jdbc.sql("""
+					CREATE TABLE %s (
+					    fid      bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+					    geom     geometry(MultiPolygon, 25832) NOT NULL,
+					    smallcol smallint
+					)
+					""".formatted(SqlIdentifier.quoteLayerTable(smallintTableName))).update();
+			Layer smallintLayer = layerRepository.saveAndFlush(new Layer(
+					smallintLayerId, smallintProject, "Smallint", smallintTableName, "MULTIPOLYGON", 25832));
+			fieldRepository.saveAndFlush(new LayerField(smallintLayer, "Kleine Zahl", "smallcol", "smallint", 0));
+
+			long fid = jdbc.sql("INSERT INTO " + SqlIdentifier.quoteLayerTable(smallintTableName)
+							+ " (geom) VALUES (ST_Multi(ST_MakeEnvelope(0, 0, 10, 10, 25832))) RETURNING fid")
+					.query(Long.class)
+					.single();
+
+			MockHttpServletResponse response = mockMvc.perform(post(
+							"/api/layers/" + smallintLayer.getId() + "/edits")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"updates\":[{\"fid\":" + fid + ",\"properties\":{\"smallcol\":40000}}]}"))
+					.andReturn().getResponse();
+
+			assertThat(response.getStatus()).isEqualTo(400);
+			String body = response.getContentAsString(StandardCharsets.UTF_8);
+			assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+			assertThat(body).as("names the field by its source name").contains("Kleine Zahl");
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(smallintTableName)).update();
+			layerRepository.findById(smallintLayerId).ifPresent(layerRepository::delete);
+			projectRepository.deleteById(smallintProject.getId());
+		}
+	}
+
+	/**
+	 * PostgreSQL rejects a signed {@code NaN} outright ({@code invalid input syntax for
+	 * type numeric}), unlike the four signed spellings of Infinity {@link
+	 * #acceptsEverySignedSpellingOfInfinity} below confirms all work. A review of an
+	 * earlier version of {@code EditService.SPECIAL_NUMERIC_LITERAL} found it did not draw
+	 * that line -- its sign applied to the whole {@code nan|infinity} alternation, so
+	 * {@code "+NaN"}/{@code "-NaN"} were wrapped and handed to PostgreSQL's own {@code
+	 * CAST}, which then failed with no {@link de.kreuter.hgis.common.BadRequestException}
+	 * to translate it: a bare 500, in place of the clean 400 every other unparsable number
+	 * on this endpoint gets, {@code "abc"} included.
+	 */
+	@Test
+	@DisplayName("+NaN and -NaN are a 400 naming the field, not a raw 500 from PostgreSQL's own rejection")
+	void rejectsASignedNanWith400NotA500() throws Exception {
+		for (String signedNan : List.of("+NaN", "-NaN")) {
+			MockHttpServletResponse response = putProperties(filledFid, "{\"numcol\":\"" + signedNan + "\"}");
+
+			assertThat(response.getStatus())
+					.as("%s must get the same clean 400 an ordinary unparsable number does", signedNan)
+					.isEqualTo(400);
+			String body = response.getContentAsString(StandardCharsets.UTF_8);
+			assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+			assertThat(body).as("names the field by its source name").contains("Betrag");
+		}
+	}
+
+	/**
+	 * The counterpart to {@link #rejectsASignedNanWith400NotA500}: tightening the pattern
+	 * to exclude a signed NaN must not also, by accident, exclude one of the four signed
+	 * spellings of Infinity PostgreSQL does accept.
+	 *
+	 * <p>Deliberately its own layer with a plain, unconstrained {@code numeric} column,
+	 * not {@link #filledFid}'s {@code numcol numeric(12,2)}: a scale-constrained column
+	 * rejects every spelling of Infinity outright with its own, unrelated {@code numeric
+	 * field overflow} (Infinity fits no finite precision/scale, unlike NaN, which that
+	 * constraint exempts) -- a pre-existing gap this method is not about and must not be
+	 * mistaken for a failure of the pattern under test here.
+	 */
+	@Test
+	@DisplayName("all four signed spellings of Infinity are still accepted")
+	void acceptsEverySignedSpellingOfInfinity() throws Exception {
+		Project infProject = projectRepository.saveAndFlush(
+				new Project("Vorzeichen-Unendlich-Test " + UUID.randomUUID(), null, 25832, "osm"));
+		UUID infLayerId = UUID.randomUUID();
+		String infTableName = SqlIdentifier.tableName(infLayerId);
+		try {
+			jdbc.sql("""
+					CREATE TABLE %s (
+					    fid    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+					    geom   geometry(MultiPolygon, 25832) NOT NULL,
+					    numcol numeric
+					)
+					""".formatted(SqlIdentifier.quoteLayerTable(infTableName))).update();
+			Layer infLayer = layerRepository.saveAndFlush(
+					new Layer(infLayerId, infProject, "Vorzeichen-Unendlich", infTableName, "MULTIPOLYGON", 25832));
+			fieldRepository.saveAndFlush(new LayerField(infLayer, "Betrag", "numcol", "numeric", 0));
+
+			for (String spelling : List.of("+Inf", "-Inf", "+Infinity", "-Infinity")) {
+				long fid = jdbc.sql("INSERT INTO " + SqlIdentifier.quoteLayerTable(infTableName)
+								+ " (geom) VALUES (ST_Multi(ST_MakeEnvelope(0, 0, 10, 10, 25832))) RETURNING fid")
+						.query(Long.class)
+						.single();
+
+				MockHttpServletResponse response = mockMvc.perform(post(
+								"/api/layers/" + infLayer.getId() + "/edits")
+								.contentType(MediaType.APPLICATION_JSON)
+								.content("{\"updates\":[{\"fid\":" + fid + ",\"properties\":"
+										+ "{\"numcol\":\"" + spelling + "\"}}]}"))
+						.andReturn().getResponse();
+				assertThat(response.getStatus())
+						.as("%s must still be accepted -- PostgreSQL itself allows it", spelling)
+						.isEqualTo(200);
+
+				// PostgreSQL normalises every signed spelling to "Infinity"/"-Infinity" on
+				// readback, and Jackson writes a non-finite double as a quoted JSON string
+				// rather than the bare, invalid JSON token -- so this is a plain string
+				// comparison, not a numeric one.
+				MockHttpServletResponse getResponse = mockMvc.perform(
+								get("/api/layers/" + infLayer.getId() + "/features/" + fid))
+						.andReturn().getResponse();
+				JsonNode numcol = JSON.readTree(getResponse.getContentAsString(StandardCharsets.UTF_8))
+						.get("properties").get("numcol");
+				String expected = spelling.startsWith("-") ? "-Infinity" : "Infinity";
+				assertThat(numcol.asString()).as("%s reads back normalised", spelling).isEqualTo(expected);
+			}
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(infTableName)).update();
+			layerRepository.findById(infLayerId).ifPresent(layerRepository::delete);
+			projectRepository.deleteById(infProject.getId());
+		}
+	}
+
+	/**
+	 * Unlike every other test in this section, this value is never rejected by {@code
+	 * EditService} itself: {@code new BigDecimal("123456789012345.67")} parses fine, and
+	 * nothing in this codebase knows {@code numcol}'s precision and scale ahead of time to
+	 * check it against. The rejection is PostgreSQL's own, at the {@code INSERT}/{@code
+	 * UPDATE} -- {@code numeric field overflow}, SQLSTATE 22003 -- so this is a test of
+	 * {@code ProblemDetailAdvice.handleDataIntegrityViolation}, not of {@code EditService}.
+	 * A review found this uncaught: an everyday typo or a wrongly-scaled import value hits
+	 * it far more often than a special value like NaN ever would, and it used to fall
+	 * through to the generic 500 with neither a field named nor a reason given.
+	 */
+	@Test
+	@DisplayName("a numeric value too large for its column's precision/scale is a 400, not a raw 500")
+	void rejectsANumericOverflowWith400NotA500() throws Exception {
+		MockHttpServletResponse response = putProperties(filledFid, "{\"numcol\":123456789012345.67}");
+
+		assertThat(response.getStatus())
+				.as("an overflowing numeric value must be a clean 400, not PostgreSQL's own "
+						+ "\"numeric field overflow\" surfacing as an unhandled 500")
+				.isEqualTo(400);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+	}
+
 	@Test
 	@DisplayName("an unparsable date is a 400 naming the field, not a generic 500")
 	void rejectsATypeMismatchedDateWith400() throws Exception {

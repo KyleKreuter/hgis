@@ -1,7 +1,10 @@
 package de.kreuter.hgis.catalog;
 
 import de.kreuter.hgis.catalog.dto.LayerDtos;
+import de.kreuter.hgis.changelog.ChangeLogAction;
+import de.kreuter.hgis.changelog.ChangeLogService;
 import de.kreuter.hgis.common.BadRequestException;
+import de.kreuter.hgis.common.ConflictException;
 import de.kreuter.hgis.common.FieldType;
 import de.kreuter.hgis.common.FieldValidationException;
 import de.kreuter.hgis.common.GeometryType;
@@ -47,16 +50,18 @@ public class LayerService {
 	private final ProjectRepository projectRepository;
 	private final LayerStyleService styleService;
 	private final TableCreator tableCreator;
+	private final ChangeLogService changeLog;
 	private final JdbcClient jdbc;
 
 	LayerService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
 			ProjectRepository projectRepository, LayerStyleService styleService, TableCreator tableCreator,
-			JdbcClient jdbc) {
+			ChangeLogService changeLog, JdbcClient jdbc) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.projectRepository = projectRepository;
 		this.styleService = styleService;
 		this.tableCreator = tableCreator;
+		this.changeLog = changeLog;
 		this.jdbc = jdbc;
 	}
 
@@ -100,7 +105,7 @@ public class LayerService {
 	 * table works with no further setup.
 	 */
 	@Transactional
-	public LayerDtos.Summary create(UUID projectId, LayerDtos.CreateRequest request) {
+	public LayerDtos.Summary create(UUID projectId, LayerDtos.CreateRequest request, String clientName) {
 		Project project = projectRepository.findById(projectId)
 				.orElseThrow(() -> new NotFoundException("Projekt " + projectId + " existiert nicht"));
 
@@ -110,6 +115,9 @@ public class LayerService {
 		TableCreator.CreatedLayer created = tableCreator.createLayerTable(
 				project, geometryType, fields, request.name().trim());
 
+		changeLog.record(projectId, created.layer().getId(), created.layer().getName(),
+				ChangeLogAction.LAYER_CREATE, clientName, 1, null);
+
 		// A brand-new layer is never itself a mask, but existing project masks may
 		// already sit below it and clip it from the first tile it ever serves.
 		List<Layer> masks = layerRepository.findClipMasks(projectId);
@@ -117,8 +125,9 @@ public class LayerService {
 	}
 
 	@Transactional
-	public LayerDtos.Detail update(UUID layerId, LayerDtos.UpdateRequest request) {
+	public LayerDtos.Detail update(UUID layerId, LayerDtos.UpdateRequest request, String clientName) {
 		Layer layer = require(layerId);
+		layer.requireNotTrashed();
 
 		if (request.name() != null) {
 			String name = request.name().trim();
@@ -165,6 +174,9 @@ public class LayerService {
 		// is current in the response, not the value from before this update, and so the
 		// clip mask lookup just below sees this layer's own new clipMode state.
 		layerRepository.flush();
+
+		changeLog.record(layer.getProject().getId(), layer.getId(), layer.getName(),
+				ChangeLogAction.LAYER_UPDATE, clientName, 1, null);
 
 		List<Layer> masks = layerRepository.findClipMasks(layer.getProject().getId());
 		return toDetail(layer, masks);
@@ -217,21 +229,114 @@ public class LayerService {
 				.toList();
 	}
 
+	/**
+	 * Moves a layer to the trash (CONTRACT.md "Schreibstufe" 1.1). Nothing physical
+	 * happens here any more -- the catalog row and the payload table both stay exactly as
+	 * they are; only {@link #deletedAt}/{@link #deletedBy} change. {@link #purge} is now
+	 * the only path in this class that actually destroys anything.
+	 *
+	 * <p>Returns the trash entry rather than nothing: without it, "the layer was empty",
+	 * "the layer held 70 000 objects" and "the layer was already gone" are indistinguishable
+	 * to the caller -- all three look like success (orchestrator amendment).
+	 *
+	 * @throws ConflictException if the layer is already in the trash
+	 */
 	@Transactional
-	public void delete(UUID layerId) {
-		Layer layer = require(layerId);
+	public LayerDtos.TrashEntry delete(UUID layerId, String clientName) {
+		Layer layer = requireLocked(layerId);
+		if (layer.isTrashed()) {
+			throw new ConflictException("Layer '" + layer.getName() + "' liegt bereits im Papierkorb", null);
+		}
 
-		// A map image (kind WMS) has no payload table -- nothing to drop, unlike a
-		// vector layer. The physical table has to go while its name is still known --
-		// deleting the catalog row first would leave an orphan behind that nothing can
-		// name any more. Same reasoning as ProjectDeletionService, just for a single
-		// layer. Both statements run in one transaction; DDL is transactional in
-		// PostgreSQL, so a failure here rolls back cleanly.
+		layer.moveToTrash(clientName);
+		changeLog.record(layer.getProject().getId(), layer.getId(), layer.getName(),
+				ChangeLogAction.LAYER_DELETE, clientName, 1, null);
+
+		return toTrashEntry(layer);
+	}
+
+	/**
+	 * The trash of one project: name, deletion time, feature count and who deleted it --
+	 * exactly what CONTRACT.md 1.1 asks the confirmation dialog to be able to show.
+	 */
+	@Transactional(readOnly = true)
+	public List<LayerDtos.TrashEntry> trash(UUID projectId) {
+		if (!projectRepository.existsById(projectId)) {
+			throw new NotFoundException("Projekt " + projectId + " existiert nicht");
+		}
+		return layerRepository.findTrashedByProject(projectId).stream()
+				.map(LayerService::toTrashEntry)
+				.toList();
+	}
+
+	private static LayerDtos.TrashEntry toTrashEntry(Layer layer) {
+		return new LayerDtos.TrashEntry(
+				layer.getId(), layer.getName(), layer.getDeletedAt(),
+				layer.getFeatureCount(), layer.getDeletedBy());
+	}
+
+	/**
+	 * Brings a trashed layer back into ordinary use. No cleanup job, no expiry -- the
+	 * user empties the trash by hand (CONTRACT.md 1.1), so a layer sits there exactly as
+	 * long as nobody either restores or purges it.
+	 *
+	 * @throws ConflictException if the layer is not in the trash
+	 */
+	@Transactional
+	public LayerDtos.Summary restore(UUID layerId, String clientName) {
+		Layer layer = requireLocked(layerId);
+		if (!layer.isTrashed()) {
+			throw new ConflictException("Layer '" + layer.getName() + "' liegt nicht im Papierkorb", null);
+		}
+
+		layer.restoreFromTrash();
+		layerRepository.flush();
+		changeLog.record(layer.getProject().getId(), layer.getId(), layer.getName(),
+				ChangeLogAction.LAYER_RESTORE, clientName, 1, null);
+
+		List<Layer> masks = layerRepository.findClipMasks(layer.getProject().getId());
+		return toSummary(layer, masks);
+	}
+
+	/**
+	 * Empties one entry of the trash for good: drops the payload table, if any, and
+	 * removes the catalog row. {@link #delete} used to carry this same {@code DROP TABLE}
+	 * -- CONTRACT.md's "Schreibstufe" moved it here, and this is now the only place in
+	 * this class that runs it.
+	 *
+	 * @throws ConflictException if the layer is not in the trash -- purge is reached
+	 *     through the trash, never as a shortcut around it
+	 * @return the trash entry as it stood the moment before this purge -- describing the
+	 *     trashing, not the purge itself, since the layer no longer exists to describe
+	 *     anything about afterwards. That is deliberately the more useful answer: "this is
+	 *     what sat in the trash before it was gone", the one thing purge is uniquely
+	 *     positioned to tell the caller and no other endpoint can (orchestrator amendment).
+	 */
+	@Transactional
+	public LayerDtos.TrashEntry purge(UUID layerId, String clientName) {
+		Layer layer = requireLocked(layerId);
+		if (!layer.isTrashed()) {
+			throw new ConflictException("Layer '" + layer.getName()
+					+ "' liegt nicht im Papierkorb. Erst löschen, dann endgültig entfernen.", null);
+		}
+
+		UUID projectId = layer.getProject().getId();
+		String name = layer.getName();
+		LayerDtos.TrashEntry snapshot = toTrashEntry(layer);
+
 		if (layer.isVectorLayer()) {
 			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(layer.getTableName()))
 					.update();
 		}
 		layerRepository.delete(layer);
+
+		// layerId is deliberately omitted: the row above is gone by the time this is
+		// logged, and change_log.layer_id's FK would reject a reference to it. layerName
+		// is what keeps this entry -- and every earlier one for this layer, nulled the
+		// same way by ON DELETE SET NULL -- readable regardless.
+		changeLog.record(projectId, null, name, ChangeLogAction.LAYER_PURGE, clientName, 1, null);
+
+		return snapshot;
 	}
 
 	// --- create validation -------------------------------------------------------
@@ -446,6 +551,17 @@ public class LayerService {
 
 	private Layer require(UUID layerId) {
 		return layerRepository.findById(layerId)
+				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
+	}
+
+	/**
+	 * Same as {@link #require}, but for {@link #delete}, {@link #restore} and
+	 * {@link #purge} only -- see {@link LayerRepository#findByIdForUpdate} for why
+	 * exactly those three, and only those three, need the row locked from the read
+	 * onward.
+	 */
+	private Layer requireLocked(UUID layerId) {
+		return layerRepository.findByIdForUpdate(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
 	}
 

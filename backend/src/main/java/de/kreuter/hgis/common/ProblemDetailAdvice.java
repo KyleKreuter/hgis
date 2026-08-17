@@ -1,12 +1,15 @@
 package de.kreuter.hgis.common;
 
+import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -45,6 +48,23 @@ public class ProblemDetailAdvice {
 			problem.setProperty("current", ex.getCurrent());
 		}
 		return problem;
+	}
+
+	/**
+	 * Hibernate's own optimistic check -- a row this request loaded was changed or
+	 * removed by someone else before this request's write reached it -- not a client
+	 * -supplied {@code rowVersion} mismatch, which is already a {@link ConflictException}
+	 * of its own. A client cannot tell the two apart and should not have to: same 409
+	 * shape as every hand-rolled conflict here, not the catch-all's "Interner Fehler".
+	 * Concretely reachable from two racing trash state transitions (delete/restore/purge)
+	 * on the same layer -- {@code LayerRepository#findByIdForUpdate} closes the window
+	 * where the race would otherwise happen, but this stays as the honest answer for
+	 * whatever narrower race the row lock does not cover.
+	 */
+	@ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+	public ProblemDetail handleOptimisticLocking(ObjectOptimisticLockingFailureException ex) {
+		return problem(HttpStatus.CONFLICT, "Konflikt",
+				"Eine andere Stelle hat diesen Datensatz zwischenzeitlich geändert oder entfernt");
 	}
 
 	/** The resource exists and answered, but its content cannot be used as asked. */
@@ -144,6 +164,35 @@ public class ProblemDetailAdvice {
 	@ExceptionHandler(AsyncRequestNotUsableException.class)
 	public void handleClientGone(AsyncRequestNotUsableException ex) {
 		log.info("Antwort nicht mehr zustellbar, Client hat die Verbindung beendet: {}", ex.getMessage());
+	}
+
+	/** PostgreSQL's SQLSTATE class "22" code for a value that overflows its column's declared
+	 *  precision/scale, e.g. {@code numeric(12,2)}. */
+	private static final String NUMERIC_VALUE_OUT_OF_RANGE = "22003";
+
+	/**
+	 * PostgreSQL rejects a numeric value that does not fit its column's declared precision
+	 * or scale with a plain {@code numeric field overflow} (SQLSTATE 22003) -- a review
+	 * found this fell through to {@link #handleUnexpected} with no field named and no
+	 * reason given, the same failure class the NaN/Infinity fix in this package closed,
+	 * just at a spot an everyday typo or a wrongly-scaled import value hits far more often
+	 * than a special value ever would.
+	 *
+	 * <p>Deliberately without a field name: {@code EditService} binds one statement per
+	 * create/update that can touch several columns at once, and neither PostgreSQL's error
+	 * message nor its SQLSTATE says which one overflowed -- naming one would mean guessing,
+	 * which is worse than naming none. Every other {@link DataIntegrityViolationException}
+	 * (a NOT NULL, a unique or a foreign key violation) is a different SQLSTATE and keeps
+	 * falling through to {@link #handleUnexpected} exactly as before.
+	 */
+	@ExceptionHandler(DataIntegrityViolationException.class)
+	public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+		if (ex.getMostSpecificCause() instanceof SQLException sqlEx
+				&& NUMERIC_VALUE_OUT_OF_RANGE.equals(sqlEx.getSQLState())) {
+			return problem(HttpStatus.BAD_REQUEST, "Ungültige Anfrage",
+					"Ein Zahlenwert ist zu groß oder hat zu viele Nachkommastellen für sein Feld");
+		}
+		return handleUnexpected(ex);
 	}
 
 	@ExceptionHandler(Exception.class)

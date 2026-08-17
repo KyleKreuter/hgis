@@ -1,6 +1,8 @@
 package de.kreuter.hgis.catalog;
 
 import de.kreuter.hgis.catalog.dto.LayerDtos;
+import de.kreuter.hgis.changelog.ChangeLogAction;
+import de.kreuter.hgis.changelog.ChangeLogService;
 import de.kreuter.hgis.common.FieldType;
 import de.kreuter.hgis.common.FieldValidationException;
 import de.kreuter.hgis.common.GeometryType;
@@ -46,14 +48,17 @@ public class LayerFieldService {
 	private final LayerFieldRepository fieldRepository;
 	private final TableCreator tableCreator;
 	private final LayerStyleService styleService;
+	private final ChangeLogService changeLog;
 	private final JdbcClient jdbc;
 
 	LayerFieldService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
-			TableCreator tableCreator, LayerStyleService styleService, JdbcClient jdbc) {
+			TableCreator tableCreator, LayerStyleService styleService, ChangeLogService changeLog,
+			JdbcClient jdbc) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.tableCreator = tableCreator;
 		this.styleService = styleService;
+		this.changeLog = changeLog;
 		this.jdbc = jdbc;
 	}
 
@@ -63,8 +68,9 @@ public class LayerFieldService {
 	 * what a freshly added column always contains.
 	 */
 	@Transactional
-	public LayerDtos.Field addField(UUID layerId, LayerDtos.AddFieldRequest request) {
+	public LayerDtos.Field addField(UUID layerId, LayerDtos.AddFieldRequest request, String clientName) {
 		Layer layer = requireLayer(layerId);
+		layer.requireNotTrashed();
 		List<LayerField> existing = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
 		if (existing.size() >= MAX_FIELDS) {
 			throw new FieldValidationException("name",
@@ -80,6 +86,9 @@ public class LayerFieldService {
 		int ordinal = fieldRepository.maxOrdinal(layerId) + 1;
 		LayerField field = fieldRepository.save(
 				new LayerField(layer, name, columnName, type.pgType(), ordinal));
+
+		changeLog.record(layer.getProject().getId(), layer.getId(), layer.getName(),
+				ChangeLogAction.FIELD_CREATE, clientName, 1, null);
 		return toDto(field);
 	}
 
@@ -89,7 +98,8 @@ public class LayerFieldService {
 	 */
 	@Transactional
 	public LayerDtos.Field renameField(UUID layerId, UUID fieldId, LayerDtos.RenameFieldRequest request) {
-		requireLayer(layerId);
+		Layer layer = requireLayer(layerId);
+		layer.requireNotTrashed();
 		List<LayerField> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
 		LayerField field = fields.stream()
 				.filter(candidate -> candidate.getId().equals(fieldId))
@@ -148,8 +158,9 @@ public class LayerFieldService {
 	 * the frontend's job, informed by {@link #usage}, not a check this method repeats.
 	 */
 	@Transactional
-	public void deleteField(UUID layerId, UUID fieldId) {
+	public void deleteField(UUID layerId, UUID fieldId, String clientName) {
 		Layer layer = requireLayer(layerId);
+		layer.requireNotTrashed();
 		List<LayerField> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
 		LayerField field = fields.stream()
 				.filter(candidate -> candidate.getId().equals(fieldId))
@@ -177,6 +188,9 @@ public class LayerFieldService {
 		if (!before.equals(after)) {
 			layer.bumpStyleVersion();
 		}
+
+		changeLog.record(layer.getProject().getId(), layer.getId(), layer.getName(),
+				ChangeLogAction.FIELD_DELETE, clientName, 1, null);
 	}
 
 	// --- internals -----------------------------------------------------------------

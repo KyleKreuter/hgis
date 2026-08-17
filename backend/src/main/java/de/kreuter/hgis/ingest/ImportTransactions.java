@@ -4,6 +4,8 @@ import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.Project;
 import de.kreuter.hgis.catalog.ProjectRepository;
+import de.kreuter.hgis.changelog.ChangeLogAction;
+import de.kreuter.hgis.changelog.ChangeLogService;
 import de.kreuter.hgis.common.ExtentCalculator;
 import de.kreuter.hgis.common.LayerProvenance;
 import de.kreuter.hgis.common.SqlIdentifier;
@@ -48,10 +50,11 @@ class ImportTransactions {
 	private final ProjectRepository projectRepository;
 	private final JdbcClient jdbc;
 	private final ExtentCalculator extentCalculator;
+	private final ChangeLogService changeLog;
 
 	ImportTransactions(TableCreator tableCreator, FeatureWriter featureWriter, JobService jobService,
 			LayerRepository layerRepository, ProjectRepository projectRepository, JdbcClient jdbc,
-			ExtentCalculator extentCalculator) {
+			ExtentCalculator extentCalculator, ChangeLogService changeLog) {
 		this.tableCreator = tableCreator;
 		this.featureWriter = featureWriter;
 		this.jobService = jobService;
@@ -59,6 +62,7 @@ class ImportTransactions {
 		this.projectRepository = projectRepository;
 		this.jdbc = jdbc;
 		this.extentCalculator = extentCalculator;
+		this.changeLog = changeLog;
 	}
 
 	@Transactional
@@ -124,6 +128,21 @@ class ImportTransactions {
 		// view for a project that has never been opened, so without this a freshly
 		// imported project would start zoomed out over the whole country.
 		updateProjectExtent(layer.getProject().getId());
+
+		// Logged here, not in begin(): a layer that fails before this point is dropped
+		// whole by compensateAndFail and never existed as far as CONTRACT.md's protocol
+		// is concerned -- logging at begin() would leave a change_log entry for a layer
+		// that was never real. featureCount can be 0 (every row skipped), and
+		// ChangeLogService.record requires affected_count > 0, hence the guard. No
+		// client name: an import carries none today (see ClientId) -- one entry per
+		// operation, not one per batch, matches CONTRACT.md's own "vollständige Zeilen
+		// nur beim Löschen" scope.
+		changeLog.record(layer.getProject().getId(), layer.getId(), layer.getName(),
+				ChangeLogAction.LAYER_CREATE, null, 1, null);
+		if (featureCount > 0) {
+			changeLog.record(layer.getProject().getId(), layer.getId(), layer.getName(),
+					ChangeLogAction.FEATURE_INSERT, null, (int) Math.min(featureCount, Integer.MAX_VALUE), null);
+		}
 
 		String message = skippedCount > 0
 				? "Der Import hat " + skippedCount + " von " + (featureCount + skippedCount)

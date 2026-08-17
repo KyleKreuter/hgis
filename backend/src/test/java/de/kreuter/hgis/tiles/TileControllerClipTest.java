@@ -202,7 +202,7 @@ class TileControllerClipTest {
 		markAsMask(maskeB, "insideClipped");
 
 		mockMvc.perform(delete("/api/layers/{layerId}", maskeA.getId()))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk());
 		maskeA = null; // tearDown must not try to drop it again
 
 		double afterDeletingOne = featureArea(tile(oben));
@@ -219,7 +219,7 @@ class TileControllerClipTest {
 		assertThat(featureArea(tile(oben))).isLessThan(baselineArea);
 
 		mockMvc.perform(delete("/api/layers/{layerId}", maskeA.getId()))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk());
 		maskeA = null; // tearDown must not try to drop it again
 
 		assertThat(featureArea(tile(oben))).isEqualTo(baselineArea);

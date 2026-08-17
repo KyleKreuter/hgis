@@ -4,6 +4,8 @@ import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerField;
 import de.kreuter.hgis.catalog.LayerFieldRepository;
 import de.kreuter.hgis.catalog.LayerRepository;
+import de.kreuter.hgis.changelog.ChangeLogAction;
+import de.kreuter.hgis.changelog.ChangeLogService;
 import de.kreuter.hgis.common.BadRequestException;
 import de.kreuter.hgis.common.ConflictException;
 import de.kreuter.hgis.common.NotFoundException;
@@ -11,6 +13,7 @@ import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.features.dto.EditDtos;
 import de.kreuter.hgis.features.dto.FeatureDtos;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
@@ -22,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,20 +49,26 @@ public class EditService {
 	private final LayerFieldRepository fieldRepository;
 	private final JdbcClient jdbc;
 	private final LayerBookkeeping bookkeeping;
+	private final ChangeLogService changeLog;
+	private final FeatureDeleteCapture deleteCapture;
 
 	EditService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
-			JdbcClient jdbc, LayerBookkeeping bookkeeping) {
+			JdbcClient jdbc, LayerBookkeeping bookkeeping, ChangeLogService changeLog,
+			FeatureDeleteCapture deleteCapture) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.jdbc = jdbc;
 		this.bookkeeping = bookkeeping;
+		this.changeLog = changeLog;
+		this.deleteCapture = deleteCapture;
 	}
 
 	@Transactional
-	public EditDtos.Response apply(UUID layerId, EditDtos.Request request) {
+	public EditDtos.Response apply(UUID layerId, EditDtos.Request request, String clientName) {
 		Layer layer = layerRepository.findById(layerId)
 				.orElseThrow(() -> new NotFoundException("Layer " + layerId + " existiert nicht"));
 		layer.requireVector();
+		layer.requireNotTrashed();
 
 		int total = request.creates().size() + request.updates().size() + request.deletes().size();
 		if (total == 0) {
@@ -76,18 +86,34 @@ public class EditService {
 		for (EditDtos.Create create : request.creates()) {
 			createdFids.put(create.clientId(), insert(table, layer, fields, create, request.repairsInvalid()));
 		}
+		if (!createdFids.isEmpty()) {
+			log(layer, ChangeLogAction.FEATURE_INSERT, clientName, createdFids.size(), null);
+		}
 
 		int updated = 0;
 		for (EditDtos.Update update : request.updates()) {
 			updated += update(table, layer, fields, update, request.repairsInvalid());
 		}
+		if (updated > 0) {
+			log(layer, ChangeLogAction.FEATURE_UPDATE, clientName, updated, null);
+		}
 
-		int deleted = request.deletes().isEmpty() ? 0
-				: jdbc.sql("DELETE FROM " + table + " WHERE fid = ANY(:fids)")
-						.param("fids", request.deletes().toArray(Long[]::new))
-						.update();
+		int deleted = 0;
+		if (!request.deletes().isEmpty()) {
+			FeatureDeleteCapture.Result capture =
+					deleteCapture.deleteAndCapture(table, fields.values(), request.deletes());
+			deleted = capture.count();
+			if (deleted > 0) {
+				log(layer, ChangeLogAction.FEATURE_DELETE, clientName, deleted, capture.rowsJson());
+			}
+		}
 
 		return finish(layer, table, createdFids, updated, deleted);
+	}
+
+	private void log(Layer layer, String action, String clientName, int affectedCount, String deletedRowsJson) {
+		changeLog.record(layer.getProject().getId(), layer.getId(), layer.getName(),
+				action, clientName, affectedCount, deletedRowsJson);
 	}
 
 	// --- writes -----------------------------------------------------------------------
@@ -107,13 +133,13 @@ public class EditService {
 		columns.forEach(column -> sql.append(", ").append(column));
 		sql.append(") VALUES (").append(geometrySql);
 		for (int i = 0; i < columns.size(); i++) {
-			sql.append(", :v").append(i);
+			sql.append(", ").append(placeholderFor(values.get(i), i));
 		}
 		sql.append(") RETURNING fid");
 
 		var statement = jdbc.sql(sql.toString()).param("g", create.geometry().toString());
 		for (int i = 0; i < values.size(); i++) {
-			statement = statement.param("v" + i, values.get(i));
+			statement = statement.param("v" + i, paramValue(values.get(i)));
 		}
 		return statement.query(Long.class).single();
 	}
@@ -130,7 +156,7 @@ public class EditService {
 			List<String> columns = new ArrayList<>();
 			collectProperties(fields, update.properties(), columns, values);
 			for (int i = 0; i < columns.size(); i++) {
-				assignments.add(columns.get(i) + " = :v" + i);
+				assignments.add(columns.get(i) + " = " + placeholderFor(values.get(i), i));
 			}
 		}
 		if (assignments.isEmpty()) {
@@ -155,7 +181,7 @@ public class EditService {
 			statement = statement.param("rowVersion", update.rowVersion());
 		}
 		for (int i = 0; i < values.size(); i++) {
-			statement = statement.param("v" + i, values.get(i));
+			statement = statement.param("v" + i, paramValue(values.get(i)));
 		}
 
 		int affected = statement.update();
@@ -343,8 +369,9 @@ public class EditService {
 		}
 		String type = field.getDataType().toLowerCase(Locale.ROOT);
 		return switch (type) {
-			case "integer", "smallint" -> asNumber(field, value).intValue();
-			case "bigint" -> asNumber(field, value).longValue();
+			case "smallint" -> asBoundedInteger(field, value, Short.MIN_VALUE, Short.MAX_VALUE).intValue();
+			case "integer" -> asBoundedInteger(field, value, Integer.MIN_VALUE, Integer.MAX_VALUE).intValue();
+			case "bigint" -> asBoundedInteger(field, value, Long.MIN_VALUE, Long.MAX_VALUE).longValue();
 			case "double precision", "real" -> asNumber(field, value).doubleValue();
 			case "numeric", "decimal" -> asBigDecimal(field, value);
 			case "boolean" -> asBoolean(field, value);
@@ -366,9 +393,138 @@ public class EditService {
 		throw typeMismatch(field, value);
 	}
 
-	private static BigDecimal asBigDecimal(LayerField field, Object value) {
+	/**
+	 * Enforces PostgreSQL's real range for {@code smallint}/{@code integer}/{@code bigint}
+	 * before {@link Number#intValue()}/{@link Number#longValue()} ever run -- a review
+	 * found neither checks anything, it silently narrows. A JSON integer past 32-bit range
+	 * decodes as a {@link Long} or {@link BigInteger}, not an error, and calling {@code
+	 * intValue()}/{@code longValue()} on either wraps around instead of throwing: {@code
+	 * 3000000000} into an {@code integer} column used to become {@code -1294967296} in the
+	 * database with an ordinary 200 OK, no error anywhere for either the writer or a later
+	 * reader to notice. {@code smallint} shared {@code integer}'s conversion before this
+	 * method existed, which is its own gap: {@code smallint}'s true range is far tighter
+	 * than a 32-bit int, so a value like {@code 40000} narrowed to a valid {@code int} and
+	 * only PostgreSQL's own {@code numeric field overflow} caught it -- correctly, but
+	 * without a field name (see {@code ProblemDetailAdvice}).
+	 *
+	 * <p>Goes through {@link BigDecimal}, not straight to {@link BigInteger} via {@code
+	 * longValue()}: a JSON literal with a decimal point or exponent -- {@code 1e30}, say --
+	 * decodes as a {@link Double}, not a {@link BigInteger}, and {@code Double.longValue()}
+	 * does not wrap the way {@code int} narrowing does (JLS 5.1.3) -- it <em>clamps</em> to
+	 * {@link Long#MAX_VALUE}/{@link Long#MIN_VALUE}. For {@code smallint}/{@code integer}
+	 * that clamp value is harmlessly outside their tighter bounds and still gets rejected,
+	 * but for {@code bigint} the clamp value <em>is</em> its own bound: a first version of
+	 * this method compared the already-clamped {@code long} and let it through unchecked.
+	 * Parsing the magnitude from {@link Number#toString()} before anything narrows it is
+	 * what closes that -- the same reason {@link BigDecimal#toBigInteger()} at the end
+	 * still truncates a genuine fraction like {@code 3.7} silently, matching the existing,
+	 * deliberately unchanged convention for a non-integral ordinary value.
+	 *
+	 * @param min the column type's own minimum ({@link Short#MIN_VALUE} for smallint, not
+	 *            {@link Integer#MIN_VALUE} -- the two must not be conflated the way the
+	 *            unchecked conversion this replaces did)
+	 */
+	private static BigInteger asBoundedInteger(LayerField field, Object value, long min, long max) {
 		Number number = asNumber(field, value);
-		return number instanceof BigDecimal decimal ? decimal : BigDecimal.valueOf(number.doubleValue());
+		BigDecimal exact;
+		try {
+			exact = new BigDecimal(number.toString());
+		}
+		catch (NumberFormatException ex) {
+			throw typeMismatch(field, value);
+		}
+		if (exact.compareTo(BigDecimal.valueOf(min)) < 0 || exact.compareTo(BigDecimal.valueOf(max)) > 0) {
+			throw new BadRequestException("Feld " + field.getSourceName() + " erwartet einen Wert zwischen "
+					+ min + " und " + max + " für den Typ " + field.getDataType()
+					+ ". Erhalten: " + exact.toPlainString() + ".");
+		}
+		return exact.toBigInteger();
+	}
+
+	/**
+	 * PostgreSQL accepts {@code NaN} as a {@code numeric} value, and {@code Infinity} /
+	 * {@code -Infinity} as well since version 14 -- reachable via import or hand-written
+	 * SQL, not only through this service, and {@link FeatureDeleteCapture} therefore
+	 * captures a numeric column exactly as it reads: {@code "NaN"} included. None of the
+	 * three has a {@link BigDecimal} representation, so they can never come back through
+	 * {@link BigDecimal#BigDecimal(String)} below; matched case-insensitively (PostgreSQL
+	 * itself is) and wrapped as a {@link NumericLiteral} instead.
+	 *
+	 * <p>The sign is deliberately only optional in front of {@code inf}/{@code infinity},
+	 * not {@code nan}: PostgreSQL itself accepts {@code +Inf}/{@code -Inf}/{@code
+	 * +Infinity}/{@code -Infinity} but rejects {@code +NaN}/{@code -NaN} outright ({@code
+	 * invalid input syntax for type numeric}). A review of an earlier version of this
+	 * pattern -- {@code [+-]?(nan|inf(inity)?)}, sign in front of the whole alternation --
+	 * found exactly that gap: it wrapped a signed NaN as a {@link NumericLiteral} anyway,
+	 * so the {@code CAST} in {@link #placeholderFor} reached PostgreSQL and failed there
+	 * instead of here, surfacing as a bare 500 with no {@link BadRequestException} to
+	 * translate it -- a narrower version of the exact failure this whole method exists to
+	 * prevent.
+	 */
+	private static final Pattern SPECIAL_NUMERIC_LITERAL = Pattern.compile("(?i)^(nan|[+-]?inf(inity)?)$");
+
+	/**
+	 * Marks a value that {@link #placeholderFor} has to bind through an explicit
+	 * {@code CAST(... AS numeric)} rather than an ordinary placeholder -- the driver binds
+	 * a bare {@link String} parameter as {@code varchar}, and PostgreSQL has no implicit
+	 * cast from {@code varchar} to {@code numeric} (unlike a literal in the SQL text
+	 * itself, which is untyped until the column gives it a type). Same technique
+	 * {@link FeatureQueryService}'s cursor comparison already uses for the same reason.
+	 */
+	private record NumericLiteral(String text) {
+	}
+
+	/**
+	 * A JSON number token is not the only shape a numeric value legitimately arrives
+	 * in: {@link FeatureDeleteCapture} deliberately captures a {@code numeric} column as
+	 * text (see there for why), specifically so replaying a deleted row through this
+	 * same method never has to go through {@code double} -- Jackson's default reading of
+	 * a floating-point JSON token, which does not have the precision {@code numeric}
+	 * promises. A plain {@link String} is therefore parsed with {@link BigDecimal}'s own
+	 * constructor first; only a genuine JSON number (the ordinary UI write) falls back
+	 * to the {@code double} route, same as before.
+	 *
+	 * <p>Returns {@link Object}, not {@link BigDecimal}: {@link #SPECIAL_NUMERIC_LITERAL}
+	 * comes back as a {@link NumericLiteral} instead, since {@link BigDecimal} cannot
+	 * represent any of the three values it matches.
+	 */
+	private static Object asBigDecimal(LayerField field, Object value) {
+		if (value instanceof BigDecimal decimal) {
+			return decimal;
+		}
+		if (value instanceof String text) {
+			try {
+				return new BigDecimal(text);
+			}
+			catch (NumberFormatException ex) {
+				String trimmed = text.trim();
+				if (SPECIAL_NUMERIC_LITERAL.matcher(trimmed).matches()) {
+					return new NumericLiteral(trimmed);
+				}
+				throw typeMismatch(field, value);
+			}
+		}
+		Number number = asNumber(field, value);
+		return BigDecimal.valueOf(number.doubleValue());
+	}
+
+	/**
+	 * The SQL text for one bound value at index {@code i}: an explicit cast for a
+	 * {@link NumericLiteral} (see {@link #asBigDecimal}), an ordinary named placeholder
+	 * for everything else.
+	 */
+	private static String placeholderFor(Object value, int i) {
+		return value instanceof NumericLiteral ? "CAST(:v" + i + " AS numeric)" : ":v" + i;
+	}
+
+	/**
+	 * What actually gets bound for one value: a {@link NumericLiteral} unwraps to its
+	 * plain text, which {@link #placeholderFor} already wrapped in the matching cast --
+	 * the driver only ever sees an ordinary {@link String} or {@link BigDecimal}, never
+	 * this class's own marker type.
+	 */
+	private static Object paramValue(Object value) {
+		return value instanceof NumericLiteral literal ? literal.text() : value;
 	}
 
 	private static Boolean asBoolean(LayerField field, Object value) {

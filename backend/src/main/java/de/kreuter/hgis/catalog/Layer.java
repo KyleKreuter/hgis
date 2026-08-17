@@ -209,6 +209,23 @@ public class Layer {
 	@Column(name = "source_fetched_at")
 	private Instant sourceFetchedAt;
 
+	// --- trash (CONTRACT.md "Schreibstufe" 1.1) -------------------------------------------
+	// Both null together means "not trashed". Set together by #moveToTrash, cleared
+	// together by #restoreFromTrash -- see LayerService#delete/restore/purge, the only
+	// three callers that ever touch them.
+
+	/**
+	 * When {@code DELETE /api/layers/{id}} moved this layer to the trash, or null for a
+	 * layer in ordinary use. The catalog row and its payload table both survive that move
+	 * -- only {@link LayerService#purge} removes either.
+	 */
+	@Column(name = "deleted_at")
+	private Instant deletedAt;
+
+	/** The {@code X-Hgis-Client} of whoever moved this layer to the trash, or null. */
+	@Column(name = "deleted_by")
+	private String deletedBy;
+
 	@CreationTimestamp
 	@Column(name = "created_at", updatable = false)
 	private Instant createdAt;
@@ -555,6 +572,53 @@ public class Layer {
 
 	public Instant getUpdatedAt() {
 		return updatedAt;
+	}
+
+	// --- trash (CONTRACT.md "Schreibstufe" 1.1) -------------------------------------------
+
+	/** Whether this layer currently sits in the trash -- see {@link #deletedAt}. */
+	public boolean isTrashed() {
+		return deletedAt != null;
+	}
+
+	public Instant getDeletedAt() {
+		return deletedAt;
+	}
+
+	public String getDeletedBy() {
+		return deletedBy;
+	}
+
+	/** @param clientName the {@code X-Hgis-Client} of whoever deleted it, or null */
+	public void moveToTrash(String clientName) {
+		this.deletedAt = Instant.now();
+		this.deletedBy = clientName;
+	}
+
+	public void restoreFromTrash() {
+		this.deletedAt = null;
+		this.deletedBy = null;
+	}
+
+	/**
+	 * Guards every write against a layer sitting in the trash: {@code PATCH}, the edit
+	 * batch, adding or deleting a field, and split/merge all call this before touching
+	 * anything (CONTRACT.md "Schreibstufe" 1.1, orchestrator follow-up). Without it a
+	 * layer that looks deleted -- gone from the list, gone from the map -- could still be
+	 * written to underneath that appearance, most concretely by the Python library
+	 * addressing it directly by id; restoring it would then bring back something other
+	 * than what looked deleted. {@code LayerService#delete}, {@code #restore} and
+	 * {@code #purge} are exempt on purpose -- they are the operations that manage this
+	 * very state and each already checks the opposite condition.
+	 *
+	 * @throws ConflictException mapped to 409: the request is valid for a layer in
+	 *     general, just not for one currently in the trash
+	 */
+	public void requireNotTrashed() {
+		if (isTrashed()) {
+			throw new ConflictException(
+					"Layer '" + name + "' liegt im Papierkorb und kann nicht mehr geändert werden.", null);
+		}
 	}
 
 	// --- Geoportal provenance (CONTRACT.md phase 23.7) -----------------------------------

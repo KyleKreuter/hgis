@@ -99,6 +99,20 @@ class ProblemDetailAdviceTest {
 	}
 
 	@Test
+	@DisplayName("Hibernate's own optimistic-locking failure yields 409, not 500 -- the same shape as a "
+			+ "hand-rolled conflict, not the catch-all's \"Interner Fehler\"")
+	void optimisticLockingFailureIsMappedToConflict() throws Exception {
+		org.mockito.BDDMockito
+				.given(projectService.get(org.mockito.ArgumentMatchers.any()))
+				.willThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(
+						"de.kreuter.hgis.catalog.Layer", "019fec35-6373-76e1-b5a4-26943cb0a780"));
+
+		mvc.perform(get("/api/projects/019fec35-6373-76e1-b5a4-26943cb0a780"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.status").value(409));
+	}
+
+	@Test
 	@DisplayName("an unexpected failure still yields 500 without leaking internals")
 	void unexpectedFailureStaysGeneric() throws Exception {
 		org.mockito.BDDMockito

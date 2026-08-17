@@ -3,6 +3,9 @@ package de.kreuter.hgis.catalog;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import de.kreuter.hgis.TestcontainersConfiguration;
+import de.kreuter.hgis.changelog.ChangeLogAction;
+import de.kreuter.hgis.changelog.ChangeLogEntry;
+import de.kreuter.hgis.changelog.ChangeLogRepository;
 import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.jobs.Job;
 import de.kreuter.hgis.jobs.JobService;
@@ -32,6 +35,7 @@ class ProjectDuplicateServiceTest {
 	@Autowired private ProjectDeletionService deletion;
 	@Autowired private JobService jobs;
 	@Autowired private JdbcClient jdbc;
+	@Autowired private ChangeLogRepository changeLogRepository;
 
 	private Project source;
 	private String sourceTable;
@@ -118,6 +122,40 @@ class ProjectDuplicateServiceTest {
 		assertThat(newFid).isGreaterThan(2);
 		assertThat(jdbc.sql("SELECT COUNT(*) FROM " + SqlIdentifier.quoteLayerTable(sourceTable))
 				.query(Long.class).single()).isEqualTo(2);
+	}
+
+	@Test
+	@DisplayName("duplicating a project logs layer.create and feature.insert for the copied layer")
+	void duplicatingAProjectIsLogged() {
+		Job job = jobs.create(source.getId(), Job.Type.DUPLICATE, null);
+		duplicateService.runDuplicate(job.getId(), source.getId(), null);
+
+		JobDtos.Response result = jobs.get(job.getId());
+		Project target = projects.findById(result.outputProjectId()).orElseThrow();
+		Layer targetLayer = layers.findByProjectOrdered(target.getId()).getFirst();
+
+		List<ChangeLogEntry> entries = changeLogRepository
+				.findByProjectIdOrderByOccurredAtDescIdDesc(target.getId(),
+						org.springframework.data.domain.PageRequest.of(0, 10))
+				.stream()
+				.filter(e -> targetLayer.getId().equals(e.getLayerId()))
+				.toList();
+		assertThat(entries).extracting(ChangeLogEntry::getAction)
+				.containsExactlyInAnyOrder(ChangeLogAction.LAYER_CREATE, ChangeLogAction.FEATURE_INSERT);
+
+		ChangeLogEntry insertEntry = entries.stream()
+				.filter(e -> e.getAction().equals(ChangeLogAction.FEATURE_INSERT))
+				.findFirst().orElseThrow();
+		assertThat(insertEntry.getAffectedCount())
+				.as("the two rows setUp put into the source table")
+				.isEqualTo(2);
+
+		// Not logged against the source project -- the source is untouched by a
+		// duplicate, and its own log must stay that way too.
+		assertThat(changeLogRepository
+				.findByProjectIdOrderByOccurredAtDescIdDesc(source.getId(),
+						org.springframework.data.domain.PageRequest.of(0, 10)))
+				.isEmpty();
 	}
 
 	/**

@@ -283,7 +283,7 @@ class LayerCreateTest {
 		EditDtos.Request request = new EditDtos.Request(
 				List.of(new EditDtos.Create(-1, geometry, Map.of("art", "Eiche"))), null, null, false);
 
-		EditDtos.Response response = editService.apply(layerId, request);
+		EditDtos.Response response = editService.apply(layerId, request, null);
 
 		assertThat(response.createdFids()).containsOnlyKeys(-1L);
 		assertThat(response.featureCount()).isEqualTo(1);
@@ -314,7 +314,7 @@ class LayerCreateTest {
 						new EditDtos.Create(-3, polygon, Map.of())),
 				null, null, false);
 
-		EditDtos.Response response = editService.apply(layerId, request);
+		EditDtos.Response response = editService.apply(layerId, request, null);
 
 		assertThat(response.createdFids()).containsOnlyKeys(-1L, -2L, -3L);
 		assertThat(response.featureCount()).isEqualTo(3);
