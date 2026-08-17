@@ -244,6 +244,34 @@ außerdem nicht löschen.
 Server, ob eine andere Person die Zeile inzwischen geändert hat. Falls ja, lehnt der
 Server den ganzen Vorgang ab. So überschreibt er keine fremde Arbeit.
 
+### Papierkorb und Änderungsprotokoll
+
+Ein gelöschter Layer ist nicht weg. Er wandert in den Papierkorb: Der Katalogeintrag
+bleibt, die Datentabelle bleibt, nur aus der Layerliste und der Karte verschwindet er. Der
+Papierkorb zeigt zu jedem Eintrag den Namen, wann gelöscht wurde, von wem und wie viele
+Objekte betroffen sind. Von dort holen Sie den Layer zurück oder löschen ihn endgültig.
+
+Der Papierkorb leert sich nicht von selbst. Es gibt kein Ablaufdatum und keinen
+Aufräumjob — nur Sie entscheiden, wann etwas wirklich verschwindet.
+
+**Endgültiges Löschen ist der einzige Weg, der Daten wirklich vernichtet.** Er fragt vorher
+nach und nennt dabei die Objektzahl.
+
+Solange ein Layer im Papierkorb liegt, lässt er sich nicht mehr verändern — weder über die
+Oberfläche noch über die Programmierschnittstelle. Sonst bekämen Sie beim Zurückholen
+einen anderen Layer als den, den Sie gelöscht haben.
+
+Für **einzelne Objekte** gibt es keinen Papierkorb. Ihre Rückfallebene ist das
+Änderungsprotokoll: Es hält jeden Schreibvorgang fest — wer, wann, welcher Layer, wie
+viele Objekte — und bei jedem Löschen zusätzlich die **vollständigen Zeilen** mit
+Geometrie und allen Attributen. Daraus lässt sich ein gelöschtes Objekt wieder anlegen.
+Das Protokoll erfasst auch, was nicht über die Oberfläche kommt: Import, Projektduplikat,
+Zusammenführen und Teilen von Objekten, und jeden Zugriff aus einem Skript.
+
+Ein Hinweis zur Größe: Die vollständigen Zeilen wachsen mit der Geometrie, etwa 30 Byte
+je Stützpunkt. Ein einfacher Gebäudeumriss kommt auf rund 700 Byte je Objekt, ein
+verwinkelter auf das Doppelte bis Dreifache.
+
 ### Suchen und filtern
 
 Über der Attributtabelle liegt ein Eingabefeld mit zwei Betriebsarten. **Suchen** nimmt
