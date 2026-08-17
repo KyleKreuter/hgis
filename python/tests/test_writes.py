@@ -542,6 +542,55 @@ def test_delete_features_leaves_a_broken_getitem_alone_rather_than_crashing() ->
     assert transport.bodies[-1]["deletes"] == [7]
 
 
+@pytest.mark.parametrize("fids", [{"5"}, frozenset({"5"})])
+def test_delete_features_accepts_a_single_character_string_in_a_real_collection(fids) -> None:
+    """
+    The reported false positive: neither ``set`` nor ``frozenset`` has
+    ``__getitem__``, so a one-element collection like ``{"5"}`` -- one valid
+    fid, wrapped the ordinary way -- reached the same fallback a decomposing
+    ``__iter__``-only value does, and with only its first element checked,
+    the two looked identical: both hand back one single-character string.
+    Must not be rejected: there is only one element here, and the dangerous
+    case -- several wrong values instead of the one right one -- needs at
+    least two.
+    """
+
+    def handle(request: object) -> Response:
+        return Response(
+            200, '{"createdFids":{},"updated":0,"deleted":1,"dataVersion":1,"featureCount":1}'
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.delete_features(fids)
+
+    assert transport.count == 1
+
+
+@pytest.mark.parametrize("fids", [{"5": "x"}.keys(), {"x": "5"}.values()])
+def test_delete_features_accepts_a_dict_view_with_one_single_character_entry(fids) -> None:
+    """
+    The same false positive, for the two other no-``__getitem__`` types the
+    review found: ``dict.keys()`` and ``dict.values()``. A ``dict`` itself
+    was already safe (a lookup for key ``0`` raises ``KeyError``, caught
+    directly); its views are a different type, without the ``dict``'s own
+    ``__getitem__``, and reach the same fallback ``{"5"}`` does.
+    """
+
+    def handle(request: object) -> Response:
+        return Response(
+            200, '{"createdFids":{},"updated":0,"deleted":1,"dataVersion":1,"featureCount":1}'
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.delete_features(fids)
+
+    assert transport.count == 1
+
+
 @pytest.mark.parametrize("fids", [[123], (123,), {123}, frozenset({123}), range(120, 124)])
 def test_delete_features_accepts_real_collections(fids) -> None:
     """The check above must not be so tight that an ordinary collection fails."""

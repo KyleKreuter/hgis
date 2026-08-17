@@ -130,16 +130,20 @@ def _every_client_built_here_must_be_read_only():
     of it can be routed around. Two things this does *not* cover, named
     rather than left for the next person to assume are handled:
 
-    * **Module-level code.** A ``client = hgis.connect(URL)`` written
-      directly at this file's top level, outside any function, runs while
-      pytest is still collecting this file -- before this fixture's setup
-      has had any test to run around, and so before it has installed
-      anything. Demonstrated separately, and closed the other way this file
-      already knows: see
-      ``test_no_module_level_statement_in_this_file_builds_a_client`` below,
-      which reads the syntax tree for exactly the statements collection
-      would run, rather than trying to patch something that is not there
-      yet to patch.
+    * **Anything that runs at definition time rather than call time.** A
+      ``client = hgis.connect(URL)`` written directly at this file's top
+      level runs while pytest is still collecting this file -- before this
+      fixture's setup has had any test to run around, and so before it has
+      installed anything. The same is true, less obviously, of a decorator
+      argument, a parameter default value, and a class body's own
+      statements: all three run the moment the ``def``/``class`` statement
+      itself does, not when whatever they decorate or default is later
+      called. Demonstrated separately for all of these, and closed the
+      other way this file already knows: see
+      ``test_no_module_level_statement_in_this_file_builds_a_client``
+      below, which reads the syntax tree for exactly what collection would
+      run immediately, rather than trying to patch something that is not
+      there yet to patch.
     * **``hgis.Client.__new__`` called directly**, with attributes set by
       hand instead of going through ``__init__`` at all. Not a plausible
       accident the way the two syntax tricks above are -- not something
@@ -201,10 +205,20 @@ def test_no_module_level_statement_in_this_file_builds_a_client() -> None:
     the same result as if no check existed at all.
 
     So this reads the syntax tree instead, and only for what collection
-    would actually run: direct, module-level statements. A call inside a
-    function or class body does not count here -- it only runs once called,
-    which is what the runtime check above already covers, regardless of the
-    syntax used to reach it.
+    would actually run *immediately* -- which is more than "module level"
+    suggests. A plain function body is deferred and does not count here; the
+    runtime check above already covers it regardless of the syntax used to
+    reach it. But a decorator expression, a parameter default value, and a
+    base class or keyword argument on a ``class`` statement all run at
+    *definition* time, the moment the ``def``/``class`` statement itself
+    runs -- and a class body is not deferred at all, unlike a function's: it
+    executes immediately, as part of building the class's namespace, which
+    is exactly how a class gets its attributes in the first place.
+    Confirmed for all three: a client built in a decorator argument, in a
+    default value, and as a bare class-body assignment all ran during
+    import, before any fixture existed, and before this check's earlier,
+    simpler version (which skipped a ``def``/``class`` node entirely) saw
+    any of them.
     """
     import ast
     from pathlib import Path
@@ -218,21 +232,52 @@ def test_no_module_level_statement_in_this_file_builds_a_client() -> None:
             return node.attr
         return None
 
-    # Only statements that run immediately, while pytest collects this
-    # module -- not the body of a function or class, which runs later, if
-    # ever, and only when called, exactly the case the runtime check above
-    # already handles regardless of how the call is written.
-    definitions = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    def _client_calls(node: ast.AST) -> list[ast.Call]:
+        return [
+            n
+            for n in ast.walk(node)
+            if isinstance(n, ast.Call) and _name(n.func) in ("connect", "Client")
+        ]
+
+    found: list[ast.Call] = []
+
+    def visit(node: ast.AST) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            # The decorator and every default run now, at the def statement
+            # itself; the function's own body is deferred until it is
+            # called, which the runtime check above already covers.
+            for part in (*node.decorator_list, *node.args.defaults, *node.args.kw_defaults):
+                if part is not None:
+                    found.extend(_client_calls(part))
+            return
+        if isinstance(node, ast.ClassDef):
+            # The decorator, every base class and every keyword argument
+            # (a metaclass=... among them) run now too -- and unlike a
+            # function, the class body itself is not deferred either: it
+            # runs immediately, building the class's namespace.
+            for part in (*node.decorator_list, *node.bases, *node.keywords):
+                found.extend(_client_calls(part))
+            for statement in node.body:
+                visit(statement)
+            return
+        if isinstance(node, ast.Lambda):
+            return  # a lambda's body is deferred until the lambda is called
+        if isinstance(node, ast.Call) and _name(node.func) in ("connect", "Client"):
+            found.append(node)
+        for child in ast.iter_child_nodes(node):
+            visit(child)
+
     for statement in tree.body:
-        if isinstance(statement, definitions):
-            continue
-        for node in ast.walk(statement):
-            if isinstance(node, ast.Call) and _name(node.func) in ("connect", "Client"):
-                pytest.fail(
-                    f"Zeile {node.lineno}: ein hgis.Client wird auf Modulebene "
-                    "gebaut -- das läuft schon beim Einsammeln dieser Datei, "
-                    "bevor irgendeine Fixture etwas patchen könnte."
-                )
+        visit(statement)
+
+    if found:
+        pytest.fail(
+            f"Zeile {found[0].lineno}: ein hgis.Client wird beim Einsammeln dieser "
+            "Datei gebaut -- entweder auf Modulebene, oder in einem Dekorator, "
+            "einem Standardwert oder einer Klassenkörper-Anweisung, die schon "
+            "beim def/class-Statement laufen -- bevor irgendeine Fixture etwas "
+            "patchen könnte."
+        )
 
 
 #: A layer worth testing against holds more than one page, so paging is

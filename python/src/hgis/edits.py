@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from itertools import islice
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from .errors import InvalidArgumentError
@@ -156,13 +157,33 @@ def _first_character_if_it_looks_like_one(value: Any) -> bool:
 
     The fallback distinguishes an **iterator** from an **iterable that is
     not one**. An iterator (a generator, or anything with ``__next__``)
-    consumes itself as it is read, so peeking at its first element would
-    silently drop that element for whatever reads ``value`` next -- left
-    alone entirely, the same protection the index-based check above already
-    gave a plain generator. An iterable that is *not* an iterator hands back
-    a fresh iterator every time ``__iter__`` is called, so looking at its
-    first element here does not touch ``value`` itself; anything else --
-    not iterable at all -- is left alone the same way.
+    consumes itself as it is read, so peeking at its elements would silently
+    drop them for whatever reads ``value`` next -- left alone entirely, the
+    same protection the index-based check above already gave a plain
+    generator. An iterable that is *not* an iterator hands back a fresh
+    iterator every time ``__iter__`` is called, so looking at its first
+    elements here does not touch ``value`` itself; anything else -- not
+    iterable at all -- is left alone the same way.
+
+    Two elements are checked here, not one: a ``set``, a ``frozenset`` and a
+    ``dict``'s ``.keys()``/``.values()`` all have no ``__getitem__`` either,
+    so ``{"5"}`` -- one valid fid, wrapped in an ordinary collection --
+    reaches this fallback exactly like ``CharsOnlyIterable("5")`` would, and
+    with only the first element checked, the two are indistinguishable: both
+    hand back one single-character string. Two elements resolve it without
+    a special case for either type: a decomposing value only ever produces
+    one element when the whole thing was already a single character, in
+    which case treating it as "one fid" or as "one character of a larger
+    scalar" reaches the same list either way, so there is nothing unsafe
+    about accepting it; the dangerous case -- several wrong values instead
+    of the one right one -- needs at least two characters to begin with, and
+    a ``str`` or :class:`collections.UserString` of two or more characters
+    always has ``__getitem__``, so it is already caught above and never
+    reaches here in the first place. A genuine two-item, single-character
+    collection built on an ``__iter__``-only type is the one case this still
+    cannot tell apart from a decomposing value -- the same residual
+    trade-off the index/slice check above accepts implicitly for anything
+    with ``__getitem__``, just without a slice to prove it here too.
 
     Only ``str`` is checked for on this path, not the byte-value family
     :data:`_SCALAR_ITERABLES` already covers by type: there is no
@@ -182,8 +203,8 @@ def _first_character_if_it_looks_like_one(value: Any) -> bool:
 
     if isinstance(value, Iterator) or not isinstance(value, Iterable):
         return False
-    first = next(iter(value), None)
-    return isinstance(first, str) and len(first) == 1
+    first_two = list(islice(iter(value), 2))
+    return len(first_two) == 2 and all(isinstance(x, str) and len(x) == 1 for x in first_two)
 
 
 def _reject_scalar_iterable(name: str, value: Any) -> None:
