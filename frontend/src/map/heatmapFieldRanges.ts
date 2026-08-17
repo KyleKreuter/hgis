@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { isVectorLayer, type LayerSummary } from '@/api/layers'
-import { heatmapFieldRangeQuery, type FieldRangeState } from '@/styling/classification'
+import { heatmapFieldRangeQuery, resolveRangeState, type FieldRangeState } from '@/styling/classification'
 
 interface HeatmapRangeTarget {
   layerId: string
@@ -24,33 +24,6 @@ export function heatmapRangeTargets(layers: LayerSummary[]): HeatmapRangeTarget[
     const field = layer.style.renderer.field
     return field ? [{ layerId: layer.id, layerName: layer.name, field }] : []
   })
-}
-
-/**
- * One query result, narrowed to the two members `resolveRangeState` actually reads --
- * structural on purpose so this stays independent of exactly which `useQueries` result
- * type the installed TanStack Query version infers.
- */
-interface RangeQueryResult {
-  isError: boolean
-  data: { min: number; max: number } | undefined
-}
-
-/**
- * Turns one `/classify` query's result into the three states `styleToMapLibre` (via
- * `classification.ts`'s `FieldRangeState`) distinguishes. A request that failed outright
- * is the obvious `'error'`; one that *succeeded* with a non-finite `min`/`max` -- a layer
- * with no objects at all -- is folded into the same `'error'`, because
- * `range.max > range.min` alone reads `NaN > NaN` as plain `false` and would otherwise
- * land silently in the same bucket as "still loading". Exported for its own test,
- * independent of `useQueries`.
- */
-export function resolveRangeState(result: RangeQueryResult | undefined): FieldRangeState {
-  if (result?.isError) return 'error'
-  const data = result?.data
-  if (!data) return undefined
-  if (!Number.isFinite(data.min) || !Number.isFinite(data.max)) return 'error'
-  return { min: data.min, max: data.max }
 }
 
 interface HeatmapRangeState extends HeatmapRangeTarget {

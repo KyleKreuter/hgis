@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { LayerSummary } from '@/api/layers'
 import type { FieldRangeState } from '@/styling/classification'
-import { heatmapRangeTargets, layersEnteringError, resolveRangeState } from './heatmapFieldRanges'
+import { heatmapRangeTargets, layersEnteringError } from './heatmapFieldRanges'
 
 function makeLayer(overrides: Partial<LayerSummary> = {}): LayerSummary {
   return {
@@ -58,35 +58,6 @@ describe('heatmapRangeTargets', () => {
     })
 
     expect(heatmapRangeTargets([mapImage])).toEqual([])
-  })
-})
-
-describe('resolveRangeState', () => {
-  it('liest eine noch nicht angekommene Antwort als "lädt noch"', () => {
-    expect(resolveRangeState(undefined)).toBeUndefined()
-    expect(resolveRangeState({ isError: false, data: undefined })).toBeUndefined()
-  })
-
-  it('liest eine fehlgeschlagene Anfrage als "error"', () => {
-    expect(resolveRangeState({ isError: true, data: undefined })).toBe('error')
-  })
-
-  it('liest eine echte, auch entartete Spanne als aufgelöst', () => {
-    expect(resolveRangeState({ isError: false, data: { min: 0, max: 70 } })).toEqual({ min: 0, max: 70 })
-    // Zwei Objekte mit demselben Wert sind eine korrekte Aussage über die Daten, keine
-    // Störung -- das bleibt eine aufgelöste Spanne, nicht "error".
-    expect(resolveRangeState({ isError: false, data: { min: 5, max: 5 } })).toEqual({ min: 5, max: 5 })
-  })
-
-  /**
-   * Der Fund aus der Teamrunde: ein Layer ohne Objekte antwortet vermutlich mit
-   * nicht-endlichen Grenzen statt mit einem HTTP-Fehler. `range.max > range.min` allein
-   * läse `NaN > NaN` als `false` und würde das lautlos in denselben Topf wie "lädt noch"
-   * werfen -- das ist genau der Fall, den `styleToMapLibre`'s Diagnose-Verlauf braucht.
-   */
-  it('liest eine erfolgreich aufgelöste, aber nicht-endliche Spanne als "error"', () => {
-    expect(resolveRangeState({ isError: false, data: { min: NaN, max: NaN } })).toBe('error')
-    expect(resolveRangeState({ isError: false, data: { min: 0, max: Infinity } })).toBe('error')
   })
 })
 

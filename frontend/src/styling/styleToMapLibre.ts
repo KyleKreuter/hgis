@@ -223,6 +223,14 @@ function clamp(value: number, min: number, max: number): number {
  * `classification.ts`'s `heatmapFieldRangeQuery`) is what restores that spread; a fixed
  * scale could not, since two heatmap fields rarely share an order of magnitude.
  *
+ * This is a plain min/max stretch, not a percentile one -- deliberately: a single
+ * outlier (0..10000 with everything else between 50 and 100) compresses the rest of the
+ * scale toward 0, which looks like an empty heatmap rather than a wrong one. Clipping to
+ * a percentile would fix that, at the cost of a second decision (what happens to the
+ * values above it -- clamp to the hottest band, or drop them) that has no answer without
+ * real data to look at. Left as min/max for now (team review, package 2) -- if a layer's
+ * heatmap looks suspiciously empty, this stretch, not a bug, is the first thing to check.
+ *
  * Falls back to a constant weight of 1 -- every point counts equally -- in three cases:
  * no field at all (density mode, the renderer contract's default), the range for a
  * freshly chosen field not having loaded yet (a transient state the map recovers from on
@@ -232,17 +240,35 @@ function clamp(value: number, min: number, max: number): number {
  */
 function heatmapWeight(field: string | null, range: FieldRange | undefined): PaintValue<number> {
   if (!field || !range || !(range.max > range.min)) return 1
-  // `to-number`'s second argument is its fallback for a missing/non-numeric property, so
-  // an object without this field weighs in at the low end rather than breaking the
-  // expression the way an `undefined` paint value would (see `defined` above).
   return [
-    'interpolate',
-    ['linear'],
-    ['to-number', ['get', field], range.min],
-    range.min,
+    'case',
+    // An object without this field is not the same thing as one whose value happens to
+    // be low -- and MapLibre's own `to-number` does not draw that line the way its
+    // signature suggests. Its fallback argument (here `range.min`) only fires for a
+    // value that fails `Number(...)`, e.g. a non-numeric string; `['get', field]`
+    // evaluating to `null` (the property is absent from the tile) short-circuits the
+    // whole coercion to a literal `0` *before* the fallback is ever consulted
+    // (`@maplibre/maplibre-gl-style-spec`'s `Coercion.evaluate`, the `'number'` case).
+    // Fed straight into `interpolate`, that stray `0` reads as wherever `0` happens to
+    // fall in *this* field's range -- the low end for an all-positive range by
+    // coincidence, the hottest point of the map for an all-negative one. `!has` catches
+    // the absence itself, before `to-number` ever gets a say, and routes it to an
+    // explicit, chosen weight instead of an accidental one.
+    ['!', ['has', field]],
+    // Absent counts as "contributes nothing" -- the heatmap equivalent of not being
+    // drawn at all, since a weight of 0 adds no density regardless of how many such
+    // points overlap. Chosen over excluding the point via a layer `filter`: this is one
+    // expression, not a second mechanism, and it needs no maintenance of its own.
     0,
-    range.max,
-    1,
+    [
+      'interpolate',
+      ['linear'],
+      ['to-number', ['get', field], range.min],
+      range.min,
+      0,
+      range.max,
+      1,
+    ],
   ] as unknown as ExpressionSpecification
 }
 

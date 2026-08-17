@@ -585,13 +585,10 @@ describe('syncMapLayers heatmap-Gewichtung', () => {
 
     const spec = layers.get('hgis-layer-layer-1-render') as AddLayerObject & { paint?: Record<string, unknown> }
     expect(spec.paint?.['heatmap-weight']).toEqual([
-      'interpolate',
-      ['linear'],
-      ['to-number', ['get', 'laut_wert'], 0],
+      'case',
+      ['!', ['has', 'laut_wert']],
       0,
-      0,
-      70,
-      1,
+      ['interpolate', ['linear'], ['to-number', ['get', 'laut_wert'], 0], 0, 0, 70, 1],
     ])
   })
 

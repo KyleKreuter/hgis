@@ -2,7 +2,14 @@ import { useQuery } from '@tanstack/react-query'
 import type { LayerField } from '@/api/layers'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatAttributeNumber } from '@/lib/format'
-import { columnNameOfField, fieldIdOfColumn, heatmapFieldRangeQuery, sourceNameOfField, type FieldRange } from './classification'
+import {
+  columnNameOfField,
+  fieldIdOfColumn,
+  heatmapFieldRangeQuery,
+  resolveRangeState,
+  sourceNameOfField,
+  type FieldRangeState,
+} from './classification'
 import { NumberInput, Row } from './controls'
 import { COLOR_RAMPS, sampleRamp } from './defaults'
 import { isNumericField } from './fields'
@@ -40,10 +47,15 @@ export function HeatmapEditor({ layerId, renderer, fields, onChange }: HeatmapEd
   const numericFields = fields.filter(isNumericField)
   const field = renderer.field
 
-  const { data: range, isFetching } = useQuery({
+  const query = useQuery({
     ...heatmapFieldRangeQuery(layerId, field ?? ''),
     enabled: field !== null,
   })
+  // Same conversion `MapLayerSync` applies to its own copy of this query
+  // (`heatmapFieldRanges.ts`) -- both have to agree on what "the range is unavailable"
+  // means, or the panel could show a plausible range for a layer whose heatmap on the
+  // map already fell back to the diagnostic colour (team review, package 2).
+  const rangeState = resolveRangeState(query)
 
   function selectField(value: string) {
     onChange({ ...renderer, field: value === DENSITY_VALUE ? null : columnNameOfField(fields, value) })
@@ -102,7 +114,7 @@ export function HeatmapEditor({ layerId, renderer, fields, onChange }: HeatmapEd
         <PaletteSelect value={renderer.ramp} onValueChange={(ramp) => onChange({ ...renderer, ramp })} includeCategorical={false} />
       </Row>
 
-      <HeatmapLegend ramp={renderer.ramp} hasField={field !== null} isFetching={isFetching} range={range} />
+      <HeatmapLegend ramp={renderer.ramp} hasField={field !== null} isFetching={query.isFetching} rangeState={rangeState} />
     </>
   )
 }
@@ -111,7 +123,7 @@ interface HeatmapLegendProps {
   ramp: string
   hasField: boolean
   isFetching: boolean
-  range: FieldRange | undefined
+  rangeState: FieldRangeState
 }
 
 /**
@@ -119,8 +131,14 @@ interface HeatmapLegendProps {
  * heatmap without this is a colour gradient with no stated meaning. Density mode reads
  * "wenig"/"viel", a weighted field its own min/max, formatted the same way a graduated
  * class's bound is (`formatAttributeNumber`, `fields.ts`'s `formatClassLabel`).
+ *
+ * Reads `rangeState`, not a raw `min`/`max`, on purpose: a `FieldRange` here is already
+ * guaranteed finite (`resolveRangeState`), so there is no `null` left to accidentally
+ * format -- `Intl.NumberFormat` silently turns `null` into `"0"`, which used to make an
+ * unavailable range read as a very plausible, entirely fabricated "0 bis 0" (team
+ * review, package 2).
  */
-function HeatmapLegend({ ramp, hasField, isFetching, range }: HeatmapLegendProps) {
+function HeatmapLegend({ ramp, hasField, isFetching, rangeState }: HeatmapLegendProps) {
   const colors = sampleRamp(COLOR_RAMPS.find((candidate) => candidate.id === ramp) ?? COLOR_RAMPS[0], 6)
 
   return (
@@ -134,13 +152,15 @@ function HeatmapLegend({ ramp, hasField, isFetching, range }: HeatmapLegendProps
           </>
         )}
         {hasField && isFetching && <span>Wird geladen…</span>}
-        {hasField && !isFetching && range && (
+        {hasField && !isFetching && rangeState && rangeState !== 'error' && (
           <>
-            <span>{formatAttributeNumber(range.min)}</span>
-            <span>{formatAttributeNumber(range.max)}</span>
+            <span>{formatAttributeNumber(rangeState.min)}</span>
+            <span>{formatAttributeNumber(rangeState.max)}</span>
           </>
         )}
-        {hasField && !isFetching && !range && <span>Spanne unbekannt</span>}
+        {hasField && !isFetching && (rangeState === 'error' || rangeState === undefined) && (
+          <span>Spanne nicht verfügbar</span>
+        )}
       </div>
     </div>
   )

@@ -1,3 +1,4 @@
+import { createExpression } from '@maplibre/maplibre-gl-style-spec'
 import { describe, expect, it } from 'vitest'
 import type {
   CircleLayerSpecification,
@@ -406,13 +407,10 @@ describe('styleToMapLibre heatmap', () => {
     const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 0, max: 70 })
 
     expect(paint['heatmap-weight']).toEqual([
-      'interpolate',
-      ['linear'],
-      ['to-number', ['get', 'laut_wert'], 0],
+      'case',
+      ['!', ['has', 'laut_wert']],
       0,
-      0,
-      70,
-      1,
+      ['interpolate', ['linear'], ['to-number', ['get', 'laut_wert'], 0], 0, 0, 70, 1],
     ])
   })
 
@@ -426,6 +424,50 @@ describe('styleToMapLibre heatmap', () => {
     const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 5, max: 5 })
 
     expect(paint['heatmap-weight']).toBe(1)
+  })
+
+  /**
+   * Team-Review nach package 2: eine Expression, die richtig aussieht, ist nicht
+   * dasselbe wie eine, die richtig rechnet. Ausgewertet mit MapLibres eigenem
+   * Interpreter (`@maplibre/maplibre-gl-style-spec`'s `createExpression`), nicht nur an
+   * der erzeugten Struktur geprüft -- genau das hätte den ursprünglichen Fehler
+   * gefunden: `to-number`s zweites Argument (der Fallback) wird nur für einen Wert
+   * erreicht, der nicht in eine Zahl umgewandelt werden kann, z. B. eine Zeichenkette --
+   * für ein fehlendes Feld liefert `['get', field]` `null`, und MapLibres `Coercion`
+   * bricht die `'number'`-Umwandlung dafür sofort mit `0` ab, *bevor* der Fallback
+   * überhaupt betrachtet wird. Ohne einen expliziten `!has`-Zweig davor landete dieses
+   * `0` im `interpolate` und wurde je nach Vorzeichen der Spanne zu 0, zur Mitte oder --
+   * bei einer rein negativen Spanne -- zum Maximalgewicht.
+   */
+  function evaluateHeatmapWeight(expression: unknown, properties: Record<string, unknown>): number {
+    const parsed = createExpression(expression, 'heatmap-weight')
+    if (parsed.result !== 'success') {
+      throw new Error(`Expression konnte nicht geparst werden: ${JSON.stringify(parsed.value)}`)
+    }
+    // `type` here is MapLibre's own geometry-kind discriminator, not GeoJSON's -- a
+    // heatmap tile carries points, and no expression here reads the geometry anyway.
+    return parsed.value.evaluate({ zoom: 10 }, { type: 'Point', properties }) as number
+  }
+
+  it('gewichtet ein Objekt ohne Feldwert immer mit 0 -- unabhängig vom Vorzeichen der Spanne', () => {
+    const positiveRange = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 10, max: 100 })
+    const straddlingRange = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: -50, max: 70 })
+    const negativeRange = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: -100, max: -10 })
+
+    expect(evaluateHeatmapWeight(positiveRange['heatmap-weight'], {})).toBe(0)
+    expect(evaluateHeatmapWeight(straddlingRange['heatmap-weight'], {})).toBe(0)
+    // Der eigentliche Fund: bei rein negativer Spanne wurde ein Objekt ohne Wert vorher
+    // zum hellsten Punkt der Karte (Gewicht 1) statt zum dunkelsten.
+    expect(evaluateHeatmapWeight(negativeRange['heatmap-weight'], {})).toBe(0)
+  })
+
+  it('interpoliert einen vorhandenen Wert weiterhin korrekt zwischen den Rändern', () => {
+    const paint = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), { min: 0, max: 70 })
+    const weight = paint['heatmap-weight']
+
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 0 })).toBe(0)
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 35 })).toBe(0.5)
+    expect(evaluateHeatmapWeight(weight, { laut_wert: 70 })).toBe(1)
   })
 
   it('klammert Radius und Intensität an ihre Grenzen', () => {

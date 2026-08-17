@@ -190,35 +190,46 @@ export async function requestGraduatedClasses(
 }
 
 /**
- * `min`/`max` for one numeric field -- what a heatmap renderer normalises
- * `heatmap-weight` against (`styleToMapLibre`), and what its legend labels its two
- * ends with (`HeatmapEditor`). A plain projection of `ClassifyResult`, which already
- * carries both alongside `breaks`.
+ * `min`/`max` for one numeric field, guaranteed finite -- what a heatmap renderer
+ * normalises `heatmap-weight` against (`styleToMapLibre`), and what its legend labels
+ * its two ends with (`HeatmapEditor`).
+ *
+ * Deliberately not a projection of `ClassifyResult` (whose own `min`/`max` are
+ * `number | null` -- an empty column has no range to report): this type exists so
+ * everything downstream of `resolveRangeState` can read `.min`/`.max` as plain numbers
+ * without re-checking nullability at every use. `resolveRangeState` is the one place
+ * that conversion happens; nothing else constructs a `FieldRange`.
  */
-export type FieldRange = Pick<ClassifyResult, 'min' | 'max'>
+export interface FieldRange {
+  min: number
+  max: number
+}
 
 /**
- * What `MapLayerSync` (`heatmapFieldRanges.ts`) knows about a heatmap's weight field
- * range at render time -- and the reason `styleToMapLibre` needs any state logic here
- * at all where `categorized`/`graduated` need none: their classes are computed once and
- * stored in the style itself, self-sufficient from then on, while a heatmap's `field` is
- * only ever a column name -- the range has to be re-fetched live on every map render, so
- * "the fetch has not settled" and "the fetch will never settle" are both real states the
- * map has to render *something* for.
+ * What `MapLayerSync` (`heatmapFieldRanges.ts`) and `HeatmapEditor`'s own legend know
+ * about a heatmap's weight field range at render time -- and the reason `styleToMapLibre`
+ * needs any state logic here at all where `categorized`/`graduated` need none: their
+ * classes are computed once and stored in the style itself, self-sufficient from then
+ * on, while a heatmap's `field` is only ever a column name -- the range has to be
+ * re-fetched live on every map render, so "the fetch has not settled" and "the fetch
+ * will never settle" are both real states something has to render for.
  *
  * `undefined` while the request has not settled yet, or for a renderer that never needed
  * one (no field -- density mode). `'error'` once unavailability is confirmed: the request
- * itself failed, or it succeeded with a range that is not a real range at all (a layer
- * with no objects reads as non-finite `min`/`max`, see `heatmapFieldRanges.ts`'s
- * `resolveRangeState` -- `range.max > range.min` alone would silently read `NaN > NaN` as
- * `false` and land in the same bucket as "loading"). A resolved `FieldRange` otherwise.
+ * itself failed, or it succeeded with a `ClassifyResult` that is not a real range at all
+ * -- `min`/`max` came back `null` (a layer with no objects, or every object missing the
+ * field) or otherwise non-finite. `range.max > range.min` alone would read `null > null`
+ * (coerced to `0 > 0`) as plain `false` and land silently in the same bucket as "loading"
+ * -- exactly the bug that used to leave a heatmap's own legend claiming a range of
+ * "0 bis 0" no data ever produced (team review, package 2). A resolved `FieldRange`
+ * otherwise.
  *
  * `undefined` and `'error'` are deliberately not the same thing to `styleToMapLibre`: the
  * first is `heatmapWeight`'s existing "count everyone equally, a transient state that
  * self-heals" fallback; the second additionally swaps `heatmap-color` for a diagnostic
  * pattern no ramp in `COLOR_RAMPS` can produce, because a heatmap that will never learn
  * its field's range would otherwise render exactly like density mode forever -- a result
- * that looks finished and is not (CONTRACT.md discussion, package 2 review).
+ * that looks finished and is not.
  */
 export type FieldRangeState = FieldRange | 'error' | undefined
 
@@ -233,6 +244,40 @@ const RANGE_CLASS_COUNT = 2
 /** The field-range counterpart to `layerClassifyQuery`/`layerValuesQuery` above. */
 export function heatmapFieldRangeQuery(layerId: string, field: string) {
   return layerClassifyQuery(layerId, field, RANGE_METHOD, RANGE_CLASS_COUNT)
+}
+
+/**
+ * One query result, narrowed to the two members `resolveRangeState` reads --
+ * structural on purpose so this stays independent of exactly which `useQueries`/
+ * `useQuery` result type the installed TanStack Query version infers.
+ */
+export interface RangeQueryResult {
+  isError: boolean
+  data: Pick<ClassifyResult, 'min' | 'max'> | undefined
+}
+
+/**
+ * Turns one `/classify` query's result into the three states `FieldRangeState`
+ * distinguishes -- the one place a raw, nullable `ClassifyResult` becomes either
+ * `'error'` or a `FieldRange` guaranteed finite. Shared by `MapLayerSync`
+ * (`heatmapFieldRanges.ts`, the map's own weight normalisation) and `HeatmapEditor`'s
+ * legend, so both agree on what "the range is unavailable" means -- before this they
+ * did not: the legend read its own query's `data` directly and had no notion of
+ * `'error'` at all, which is how it ended up formatting a `null` `min`/`max` with
+ * `Intl.NumberFormat` (silently `"0"`) into a plausible-looking but fabricated
+ * "0 bis 0" (team review, package 2).
+ *
+ * A request that failed outright is the obvious `'error'`; one that *succeeded* with a
+ * non-finite (or `null`) `min`/`max` is folded into the same `'error'`, because
+ * `range.max > range.min` alone reads `NaN > NaN` (or `null`'s coercion to `0 > 0`) as
+ * plain `false` and would otherwise land silently in the same bucket as "still loading".
+ */
+export function resolveRangeState(result: RangeQueryResult | undefined): FieldRangeState {
+  if (result?.isError) return 'error'
+  const data = result?.data
+  if (!data) return undefined
+  if (!Number.isFinite(data.min) || !Number.isFinite(data.max)) return 'error'
+  return { min: data.min as number, max: data.max as number }
 }
 
 export interface CategorizedClassification {
