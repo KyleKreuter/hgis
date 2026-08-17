@@ -81,7 +81,7 @@ class TrashedLayerWriteGuardTest {
 		layer = layerRepository.saveAndFlush(created);
 
 		mockMvc.perform(delete("/api/layers/{id}", layer.getId()))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk());
 	}
 
 	@AfterEach
@@ -141,6 +141,17 @@ class TrashedLayerWriteGuardTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 						{"name":"Test","type":"TEXT"}
+						"""));
+	}
+
+	@Test
+	@DisplayName("renaming a field on a trashed layer is a 409 -- found by review, renameField "
+			+ "used to call the unguarded lookup usage() also uses")
+	void renameFieldIsConflict() throws Exception {
+		expectConflict(patch("/api/layers/{id}/fields/{fieldId}", layer.getId(), UUID.randomUUID())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"name":"Neuer Name"}
 						"""));
 	}
 

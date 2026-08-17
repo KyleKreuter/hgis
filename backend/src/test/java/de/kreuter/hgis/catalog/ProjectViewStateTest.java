@@ -122,7 +122,7 @@ class ProjectViewStateTest {
 				Map.of(layer.getId(), new ProjectDtos.LayerViewState(null, null, List.of(1L, 2L, 3L))));
 		putViewState(saved).andExpect(status().isNoContent());
 
-		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId())).andExpect(status().isNoContent());
+		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId())).andExpect(status().isOk());
 
 		getViewState()
 				.andExpect(status().isOk())
@@ -136,7 +136,7 @@ class ProjectViewStateTest {
 		ProjectDtos.ViewState saved = new ProjectDtos.ViewState(1, layer.getId(), Map.of());
 		putViewState(saved).andExpect(status().isNoContent());
 
-		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId())).andExpect(status().isNoContent());
+		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId())).andExpect(status().isOk());
 
 		getViewState()
 				.andExpect(status().isOk())

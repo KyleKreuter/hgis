@@ -111,7 +111,7 @@ class ChangeLogControllerTest {
 	@DisplayName("deleting the layer produces a layer.delete entry alongside the create")
 	void deletingTheLayerAddsAnEntry() throws Exception {
 		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk());
 
 		mockMvc.perform(get("/api/projects/{projectId}/changes", project.getId()))
 				.andExpect(status().isOk())

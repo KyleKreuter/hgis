@@ -99,12 +99,16 @@ public class LayerController {
 		return service.reorder(projectId, request.layerIdsBottomToTop());
 	}
 
-	/** Moves the layer to the project's trash rather than destroying it (CONTRACT.md "Schreibstufe" 1.1). */
+	/**
+	 * Moves the layer to the project's trash rather than destroying it (CONTRACT.md
+	 * "Schreibstufe" 1.1). Answers 200 with the trash entry, not a bare 204 -- a write
+	 * reports what it did, the same rule that already held for {@link #restore}
+	 * (orchestrator amendment).
+	 */
 	@DeleteMapping("/api/layers/{layerId}")
-	public ResponseEntity<Void> delete(@PathVariable UUID layerId,
+	public LayerDtos.TrashEntry delete(@PathVariable UUID layerId,
 			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
-		service.delete(layerId, ClientId.require(origin));
-		return ResponseEntity.noContent().build();
+		return service.delete(layerId, ClientId.require(origin));
 	}
 
 	/** What sits in a project's trash: name, deletion time, object count, who deleted it. */
@@ -122,13 +126,17 @@ public class LayerController {
 
 	/**
 	 * Empties one trash entry for good -- the only endpoint that actually destroys a
-	 * layer's data (CONTRACT.md "Schreibstufe" 1.1).
+	 * layer's data (CONTRACT.md "Schreibstufe" 1.1). Answers 200 with the trash entry as
+	 * it stood the moment before the purge -- {@code deletedAt}/{@code deletedBy} describe
+	 * the trashing, not the purge itself, since the layer no longer exists to describe
+	 * anything about afterwards (orchestrator amendment). Without a body, "the layer was
+	 * empty", "the layer held 70 000 objects" and "the layer was already gone" all look
+	 * identical to the caller.
 	 */
 	@DeleteMapping("/api/layers/{layerId}/purge")
-	public ResponseEntity<Void> purge(@PathVariable UUID layerId,
+	public LayerDtos.TrashEntry purge(@PathVariable UUID layerId,
 			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
-		service.purge(layerId, ClientId.require(origin));
-		return ResponseEntity.noContent().build();
+		return service.purge(layerId, ClientId.require(origin));
 	}
 
 	/** Adds one attribute field to an existing layer (CONTRACT.md phase 11). */

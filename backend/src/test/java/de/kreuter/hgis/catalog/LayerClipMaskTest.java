@@ -280,7 +280,7 @@ class LayerClipMaskTest {
 		assertThat(clipVersionOf(oben.getId())).isNotZero();
 
 		mockMvc.perform(delete("/api/layers/{layerId}", maskeA.getId()))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk());
 
 		assertThat(clipVersionOf(oben.getId())).isNotZero();
 		assertThat(layerRepository.findById(maskeB.getId()).orElseThrow().isMask()).isTrue();
@@ -293,7 +293,7 @@ class LayerClipMaskTest {
 		assertThat(clipVersionOf(oben.getId())).isNotZero();
 
 		mockMvc.perform(delete("/api/layers/{layerId}", maskeA.getId()))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk());
 
 		assertThat(clipVersionOf(oben.getId())).isZero();
 

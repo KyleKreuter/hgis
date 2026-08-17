@@ -161,11 +161,17 @@ class LayerControllerTest {
 	}
 
 	@Test
-	@DisplayName("delete moves the layer to the trash -- catalog row and physical table both survive")
+	@DisplayName("delete moves the layer to the trash and answers with the trash entry -- "
+			+ "catalog row and physical table both survive")
 	void deleteMovesTheLayerToTheTrashInsteadOfDroppingIt() throws Exception {
 		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId())
 						.header(ClientId.HEADER, "test-client"))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.id").value(layer.getId().toString()))
+				.andExpect(jsonPath("$.name").value("Gebäude"))
+				.andExpect(jsonPath("$.featureCount").value(1))
+				.andExpect(jsonPath("$.deletedBy").value("test-client"))
+				.andExpect(jsonPath("$.deletedAt").exists());
 
 		Layer reloaded = layerRepository.findById(layer.getId()).orElseThrow();
 		assertThat(reloaded.isTrashed()).isTrue();
@@ -189,7 +195,7 @@ class LayerControllerTest {
 	@DisplayName("a trashed layer disappears from the ordinary layer list")
 	void trashedLayerIsHiddenFromTheOrdinaryList() throws Exception {
 		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk());
 
 		mockMvc.perform(get("/api/projects/{projectId}/layers", project.getId()))
 				.andExpect(status().isOk())
@@ -200,7 +206,7 @@ class LayerControllerTest {
 	@DisplayName("deleting an already-trashed layer is a conflict, not a silent no-op")
 	void deletingAnAlreadyTrashedLayerConflicts() throws Exception {
 		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk());
 
 		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
 				.andExpect(status().isConflict());
@@ -211,7 +217,7 @@ class LayerControllerTest {
 	void trashListsWhatWasDeleted() throws Exception {
 		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId())
 						.header(ClientId.HEADER, "cli-abc"))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk());
 
 		mockMvc.perform(get("/api/projects/{projectId}/trash", project.getId()))
 				.andExpect(status().isOk())
@@ -227,7 +233,7 @@ class LayerControllerTest {
 	@DisplayName("restore brings a trashed layer back and it reappears in the list")
 	void restoreBringsALayerBackFromTheTrash() throws Exception {
 		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk());
 
 		mockMvc.perform(post("/api/layers/{layerId}/restore", layer.getId()))
 				.andExpect(status().isOk())
@@ -248,13 +254,21 @@ class LayerControllerTest {
 	}
 
 	@Test
-	@DisplayName("purge is the only path left that actually drops the payload table")
+	@DisplayName("purge is the only path left that actually drops the payload table, and answers "
+			+ "with the trash entry as it stood right before the purge -- proving deletedAt/deletedBy "
+			+ "describe the trashing (test-client's delete), not the purge call itself (no header)")
 	void purgeDropsThePhysicalTableAndRemovesTheCatalogRow() throws Exception {
-		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
-				.andExpect(status().isNoContent());
+		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId())
+						.header(ClientId.HEADER, "cli-purge"))
+				.andExpect(status().isOk());
 
 		mockMvc.perform(delete("/api/layers/{layerId}/purge", layer.getId()))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.id").value(layer.getId().toString()))
+				.andExpect(jsonPath("$.name").value("Gebäude"))
+				.andExpect(jsonPath("$.featureCount").value(1))
+				.andExpect(jsonPath("$.deletedBy").value("cli-purge"))
+				.andExpect(jsonPath("$.deletedAt").exists());
 
 		assertThat(layerRepository.findById(layer.getId())).isEmpty();
 

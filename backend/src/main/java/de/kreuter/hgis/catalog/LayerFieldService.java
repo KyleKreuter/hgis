@@ -98,7 +98,8 @@ public class LayerFieldService {
 	 */
 	@Transactional
 	public LayerDtos.Field renameField(UUID layerId, UUID fieldId, LayerDtos.RenameFieldRequest request) {
-		requireLayer(layerId);
+		Layer layer = requireLayer(layerId);
+		layer.requireNotTrashed();
 		List<LayerField> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
 		LayerField field = fields.stream()
 				.filter(candidate -> candidate.getId().equals(fieldId))

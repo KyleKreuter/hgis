@@ -235,10 +235,14 @@ public class LayerService {
 	 * they are; only {@link #deletedAt}/{@link #deletedBy} change. {@link #purge} is now
 	 * the only path in this class that actually destroys anything.
 	 *
+	 * <p>Returns the trash entry rather than nothing: without it, "the layer was empty",
+	 * "the layer held 70 000 objects" and "the layer was already gone" are indistinguishable
+	 * to the caller -- all three look like success (orchestrator amendment).
+	 *
 	 * @throws ConflictException if the layer is already in the trash
 	 */
 	@Transactional
-	public void delete(UUID layerId, String clientName) {
+	public LayerDtos.TrashEntry delete(UUID layerId, String clientName) {
 		Layer layer = requireLocked(layerId);
 		if (layer.isTrashed()) {
 			throw new ConflictException("Layer '" + layer.getName() + "' liegt bereits im Papierkorb", null);
@@ -247,6 +251,8 @@ public class LayerService {
 		layer.moveToTrash(clientName);
 		changeLog.record(layer.getProject().getId(), layer.getId(), layer.getName(),
 				ChangeLogAction.LAYER_DELETE, clientName, 1, null);
+
+		return toTrashEntry(layer);
 	}
 
 	/**
@@ -259,10 +265,14 @@ public class LayerService {
 			throw new NotFoundException("Projekt " + projectId + " existiert nicht");
 		}
 		return layerRepository.findTrashedByProject(projectId).stream()
-				.map(layer -> new LayerDtos.TrashEntry(
-						layer.getId(), layer.getName(), layer.getDeletedAt(),
-						layer.getFeatureCount(), layer.getDeletedBy()))
+				.map(LayerService::toTrashEntry)
 				.toList();
+	}
+
+	private static LayerDtos.TrashEntry toTrashEntry(Layer layer) {
+		return new LayerDtos.TrashEntry(
+				layer.getId(), layer.getName(), layer.getDeletedAt(),
+				layer.getFeatureCount(), layer.getDeletedBy());
 	}
 
 	/**
@@ -296,9 +306,14 @@ public class LayerService {
 	 *
 	 * @throws ConflictException if the layer is not in the trash -- purge is reached
 	 *     through the trash, never as a shortcut around it
+	 * @return the trash entry as it stood the moment before this purge -- describing the
+	 *     trashing, not the purge itself, since the layer no longer exists to describe
+	 *     anything about afterwards. That is deliberately the more useful answer: "this is
+	 *     what sat in the trash before it was gone", the one thing purge is uniquely
+	 *     positioned to tell the caller and no other endpoint can (orchestrator amendment).
 	 */
 	@Transactional
-	public void purge(UUID layerId, String clientName) {
+	public LayerDtos.TrashEntry purge(UUID layerId, String clientName) {
 		Layer layer = requireLocked(layerId);
 		if (!layer.isTrashed()) {
 			throw new ConflictException("Layer '" + layer.getName()
@@ -307,6 +322,7 @@ public class LayerService {
 
 		UUID projectId = layer.getProject().getId();
 		String name = layer.getName();
+		LayerDtos.TrashEntry snapshot = toTrashEntry(layer);
 
 		if (layer.isVectorLayer()) {
 			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(layer.getTableName()))
@@ -319,6 +335,8 @@ public class LayerService {
 		// is what keeps this entry -- and every earlier one for this layer, nulled the
 		// same way by ON DELETE SET NULL -- readable regardless.
 		changeLog.record(projectId, null, name, ChangeLogAction.LAYER_PURGE, clientName, 1, null);
+
+		return snapshot;
 	}
 
 	// --- create validation -------------------------------------------------------
