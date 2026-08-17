@@ -462,6 +462,30 @@ def test_delete_features_rejects_a_scalar_iterable_instead_of_a_list(fids) -> No
     assert transport.count == 0
 
 
+def test_delete_features_rejects_a_string_that_is_not_a_str() -> None:
+    """
+    The same break, once more, for a value that is not one of the four
+    enumerated types at all: ``collections.UserString`` wraps a real ``str``
+    instead of subclassing one, so it slips past ``isinstance(value, str)``
+    -- but iterating it still walks it one character at a time. Caught by
+    the effect check in :func:`hgis.edits._decomposes_into_single_characters`,
+    not by widening the type list, which would only ever cover the next
+    named type and never the one after that.
+    """
+    import collections
+
+    def handle(request: object) -> Response:  # pragma: no cover - must not run
+        raise AssertionError("Das haette nichts senden duerfen.")
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    with pytest.raises(hgis.InvalidArgumentError):
+        layer.delete_features(collections.UserString("123"))
+
+    assert transport.count == 0
+
+
 @pytest.mark.parametrize("fids", [[123], (123,), {123}, frozenset({123}), range(120, 124)])
 def test_delete_features_accepts_real_collections(fids) -> None:
     """The check above must not be so tight that an ordinary collection fails."""
@@ -477,6 +501,79 @@ def test_delete_features_accepts_real_collections(fids) -> None:
     layer.delete_features(fids)
 
     assert transport.count == 1
+
+
+def test_delete_features_accepts_array_array() -> None:
+    """
+    A real collection that, like the bytes family, iterates into plain
+    integers rather than into its own elements -- must stay accepted, not
+    be swept up by widening the check for the bytes family.
+    """
+    import array
+
+    def handle(request: object) -> Response:
+        return Response(
+            200, '{"createdFids":{},"updated":0,"deleted":1,"dataVersion":1,"featureCount":1}'
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.delete_features(array.array("i", [123]))
+
+    assert transport.count == 1
+
+
+def test_delete_features_accepts_a_single_element_numpy_array() -> None:
+    """
+    The one shape the effect check in
+    :func:`hgis.edits._decomposes_into_single_characters` has to be careful
+    with: NumPy's ``==`` compares element-wise, so
+    ``arr[0] == arr[0:1]`` for a one-element array returns an array holding
+    one ``True``, not the ``bool`` a real match returns. Trusting that as
+    truthy would reject exactly the single-fid case this check must accept.
+    """
+    numpy = pytest.importorskip("numpy")
+
+    def handle(request: object) -> Response:
+        return Response(
+            200, '{"createdFids":{},"updated":0,"deleted":1,"dataVersion":1,"featureCount":1}'
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.delete_features(numpy.array([123]))
+
+    assert transport.count == 1
+
+
+def test_delete_features_rejects_a_string_kept_in_a_generator_untouched() -> None:
+    """
+    The effect check indexes rather than calling ``next(iter(value))`` to
+    peek at a value -- so a generator, which the check must leave alone
+    entirely (it has no ``__getitem__``), is not silently drained of its
+    first item by the very check that is supposed to be read-only.
+    """
+
+    def one_and_two():
+        yield 1
+        yield 2
+
+    generator = one_and_two()
+
+    def handle(request: object) -> Response:
+        return Response(
+            200, '{"createdFids":{},"updated":0,"deleted":2,"dataVersion":1,"featureCount":1}'
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.delete_features(generator)
+
+    assert transport.count == 1
+    assert transport.bodies[-1]["deletes"] == [1, 2]
 
 
 def test_edit_rejects_a_string_for_deletes_too() -> None:

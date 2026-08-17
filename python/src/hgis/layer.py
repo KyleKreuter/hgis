@@ -677,11 +677,13 @@ class Layer:
         does not do that for you.
 
         :raises hgis.errors.InvalidArgumentError: ``fids`` is a ``str``,
-            ``bytes``, ``bytearray`` or ``memoryview`` -- all four are
-            iterable too, so ``layer.delete_features("123")``, almost
-            certainly meant as the one fid 123, would otherwise be walked
-            element by element and delete objects that have nothing to do
-            with each other or with 123. See :data:`hgis.edits._SCALAR_ITERABLES`.
+            ``bytes``, ``bytearray``, ``memoryview``, or anything else that
+            decomposes into its own characters the same way those do (see
+            :func:`hgis.edits._decomposes_into_single_characters`) -- all of
+            them are iterable too, so ``layer.delete_features("123")``,
+            almost certainly meant as the one fid 123, would otherwise be
+            walked element by element and delete objects that have nothing
+            to do with each other or with 123.
         """
         _reject_scalar_iterable("fids", fids)
         return self.edit(deletes=list(fids))

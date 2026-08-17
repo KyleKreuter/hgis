@@ -91,16 +91,58 @@ class EditResult:
 #: ``memoryview`` split into byte values (``b"123"`` -> ``[49, 50, 51]``, the
 #: ASCII codes of the digits, not the digits). Both land on the server as a
 #: batch touching several unrelated objects instead of the one that was meant.
+#:
+#: An enumeration of types, and known to be incomplete because of it: it
+#: catches every value that *is* one of these four types, and nothing that
+#: merely *behaves* like one without being one. See
+#: :func:`_decomposes_into_single_characters` for the other half of the check
+#: -- the one that looks at what a value does rather than what it is.
 _SCALAR_ITERABLES = (str, bytes, bytearray, memoryview)
+
+
+def _decomposes_into_single_characters(value: Any) -> bool:
+    """
+    True for a value that is not one of :data:`_SCALAR_ITERABLES` by type, but
+    still splits the same way they do. ``collections.UserString`` is the
+    standard library's own example: it wraps a real ``str`` rather than
+    subclassing one, so ``isinstance(value, str)`` misses it, yet
+    ``list(UserString("123"))`` is ``['1', '2', '3']``, exactly the break
+    this whole check exists to catch.
+
+    Checks the effect, not the type: for ``str`` and everything that behaves
+    like it, indexing one element (``value[0]``) and slicing that same one
+    element (``value[0:1]``) come back equal, because there is no separate
+    "character" type standing between the two. An actual collection never
+    has that property -- ``[1, 2, 3][0]`` is ``1``, ``[1, 2, 3][0:1]`` is
+    ``[1]``, and ``1 == [1]`` is false for every real collection, not only
+    lists. Compared with ``is True`` rather than trusted as a plain bool,
+    because a NumPy array answers ``==`` element-wise: a single-element
+    ``numpy.ndarray`` would otherwise pass this check by returning an array
+    holding one ``True`` instead of the ``bool`` a real match returns, and be
+    mistaken for one of these when it is only a collection with one entry.
+
+    A value with no ``__getitem__`` at all -- a generator, a ``set``, a
+    ``dict`` -- fails on the first line and is left alone. Indexing rather
+    than ``next(iter(value))`` is deliberate: consuming from an iterator to
+    peek at it would silently drop that first item for whatever reads
+    ``value`` next; a one-shot iterator simply is not subscriptable, so this
+    never touches it.
+    """
+    try:
+        first, one_slice = value[0], value[0:1]
+    except (TypeError, IndexError, KeyError):
+        return False
+    return (first == one_slice) is True
 
 
 def _reject_scalar_iterable(name: str, value: Any) -> None:
     """
     :raises hgis.errors.InvalidArgumentError: ``value`` is one of
-        :data:`_SCALAR_ITERABLES` -- see there for what it would otherwise
-        quietly become
+        :data:`_SCALAR_ITERABLES`, or anything else that decomposes into its
+        own characters the same way those do -- see
+        :func:`_decomposes_into_single_characters` for what that adds
     """
-    if isinstance(value, _SCALAR_ITERABLES):
+    if isinstance(value, _SCALAR_ITERABLES) or _decomposes_into_single_characters(value):
         raise InvalidArgumentError(
             f"{name} erwartet eine Liste, keine einzelne Zeichen- oder Bytefolge: "
             f"{value!r}. Zerlegt in ihre einzelnen Zeichen oder Bytes, würde sie "
@@ -123,7 +165,9 @@ def apply_edits(
     about reading a layer's shape, not about the wire format of a write.
 
     :raises hgis.errors.InvalidArgumentError: ``creates``, ``updates`` or
-        ``deletes`` is one of :data:`_SCALAR_ITERABLES` -- passed for
+        ``deletes`` is one of :data:`_SCALAR_ITERABLES`, or decomposes into
+        its own characters the same way those do (see
+        :func:`_decomposes_into_single_characters`) -- passed for
         ``deletes``, a ``str`` or ``bytes`` given as one fid would otherwise
         quietly reach the server as several
     :raises hgis.errors.ConflictError: a ``row_version`` no longer matches

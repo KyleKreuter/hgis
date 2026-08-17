@@ -130,6 +130,13 @@ class UnsafeTransportError(HgisError, ValueError):
     rather than silently turned back off: flipping the flag here would change
     that client's behaviour everywhere else it is used too, and do it
     quietly.
+
+    This is the one way to make httpx resolve a redirect on its own that can
+    be checked from here: it reads one attribute. A caller who installs a
+    custom ``httpx.BaseTransport`` that resolves a redirect internally,
+    instead of setting this attribute, is not caught by this error at all --
+    see :class:`hgis.client.RequestGuard`'s own docstring for why not, and
+    for how far that gap was measured to go.
     """
 
 

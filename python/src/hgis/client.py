@@ -243,8 +243,9 @@ class RequestGuard(Transport):
     A hop may not change origin either. Without that rule, an injected redirect
     could send this request -- and the headers on it -- to another host.
 
-    **This depends on the floor handing a redirect response back untouched,
-    and is not merely assumed of it.** A caller who hands
+    **This depends on the floor handing a redirect response back untouched --
+    enforced for the one way that was found to fail, not guaranteed for
+    every way it could.** A caller who hands
     :class:`hgis.transport.HttpxTransport` an ``httpx.Client`` configured with
     ``follow_redirects=True`` would put this class in exactly the position
     the paragraph above describes -- httpx resolving the whole chain *inside*
@@ -254,12 +255,35 @@ class RequestGuard(Transport):
     :class:`hgis.transport.HttpxTransport` makes, not only when it is built,
     since ``follow_redirects`` is a plain attribute the caller can still flip
     afterwards on a client they own; see
-    :class:`hgis.errors.UnsafeTransportError`. That guarantee belongs to
-    ``HttpxTransport`` specifically -- a caller who substitutes the *entire*
-    floor with their own :class:`~hgis.transport.Transport`, one that builds
-    its own following ``httpx.Client`` internally, sits outside what either
-    class can see. That is intent, not the accident this paragraph guards
-    against.
+    :class:`hgis.errors.UnsafeTransportError`.
+
+    **A known gap, left open rather than hidden:** that check reads one
+    attribute. A caller who instead plugs a custom ``httpx.BaseTransport``
+    into ``httpx.Client(transport=...)`` -- official, public httpx API, the
+    same extension point a retry, caching or auth wrapper would use -- and
+    has *that* transport resolve the redirect internally puts this class
+    back in the same position, with ``follow_redirects`` never touched and
+    the check above never tripped. Demonstrated the same way the paragraph
+    above was: a checked ``PUT`` -- full body, the client-name header
+    included -- arrived unchecked at a second, forbidden host, while
+    ``response.url``, ``response.history`` and ``response.request.url`` on
+    the answer this loop received all still read back the *original* URL --
+    the same values an ordinary, un-redirected answer would carry. There is
+    nothing on the response this loop could check that would tell the two
+    apart: ``httpx.BaseTransport`` is opaque by the design of the interface
+    it implements, which is exactly what lets a legitimate transport add
+    retries or caching without this class ever needing to know. Closing this
+    would mean ``HttpxTransport`` refusing to build on a caller-supplied
+    ``httpx.Client`` at all, giving up the connection-pool reuse that
+    argument exists for -- a bigger trade than this stage has made. Named
+    here so it is not mistaken for closed; see ``test_redirect.py`` for the
+    demonstration kept as a test, not only as this paragraph.
+
+    Substituting the *entire* floor with a caller's own
+    :class:`~hgis.transport.Transport` is a different case, and does stay
+    outside what either class can see, on purpose: ``HttpxTransport`` is not
+    involved at all then, so there is no promise about it left to break.
+    That is intent, not the accident the two paragraphs above guard against.
 
     It stops mistakes, not intent: writing to hGIS from Python needs nothing
     more than ``import httpx``. What it removes is the accidental write that
