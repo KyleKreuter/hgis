@@ -197,6 +197,31 @@ export async function requestGraduatedClasses(
  */
 export type FieldRange = Pick<ClassifyResult, 'min' | 'max'>
 
+/**
+ * What `MapLayerSync` (`heatmapFieldRanges.ts`) knows about a heatmap's weight field
+ * range at render time -- and the reason `styleToMapLibre` needs any state logic here
+ * at all where `categorized`/`graduated` need none: their classes are computed once and
+ * stored in the style itself, self-sufficient from then on, while a heatmap's `field` is
+ * only ever a column name -- the range has to be re-fetched live on every map render, so
+ * "the fetch has not settled" and "the fetch will never settle" are both real states the
+ * map has to render *something* for.
+ *
+ * `undefined` while the request has not settled yet, or for a renderer that never needed
+ * one (no field -- density mode). `'error'` once unavailability is confirmed: the request
+ * itself failed, or it succeeded with a range that is not a real range at all (a layer
+ * with no objects reads as non-finite `min`/`max`, see `heatmapFieldRanges.ts`'s
+ * `resolveRangeState` -- `range.max > range.min` alone would silently read `NaN > NaN` as
+ * `false` and land in the same bucket as "loading"). A resolved `FieldRange` otherwise.
+ *
+ * `undefined` and `'error'` are deliberately not the same thing to `styleToMapLibre`: the
+ * first is `heatmapWeight`'s existing "count everyone equally, a transient state that
+ * self-heals" fallback; the second additionally swaps `heatmap-color` for a diagnostic
+ * pattern no ramp in `COLOR_RAMPS` can produce, because a heatmap that will never learn
+ * its field's range would otherwise render exactly like density mode forever -- a result
+ * that looks finished and is not (CONTRACT.md discussion, package 2 review).
+ */
+export type FieldRangeState = FieldRange | 'error' | undefined
+
 // The `/classify` request every field-range lookup shares. `breaks` is never read here
 // -- only `min`/`max` are -- so any valid (method, classes) pair would do; fixing one
 // keeps every caller (the panel's own legend, `MapLayerSync`'s weight normalisation) on

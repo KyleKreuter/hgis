@@ -7,7 +7,7 @@ import type {
   VectorSourceSpecification,
 } from 'maplibre-gl'
 import { isMapImageLayer, isVectorLayer, type LayerSummary } from '@/api/layers'
-import type { FieldRange } from '@/styling/classification'
+import type { FieldRangeState } from '@/styling/classification'
 import { styleToMapLibre } from '@/styling/styleToMapLibre'
 import { buildTileUrl, sourceIdFor } from './layerSpecs'
 import { raiseOverlays } from './overlays'
@@ -105,7 +105,7 @@ function addToMap(map: MapLike, layer: LayerSummary, tileUrl: string, specs: Lay
 function specsFor(
   layer: LayerSummary,
   sourceId: string,
-  fieldRange: FieldRange | undefined,
+  fieldRange: FieldRangeState,
 ): { tileUrl: string; specs: LayerSpecification[] } {
   if (isMapImageLayer(layer)) {
     return { tileUrl: buildWmsGetMapUrl(layer.wms), specs: [wmsLayerSpec(layer, sourceId)] }
@@ -242,7 +242,7 @@ export function syncMapLayers(
   map: MapLike,
   layers: LayerSummary[],
   applied: Map<string, AppliedLayer>,
-  fieldRanges: Map<string, FieldRange> = new Map(),
+  fieldRanges: Map<string, FieldRangeState> = new Map(),
 ): void {
   const desired = new Map(layers.map((layer) => [layer.id, layer]))
 

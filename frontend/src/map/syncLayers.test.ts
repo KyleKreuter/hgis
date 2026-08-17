@@ -604,4 +604,17 @@ describe('syncMapLayers heatmap-Gewichtung', () => {
     const spec = layers.get('hgis-layer-layer-1-render') as AddLayerObject & { paint?: Record<string, unknown> }
     expect(spec.paint?.['heatmap-weight']).toBe(1)
   })
+
+  it('faerbt diagnostisch, sobald MapLayerSync die Spanne als bestaetigt fehlend meldet', () => {
+    const errored = createFakeMap()
+    syncMapLayers(errored.map, [heatmapLayer()], new Map<string, AppliedLayer>(), new Map([['layer-1', 'error']]))
+    const failed = errored.layers.get('hgis-layer-layer-1-render') as AddLayerObject & { paint?: Record<string, unknown> }
+
+    const resolved = createFakeMap()
+    syncMapLayers(resolved.map, [heatmapLayer()], new Map<string, AppliedLayer>(), new Map([['layer-1', { min: 0, max: 70 }]]))
+    const working = resolved.layers.get('hgis-layer-layer-1-render') as AddLayerObject & { paint?: Record<string, unknown> }
+
+    expect(failed.paint?.['heatmap-weight']).toBe(1)
+    expect(failed.paint?.['heatmap-color']).not.toEqual(working.paint?.['heatmap-color'])
+  })
 })

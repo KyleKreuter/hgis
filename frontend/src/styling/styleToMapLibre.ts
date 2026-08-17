@@ -9,7 +9,7 @@ import type {
 } from 'maplibre-gl'
 import type { VectorLayerSummary } from '@/api/layers'
 import { GEOMETRY_FILTERS, TILE_SOURCE_LAYER, layerIdsFor, layerSpecsFor } from '@/map/layerSpecs'
-import type { FieldRange } from './classification'
+import type { FieldRange, FieldRangeState } from './classification'
 import {
   COLOR_RAMPS,
   DEFAULT_FILL,
@@ -48,14 +48,14 @@ export function styleToMapLibre(
   layer: VectorLayerSummary,
   sourceId: string,
   /**
-   * The weight field's `min`/`max`, for a heatmap renderer that has one -- `undefined`
-   * for every other renderer, and while the range for a freshly chosen field has not
-   * loaded yet (`heatmapWeight` falls back to a constant weight until it has). Supplied
+   * The weight field's `min`/`max`, for a heatmap renderer that has one -- see
+   * `classification.ts`'s `FieldRangeState` for what each of its three states means and
+   * why a heatmap needs this parameter at all where the other renderers do not. Supplied
    * by the caller rather than fetched in here: this function stays pure and synchronous,
    * and `MapLayerSync` is what actually owns the query (`classification.ts`'s
-   * `heatmapFieldRangeQuery`).
+   * `heatmapFieldRangeQuery`, `map/heatmapFieldRanges.ts`).
    */
-  fieldRange?: FieldRange,
+  fieldRange?: FieldRangeState,
 ): LayerSpecification[] {
   // The unstyled path is the literal one from `layerSpecs`, not a re-derivation: every
   // layer that has never been styled must keep looking exactly as it did.
@@ -150,7 +150,7 @@ function heatmapSpecs(
   opacity: number,
   common: Common,
   labels: LabelStyle | null,
-  fieldRange: FieldRange | undefined,
+  fieldRange: FieldRangeState,
 ): LayerSpecification[] {
   const ids = layerIdsFor(layer.id, layer.geometryType, { labeled: labels !== null, heatmap: true })
   const specs: LayerSpecification[] = [
@@ -272,16 +272,49 @@ function toTransparent(hex: string): string {
   return `rgba(${r}, ${g}, ${b}, 0)`
 }
 
+/**
+ * The colour a heatmap falls back to once its weight field's range is *confirmed*
+ * unavailable (`FieldRangeState`'s `'error'`) -- not while it is merely still loading,
+ * which stays on the ordinary ramp via `heatmapColorRamp`. Without this, a heatmap whose
+ * range request fails permanently (the field was deleted, the layer has no objects, the
+ * request itself errors) would render with a constant weight *and* an ordinary colour --
+ * indistinguishable from a deliberately chosen density-mode heatmap, forever, with no way
+ * to tell "finished" from "broken" short of opening the panel (team review, package 2).
+ *
+ * Deliberately not grey, or any other single colour: `COLOR_RAMPS` already offers `greys`
+ * as a legitimate choice (`defaults.ts`), so a flat grey fallback would be invisible to
+ * anyone who happens to like grey heatmaps -- the one case the signal most needs to
+ * survive. Every ramp in the catalogue interpolates smoothly between two or three anchor
+ * colours; alternating between two fixed, saturated ones turns that smooth gradient into
+ * visible concentric bands instead -- the same "hazard stripes" convention warning tape
+ * uses -- which no ramp, present or future, produces by accident. Readable on the map
+ * alone, without opening the panel next to it.
+ */
+const HEATMAP_ERROR_BANDS = 8
+const HEATMAP_ERROR_COLORS = ['#f59e0b', '#18181b'] as const // amber / near-black
+
+function heatmapErrorColorRamp(): ExpressionSpecification {
+  const stops: (number | string)[] = [0, 'rgba(0, 0, 0, 0)']
+  for (let index = 1; index <= HEATMAP_ERROR_BANDS; index += 1) {
+    stops.push(index / HEATMAP_ERROR_BANDS, HEATMAP_ERROR_COLORS[index % 2])
+  }
+  return ['interpolate', ['linear'], ['heatmap-density'], ...stops] as unknown as ExpressionSpecification
+}
+
 function heatmapPaint(
   renderer: Extract<Renderer, { type: 'heatmap' }>,
   opacity: number,
-  fieldRange: FieldRange | undefined,
+  fieldRange: FieldRangeState,
 ): HeatmapLayerSpecification['paint'] {
+  const failed = fieldRange === 'error'
   return defined<NonNullable<HeatmapLayerSpecification['paint']>>({
-    'heatmap-weight': heatmapWeight(renderer.field, fieldRange),
+    // A failed range is not a range `heatmapWeight` can use either -- it falls back to
+    // the same constant weight "still loading" gets, the colour is what carries the
+    // distinction.
+    'heatmap-weight': heatmapWeight(renderer.field, failed ? undefined : fieldRange),
     'heatmap-radius': clamp(numberOr(renderer.radius, DEFAULT_HEATMAP_RADIUS), 1, 100),
     'heatmap-intensity': clamp(numberOr(renderer.intensity, DEFAULT_HEATMAP_INTENSITY), 0.1, 5),
-    'heatmap-color': heatmapColorRamp(renderer.ramp),
+    'heatmap-color': failed ? heatmapErrorColorRamp() : heatmapColorRamp(renderer.ramp),
     // Only written when it differs from MapLibre's own default, same convention
     // `linePaint`/`circlePaint` follow.
     ...(opacity < 1 ? { 'heatmap-opacity': effectiveOpacity(opacity) } : {}),

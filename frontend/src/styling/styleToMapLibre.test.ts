@@ -392,7 +392,7 @@ describe('styleToMapLibre heatmap', () => {
   function heatmapPaintOf(
     style: LayerStyle,
     layer: VectorLayerSummary = makeLayer(),
-    fieldRange?: { min: number; max: number },
+    fieldRange?: { min: number; max: number } | 'error',
   ): NonNullable<HeatmapLayerSpecification['paint']> {
     const [spec] = styleToMapLibre(style, layer, SOURCE_ID, fieldRange)
     return (spec as HeatmapLayerSpecification).paint ?? {}
@@ -451,6 +451,28 @@ describe('styleToMapLibre heatmap', () => {
     expect(color[3]).toBe(0)
     expect(color[4]).toMatch(/^rgba\(\d+, \d+, \d+, 0\)$/)
     expect(color[color.length - 2]).toBe(1)
+  })
+
+  /**
+   * Team-Review nach package 2: "lädt noch" und "wird nie kommen" sahen vorher gleich
+   * aus -- beide fielen auf ein konstantes Gewicht *und* die normale Rampe zurück, eine
+   * Karte, die aussieht, als hätte die Normierung funktioniert, obwohl sie es nicht hat.
+   * `'error'` bekommt deshalb eine eigene Farbe, das Gewicht bleibt bei beiden gleich.
+   */
+  it('faerbt bei bestaetigt fehlender Spanne diagnostisch statt mit der gewaehlten Rampe', () => {
+    const working = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'greys' }), makeLayer(), { min: 0, max: 70 })
+    const failed = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'greys' }), makeLayer(), 'error')
+
+    expect(failed['heatmap-color']).not.toEqual(working['heatmap-color'])
+    // Grau ist ein gültiger Katalogeintrag (`greys`) -- die Diagnosefarbe darf ihm daher
+    // nicht gleichen, sonst waere sie fuer genau die Person unsichtbar, die Grau mag.
+    expect(JSON.stringify(failed['heatmap-color'])).not.toContain('#404040')
+  })
+
+  it('faellt bei bestaetigt fehlender Spanne trotzdem auf ein konstantes Gewicht zurueck, nicht auf 0', () => {
+    // Ein unsichtbarer Layer waere kein Signal, nur ein weiteres Symptom -- die Karte
+    // zeigt weiterhin ehrlich, wo die Objekte liegen.
+    expect(heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), 'error')['heatmap-weight']).toBe(1)
   })
 
   it('rendert einen GEOMETRY-Layer als einen einzigen Punkt-Sublayer statt der Dreifach-Aufteilung', () => {
