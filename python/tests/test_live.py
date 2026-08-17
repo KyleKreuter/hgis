@@ -26,6 +26,7 @@ non-GET call through that client fails loudly before it reaches the network
 
 from __future__ import annotations
 
+import ast
 import os
 
 import pytest
@@ -135,11 +136,14 @@ def _every_client_built_here_must_be_read_only():
       level runs while pytest is still collecting this file -- before this
       fixture's setup has had any test to run around, and so before it has
       installed anything. The same is true, less obviously, of a decorator
-      argument, a parameter default value, and a class body's own
-      statements: all three run the moment the ``def``/``class`` statement
-      itself does, not when whatever they decorate or default is later
-      called. Demonstrated separately for all of these, and closed the
-      other way this file already knows: see
+      argument, a parameter default value on a ``def`` *or* a ``lambda``,
+      and a class body's own statements: all of these run the moment the
+      ``def``/``class``/``lambda`` expression itself does, not when
+      whatever they decorate or default is later called -- a default value
+      is evaluated once, when the function or lambda is defined, and reused
+      on every call after that, never re-evaluated then. Demonstrated
+      separately for all of these, and closed the other way this file
+      already knows: see
       ``test_no_module_level_statement_in_this_file_builds_a_client``
       below, which reads the syntax tree for exactly what collection would
       run immediately, rather than trying to patch something that is not
@@ -189,41 +193,37 @@ def test_a_client_not_built_on_the_read_only_floor_is_refused() -> None:
         getattr(hgis, "connect")(URL, timeout=5)
 
 
-def test_no_module_level_statement_in_this_file_builds_a_client() -> None:
+def _definition_time_client_calls(tree: ast.Module) -> list[ast.Call]:
     """
-    The gap the fixture above names but does not close: its patch is
-    installed by fixture *setup*, which pytest only runs around a test call.
-    A ``client = hgis.connect(URL)`` written directly at this file's top
-    level -- outside any function, a plausible slip while editing this file,
-    not a deliberate bypass the way an aliased import or reflection is --
-    would run while pytest is still collecting this module, before any
-    fixture exists to catch it.
+    Every ``hgis.connect(...)`` / ``hgis.Client(...)`` call in ``tree`` that
+    runs the moment Python reaches its statement -- while pytest is still
+    collecting the module the tree came from, before any fixture has run --
+    rather than only when something later calls whatever the statement
+    defined.
 
-    Confirmed: with the fixture's patch installed by hand *before* import
-    instead of relying on fixture setup, a module-level ``hgis.connect(...)``
-    added to a copy of this file still reached a real, unguarded client --
-    the same result as if no check existed at all.
+    That is more than "module level" suggests. A plain function or lambda
+    *body* is deferred and does not count: the runtime check in this file
+    already covers it, regardless of the syntax used to reach it. But a
+    decorator expression, a parameter default value -- on a ``def`` *or* a
+    ``lambda``, both evaluated once, when the function or lambda is defined,
+    never re-evaluated on a later call -- and a base class or keyword
+    argument on a ``class`` statement all run at *definition* time, the
+    moment the ``def``/``class``/``lambda`` expression itself runs. A class
+    body is not deferred at all, unlike a function's: it executes
+    immediately, as part of building the class's namespace, which is
+    exactly how a class gets its attributes in the first place.
 
-    So this reads the syntax tree instead, and only for what collection
-    would actually run *immediately* -- which is more than "module level"
-    suggests. A plain function body is deferred and does not count here; the
-    runtime check above already covers it regardless of the syntax used to
-    reach it. But a decorator expression, a parameter default value, and a
-    base class or keyword argument on a ``class`` statement all run at
-    *definition* time, the moment the ``def``/``class`` statement itself
-    runs -- and a class body is not deferred at all, unlike a function's: it
-    executes immediately, as part of building the class's namespace, which
-    is exactly how a class gets its attributes in the first place.
-    Confirmed for all three: a client built in a decorator argument, in a
-    default value, and as a bare class-body assignment all ran during
-    import, before any fixture existed, and before this check's earlier,
-    simpler version (which skipped a ``def``/``class`` node entirely) saw
-    any of them.
+    Confirmed for all four shapes -- a client built in a decorator argument,
+    in a ``def``'s default value, in a ``lambda``'s default value, and as a
+    bare class-body assignment -- by :func:`test_definition_time_client_calls_finds_every_shape`
+    below, and for the first three of those against a real file's import in
+    turn, by :func:`test_no_module_level_statement_in_this_file_builds_a_client`.
+    The first three were also confirmed to slip past two earlier, narrower
+    versions of this very function: one that skipped a ``def``/``class``
+    node entirely, and a second, its immediate successor, that read defaults
+    and decorators on a ``def``/``class`` but still skipped a ``lambda``
+    node outright instead of applying the same split to it.
     """
-    import ast
-    from pathlib import Path
-
-    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"), filename=__file__)
 
     def _name(node: ast.expr) -> str | None:
         if isinstance(node, ast.Name):
@@ -261,7 +261,13 @@ def test_no_module_level_statement_in_this_file_builds_a_client() -> None:
                 visit(statement)
             return
         if isinstance(node, ast.Lambda):
-            return  # a lambda's body is deferred until the lambda is called
+            # Same split as FunctionDef above: a default value runs now, at
+            # the lambda expression itself, not when the lambda is later
+            # called -- only node.body is deferred until then.
+            for part in (*node.args.defaults, *node.args.kw_defaults):
+                if part is not None:
+                    found.extend(_client_calls(part))
+            return
         if isinstance(node, ast.Call) and _name(node.func) in ("connect", "Client"):
             found.append(node)
         for child in ast.iter_child_nodes(node):
@@ -269,6 +275,79 @@ def test_no_module_level_statement_in_this_file_builds_a_client() -> None:
 
     for statement in tree.body:
         visit(statement)
+    return found
+
+
+def test_definition_time_client_calls_finds_every_shape() -> None:
+    """
+    :func:`_definition_time_client_calls` itself, against a small source
+    string built to hold one of each shape -- not the file this module is
+    in, so a future fix to the function can be proven here without editing
+    (and un-editing) a live client into this file by hand each time.
+
+    One of each dangerous shape, one line apart so the line number pins
+    which: a decorator argument, a ``def``'s default value, a ``lambda``'s
+    default value, and a class-body assignment. Three deferred shapes that
+    must *not* be found, mixed in among them: an ordinary function body, a
+    method body, and a lambda body -- all of which only run once called,
+    which the runtime check elsewhere in this file already covers.
+    """
+    source = (
+        "import hgis\n"
+        "\n"
+        "def make_marker(x):\n"
+        "    return lambda f: f\n"
+        "\n"
+        '@make_marker(hgis.connect("http://x"))\n'  # line 6: decorator argument
+        "def decorated():\n"
+        "    pass\n"
+        "\n"
+        'def has_a_default(c=hgis.connect("http://x")):\n'  # line 10: def default
+        "    pass\n"
+        "\n"
+        'lambda_default = lambda c=hgis.connect("http://x"): c\n'  # line 13: lambda default
+        "\n"
+        "class HasAClassBodyAssignment:\n"
+        '    c = hgis.connect("http://x")\n'  # line 16: class body
+        "\n"
+        "def deferred_function_body():\n"
+        '    return hgis.connect("http://x")\n'  # deferred -- must not be found
+        "\n"
+        "class HasAMethod:\n"
+        "    def a_method(self):\n"
+        '        return hgis.connect("http://x")\n'  # deferred -- must not be found
+        "\n"
+        'deferred_lambda_body = lambda: hgis.connect("http://x")\n'  # deferred -- must not be found
+    )
+
+    found = _definition_time_client_calls(ast.parse(source))
+
+    assert sorted(call.lineno for call in found) == [6, 10, 13, 16]
+
+
+def test_no_module_level_statement_in_this_file_builds_a_client() -> None:
+    """
+    The gap the fixture above names but does not close: its patch is
+    installed by fixture *setup*, which pytest only runs around a test call.
+    A ``client = hgis.connect(URL)`` written directly at this file's top
+    level -- outside any function, a plausible slip while editing this file,
+    not a deliberate bypass the way an aliased import or reflection is --
+    would run while pytest is still collecting this module, before any
+    fixture exists to catch it.
+
+    Confirmed: with the fixture's patch installed by hand *before* import
+    instead of relying on fixture setup, a module-level ``hgis.connect(...)``
+    added to a copy of this file still reached a real, unguarded client --
+    the same result as if no check existed at all.
+
+    So this reads the syntax tree of this very file with
+    :func:`_definition_time_client_calls`, whose own docstring is the fuller
+    account of what counts as "runs immediately" here and why.
+    """
+    from pathlib import Path
+
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"), filename=__file__)
+    found = _definition_time_client_calls(tree)
 
     if found:
         pytest.fail(
