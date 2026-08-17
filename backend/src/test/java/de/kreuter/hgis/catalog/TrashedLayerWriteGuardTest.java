@@ -1,5 +1,6 @@
 package de.kreuter.hgis.catalog;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -52,8 +53,12 @@ class TrashedLayerWriteGuardTest {
 	@Autowired
 	private LayerRepository layerRepository;
 
+	@Autowired
+	private LayerFieldRepository fieldRepository;
+
 	private Project project;
 	private Layer layer;
+	private LayerField field;
 	private String tableName;
 	private long fid;
 
@@ -67,8 +72,9 @@ class TrashedLayerWriteGuardTest {
 		String table = SqlIdentifier.quoteLayerTable(tableName);
 		jdbc.sql("""
 				CREATE TABLE %s (
-				    fid  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-				    geom geometry(MultiPolygon, 25832) NOT NULL
+				    fid        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom       geometry(MultiPolygon, 25832) NOT NULL,
+				    f_original text
 				)
 				""".formatted(table)).update();
 		fid = jdbc.sql("INSERT INTO " + table
@@ -79,6 +85,10 @@ class TrashedLayerWriteGuardTest {
 		Layer created = new Layer(layerId, project, "Geschützt", tableName, "MULTIPOLYGON", 25832);
 		created.setFeatureCount(1);
 		layer = layerRepository.saveAndFlush(created);
+		// A real field, not merely a random UUID: renamingARealFieldOnATrashedLayerChangesNothing
+		// needs an id the lookup actually finds, so it proves the guard leaves an existing
+		// field untouched, not only that it fires before an unknown one is looked up.
+		field = fieldRepository.saveAndFlush(new LayerField(layer, "Ursprünglicher Name", "f_original", "text", 0));
 
 		mockMvc.perform(delete("/api/layers/{id}", layer.getId()))
 				.andExpect(status().isOk());
@@ -153,6 +163,32 @@ class TrashedLayerWriteGuardTest {
 				.content("""
 						{"name":"Neuer Name"}
 						"""));
+	}
+
+	/**
+	 * {@link #renameFieldIsConflict} above only proves the guard fires before an unknown
+	 * fieldId is even looked up -- a real gap review found, since {@code renameField} could
+	 * in principle have thrown for that reason alone and still gone on to rename a field
+	 * that does exist. This uses {@link #field}, which really is a field of {@link #layer},
+	 * so a regression here would show up as the field's {@code source_name} actually
+	 * changing in the database, not merely as a wrong status code.
+	 */
+	@Test
+	@DisplayName("renaming a REAL field of a trashed layer is a 409 and leaves source_name untouched in the database")
+	void renamingARealFieldOnATrashedLayerChangesNothing() throws Exception {
+		expectConflict(patch("/api/layers/{id}/fields/{fieldId}", layer.getId(), field.getId())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"name":"Übernommener Name"}
+						"""));
+
+		String sourceNameInDb = jdbc.sql("SELECT source_name FROM gis_meta.layer_field WHERE id = :id")
+				.param("id", field.getId())
+				.query(String.class)
+				.single();
+		assertThat(sourceNameInDb)
+				.as("the guard must fire before any change reaches the database")
+				.isEqualTo("Ursprünglicher Name");
 	}
 
 	@Test

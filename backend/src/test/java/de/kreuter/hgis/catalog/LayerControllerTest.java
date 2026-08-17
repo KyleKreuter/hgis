@@ -282,6 +282,56 @@ class LayerControllerTest {
 		// delete for the layer, since purge already did that.
 	}
 
+	/**
+	 * The shared fixture's own layer always has {@code featureCount} explicitly set to 1
+	 * (see {@link #setUp}), so {@link #purgeDropsThePhysicalTableAndRemovesTheCatalogRow}
+	 * never exercises the value {@code featureCount} actually defaults to on {@link Layer}:
+	 * a layer nobody ever populated -- created, then trashed and purged empty -- carries
+	 * whatever the primitive {@code long} field starts at. This uses its own project and
+	 * layer, not the shared fixture, specifically so it stays 0 the whole way through.
+	 */
+	@Test
+	@DisplayName("purging an empty vector layer (featureCount never set) reports featureCount 0, "
+			+ "and the table is actually gone")
+	void purgingAnEmptyVectorLayerReportsZeroFeatureCount() throws Exception {
+		Project emptyProject = projectRepository.saveAndFlush(
+				new Project("Leerer-Layer-Testprojekt " + UUID.randomUUID(), null, 25832, "osm"));
+		UUID emptyLayerId = UUID.randomUUID();
+		String emptyTableName = SqlIdentifier.tableName(emptyLayerId);
+		try {
+			jdbc.sql("""
+					CREATE TABLE %s (
+					    fid  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+					    geom geometry(MultiPolygon, 25832) NOT NULL
+					)
+					""".formatted(SqlIdentifier.quoteLayerTable(emptyTableName))).update();
+			Layer emptyLayer = layerRepository.saveAndFlush(
+					new Layer(emptyLayerId, emptyProject, "Leerer Layer", emptyTableName, "MULTIPOLYGON", 25832));
+
+			mockMvc.perform(delete("/api/layers/{layerId}", emptyLayer.getId()))
+					.andExpect(status().isOk());
+
+			mockMvc.perform(delete("/api/layers/{layerId}/purge", emptyLayer.getId()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.name").value("Leerer Layer"))
+					.andExpect(jsonPath("$.featureCount").value(0))
+					.andExpect(jsonPath("$.deletedAt").exists());
+
+			Boolean tableStillExists = jdbc.sql("SELECT to_regclass('gis_data.' || :tableName) IS NOT NULL")
+					.param("tableName", emptyTableName)
+					.query(Boolean.class)
+					.single();
+			assertThat(tableStillExists)
+					.as("the table must actually be gone, not just the catalog row")
+					.isFalse();
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(emptyTableName)).update();
+			layerRepository.findById(emptyLayerId).ifPresent(layerRepository::delete);
+			projectRepository.deleteById(emptyProject.getId());
+		}
+	}
+
 	@Test
 	@DisplayName("purge without going through the trash first is a conflict, not a shortcut")
 	void purgingANonTrashedLayerConflicts() throws Exception {

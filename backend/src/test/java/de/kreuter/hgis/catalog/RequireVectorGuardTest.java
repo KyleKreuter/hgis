@@ -185,13 +185,23 @@ class RequireVectorGuardTest {
 				.extracting(Layer::isTrashed).isEqualTo(true);
 	}
 
+	/**
+	 * The response body matters here as much as the status: {@code featureCount} is a
+	 * primitive {@code long} on {@link Layer} that a map image never gets to set (there is
+	 * no payload table to count), so it has to come back as a plain {@code 0}, not a null
+	 * or a failure to serialise.
+	 */
 	@Test
-	@DisplayName("purging a map image works too -- no table to drop, but the catalog row goes")
+	@DisplayName("purging a map image works too -- no table to drop, but the catalog row goes, "
+			+ "and the response reports featureCount 0")
 	void purgingAMapImageStillWorks() throws Exception {
 		mockMvc.perform(delete("/api/layers/{id}", wmsLayer.getId()))
 				.andExpect(status().isOk());
 		mockMvc.perform(delete("/api/layers/{id}/purge", wmsLayer.getId()))
-				.andExpect(status().isOk());
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.name").value("Kartenbild"))
+				.andExpect(jsonPath("$.featureCount").value(0))
+				.andExpect(jsonPath("$.deletedAt").exists());
 
 		assertThat(layerRepository.findById(wmsLayer.getId())).isEmpty();
 	}
