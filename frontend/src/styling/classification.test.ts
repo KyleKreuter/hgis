@@ -310,10 +310,26 @@ describe('resolveRangeState', () => {
    * den `styleToMapLibre`'s Diagnose-Verlauf braucht. `null` ist der tatsächliche
    * Wire-Wert von `/classify` bei einer leeren Spalte (`ClassifyResult.min`/`.max`,
    * `api/layers.ts`); `NaN`/`Infinity` sind hier nur die zusätzliche Absicherung.
+   *
+   * `'invalid'`, nicht `'error'`: eine erfolgreich beantwortete, aber unbrauchbare Anfrage
+   * ist kein Transportproblem -- ein Neuladen der Seite ändert an genau diesem Ergebnis
+   * nichts (`heatmapFieldRanges.ts`'s `rangeToastMessage` rät deshalb auch etwas anderes).
    */
-  it('liest eine erfolgreich aufgelöste, aber nicht-endliche oder null Spanne als "error"', () => {
-    expect(resolveRangeState({ isError: false, data: { min: NaN, max: NaN } })).toBe('error')
-    expect(resolveRangeState({ isError: false, data: { min: 0, max: Infinity } })).toBe('error')
-    expect(resolveRangeState({ isError: false, data: { min: null, max: null } })).toBe('error')
+  it('liest eine erfolgreich aufgelöste, aber nicht-endliche oder null Spanne als "invalid"', () => {
+    expect(resolveRangeState({ isError: false, data: { min: NaN, max: NaN } })).toBe('invalid')
+    expect(resolveRangeState({ isError: false, data: { min: 0, max: Infinity } })).toBe('invalid')
+    expect(resolveRangeState({ isError: false, data: { min: null, max: null } })).toBe('invalid')
+  })
+
+  /**
+   * Zweiter Fund der Teamrunde: `/classify` kann ein verdrehtes Paar praktisch nicht
+   * liefern (`min`/`max` kommen aus derselben SQL-Aggregation über dieselbe Spalte, SQL
+   * garantiert `min <= max`) -- aber ungeprüft wäre es dasselbe Bild über einen dritten
+   * Weg: `heatmapWeight`s eigener Schutz (`max > min`) fiele still auf Gewicht 1 zurück,
+   * während die Karte mit der gewählten Rampe statt der Diagnosefarbe zeichnet, weil
+   * `resolveRangeState` das Paar für gültig hielt. Eine Zeile schließt das für immer.
+   */
+  it('liest ein verdrehtes Paar (min > max) als "invalid", obwohl der echte Endpunkt es nicht liefern kann', () => {
+    expect(resolveRangeState({ isError: false, data: { min: 100, max: 10 } })).toBe('invalid')
   })
 })

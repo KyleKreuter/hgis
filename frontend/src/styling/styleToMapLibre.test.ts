@@ -9,6 +9,7 @@ import type {
 } from 'maplibre-gl'
 import type { GeometryType, VectorLayerSummary } from '@/api/layers'
 import { CIRCLE_PAINT, FILL_PAINT, LINE_PAINT } from '@/map/layerSpecs'
+import type { FieldRangeState } from './classification'
 import { defaultStyleFor } from './defaults'
 import { styleToMapLibre } from './styleToMapLibre'
 import type { LayerStyle } from './types'
@@ -393,7 +394,7 @@ describe('styleToMapLibre heatmap', () => {
   function heatmapPaintOf(
     style: LayerStyle,
     layer: VectorLayerSummary = makeLayer(),
-    fieldRange?: { min: number; max: number } | 'error',
+    fieldRange?: FieldRangeState,
   ): NonNullable<HeatmapLayerSpecification['paint']> {
     const [spec] = styleToMapLibre(style, layer, SOURCE_ID, fieldRange)
     return (spec as HeatmapLayerSpecification).paint ?? {}
@@ -501,20 +502,33 @@ describe('styleToMapLibre heatmap', () => {
    * Karte, die aussieht, als hätte die Normierung funktioniert, obwohl sie es nicht hat.
    * `'error'` bekommt deshalb eine eigene Farbe, das Gewicht bleibt bei beiden gleich.
    */
-  it('faerbt bei bestaetigt fehlender Spanne diagnostisch statt mit der gewaehlten Rampe', () => {
-    const working = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'greys' }), makeLayer(), { min: 0, max: 70 })
-    const failed = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'greys' }), makeLayer(), 'error')
+  it.each(['error', 'invalid'] as const)(
+    'faerbt bei bestaetigt fehlender Spanne (%s) diagnostisch statt mit der gewaehlten Rampe',
+    (state) => {
+      const working = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'greys' }), makeLayer(), { min: 0, max: 70 })
+      const failed = heatmapPaintOf(heatmapStyle({ field: 'laut_wert', ramp: 'greys' }), makeLayer(), state)
 
-    expect(failed['heatmap-color']).not.toEqual(working['heatmap-color'])
-    // Grau ist ein gültiger Katalogeintrag (`greys`) -- die Diagnosefarbe darf ihm daher
-    // nicht gleichen, sonst waere sie fuer genau die Person unsichtbar, die Grau mag.
-    expect(JSON.stringify(failed['heatmap-color'])).not.toContain('#404040')
-  })
+      expect(failed['heatmap-color']).not.toEqual(working['heatmap-color'])
+      // Grau ist ein gültiger Katalogeintrag (`greys`) -- die Diagnosefarbe darf ihm daher
+      // nicht gleichen, sonst waere sie fuer genau die Person unsichtbar, die Grau mag.
+      expect(JSON.stringify(failed['heatmap-color'])).not.toContain('#404040')
+    },
+  )
 
-  it('faellt bei bestaetigt fehlender Spanne trotzdem auf ein konstantes Gewicht zurueck, nicht auf 0', () => {
-    // Ein unsichtbarer Layer waere kein Signal, nur ein weiteres Symptom -- die Karte
-    // zeigt weiterhin ehrlich, wo die Objekte liegen.
-    expect(heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), 'error')['heatmap-weight']).toBe(1)
+  it.each(['error', 'invalid'] as const)(
+    'faellt bei bestaetigt fehlender Spanne (%s) trotzdem auf ein konstantes Gewicht zurueck, nicht auf 0',
+    (state) => {
+      // Ein unsichtbarer Layer waere kein Signal, nur ein weiteres Symptom -- die Karte
+      // zeigt weiterhin ehrlich, wo die Objekte liegen.
+      expect(heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), state)['heatmap-weight']).toBe(1)
+    },
+  )
+
+  it('faerbt "error" und "invalid" auf der Karte gleich -- sie unterscheiden sich nur im Toast-Text', () => {
+    const asError = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), 'error')
+    const asInvalid = heatmapPaintOf(heatmapStyle({ field: 'laut_wert' }), makeLayer(), 'invalid')
+
+    expect(asError).toEqual(asInvalid)
   })
 
   it('rendert einen GEOMETRY-Layer als einen einzigen Punkt-Sublayer statt der Dreifach-Aufteilung', () => {

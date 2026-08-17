@@ -152,15 +152,18 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState }: HeatmapLegend
           </>
         )}
         {hasField && isFetching && <span>Wird geladen…</span>}
-        {hasField && !isFetching && rangeState && rangeState !== 'error' && (
+        {/* `typeof === 'object'` rather than naming every non-`FieldRange` member of
+            `FieldRangeState` one by one: `FieldRange` is the union's only object-shaped
+            case, so this stays correct on its own if a third string state is ever added
+            (e.g. distinguishing "invalid" further), which enumerating `'error'`/`'invalid'`
+            here by name would not. */}
+        {hasField && !isFetching && typeof rangeState === 'object' && (
           <>
             <span>{formatAttributeNumber(rangeState.min)}</span>
             <span>{formatAttributeNumber(rangeState.max)}</span>
           </>
         )}
-        {hasField && !isFetching && (rangeState === 'error' || rangeState === undefined) && (
-          <span>Spanne nicht verfügbar</span>
-        )}
+        {hasField && !isFetching && typeof rangeState !== 'object' && <span>Spanne nicht verfügbar</span>}
       </div>
     </div>
   )

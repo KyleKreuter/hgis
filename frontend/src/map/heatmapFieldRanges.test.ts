@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { LayerSummary } from '@/api/layers'
 import type { FieldRangeState } from '@/styling/classification'
-import { heatmapRangeTargets, layersEnteringError } from './heatmapFieldRanges'
+import { heatmapRangeTargets, layersEnteringError, rangeToastMessage } from './heatmapFieldRanges'
 
 function makeLayer(overrides: Partial<LayerSummary> = {}): LayerSummary {
   return {
@@ -92,5 +92,49 @@ describe('layersEnteringError', () => {
     const afterRecovery = new Set(recovered.filter((entry) => entry.state === 'error').map((entry) => entry.layerId))
     expect(afterRecovery.size).toBe(0)
     expect(layersEnteringError(failing, afterRecovery)).toEqual(['layer-1'])
+  })
+
+  /**
+   * `'invalid'` (eine erfolgreich beantwortete, aber unbrauchbare Anfrage) meldet sich
+   * genauso wie `'error'` -- beide sind "bestätigt nicht verfügbar", nur die Formulierung
+   * unterscheidet sich (siehe `rangeToastMessage` unten).
+   */
+  it('meldet auch einen Wechsel nach invalid', () => {
+    const states = [{ layerId: 'layer-1', state: 'invalid' as const }]
+
+    expect(layersEnteringError(states, new Set())).toEqual(['layer-1'])
+  })
+})
+
+describe('rangeToastMessage', () => {
+  const layer = { field: 'laenge_km', layerName: 'Fluglärm Hamburg' }
+
+  it('rät bei einer fehlgeschlagenen Anfrage zu Verbindung oder Neuladen', () => {
+    const message = rangeToastMessage({ ...layer, state: 'error' })
+
+    expect(message).toContain('nicht laden')
+    expect(message).toContain('Verbindung')
+    expect(message).toContain('Seite neu')
+  })
+
+  /**
+   * Der Fund aus der Teamrunde: für "invalid" ist "laden Sie die Seite neu" wirkungslose
+   * Beratung -- dieselbe Anfrage mit demselben Schlüssel liefert nach dem Neuladen exakt
+   * dasselbe. Die Meldung darf diesen Rat deshalb nicht enthalten, und muss stattdessen
+   * auf die Daten selbst verweisen.
+   */
+  it('rät bei einer erfolgreichen, aber unbrauchbaren Antwort nicht zum Neuladen', () => {
+    const message = rangeToastMessage({ ...layer, state: 'invalid' })
+
+    expect(message).not.toContain('Seite neu')
+    expect(message).not.toContain('Verbindung')
+    expect(message).toContain('Werte')
+  })
+
+  it('nennt Feld und Layer in beiden Fällen beim Namen', () => {
+    expect(rangeToastMessage({ ...layer, state: 'error' })).toContain('laenge_km')
+    expect(rangeToastMessage({ ...layer, state: 'error' })).toContain('Fluglärm Hamburg')
+    expect(rangeToastMessage({ ...layer, state: 'invalid' })).toContain('laenge_km')
+    expect(rangeToastMessage({ ...layer, state: 'invalid' })).toContain('Fluglärm Hamburg')
   })
 })

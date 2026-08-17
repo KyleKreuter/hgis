@@ -30,19 +30,42 @@ interface HeatmapRangeState extends HeatmapRangeTarget {
   state: FieldRangeState
 }
 
+/** Both `'error'` and `'invalid'` are "confirmed unavailable" for the toast's purposes --
+ *  they only disagree on which text to show, see `rangeToastMessage` below. */
+function hasFailed(state: FieldRangeState): state is 'error' | 'invalid' {
+  return state === 'error' || state === 'invalid'
+}
+
 /**
- * Which layers, of the ones just resolved, just transitioned *into* `'error'` -- pure, so
- * the toast trigger (`useHeatmapRangeErrorToasts`) is testable without mounting a hook,
- * which this project's `environment: 'node'` vitest run cannot do (no jsdom/RTL, same
- * reason `GraduatedEditor`/`CategorizedEditor` are only tested through their pure helpers).
- * A layer already in `previouslyFailed` does not fire again -- that is what keeps the
- * toast to one per failure instead of one per render.
+ * Which layers, of the ones just resolved, just transitioned *into* a failed state --
+ * pure, so the toast trigger (`useHeatmapRangeErrorToasts`) is testable without mounting
+ * a hook, which this project's `environment: 'node'` vitest run cannot do (no jsdom/RTL,
+ * same reason `GraduatedEditor`/`CategorizedEditor` are only tested through their pure
+ * helpers). A layer already in `previouslyFailed` does not fire again -- that is what
+ * keeps the toast to one per failure instead of one per render.
  */
 export function layersEnteringError(
   states: Pick<HeatmapRangeState, 'layerId' | 'state'>[],
   previouslyFailed: ReadonlySet<string>,
 ): string[] {
-  return states.filter((entry) => entry.state === 'error' && !previouslyFailed.has(entry.layerId)).map((entry) => entry.layerId)
+  return states.filter((entry) => hasFailed(entry.state) && !previouslyFailed.has(entry.layerId)).map((entry) => entry.layerId)
+}
+
+/**
+ * The toast text for one failed layer -- `'error'` and `'invalid'` need different advice,
+ * not just different words: a failed *request* is worth retrying (a network hiccup, a
+ * server that was briefly down), so "laden Sie die Seite neu" is honest. An *invalid*
+ * result is not a request problem at all -- the exact same query, same cache key, would
+ * answer with the exact same unusable range after a reload, so that advice would send
+ * the user through a reload that changes nothing (team review, package 2). What actually
+ * helps there is looking at the data itself: does the field have any values at all.
+ * Exported for its own test, independent of the toast itself.
+ */
+export function rangeToastMessage(entry: Pick<HeatmapRangeState, 'field' | 'layerName' | 'state'>): string {
+  if (entry.state === 'error') {
+    return `Das Programm konnte die Wertespanne von „${entry.field}" nicht laden. „${entry.layerName}" zeigt deshalb nur die Dichte. Prüfen Sie die Verbindung, oder laden Sie die Seite neu.`
+  }
+  return `Das Feld „${entry.field}" hat keine auswertbare Wertespanne. „${entry.layerName}" zeigt deshalb nur die Dichte. Prüfen Sie, ob das Feld Werte enthält.`
 }
 
 /**
@@ -50,10 +73,10 @@ export function layersEnteringError(
  * fallback on the map (`styleToMapLibre`'s diagnostic colour) works without anyone
  * having the panel open, but nobody reads a map that quietly changed its own colours as
  * "something failed", and a toast that fired on every re-render would just be noise. So
- * this fires exactly once per layer, on the transition into `'error'` (`layersEnteringError`
- * above), and again the next time it happens after a recovery -- tracked in
- * `previousErrorsRef` rather than in component state, since a Set that drives no render
- * has no business being state.
+ * this fires exactly once per layer, on the transition into a failed state
+ * (`layersEnteringError` above), and again the next time it happens after a recovery --
+ * tracked in `previousErrorsRef` rather than in component state, since a Set that drives
+ * no render has no business being state.
  */
 function useHeatmapRangeErrorToasts(states: HeatmapRangeState[]): void {
   const previousErrorsRef = useRef<Set<string>>(new Set())
@@ -62,11 +85,9 @@ function useHeatmapRangeErrorToasts(states: HeatmapRangeState[]): void {
     for (const layerId of layersEnteringError(states, previousErrorsRef.current)) {
       const entry = states.find((candidate) => candidate.layerId === layerId)
       if (!entry) continue
-      toast.error(
-        `Das Programm konnte die Wertespanne von „${entry.field}" nicht laden. „${entry.layerName}" zeigt deshalb nur die Dichte. Prüfen Sie das Feld, oder laden Sie die Seite neu.`,
-      )
+      toast.error(rangeToastMessage(entry))
     }
-    previousErrorsRef.current = new Set(states.filter((entry) => entry.state === 'error').map((entry) => entry.layerId))
+    previousErrorsRef.current = new Set(states.filter((entry) => hasFailed(entry.state)).map((entry) => entry.layerId))
   })
 }
 

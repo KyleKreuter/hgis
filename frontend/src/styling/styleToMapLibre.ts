@@ -332,7 +332,11 @@ function heatmapPaint(
   opacity: number,
   fieldRange: FieldRangeState,
 ): HeatmapLayerSpecification['paint'] {
-  const failed = fieldRange === 'error'
+  // `'error'` (the request failed) and `'invalid'` (it succeeded with an unusable
+  // result) get the same rendering treatment here -- they differ only in what the toast
+  // advises (`heatmapFieldRanges.ts`'s `useHeatmapRangeErrorToasts`), not in what the map
+  // shows.
+  const failed = fieldRange === 'error' || fieldRange === 'invalid'
   return defined<NonNullable<HeatmapLayerSpecification['paint']>>({
     // A failed range is not a range `heatmapWeight` can use either -- it falls back to
     // the same constant weight "still loading" gets, the colour is what carries the
