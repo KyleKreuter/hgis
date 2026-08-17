@@ -21,7 +21,7 @@ import { ColorInput, Row } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
 import { formatCategoryValue } from './fields'
 import { PaletteSelect } from './PaletteSelect'
-import { paletteColors } from './palettes'
+import { paletteColors, resolvePaletteId } from './palettes'
 import { SymbolEditor } from './SymbolEditor'
 import type { LayerSymbol, Renderer, StyleCategory } from './types'
 
@@ -106,12 +106,24 @@ export function CategorizedEditor({
     void request(field, palette, [])
   }
 
+  /**
+   * Writes back `resolvePaletteId(paletteId)`, not `paletteId` itself: called both from
+   * `PaletteSelect` (always a name from its own list, already resolved) and from the
+   * "Farben neu verteilen" button below, which replays whatever `palette` currently holds
+   * -- and a style saved before this palette existed, or naming one since renamed or
+   * removed, seeds that state with a name `paletteColors` cannot place
+   * (`initialCategorizedPalette`, `classification.ts`). Pressing the button then repaints
+   * every category from `DEFAULT_RAMP` regardless; without resolving here, `renderer.palette`
+   * would go on claiming the old, unresolved name while the categories on screen no longer
+   * match it (team review, package 3 addendum).
+   */
   function recolor(paletteId: string) {
-    setPalette(paletteId)
-    const colors = paletteColors(paletteId, categories.length)
+    const resolved = resolvePaletteId(paletteId)
+    setPalette(resolved)
+    const colors = paletteColors(resolved, categories.length)
     onChange({
       ...renderer,
-      palette: paletteId,
+      palette: resolved,
       categories: categories.map((category, index) => ({
         ...category,
         symbol: withPrimaryColor(category.symbol, colors[index]),
