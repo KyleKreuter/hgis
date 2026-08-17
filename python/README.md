@@ -98,6 +98,8 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 | `layer.feature(fid)` | ein Objekt mit allen Feldern |
 | `layer.values(feld)` | Werte mit Häufigkeit |
 | `layer.update(name=..., visible=..., ...)` | ändert den Layer, gibt sich selbst zurück |
+| `layer.style` | der aktuelle Stil, `None` für die Standarddarstellung |
+| `layer.set_style(stil)` | ersetzt den Stil vollständig, siehe [Stil setzen](#stil-setzen) |
 | `layer.delete()` | Layer in den Papierkorb, gibt `TrashEntry` zurück (oder `None`, siehe unten) |
 | `layer.restore()` | Layer aus dem Papierkorb zurück |
 | `layer.purge()` | Layer und Daten endgültig löschen -- **unwiderruflich**, gibt `TrashEntry` zurück (oder `None`, siehe unten) |
@@ -206,6 +208,62 @@ Bibliothek erfindet keine Objektzahl aus dem, was sie vor dem Aufruf über den
 Layer wusste, weil das inzwischen nicht mehr stimmen muss. Sobald der Server
 eine Antwort im Format von `LayerDtos.TrashEntry` mitschickt, füllt sich
 `eintrag` von selbst -- ohne eine weitere Änderung in dieser Bibliothek.
+
+### Stil setzen
+
+Eine Heatmap in drei Zeilen:
+
+```python
+renderer = hgis.Renderer(hgis.RENDERER_HEATMAP, field="Lautstärke Wert", ramp="inferno")
+layer.set_style(hgis.Style(renderer))
+```
+
+`layer.set_style(stil)` ersetzt den Stil des Layers vollständig -- es gibt
+keine Teiländerung. Um nur einen Teil zu ändern, lesen Sie zuerst
+`layer.style` und bauen den neuen Stil daraus auf.
+
+`hgis.Renderer` kennt vier Arten, benannt in `hgis.RENDERER_SINGLE`,
+`RENDERER_CATEGORIZED`, `RENDERER_GRADUATED` und `RENDERER_HEATMAP`:
+
+```python
+# Ein Symbol für den ganzen Layer
+layer.set_style(hgis.Style(hgis.Renderer(
+    hgis.RENDERER_SINGLE,
+    symbol=hgis.Symbol(hgis.SYMBOL_MARKER, fill_color="#2a6f4f", size=4),
+)))
+
+# Klasseneinteilung über ein Zahlenfeld
+layer.set_style(hgis.Style(hgis.Renderer(
+    hgis.RENDERER_GRADUATED, field="Pflanzjahr", ramp="viridis",
+    classes=[hgis.ClassBreak(1950, 2000, label="1950–2000")],
+)))
+
+# Heatmap: field ist wahlfrei -- ohne Feld zählt jeder Punkt gleich
+layer.set_style(hgis.Style(hgis.Renderer(
+    hgis.RENDERER_HEATMAP, radius=30, intensity=1.0, ramp="inferno",
+)))
+```
+
+`set_style(None)` setzt den Layer auf die monochrome Standarddarstellung
+zurück.
+
+`field` nehmen Sie beim Schreiben wie überall in dieser Bibliothek -- als
+Anzeigename oder Spaltenname. Der Server löst ihn auf und liefert ihn als
+Spaltenname zurück; das ist auch, was `set_style()` als Ergebnis meldet: **den
+Stil, wie der Server ihn gespeichert hat, nicht das, was Sie hineingegeben
+haben.**
+
+Ein Tippfehler in `renderer.type` fällt vor dem Netzwerk auf:
+
+```python
+>>> layer.set_style({"renderer": {"type": "heatmp"}})
+hgis.errors.InvalidArgumentError: Unbekannter Renderer-Typ: 'heatmp'. Erlaubt
+sind categorized, graduated, heatmap, single.
+```
+
+Alles andere im Stil -- Farbformat, Wertebereiche, ob ein Feldname wirklich
+zu diesem Layer gehört -- prüft nur der Server; seine Meldung nennt dann,
+was gültig gewesen wäre.
 
 ### Felder anlegen und löschen
 

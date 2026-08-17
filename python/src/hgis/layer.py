@@ -10,6 +10,7 @@ from .edits import EditResult, FeatureUpdate, NewFeature, _reject_scalar_iterabl
 from .edits import apply_edits as _apply_edits
 from .errors import ApiError
 from .query import PAGE_SIZE, Feature, Query, _column_to_name, _to_feature
+from .style import Style, to_style_json
 
 if TYPE_CHECKING:
     from .client import Client
@@ -163,6 +164,20 @@ class Layer:
             return None
         return (value[0], value[1], value[2], value[3])
 
+    @property
+    def style(self) -> Style | None:
+        """
+        How this layer is drawn, as the server last stored it -- or None for
+        the default monochrome rendering.
+
+        Carried on every response that describes a layer (:meth:`fields`,
+        :meth:`refresh`, :meth:`update`, :meth:`set_style`), so reading this
+        costs nothing extra. Read it before :meth:`set_style` when only one
+        part of an existing style should change -- the write replaces the
+        whole document, there is no partial update.
+        """
+        return Style.from_json(self._data.get("style"))
+
     def __repr__(self) -> str:
         return (
             f"<hgis.Layer {self.name!r} {self.geometry_type} "
@@ -289,9 +304,11 @@ class Layer:
         """
         Change this layer's ordinary properties in place and return it.
 
-        Every argument left at None keeps its current value. Style, basemap
-        and clip mode are not part of this stage -- change them, if you must,
-        through the interface.
+        Every argument left at None keeps its current value. Style has its
+        own method, :meth:`set_style` -- it replaces the whole document
+        rather than merging in one property, so it does not fit this
+        signature. Basemap and clip mode are still not part of this stage --
+        change them, if you must, through the interface.
         """
         self._data = self._client.update_layer(
             self.id,
@@ -303,6 +320,37 @@ class Layer:
         )
         self._fields = [_to_field(item) for item in self._data["fields"]]
         return self
+
+    def set_style(self, style: "Style | dict[str, Any] | None") -> Style | None:
+        """
+        Replace this layer's style wholesale.
+
+        One of the four renderers -- :data:`hgis.RENDERER_SINGLE`,
+        ``RENDERER_CATEGORIZED``, ``RENDERER_GRADUATED`` or
+        ``RENDERER_HEATMAP`` -- built as a :class:`hgis.Style`, or a plain
+        ``dict`` shaped the same way. Pass None to reset the layer to its
+        default monochrome rendering.
+
+        A heatmap, the common case, in three lines::
+
+            renderer = hgis.Renderer(hgis.RENDERER_HEATMAP, field="laut_wert", ramp="inferno")
+            layer.set_style(hgis.Style(renderer))
+
+        There is no partial update -- every call replaces the whole
+        document. Change one part of an existing style by reading
+        :attr:`style` first and building the new one from it.
+
+        :raises hgis.errors.InvalidArgumentError: ``style`` is not a
+            :class:`hgis.style.Style` or ``dict``, or its renderer type is
+            not one of the four that exist -- named in the message, rather
+            than reaching the server and coming back as an HTTP 400 that
+            would say the same thing in its own words
+        :return: the style as the server actually stored it, canonicalised
+            -- not necessarily what was sent -- or None after a reset
+        """
+        self._data = self._client.update_layer_style(self.id, to_style_json(style))
+        self._fields = [_to_field(item) for item in self._data["fields"]]
+        return self.style
 
     def delete(self) -> "TrashEntry | None":
         """

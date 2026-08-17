@@ -598,7 +598,9 @@ class Client:
         Every argument left at None is left as it stood -- none of the five
         has a meaningful None of its own, so this cannot be told apart from
         "leave alone" the way :attr:`hgis.catalog.dto.LayerDtos.UpdateRequest`'s
-        style, basemap and clipMode can. Those three are not part of this stage.
+        style, basemap and clipMode can. Style has its own call,
+        :meth:`update_layer_style` -- see :meth:`hgis.layer.Layer.set_style`.
+        Basemap and clipMode are still not part of this stage.
         """
         body: dict[str, Any] = {}
         if name is not None:
@@ -612,6 +614,21 @@ class Client:
         if max_zoom is not None:
             body["maxZoom"] = max_zoom
         return self._send("PATCH", f"/api/layers/{layer_id}", json=body)
+
+    def update_layer_style(self, layer_id: str, style: dict[str, Any] | None) -> Any:
+        """
+        Replace a layer's style wholesale. See :meth:`hgis.layer.Layer.set_style`,
+        which builds ``style`` and is how to call this.
+
+        Its own PATCH, carrying only the ``style`` key -- never combined with
+        :meth:`update_layer`'s body, so a caller changing the ordinary
+        properties never touches the style by accident, and the other way
+        round. ``style=None`` still sends the key, as an explicit JSON null:
+        that is what resets the layer to its default rendering on the
+        server, as opposed to leaving the key out, which
+        :meth:`update_layer` does and which means "unchanged".
+        """
+        return self._send("PATCH", f"/api/layers/{layer_id}", json={"style": style})
 
     def delete_layer(self, layer_id: str) -> Any:
         """
