@@ -418,6 +418,30 @@ class FeaturePropertyWireFormatTest {
 		}
 	}
 
+	/**
+	 * Unlike every other test in this section, this value is never rejected by {@code
+	 * EditService} itself: {@code new BigDecimal("123456789012345.67")} parses fine, and
+	 * nothing in this codebase knows {@code numcol}'s precision and scale ahead of time to
+	 * check it against. The rejection is PostgreSQL's own, at the {@code INSERT}/{@code
+	 * UPDATE} -- {@code numeric field overflow}, SQLSTATE 22003 -- so this is a test of
+	 * {@code ProblemDetailAdvice.handleDataIntegrityViolation}, not of {@code EditService}.
+	 * A review found this uncaught: an everyday typo or a wrongly-scaled import value hits
+	 * it far more often than a special value like NaN ever would, and it used to fall
+	 * through to the generic 500 with neither a field named nor a reason given.
+	 */
+	@Test
+	@DisplayName("a numeric value too large for its column's precision/scale is a 400, not a raw 500")
+	void rejectsANumericOverflowWith400NotA500() throws Exception {
+		MockHttpServletResponse response = putProperties(filledFid, "{\"numcol\":123456789012345.67}");
+
+		assertThat(response.getStatus())
+				.as("an overflowing numeric value must be a clean 400, not PostgreSQL's own "
+						+ "\"numeric field overflow\" surfacing as an unhandled 500")
+				.isEqualTo(400);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+	}
+
 	@Test
 	@DisplayName("an unparsable date is a 400 naming the field, not a generic 500")
 	void rejectsATypeMismatchedDateWith400() throws Exception {
