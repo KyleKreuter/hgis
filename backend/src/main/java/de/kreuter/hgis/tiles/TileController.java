@@ -4,6 +4,7 @@ import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.catalog.LayerStyleService;
 import de.kreuter.hgis.common.BadRequestException;
+import de.kreuter.hgis.common.GeometryType;
 import de.kreuter.hgis.common.NotFoundException;
 import de.kreuter.hgis.common.TileRenderVersion;
 import java.util.List;
@@ -116,8 +117,9 @@ public class TileController {
 		List<MvtService.ClipMask> masks = layer.effectiveMasks(projectMasks).stream()
 				.map(mask -> new MvtService.ClipMask(mask.getTableName(), mask.getClipMode()))
 				.toList();
+		GeometryType geometryType = GeometryType.valueOf(layer.getGeometryType());
 		MvtService.RenderedTile rendered = mvtService.renderTile(layer.getTableName(), layer.getSrid(),
-				styleService.tileColumns(layer), masks, z, x, y);
+				styleService.tileColumns(layer), masks, geometryType, styleService.isHeatmap(layer), z, x, y);
 		byte[] mvt = rendered.mvt();
 
 		if (rendered.truncated()) {

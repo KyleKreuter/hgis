@@ -34,6 +34,7 @@ public final class StyleDtos {
 	public static final String RENDERER_SINGLE = "single";
 	public static final String RENDERER_CATEGORIZED = "categorized";
 	public static final String RENDERER_GRADUATED = "graduated";
+	public static final String RENDERER_HEATMAP = "heatmap";
 
 	public static final String SYMBOL_MARKER = "marker";
 	public static final String SYMBOL_LINE = "line";
@@ -58,9 +59,11 @@ public final class StyleDtos {
 	}
 
 	/**
-	 * @param type       single, categorized or graduated
+	 * @param type       single, categorized, graduated or heatmap
 	 * @param symbol     the one symbol, for single
-	 * @param field      classification attribute, for categorized and graduated.
+	 * @param field      classification attribute, for categorized and graduated; the
+	 *                   optional weighting attribute, for heatmap -- absent there, every
+	 *                   point counts equally instead of by an attribute's value.
 	 *                   <strong>Stored as the resolved {@code column_name}</strong>, see
 	 *                   {@code LayerStyleService} -- that is the key the tile carries,
 	 *                   so {@code ["get", field]} works without a second lookup.
@@ -74,11 +77,26 @@ public final class StyleDtos {
 	 * @param classCount graduated only: how many classes {@code method} was asked to produce.
 	 *                   Purely descriptive -- it may differ from {@code classes.size()} once
 	 *                   boundaries collapse, see {@code ClassificationService#strictlyAscending}.
-	 * @param ramp       graduated only: the colour ramp's display name, e.g. {@code "viridis"}.
-	 *                   The client alone interprets it; the server keeps no ramp catalogue and
-	 *                   only checks the length.
-	 * @param palette    categorized only: the colour palette's display name, checked the same
-	 *                   way as {@code ramp}.
+	 * @param ramp       graduated and heatmap: the colour ramp's display name -- one of a
+	 *                   fixed catalogue ({@code LayerStyleService.COLOR_RAMPS}: {@code blues},
+	 *                   {@code reds}, {@code greens}, {@code greys}, {@code diverging},
+	 *                   {@code inferno}, {@code viridis}), kept in step with the frontend's
+	 *                   own list. Unlike {@code palette}, an unknown name is not merely the
+	 *                   client's concern to render or not: the frontend resolves it with a
+	 *                   silent fallback to blue, so a typo would otherwise be stored, render
+	 *                   wrong, and never say why -- see {@code LayerStyleService} for the
+	 *                   review finding behind this.
+	 * @param palette    categorized only: the colour palette's display name, checked only for
+	 *                   length. Unlike {@code ramp}, the server keeps no palette catalogue --
+	 *                   a categorized renderer's colours already live in
+	 *                   {@code categories[].symbol}, so an unknown palette name has nothing
+	 *                   left to resolve wrong.
+	 * @param radius     heatmap only: influence radius in screen points, 1..100, default 30.
+	 *                   Purely a client-side rendering parameter -- the server only checks
+	 *                   the range, it never uses it to compute anything itself.
+	 * @param intensity  heatmap only: a multiplier on the computed density, 0.1..5.0,
+	 *                   default 1.0. Same role as {@code radius}: range-checked, otherwise
+	 *                   the client's own concern.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record Renderer(
@@ -91,7 +109,9 @@ public final class StyleDtos {
 			String method,
 			Integer classCount,
 			String ramp,
-			String palette) {
+			String palette,
+			Double radius,
+			Double intensity) {
 	}
 
 	/**

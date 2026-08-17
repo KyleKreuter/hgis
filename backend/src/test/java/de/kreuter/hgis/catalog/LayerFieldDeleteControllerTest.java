@@ -291,6 +291,37 @@ class LayerFieldDeleteControllerTest {
 				.andExpect(jsonPath("$.style.renderer.symbol.fillColor").value("#2980b9"));
 	}
 
+	/**
+	 * The same dead end (CONTRACT.md), for the heatmap package's weight field: a heatmap
+	 * renderer never carries a {@code symbol} or a {@code fallbackSymbol} of its own (both
+	 * are refused by {@link LayerStyleService}), so the fallback in
+	 * {@link LayerStyleService#cleanupAfterFieldRemoval} always lands on one of the three
+	 * monochrome defaults -- proven here rather than assumed.
+	 */
+	@Test
+	@DisplayName("deleting a heatmap's weight field falls back to a plain single symbol, not a 400 forever after")
+	void removingTheHeatmapWeightFieldFallsBackToSingle() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner",
+				  "radius": 40, "ramp": "inferno" } } }
+				""").andExpect(status().isOk());
+
+		deleteField(einwohnerField.getId()).andExpect(status().isNoContent());
+
+		mockMvc.perform(get("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.type").value("single"))
+				.andExpect(jsonPath("$.style.renderer.field").doesNotExist())
+				.andExpect(jsonPath("$.style.renderer.radius").doesNotExist())
+				// no symbol of its own was ever set, so the monochrome fill default stands in
+				.andExpect(jsonPath("$.style.renderer.symbol.fillColor").value("#404040"));
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "single",
+				  "symbol": { "kind": "fill", "fillColor": "#2980b9" } } } }
+				""").andExpect(status().isOk());
+	}
+
 	@Test
 	@DisplayName("deleting a field the labels read switches the labels off, and saving still works")
 	void deletingALabelledFieldDisablesLabels() throws Exception {
