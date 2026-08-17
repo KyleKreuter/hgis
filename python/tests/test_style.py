@@ -195,6 +195,48 @@ def test_set_style_carries_the_client_name() -> None:
     assert transport.requests[-1].headers.get(hgis.client.CLIENT_HEADER) == "agent-a"
 
 
+# --- the server's own ramp catalogue ---------------------------------------
+
+
+def test_an_unknown_ramp_is_reported_by_the_server_readably() -> None:
+    """
+    This library keeps no ramp catalogue itself -- see :attr:`hgis.Renderer.ramp`
+    for why -- so an unknown ramp name is never caught here, only by the
+    server. Simulated: at the time this test was written, the server side of
+    this contract (validateDisplayName in LayerStyleService) still checks
+    only the length, not against a catalogue, so this response was built by
+    hand rather than measured against a running instance. Same RFC 7807
+    shape as every other 400 this library already handles -- see
+    ``_ambiguous_layer_statistics`` in conftest.py for the same pattern with
+    an ambiguous field name -- and the point of this test is that nothing
+    between the transport and the caller loses or reshapes that ``detail``
+    sentence on the way through.
+    """
+
+    def handle(request: object) -> Response:
+        return Response(
+            400,
+            '{"type":"about:blank","title":"Ungültige Anfrage","status":400,'
+            '"detail":"Unbekannter Farbverlauf: \'infero\'. Erlaubt sind blues, '
+            'diverging, greens, greys, inferno, reds, viridis.",'
+            f'"instance":"/api/layers/{LAYER_ID}"}}',
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+    renderer = hgis.Renderer(hgis.RENDERER_HEATMAP, field="Lautstärke Wert", ramp="infero")
+
+    with pytest.raises(hgis.ApiError) as error:
+        layer.set_style(hgis.Style(renderer))
+
+    assert transport.count == 1  # reached the server -- this library keeps no local list
+    message = str(error.value)
+    assert "infero" in message
+    assert "inferno" in message
+    assert "viridis" in message
+    assert error.value.status == 400
+
+
 # --- the local check, before anything is sent -----------------------------
 
 

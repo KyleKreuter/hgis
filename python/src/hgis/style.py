@@ -252,8 +252,14 @@ class Renderer:
     :param class_count: graduated only -- how many classes ``method`` was
         asked to produce
     :param ramp: graduated and heatmap: the colour ramp's display name,
-        e.g. ``"viridis"`` or ``"inferno"``. The server keeps no ramp
-        catalogue and only checks the length; the frontend alone interprets it
+        e.g. ``"viridis"`` or ``"inferno"``. The server checks it against its
+        own catalogue and refuses an unknown name with an HTTP 400 that names
+        the valid ones; the frontend alone turns a valid name into actual
+        colours. This library keeps no copy of that catalogue -- on purpose,
+        the same reasoning as everything else in :func:`to_style_json`'s
+        docstring: a second list here would drift from the server's, and
+        would force a release of this library before a new ramp could be
+        used at all
     :param palette: categorized only: the colour palette's display name
     :param radius: heatmap only -- influence radius in screen pixels, 1..100
     :param intensity: heatmap only -- a multiplier, 0.1..5.0
