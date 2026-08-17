@@ -375,6 +375,37 @@ class FeaturePropertyWireFormatTest {
 	}
 
 	/**
+	 * A second, independently reachable route to the exact same failure class, found by a
+	 * later review of {@link #rejectsABigintOverflowWith400NotSilentWraparound}'s own fix:
+	 * {@code 1e30} decodes as a {@link Double}, not a {@link java.math.BigInteger}, since it
+	 * has an exponent rather than being a bare integer literal. {@link Double#longValue()}
+	 * does not wrap the way {@code int} narrowing does -- it clamps to {@link
+	 * Long#MAX_VALUE}, which happens to be exactly {@code bigint}'s own upper bound, so a
+	 * range check built on the already-clamped {@code long} let it through unchecked.
+	 * {@code integer}/{@code smallint} never showed this, because the clamp value sits well
+	 * outside their tighter ranges either way -- only {@code bigint}'s bound coincides with
+	 * the clamp itself. None of the three tests above used a decimal point or exponent, so
+	 * all three took the safe path; this one deliberately does not. Measured against the
+	 * real endpoint before writing this test, not assumed.
+	 */
+	@Test
+	@DisplayName("a bigint value in exponential notation past 64-bit range is a 400, not a value clamped to Long.MAX_VALUE")
+	void rejectsABigintOverflowInExponentialNotationWith400() throws Exception {
+		MockHttpServletResponse response = putProperties(filledFid, "{\"bigcol\":1e30}");
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+		assertThat(body).as("names the field by its source name").contains("Große Zahl");
+
+		Object stored = jdbc.sql("SELECT bigcol FROM " + table() + " WHERE fid = :fid")
+				.param("fid", filledFid).query().singleRow().get("bigcol");
+		assertThat(((Number) stored).longValue())
+				.as("must keep its original value, not one clamped to Long.MAX_VALUE")
+				.isEqualTo(STORED_BIGINT);
+	}
+
+	/**
 	 * {@code smallint} is a different shape of the same gap: before this fix it shared
 	 * {@code integer}'s {@code intValue()} conversion, so a value like {@code 40000} --
 	 * outside {@code smallint}'s real range but a perfectly ordinary {@code int} -- was
