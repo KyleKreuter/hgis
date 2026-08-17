@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -131,13 +132,13 @@ public class EditService {
 		columns.forEach(column -> sql.append(", ").append(column));
 		sql.append(") VALUES (").append(geometrySql);
 		for (int i = 0; i < columns.size(); i++) {
-			sql.append(", :v").append(i);
+			sql.append(", ").append(placeholderFor(values.get(i), i));
 		}
 		sql.append(") RETURNING fid");
 
 		var statement = jdbc.sql(sql.toString()).param("g", create.geometry().toString());
 		for (int i = 0; i < values.size(); i++) {
-			statement = statement.param("v" + i, values.get(i));
+			statement = statement.param("v" + i, paramValue(values.get(i)));
 		}
 		return statement.query(Long.class).single();
 	}
@@ -154,7 +155,7 @@ public class EditService {
 			List<String> columns = new ArrayList<>();
 			collectProperties(fields, update.properties(), columns, values);
 			for (int i = 0; i < columns.size(); i++) {
-				assignments.add(columns.get(i) + " = :v" + i);
+				assignments.add(columns.get(i) + " = " + placeholderFor(values.get(i), i));
 			}
 		}
 		if (assignments.isEmpty()) {
@@ -179,7 +180,7 @@ public class EditService {
 			statement = statement.param("rowVersion", update.rowVersion());
 		}
 		for (int i = 0; i < values.size(); i++) {
-			statement = statement.param("v" + i, values.get(i));
+			statement = statement.param("v" + i, paramValue(values.get(i)));
 		}
 
 		int affected = statement.update();
@@ -391,6 +392,28 @@ public class EditService {
 	}
 
 	/**
+	 * PostgreSQL accepts {@code NaN} as a {@code numeric} value, and {@code Infinity} /
+	 * {@code -Infinity} as well since version 14 -- reachable via import or hand-written
+	 * SQL, not only through this service, and {@link FeatureDeleteCapture} therefore
+	 * captures a numeric column exactly as it reads: {@code "NaN"} included. None of the
+	 * three has a {@link BigDecimal} representation, so they can never come back through
+	 * {@link BigDecimal#BigDecimal(String)} below; matched case-insensitively (PostgreSQL
+	 * itself is) and wrapped as a {@link NumericLiteral} instead.
+	 */
+	private static final Pattern SPECIAL_NUMERIC_LITERAL = Pattern.compile("(?i)^[+-]?(nan|inf(inity)?)$");
+
+	/**
+	 * Marks a value that {@link #placeholderFor} has to bind through an explicit
+	 * {@code CAST(... AS numeric)} rather than an ordinary placeholder -- the driver binds
+	 * a bare {@link String} parameter as {@code varchar}, and PostgreSQL has no implicit
+	 * cast from {@code varchar} to {@code numeric} (unlike a literal in the SQL text
+	 * itself, which is untyped until the column gives it a type). Same technique
+	 * {@link FeatureQueryService}'s cursor comparison already uses for the same reason.
+	 */
+	private record NumericLiteral(String text) {
+	}
+
+	/**
 	 * A JSON number token is not the only shape a numeric value legitimately arrives
 	 * in: {@link FeatureDeleteCapture} deliberately captures a {@code numeric} column as
 	 * text (see there for why), specifically so replaying a deleted row through this
@@ -399,8 +422,12 @@ public class EditService {
 	 * promises. A plain {@link String} is therefore parsed with {@link BigDecimal}'s own
 	 * constructor first; only a genuine JSON number (the ordinary UI write) falls back
 	 * to the {@code double} route, same as before.
+	 *
+	 * <p>Returns {@link Object}, not {@link BigDecimal}: {@link #SPECIAL_NUMERIC_LITERAL}
+	 * comes back as a {@link NumericLiteral} instead, since {@link BigDecimal} cannot
+	 * represent any of the three values it matches.
 	 */
-	private static BigDecimal asBigDecimal(LayerField field, Object value) {
+	private static Object asBigDecimal(LayerField field, Object value) {
 		if (value instanceof BigDecimal decimal) {
 			return decimal;
 		}
@@ -409,11 +436,34 @@ public class EditService {
 				return new BigDecimal(text);
 			}
 			catch (NumberFormatException ex) {
+				String trimmed = text.trim();
+				if (SPECIAL_NUMERIC_LITERAL.matcher(trimmed).matches()) {
+					return new NumericLiteral(trimmed);
+				}
 				throw typeMismatch(field, value);
 			}
 		}
 		Number number = asNumber(field, value);
 		return BigDecimal.valueOf(number.doubleValue());
+	}
+
+	/**
+	 * The SQL text for one bound value at index {@code i}: an explicit cast for a
+	 * {@link NumericLiteral} (see {@link #asBigDecimal}), an ordinary named placeholder
+	 * for everything else.
+	 */
+	private static String placeholderFor(Object value, int i) {
+		return value instanceof NumericLiteral ? "CAST(:v" + i + " AS numeric)" : ":v" + i;
+	}
+
+	/**
+	 * What actually gets bound for one value: a {@link NumericLiteral} unwraps to its
+	 * plain text, which {@link #placeholderFor} already wrapped in the matching cast --
+	 * the driver only ever sees an ordinary {@link String} or {@link BigDecimal}, never
+	 * this class's own marker type.
+	 */
+	private static Object paramValue(Object value) {
+		return value instanceof NumericLiteral literal ? literal.text() : value;
 	}
 
 	private static Boolean asBoolean(LayerField field, Object value) {

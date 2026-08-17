@@ -41,6 +41,17 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * text -- what actually crosses the wire on {@code GET .../changes?includeDeletedRows=true},
  * and for text-heavy JSON like this, compression buys roughly a factor of two to three,
  * so a disk-footprint number alone understates the size of a row a client would receive.
+ *
+ * <p>Both bytes/feature numbers are specific to each scenario's own vertex count, not a
+ * ceiling for "realistic" data in general: a review of this measurement traced the ~578
+ * byte gap between the two scenarios' uncompressed numbers to geometry size alone (182
+ * bytes of GeoJSON for the 5-vertex box, 516 bytes for the 16-vertex building, matching
+ * the measured gap to the decimal), which comes out to roughly 30 bytes per vertex. A
+ * real, non-convex building outline with wings and notches routinely has far more than 16
+ * vertices -- 32 vertices already adds roughly 780 bytes over the 5-vertex box, 64
+ * vertices roughly 1670 -- so a capacity plan built on this test's numbers should scale
+ * them by the vertex count of the data being planned for, not read {@link
+ * #measuresSizeForARealisticBuildingOutlineWithVariedText}'s number as an upper bound.
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest

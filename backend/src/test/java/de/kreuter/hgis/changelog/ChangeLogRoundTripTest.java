@@ -2,6 +2,9 @@ package de.kreuter.hgis.changelog;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import de.kreuter.hgis.TestcontainersConfiguration;
 import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerField;
@@ -30,8 +33,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -52,12 +59,29 @@ import tools.jackson.databind.ObjectMapper;
  * {@code uuid} and {@code bytea} are added explicitly alongside it: real column types
  * (via import, {@code TypeMapper}) that {@link FieldType} deliberately excludes from the
  * field-creation UI, not absent from the data this fallback has to carry.
+ *
+ * <p>{@link #replay} goes through {@link MockMvc} against the real {@code POST .../edits}
+ * controller, using the application's own, auto-configured {@link ObjectMapper} bean to
+ * both build the request body and read the response -- not a private {@code new
+ * ObjectMapper()} the way an earlier version of this class did. Two independently
+ * configured Jackson instances can silently drift apart (a future change to the bean's
+ * configuration would leave a private instance testing a deserialisation path the server
+ * no longer uses, still green), and a review of this class found exactly that risk. The
+ * captured row itself ({@link #capturedRowFor}) still travels each field of interest as a
+ * JSON string, never a bare floating-point token, so parsing it never depends on {@code
+ * ObjectMapper}'s float-vs-BigDecimal setting either way -- see {@link
+ * FeatureDeleteCapture} for why {@code numeric} is captured as text in the first place.
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
+@AutoConfigureMockMvc
 class ChangeLogRoundTripTest {
 
-	private static final ObjectMapper MAPPER = new ObjectMapper();
+	@Autowired
+	private MockMvc mockMvc;
+
+	@Autowired
+	private ObjectMapper objectMapper;
 
 	@Autowired
 	private EditService editService;
@@ -101,7 +125,7 @@ class ChangeLogRoundTripTest {
 	@Test
 	@DisplayName("every field type -- including a null one, numeric at full precision and bytea -- "
 			+ "survives a delete-and-replay through the real EditService path")
-	void everyFieldTypeSurvivesADeleteAndReplay() {
+	void everyFieldTypeSurvivesADeleteAndReplay() throws Exception {
 		UUID layerId = UUID.randomUUID();
 		String tableName = SqlIdentifier.tableName(layerId);
 		String table = SqlIdentifier.quoteLayerTable(tableName);
@@ -186,11 +210,71 @@ class ChangeLogRoundTripTest {
 				.isEqualTo(bytea);
 	}
 
+	// --- special numeric values -----------------------------------------------------------
+
+	/**
+	 * {@link #everyFieldTypeSurvivesADeleteAndReplay} covers the ordinary case, one
+	 * unremarkable value per {@link FieldType}. That says little about a fallback that
+	 * exists specifically for the moment data is unusual -- and {@code numeric} has three
+	 * such values PostgreSQL itself accepts (reachable via import or hand-written SQL, not
+	 * only through this service): {@code NaN} always, {@code Infinity}/{@code -Infinity}
+	 * since PostgreSQL 14. None of the three has a {@link BigDecimal} representation, so a
+	 * captured row carrying one used to make {@code POST .../edits} answer 400 on replay --
+	 * and because a {@code Create} is all-or-nothing, that took every other field of the
+	 * same object down with it, the exact failure class {@code bytea} had for the same
+	 * reason above.
+	 */
+	@Test
+	@DisplayName("NaN, Infinity and -Infinity in a numeric column survive a delete-and-replay "
+			+ "through the real HTTP endpoint")
+	void specialNumericValuesSurviveADeleteAndReplay() throws Exception {
+		UUID layerId = UUID.randomUUID();
+		String tableName = SqlIdentifier.tableName(layerId);
+		String table = SqlIdentifier.quoteLayerTable(tableName);
+		jdbc.sql("""
+				CREATE TABLE %s (
+				    fid       bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+				    geom      geometry(MultiPolygon, 25832) NOT NULL,
+				    f_numeric numeric
+				)
+				""".formatted(table)).update();
+
+		Layer layer = layerRepository.saveAndFlush(
+				new Layer(layerId, project, "Sonderwerte", tableName, "MULTIPOLYGON", 25832));
+		fieldRepository.saveAndFlush(new LayerField(layer, "f_numeric", "f_numeric", "numeric", 0));
+
+		for (String special : List.of("NaN", "Infinity", "-Infinity")) {
+			long fid = jdbc.sql("INSERT INTO " + table + " (geom, f_numeric) VALUES ("
+							+ "ST_Multi(ST_GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 25832)), "
+							+ "CAST(:v AS numeric)) RETURNING fid")
+					.param("v", special)
+					.query(Long.class)
+					.single();
+
+			editService.apply(layer.getId(), new EditDtos.Request(null, null, List.of(fid), false), null);
+			JsonNode capturedRow = capturedRowFor(layer.getId());
+			long newFid = replay(layer.getId(), capturedRow);
+
+			Object value = queryService.get(layer.getId(), newFid).properties().get("f_numeric");
+			assertThat(value)
+					.as("%s must survive the round trip through the real endpoint, not be rejected "
+							+ "with a 400 the way bytea and numeric precision were", special)
+					.isInstanceOf(Double.class);
+			double numeric = (Double) value;
+			switch (special) {
+				case "NaN" -> assertThat(Double.isNaN(numeric)).as("NaN").isTrue();
+				case "Infinity" -> assertThat(numeric).isEqualTo(Double.POSITIVE_INFINITY);
+				case "-Infinity" -> assertThat(numeric).isEqualTo(Double.NEGATIVE_INFINITY);
+				default -> throw new AssertionError("unreachable: " + special);
+			}
+		}
+	}
+
 	// --- every geometry shape ------------------------------------------------------------
 
 	@Test
 	@DisplayName("a point, a line and a multipolygon with a hole all survive a delete-and-replay unchanged")
-	void everyGeometryShapeSurvivesADeleteAndReplay() {
+	void everyGeometryShapeSurvivesADeleteAndReplay() throws Exception {
 		// SRID 4326 on purpose: the captured geometry is already EPSG:4326 (see
 		// FeatureDeleteCapture), so storing the layer in that same CRS makes the
 		// insert-side ST_Transform a no-op and this test about topology, not about
@@ -252,23 +336,31 @@ class ChangeLogRoundTripTest {
 				.filter(e -> layerId.equals(e.getLayerId()) && e.getAction().equals(ChangeLogAction.FEATURE_DELETE))
 				.findFirst()
 				.orElseThrow();
-		JsonNode rows = MAPPER.readTree(entry.getDeletedRows());
+		JsonNode rows = objectMapper.readTree(entry.getDeletedRows());
 		assertThat(rows).hasSize(1);
 		return rows.get(0);
 	}
 
 	/**
 	 * Rebuilds the captured row as the JSON body of a real {@code POST .../edits} request
-	 * and deserialises it through {@link EditDtos.Request} itself -- the same class, the
-	 * same generic {@code Map<String, Object>} property type an actual HTTP request goes
-	 * through -- rather than converting the captured {@link JsonNode} by hand, which would
-	 * only prove that Java objects compare equal to themselves.
+	 * and sends it through {@link #mockMvc} against the real controller -- the same
+	 * {@link org.springframework.web.bind.annotation.RequestBody @RequestBody}
+	 * deserialisation, driven by the same auto-configured {@link ObjectMapper} bean, an
+	 * actual client goes through. Converting the captured {@link JsonNode} to {@link
+	 * EditDtos.Request} directly, in-process, would only prove that Java objects compare
+	 * equal to themselves -- not that the server's own request handling accepts the value.
 	 */
-	private long replay(UUID layerId, JsonNode capturedRow) {
+	private long replay(UUID layerId, JsonNode capturedRow) throws Exception {
 		String body = "{\"creates\":[{\"clientId\":-1,\"geometry\":"
 				+ capturedRow.get("geometry") + ",\"properties\":" + capturedRow.get("properties") + "}]}";
-		EditDtos.Request request = MAPPER.readValue(body, EditDtos.Request.class);
-		EditDtos.Response response = editService.apply(layerId, request, null);
-		return response.createdFids().get(-1L);
+
+		MvcResult result = mockMvc.perform(post("/api/layers/{layerId}/edits", layerId)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(body))
+				.andExpect(status().isOk())
+				.andReturn();
+
+		JsonNode response = objectMapper.readTree(result.getResponse().getContentAsByteArray());
+		return response.get("createdFids").get("-1").asLong();
 	}
 }
