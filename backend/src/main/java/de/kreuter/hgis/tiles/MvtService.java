@@ -403,15 +403,22 @@ public class MvtService {
 	 * own report for the measured point counts this produces and how they compare to the
 	 * limit.
 	 *
-	 * <p>Five {@code LATERAL} steps, each named for what it adds:
+	 * <p>Seven {@code LATERAL} steps, each named for what it adds:
 	 *
 	 * <ol>
 	 *   <li>{@code part}: {@code ST_Dump(l.geom)} -- {@code l.geom} is always the multi
 	 *       form, and both {@code ST_LineLocatePoint} and {@code ST_LineInterpolatePoint}
 	 *       below only accept a plain {@code LINESTRING}. Splitting first, before clipping,
-	 *       is what lets step 3 measure a clipped piece's position against the <em>whole</em>
+	 *       is what lets step 4 measure a clipped piece's position against the <em>whole</em>
 	 *       original part rather than against whatever fragment this one tile happens to
 	 *       see -- the point this whole method exists to fix, below.</li>
+	 *   <li>{@code partflags}: {@code NOT ST_IsSimple(part.geom)}, computed once per part
+	 *       rather than once per clipped piece -- a self-crossing part can hand back several
+	 *       {@code ln} pieces (see the review scenario in step 4's own note, where one
+	 *       self-crossing four-point line clips into four pieces within a single tile), and
+	 *       {@code ST_IsSimple} is an {@code O(n log n)} check over the <em>whole</em> part;
+	 *       paying it once per part instead of once per piece is what keeps a tile with
+	 *       several pieces of the same meandering line from paying it several times over.</li>
 	 *   <li>{@code ln}: {@code ST_Dump(ST_CollectionExtract(ST_Intersection(part.geom,
 	 *       b.native), 2))} -- clips that one part to the tile and splits the result into
 	 *       plain linestrings again, since a clip can produce several disjoint pieces (a
@@ -430,9 +437,54 @@ public class MvtService {
 	 *       not-yet-existing mask) into an empty {@code LINESTRING}, which dumps to zero rows
 	 *       rather than raising an error -- so a tile that happens to catch a line exactly at
 	 *       its edge renders instead of failing.</li>
+	 *   <li>{@code loc}: {@code ST_LineLocatePoint(part.geom, ST_StartPoint(ln.geom))} --
+	 *       PostGIS's own, single answer for where this piece's start sits along the whole
+	 *       part, {@code 0..1}. Kept as its own step, rather than inlined into {@code phase}
+	 *       below, purely so the review scenario's second candidate (step 5) can refer to it
+	 *       by name instead of recomputing it.</li>
 	 *   <li>{@code phase}: how far this clipped piece's own start point sits along the whole
-	 *       original {@code part} ({@code ST_LineLocatePoint(part.geom, ST_StartPoint(
-	 *       ln.geom)) * ST_Length(part.geom)}), in the layer's own metres.</li>
+	 *       original {@code part}, in the layer's own metres -- {@code loc.t1 *
+	 *       ST_Length(part.geom)} for the ordinary case, but <strong>not always</strong> for a
+	 *       part that crosses itself. {@code ST_LineLocatePoint} finds the closest point on
+	 *       the curve to the point it is given and returns only one fraction -- for a simple
+	 *       part that is fine, since every point on it occurs at exactly one fraction, but a
+	 *       part that crosses itself visits its own crossing point at <em>two</em> different
+	 *       fractions, and {@code ln.geom}'s start can legitimately be either one. Reviewed and
+	 *       reproduced directly in SQL with the four-point self-crossing line {@code
+	 *       LINESTRING(0 0, 10 10, 10 0, 0 10)} (crossing itself at {@code (5,5)}, the
+	 *       geometry {@code MvtServiceHeatmapTest} tests against) clipped to a small box
+	 *       straddling that crossing: the clip produces four pieces, two of which start at
+	 *       {@code (5,5)} -- {@code ST_LineLocatePoint} answers {@code 0,1847} (7,07 m along a
+	 *       38,28 m line) for <em>both</em>, which is correct for the piece continuing along
+	 *       the first branch and wrong by 24,14 m for the piece continuing along the third,
+	 *       whose true phase is {@code 0,8153} (31,21 m) -- silently: no error, no NULL, just a
+	 *       raster offset computed against the wrong location, so that piece's points land
+	 *       spaced correctly relative to a stretch of line they do not belong to. Self-crossing
+	 *       lines are not a rare shape for this application to render as a heatmap -- a
+	 *       meandering river, a hiking trail with a loop, a railway with a reversing loop are
+	 *       exactly this shape, not an edge case of it.
+	 *       <p>Fixed by verification rather than by trying to enumerate every occurrence:
+	 *       {@code ST_LineLocatePoint} always finds the <em>first</em> (smallest-fraction)
+	 *       occurrence, so if that is wrong for this particular piece, the right one is
+	 *       necessarily later along the part -- found by re-running the same search, but only
+	 *       on the remainder of the part strictly after {@code loc.t1}
+	 *       ({@code ST_LineSubstring(part.geom, loc.t1 + epsilon, 1.0)}, the {@code epsilon}
+	 *       existing only so the search does not immediately re-find the very point it just
+	 *       started from). That second candidate is only computed at all when {@code
+	 *       partflags.self_intersects} -- a simple part never needs it, and skips straight to
+	 *       using {@code loc.t1}, unchanged from before this fix. Whichever of the (at most
+	 *       two) candidates is right is then told apart the same way a human would check it:
+	 *       walking <em>forward</em> from that candidate by {@code ln.geom}'s own length must
+	 *       land back on {@code ln.geom}'s own end point ({@code ST_LineInterpolatePoint(
+	 *       part.geom, candidate + ST_Length(ln.geom)/ST_Length(part.geom))} compared against
+	 *       {@code ST_EndPoint(ln.geom)} by {@code ST_Distance}) -- the wrong candidate's
+	 *       forward projection lands somewhere else on the part entirely, so {@code ORDER BY}
+	 *       that distance and taking the closest picks the candidate that actually reproduces
+	 *       this piece, not just a point that happens to match its start. A part that crosses
+	 *       the very same coordinate a third time is not caught by this (only two candidates
+	 *       are ever generated) -- unreached in practice, since it needs the same exact
+	 *       coordinate visited three separate times by one feature, not merely three
+	 *       self-crossings.</li>
 	 *   <li>{@code raster}: {@code clip_len} (this piece's own length) and
 	 *       {@code first_offset} -- the distance, from this piece's own start, to the next
 	 *       point on a grid measured from the <em>whole part's</em> start, spacing apart.
@@ -440,12 +492,8 @@ public class MvtService {
 	 *       {@code FLOOR} since SQL has no {@code mod} for {@code double precision}.</li>
 	 *   <li>{@code pt}: one row per point, at local fractions {@code (first_offset +
 	 *       gs * spacing) / clip_len} for {@code gs} from a {@code generate_series}, plus a
-	 *       fallback row at fraction 1.0 -- this piece's far end -- for the case
-	 *       {@code first_offset > clip_len}, when the piece is too short to reach even one
-	 *       grid point on its own. Without that fallback a short piece (a short line, or the
-	 *       last sliver of a long one inside one tile) would vanish rather than show one
-	 *       point, the same guarantee the single-{@code LEAST} version of this method used to
-	 *       give directly.</li>
+	 *       fallback row for a part shorter than one spacing unit end to end -- see the class's
+	 *       own note on this fallback's own history, below.</li>
 	 * </ol>
 	 *
 	 * <p><strong>Why the grid is measured from the whole part, not from each clipped
@@ -463,13 +511,47 @@ public class MvtService {
 	 * "how far from the part's own start is the next grid point", so they agree on where the
 	 * points fall and the seam closes. Confirmed the same way the gap was found: two real,
 	 * adjacent tiles, this time producing the same point positions across the shared edge
-	 * (see {@code MvtServiceHeatmapTest#lineCrossingATileBoundaryProducesTheSameGridOnBothSides}).
+	 * (see {@code MvtServiceHeatmapTest#lineCrossingATileBoundaryProducesTheSameGridOnBothSides},
+	 * scanning several line placements rather than trusting one -- see that test's own note).
 	 *
 	 * <p>When a part is not clipped at all -- the ordinary case, a line entirely inside one
 	 * tile -- {@code phase} is 0 and {@code first_offset} collapses to exactly {@code
 	 * spacing}, which reproduces the original, unaligned formula's own points exactly: {@code
 	 * n * spacing} for every {@code n} up to {@code floor(length / spacing)}. The realignment
 	 * only ever changes anything for a piece that a tile boundary actually cut.
+	 *
+	 * <p><strong>The fallback's own history</strong> -- its first version fired whenever
+	 * <em>this clipped piece</em> was too short to reach a grid point on its own ({@code
+	 * first_offset > clip_len}), placing the rescue point at that piece's own raw, unaligned
+	 * end -- which, for the ordinary case a tile boundary actually cuts a piece off, <em>is</em>
+	 * the tile boundary. Reviewed and reproduced: a line left with a short (~196 m, under one
+	 * spacing unit) remainder in one tile before continuing on into the next carries a
+	 * fallback point sitting exactly on that boundary, whose distance to the neighbouring
+	 * tile's own next aligned point depends only on where the boundary happens to fall in the
+	 * global raster phase -- and can be made arbitrarily small. Scanning the line's start
+	 * position across the boundary reproduced a gap shrinking continuously from 110 m down to
+	 * 14 cm before the fallback stopped firing at all: two points 14 cm apart, on a heatmap,
+	 * is a bright seam sitting exactly on the one kind of location the phase realignment above
+	 * exists to heal.
+	 * <p>The question the fallback answers was wrong: not "is this <em>piece</em> short", but
+	 * "would this <em>feature</em> vanish everywhere without it" -- a piece left short by
+	 * clipping is not missing anything, its weight belongs to the aligned grid point the
+	 * neighbouring tile places right next to the cut, which is exactly what the phase
+	 * realignment above already guarantees exists. Only a part whose own, <em>unclipped</em>
+	 * length is under one spacing unit -- so short that {@code floor(length / spacing)} is
+	 * {@code 0} everywhere, in every tile it could ever be clipped into -- has no grid point
+	 * anywhere and needs the rescue. The fallback's condition is therefore {@code
+	 * ST_Length(part.geom) < spacing}, not a comparison against {@code clip_len}, and its point
+	 * sits at {@code part.geom}'s own midpoint rather than {@code ln.geom}'s raw end: a fixed
+	 * location on the whole feature, the same regardless of which tile clipped it or where, so
+	 * it can only ever fall inside <em>one</em> tile's {@code b.native} and be kept there --
+	 * {@code ST_AsMVTGeom} discards it, silently, in every other tile that also evaluates this
+	 * same {@code WHERE}, the same way it already discards any other point outside the tile.
+	 * Confirmed against the same scan that found the bug: scanning the same boundary-crossing
+	 * line's start position no longer produces a fallback point in the short-remainder tile at
+	 * all (see {@code MvtServiceHeatmapTest#aBoundaryCutRemainderProducesNoNearDuplicate}),
+	 * while {@link MvtServiceHeatmapTest#aShortLineStillGetsOnePoint} -- a part that is short
+	 * end to end, not merely left short by a cut -- keeps its one point exactly as before.
 	 *
 	 * <p>Every point produced this way carries its parent line's own attribute values
 	 * unchanged, including the weight field -- see the class's own report for why that
@@ -478,9 +560,20 @@ public class MvtService {
 	private static String interpolatedLinePoints(int z, StringBuilder from) {
 		String spacing = String.format(Locale.ROOT, "%.6f", heatmapPointSpacingMetres(z));
 		from.append(",\n  LATERAL ST_Dump(l.geom) AS part")
+				.append(",\n  LATERAL (SELECT NOT ST_IsSimple(part.geom) AS self_intersects) AS partflags")
 				.append(",\n  LATERAL ST_Dump(ST_CollectionExtract(ST_Intersection(part.geom, b.native), 2)) AS ln")
-				.append(",\n  LATERAL (SELECT ST_LineLocatePoint(part.geom, ST_StartPoint(ln.geom))")
-				.append(" * ST_Length(part.geom) AS clip_start) AS phase")
+				.append(",\n  LATERAL (SELECT ST_LineLocatePoint(part.geom, ST_StartPoint(ln.geom)) AS t1) AS loc")
+				.append(",\n  LATERAL (SELECT (candidate.t * ST_Length(part.geom)) AS clip_start FROM (")
+				.append("SELECT loc.t1 AS t ")
+				.append("UNION ALL ")
+				.append("SELECT LEAST(loc.t1 + 1e-9, 1.0) + ST_LineLocatePoint(")
+				.append("ST_LineSubstring(part.geom, LEAST(loc.t1 + 1e-9, 1.0), 1.0), ST_StartPoint(ln.geom)) ")
+				.append("* (1.0 - LEAST(loc.t1 + 1e-9, 1.0)) ")
+				.append("WHERE partflags.self_intersects AND loc.t1 < 1.0")
+				.append(") AS candidate ")
+				.append("ORDER BY ST_Distance(ST_LineInterpolatePoint(part.geom, LEAST(1.0, candidate.t + ")
+				.append("ST_Length(ln.geom) / NULLIF(ST_Length(part.geom), 0))), ST_EndPoint(ln.geom)) ASC, candidate.t ASC ")
+				.append("LIMIT 1) AS phase")
 				.append(",\n  LATERAL (SELECT ST_Length(ln.geom) AS clip_len, ")
 				.append(spacing).append(" - (phase.clip_start - ").append(spacing)
 				.append(" * FLOOR(phase.clip_start / ").append(spacing).append(")) AS first_offset) AS raster")
@@ -490,8 +583,8 @@ public class MvtService {
 				.append("FROM generate_series(0, FLOOR((raster.clip_len - raster.first_offset) / ")
 				.append(spacing).append(")::int) AS gs")
 				.append(" UNION ALL ")
-				.append("SELECT ST_LineInterpolatePoint(ln.geom, 1.0) AS geom ")
-				.append("WHERE raster.first_offset > raster.clip_len")
+				.append("SELECT ST_LineInterpolatePoint(part.geom, 0.5) AS geom ")
+				.append("WHERE ST_Length(part.geom) < ").append(spacing)
 				.append(") AS pt");
 		return "pt.geom";
 	}
