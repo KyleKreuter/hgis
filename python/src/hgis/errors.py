@@ -1,4 +1,4 @@
-"""What can go wrong, as four exceptions.
+"""What can go wrong, each its own exception.
 
 Every one of them is an :class:`HgisError`, so a caller who wants to catch
 everything this library raises needs one name.
@@ -57,6 +57,33 @@ class NotFoundError(ApiError):
     """A project, layer or feature the server does not have (HTTP 404)."""
 
 
+class ConflictError(ApiError):
+    """
+    A write collided with another one (HTTP 409).
+
+    Raised by :meth:`hgis.layer.Layer.edit` and the convenience methods built
+    on it, when the ``row_version`` sent with an update or a delete no longer
+    matches the row -- someone else wrote it in the meantime.
+
+    :param current: the row as it stands on the server right now, in the same
+        shape ``GET /api/layers/{id}/features/{fid}`` returns -- ``fid``,
+        ``properties``, ``geometry``, ``rowVersion``. Read it, decide, and try
+        again with the fresh ``rowVersion``. None when the server's answer did
+        not carry one.
+    """
+
+    def __init__(
+        self,
+        status: int,
+        detail: str,
+        title: str | None = None,
+        instance: str | None = None,
+        current: dict | None = None,
+    ) -> None:
+        super().__init__(status, detail, title, instance)
+        self.current = current
+
+
 class UnknownNameError(HgisError, LookupError):
     """
     A name that matches no project or layer in what was actually there.
@@ -80,17 +107,73 @@ class InvalidClientIdError(HgisError, ValueError):
     """
 
 
-class ReadOnlyError(HgisError):
+class UnsafeTransportError(HgisError, ValueError):
     """
-    A request that would change data, which this stage does not do.
+    :class:`hgis.transport.HttpxTransport` is wrapping, or was just handed, an
+    ``httpx.Client`` with ``follow_redirects=True``.
+
+    Also a :class:`ValueError`, because that is what an unusable configuration
+    value is. :class:`hgis.client.RequestGuard` checks a redirect one hop at a
+    time by reading the 3xx response back and deciding for itself whether to
+    follow -- which only works if httpx hands that response back untouched.
+    With ``follow_redirects=True``, httpx resolves the whole chain *inside*
+    the one call the guard checked once, so its loop never runs and its
+    per-hop check never sees where the request actually went. Demonstrated: a
+    checked ``PUT`` -- full body, the client-name header included -- arrived
+    unchecked at wherever the first hop pointed.
+
+    Checked when a :class:`~hgis.transport.HttpxTransport` is built *and*
+    again before every request or event stream it opens -- ``follow_redirects``
+    is a plain, mutable attribute on an object the caller owns, so a client
+    that passed the check once can still be set to follow redirects a moment
+    later, by code with no idea this library exists. Refused every time
+    rather than silently turned back off: flipping the flag here would change
+    that client's behaviour everywhere else it is used too, and do it
+    quietly.
+
+    This is the one way to make httpx resolve a redirect on its own that can
+    be checked from here: it reads one attribute. A caller who installs a
+    custom ``httpx.BaseTransport`` that resolves a redirect internally,
+    instead of setting this attribute, is not caught by this error at all --
+    see :class:`hgis.client.RequestGuard`'s own docstring for why not, and
+    for how far that gap was measured to go.
+    """
+
+
+class InvalidArgumentError(HgisError, TypeError):
+    """
+    An argument does not have the shape this library expects.
+
+    Also a :class:`TypeError`, because that is what a wrongly shaped argument
+    is. Exists for the one place a value can misbehave instead of failing
+    outright: ``str`` and ``bytes`` are iterable too, so
+    ``layer.delete_features("123")`` -- meant as one fid -- would otherwise be
+    walked character by character and quietly delete objects 1, 2 and 3
+    instead. See :meth:`hgis.layer.Layer.delete_features` and
+    :func:`hgis.edits.apply_edits`.
+    """
+
+
+class GuardError(HgisError):
+    """
+    A request that :class:`hgis.client.RequestGuard` refused before it reached
+    the server.
 
     Not a lock -- anyone who means to write can import an HTTP library and go
     around this library entirely. It is a guard against the accidental one: a
-    generic ``put`` or ``_send("DELETE", ...)`` reaching a real endpoint. That
-    matters most right now, because there is no undo behind the API and no
-    recycle bin: a deletion is final the moment it arrives.
+    request nobody meant to send reaching a real endpoint, or a redirect
+    quietly turning a checked request into an unchecked one. What is allowed
+    grows with what this library can do; see :class:`hgis.client.RequestGuard`
+    for the current list.
 
-    The message names the request and the one write that is allowed.
+    Two things a deletion still cannot undo, guard or not: a *layer* deleted
+    with :meth:`hgis.layer.Layer.purge` (its :meth:`hgis.layer.Layer.delete`
+    only moves it to the project's trash, and stays reversible until purged),
+    and an *object* deleted through :meth:`hgis.layer.Layer.edit` -- the
+    server's own change log is the only way back for those, never this
+    library. See the README's "Was unwiederbringlich ist".
+
+    The message names the request and, where useful, what is allowed instead.
     """
 
 

@@ -12,20 +12,351 @@ runs green.
     HGIS_URL=http://localhost:8080 python -m pytest        # with a server
     python -m pytest -m "not live"                         # without
 
-Read-only. It sends nothing but GET.
+**Read-only, structurally, not by convention.** ``HGIS_URL`` defaults to
+``hgis.DEFAULT_BASE_URL`` -- typically the developer's own running app, real
+project data, no throwaway database behind it. Before this stage, that was
+harmless: the library had nothing but reads to offer, so nobody writing a
+test here could reach for a write by accident. That stopped being true the
+moment ``layer.delete()``, ``layer.edit()`` and the rest of the new surface
+existed to reach for. :class:`_ReadOnlyFloor` below is what keeps that from
+mattering: the ``live`` fixture hands out a client built on it, and every
+non-GET call through that client fails loudly before it reaches the network
+-- whether or not whoever adds the next test here knows any of this history.
 """
 
 from __future__ import annotations
 
+import ast
 import os
 
 import pytest
 
 import hgis
+from hgis.transport import DEFAULT_TIMEOUT, Response, Transport, default_transport
 
 URL = os.environ.get("HGIS_URL", hgis.DEFAULT_BASE_URL)
 
 pytestmark = pytest.mark.live
+
+
+class _ReadOnlyFloor(Transport):
+    """
+    Wraps the real floor and refuses anything but GET -- unconditionally, not
+    only for the paths :class:`hgis.client.RequestGuard` would refuse anyway.
+
+    That distinction is the point: ``RequestGuard`` now *allows* real writes,
+    so relying on it here would make this floor exactly as permissive as the
+    library itself, which is precisely what must not be true for a client
+    built against ``HGIS_URL``. See the module docstring.
+    """
+
+    def __init__(self, inner: Transport) -> None:
+        self.inner = inner
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        json: object = None,
+        timeout: float = DEFAULT_TIMEOUT,
+        headers: dict[str, str] | None = None,
+    ) -> Response:
+        if method.upper() != "GET":
+            raise AssertionError(
+                f"test_live.py hat versucht zu schreiben: {method} {url}. Diese "
+                "Testreihe läuft gegen einen echten Server und muss lesend "
+                "bleiben -- siehe _ReadOnlyFloor im Modul-Docstring."
+            )
+        return self.inner.request(method, url, json=json, timeout=timeout, headers=headers)
+
+    def events(self, url: str, *, headers=None, timeout=None):
+        # A stream is always a GET (see hgis.client.Client.events), so there
+        # is nothing here for this floor to refuse.
+        return self.inner.events(url, headers=headers, timeout=timeout)
+
+
+def test_the_read_only_floor_refuses_a_write() -> None:
+    """
+    Not conditional on a server answering, unlike the test below -- this has
+    to hold in CI too, where nothing ever listens on ``HGIS_URL`` and the one
+    real test always skips.
+    """
+
+    class _NeverCalled(Transport):
+        def request(self, *args: object, **kwargs: object) -> Response:
+            raise AssertionError("Der echte Boden wurde erreicht.")
+
+        def events(self, *args: object, **kwargs: object):
+            raise AssertionError("Der echte Boden wurde erreicht.")
+
+    floor = _ReadOnlyFloor(_NeverCalled())
+
+    with pytest.raises(AssertionError, match="test_live.py"):
+        floor.request("POST", "http://x/api/projects/p/layers", json={"name": "x"})
+    with pytest.raises(AssertionError, match="test_live.py"):
+        floor.request("DELETE", "http://x/api/layers/x")
+
+
+def test_the_read_only_floor_lets_reads_through() -> None:
+    class _Answering(Transport):
+        def request(self, method, url, json=None, timeout=DEFAULT_TIMEOUT, headers=None):
+            return Response(200, "{}")
+
+        def events(self, *args: object, **kwargs: object):
+            raise AssertionError
+
+    floor = _ReadOnlyFloor(_Answering())
+
+    assert floor.request("GET", "http://x/api/projects").status == 200
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _every_client_built_here_must_be_read_only():
+    """
+    Refuse any :class:`hgis.Client` built while a test in this module is
+    running whose transport is not :class:`_ReadOnlyFloor` -- the moment it
+    is built, before it can make its first request.
+
+    An earlier version of this safety net read the file's own syntax tree
+    and looked for ``hgis.connect(...)`` / ``hgis.Client(...)`` written out
+    literally. Demonstrated against it: ``from hgis import connect as c``
+    (an alias -- the check only recognised the name ``connect``) and
+    ``getattr(hgis, "connect")(...)`` (reflection -- there is no call to
+    ``connect`` in the syntax tree at all, only a call to ``getattr``) both
+    reached a live, unguarded client without tripping it.
+
+    This checks the effect instead of the syntax: every one of those paths,
+    however written, calls the same :meth:`hgis.Client.__init__` -- there is
+    exactly one constructor, and nothing a test's own code does downstream
+    of it can be routed around. Two things this does *not* cover, named
+    rather than left for the next person to assume are handled:
+
+    * **Anything that runs at definition time rather than call time.** A
+      ``client = hgis.connect(URL)`` written directly at this file's top
+      level runs while pytest is still collecting this file -- before this
+      fixture's setup has had any test to run around, and so before it has
+      installed anything. The same is true, less obviously, of a decorator
+      argument, a parameter default value on a ``def`` *or* a ``lambda``,
+      and a class body's own statements: all of these run the moment the
+      ``def``/``class``/``lambda`` expression itself does, not when
+      whatever they decorate or default is later called -- a default value
+      is evaluated once, when the function or lambda is defined, and reused
+      on every call after that, never re-evaluated then. Demonstrated
+      separately for all of these, and closed the other way this file
+      already knows: see
+      ``test_no_module_level_statement_in_this_file_builds_a_client``
+      below, which reads the syntax tree for exactly what collection would
+      run immediately, rather than trying to patch something that is not
+      there yet to patch.
+    * **``hgis.Client.__new__`` called directly**, with attributes set by
+      hand instead of going through ``__init__`` at all. Not a plausible
+      accident the way the two syntax tricks above are -- not something
+      either check in this file is built to catch.
+
+    Scoped to this module's own test run and undone in ``finally``, so it
+    never reaches a test in another file.
+    """
+    original_init = hgis.Client.__init__
+
+    def checked_init(self: hgis.Client, *args: object, **kwargs: object) -> None:
+        original_init(self, *args, **kwargs)
+        floor = self._transport.inner  # RequestGuard.inner: what it wraps
+        if not isinstance(floor, _ReadOnlyFloor):
+            raise AssertionError(
+                f"test_live.py hat einen hgis.Client gebaut, dessen Transport "
+                f"nicht _ReadOnlyFloor(...) ist: {floor!r}. Diese Testreihe "
+                "läuft gegen einen echten Server und muss lesend bleiben -- "
+                "siehe den Modul-Docstring."
+            )
+
+    hgis.Client.__init__ = checked_init
+    try:
+        yield
+    finally:
+        hgis.Client.__init__ = original_init
+
+
+def test_a_client_not_built_on_the_read_only_floor_is_refused() -> None:
+    """
+    The guard from the fixture above, proven directly and without depending
+    on a running server: build a client the three ways the review tried --
+    plain attribute access, an aliased import, and reflection -- and confirm
+    each is refused before it can reach the network.
+    """
+    from hgis import connect as aliased_connect
+
+    with pytest.raises(AssertionError, match="_ReadOnlyFloor"):
+        hgis.connect(URL, timeout=5)
+    with pytest.raises(AssertionError, match="_ReadOnlyFloor"):
+        aliased_connect(URL, timeout=5)
+    with pytest.raises(AssertionError, match="_ReadOnlyFloor"):
+        getattr(hgis, "connect")(URL, timeout=5)
+
+
+def _definition_time_client_calls(tree: ast.Module) -> list[ast.Call]:
+    """
+    Every ``hgis.connect(...)`` / ``hgis.Client(...)`` call in ``tree`` that
+    runs the moment Python reaches its statement -- while pytest is still
+    collecting the module the tree came from, before any fixture has run --
+    rather than only when something later calls whatever the statement
+    defined.
+
+    That is more than "module level" suggests. A plain function or lambda
+    *body* is deferred and does not count: the runtime check in this file
+    already covers it, regardless of the syntax used to reach it. But a
+    decorator expression, a parameter default value -- on a ``def`` *or* a
+    ``lambda``, both evaluated once, when the function or lambda is defined,
+    never re-evaluated on a later call -- and a base class or keyword
+    argument on a ``class`` statement all run at *definition* time, the
+    moment the ``def``/``class``/``lambda`` expression itself runs. A class
+    body is not deferred at all, unlike a function's: it executes
+    immediately, as part of building the class's namespace, which is
+    exactly how a class gets its attributes in the first place.
+
+    Confirmed for all four shapes -- a client built in a decorator argument,
+    in a ``def``'s default value, in a ``lambda``'s default value, and as a
+    bare class-body assignment -- by :func:`test_definition_time_client_calls_finds_every_shape`
+    below, and for the first three of those against a real file's import in
+    turn, by :func:`test_no_module_level_statement_in_this_file_builds_a_client`.
+    The first three were also confirmed to slip past two earlier, narrower
+    versions of this very function: one that skipped a ``def``/``class``
+    node entirely, and a second, its immediate successor, that read defaults
+    and decorators on a ``def``/``class`` but still skipped a ``lambda``
+    node outright instead of applying the same split to it.
+    """
+
+    def _name(node: ast.expr) -> str | None:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        return None
+
+    def _client_calls(node: ast.AST) -> list[ast.Call]:
+        return [
+            n
+            for n in ast.walk(node)
+            if isinstance(n, ast.Call) and _name(n.func) in ("connect", "Client")
+        ]
+
+    found: list[ast.Call] = []
+
+    def visit(node: ast.AST) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            # The decorator and every default run now, at the def statement
+            # itself; the function's own body is deferred until it is
+            # called, which the runtime check above already covers.
+            for part in (*node.decorator_list, *node.args.defaults, *node.args.kw_defaults):
+                if part is not None:
+                    found.extend(_client_calls(part))
+            return
+        if isinstance(node, ast.ClassDef):
+            # The decorator, every base class and every keyword argument
+            # (a metaclass=... among them) run now too -- and unlike a
+            # function, the class body itself is not deferred either: it
+            # runs immediately, building the class's namespace.
+            for part in (*node.decorator_list, *node.bases, *node.keywords):
+                found.extend(_client_calls(part))
+            for statement in node.body:
+                visit(statement)
+            return
+        if isinstance(node, ast.Lambda):
+            # Same split as FunctionDef above: a default value runs now, at
+            # the lambda expression itself, not when the lambda is later
+            # called -- only node.body is deferred until then.
+            for part in (*node.args.defaults, *node.args.kw_defaults):
+                if part is not None:
+                    found.extend(_client_calls(part))
+            return
+        if isinstance(node, ast.Call) and _name(node.func) in ("connect", "Client"):
+            found.append(node)
+        for child in ast.iter_child_nodes(node):
+            visit(child)
+
+    for statement in tree.body:
+        visit(statement)
+    return found
+
+
+def test_definition_time_client_calls_finds_every_shape() -> None:
+    """
+    :func:`_definition_time_client_calls` itself, against a small source
+    string built to hold one of each shape -- not the file this module is
+    in, so a future fix to the function can be proven here without editing
+    (and un-editing) a live client into this file by hand each time.
+
+    One of each dangerous shape, one line apart so the line number pins
+    which: a decorator argument, a ``def``'s default value, a ``lambda``'s
+    default value, and a class-body assignment. Three deferred shapes that
+    must *not* be found, mixed in among them: an ordinary function body, a
+    method body, and a lambda body -- all of which only run once called,
+    which the runtime check elsewhere in this file already covers.
+    """
+    source = (
+        "import hgis\n"
+        "\n"
+        "def make_marker(x):\n"
+        "    return lambda f: f\n"
+        "\n"
+        '@make_marker(hgis.connect("http://x"))\n'  # line 6: decorator argument
+        "def decorated():\n"
+        "    pass\n"
+        "\n"
+        'def has_a_default(c=hgis.connect("http://x")):\n'  # line 10: def default
+        "    pass\n"
+        "\n"
+        'lambda_default = lambda c=hgis.connect("http://x"): c\n'  # line 13: lambda default
+        "\n"
+        "class HasAClassBodyAssignment:\n"
+        '    c = hgis.connect("http://x")\n'  # line 16: class body
+        "\n"
+        "def deferred_function_body():\n"
+        '    return hgis.connect("http://x")\n'  # deferred -- must not be found
+        "\n"
+        "class HasAMethod:\n"
+        "    def a_method(self):\n"
+        '        return hgis.connect("http://x")\n'  # deferred -- must not be found
+        "\n"
+        'deferred_lambda_body = lambda: hgis.connect("http://x")\n'  # deferred -- must not be found
+    )
+
+    found = _definition_time_client_calls(ast.parse(source))
+
+    assert sorted(call.lineno for call in found) == [6, 10, 13, 16]
+
+
+def test_no_module_level_statement_in_this_file_builds_a_client() -> None:
+    """
+    The gap the fixture above names but does not close: its patch is
+    installed by fixture *setup*, which pytest only runs around a test call.
+    A ``client = hgis.connect(URL)`` written directly at this file's top
+    level -- outside any function, a plausible slip while editing this file,
+    not a deliberate bypass the way an aliased import or reflection is --
+    would run while pytest is still collecting this module, before any
+    fixture exists to catch it.
+
+    Confirmed: with the fixture's patch installed by hand *before* import
+    instead of relying on fixture setup, a module-level ``hgis.connect(...)``
+    added to a copy of this file still reached a real, unguarded client --
+    the same result as if no check existed at all.
+
+    So this reads the syntax tree of this very file with
+    :func:`_definition_time_client_calls`, whose own docstring is the fuller
+    account of what counts as "runs immediately" here and why.
+    """
+    from pathlib import Path
+
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"), filename=__file__)
+    found = _definition_time_client_calls(tree)
+
+    if found:
+        pytest.fail(
+            f"Zeile {found[0].lineno}: ein hgis.Client wird beim Einsammeln dieser "
+            "Datei gebaut -- entweder auf Modulebene, oder in einem Dekorator, "
+            "einem Standardwert oder einer Klassenkörper-Anweisung, die schon "
+            "beim def/class-Statement laufen -- bevor irgendeine Fixture etwas "
+            "patchen könnte."
+        )
 
 
 #: A layer worth testing against holds more than one page, so paging is
@@ -72,8 +403,8 @@ def _test_subject(projects):
 
 @pytest.fixture(scope="module")
 def live() -> hgis.Client:
-    """A client, or a skip when nothing is listening."""
-    client = hgis.connect(URL, timeout=5)
+    """A client, or a skip when nothing is listening. Cannot write -- see _ReadOnlyFloor."""
+    client = hgis.connect(URL, transport=_ReadOnlyFloor(default_transport()), timeout=5)
     try:
         client.projects()
     except hgis.HgisError as error:

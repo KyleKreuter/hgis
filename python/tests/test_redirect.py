@@ -18,13 +18,14 @@ would have kept passing right through it.
 
 from __future__ import annotations
 
+import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
 import hgis
-from hgis.client import ReadOnlyGuard
+from hgis.client import RequestGuard
 from hgis.transport import HttpxTransport, Response, Transport
 
 PROJECT = "019fec3a-ef0c-775c-a14f-7535e8a676eb"
@@ -97,7 +98,7 @@ def test_a_redirect_cannot_smuggle_a_write_past_the_guard(
     handler.status = status
     client = _client(server)
 
-    with pytest.raises(hgis.ReadOnlyError) as error:
+    with pytest.raises(hgis.GuardError) as error:
         client.save_view_state(PROJECT, {"version": 1, "activeLayerId": None, "layers": {}})
 
     assert FORBIDDEN in str(error.value)
@@ -121,6 +122,82 @@ def test_the_http_client_does_not_follow_on_its_own() -> None:
     assert transport._client.follow_redirects is False
 
 
+def test_a_client_with_follow_redirects_true_is_refused() -> None:
+    """
+    The gap the pin above only half closes: it proves the default is safe,
+    not that an unsafe one is kept out.
+
+    A caller-supplied ``httpx.Client`` with ``follow_redirects=True`` resolves
+    a redirect *inside* the one call :class:`hgis.client.RequestGuard`
+    checked once -- for ``request()``, the guard's per-hop loop then never
+    runs a second iteration, because the response it sees is already the
+    final 200, not the 3xx it exists to catch; for the write itself, that
+    means it leaves again unchecked, full body and ``X-Hgis-Client`` header
+    included, at wherever the first hop pointed. Refused here, at
+    construction, before any of that becomes reachable.
+    """
+    import httpx
+
+    with pytest.raises(hgis.UnsafeTransportError) as error:
+        HttpxTransport(client=httpx.Client(follow_redirects=True))
+
+    assert "follow_redirects" in str(error.value)
+
+
+def test_a_client_with_follow_redirects_false_is_accepted() -> None:
+    """The check must not be so tight that an already-safe, caller-built client fails."""
+    import httpx
+
+    transport = HttpxTransport(client=httpx.Client(follow_redirects=False))
+    assert transport._client.follow_redirects is False
+
+
+def test_a_client_flipped_to_follow_redirects_after_construction_is_still_refused() -> None:
+    """
+    The reported break: passing the check at construction proves nothing
+    about the client's value a moment later, because ``follow_redirects`` is
+    a plain, mutable attribute on an object the caller owns -- not something
+    this library can freeze.
+
+    >>> client = httpx.Client(follow_redirects=False)
+    >>> transport = HttpxTransport(client=client)   # passes
+    >>> client.follow_redirects = True              # flipped afterwards
+    >>> transport.request(...)                      # must still refuse
+
+    A script reusing one ``httpx.Client`` for hgis and for unrelated calls,
+    flipping this flag somewhere for those other calls, would trigger this
+    without meaning to -- so the check has to run again on every call, not
+    only once.
+    """
+    import httpx
+
+    client = httpx.Client(follow_redirects=False)
+    transport = HttpxTransport(client=client)
+
+    client.follow_redirects = True
+
+    with pytest.raises(hgis.UnsafeTransportError):
+        transport.request("GET", "http://x/api/projects")
+
+
+def test_events_refuses_a_client_flipped_after_construction_too() -> None:
+    """
+    The same check, the other of the two calls this floor makes.
+    ``events()`` is a generator -- its body, this check included, does not
+    run until the first ``next()``, so the request has to reach that point
+    for the refusal to fire, same as the network call it also gates.
+    """
+    import httpx
+
+    client = httpx.Client(follow_redirects=False)
+    transport = HttpxTransport(client=client)
+
+    client.follow_redirects = True
+
+    with pytest.raises(hgis.UnsafeTransportError):
+        next(transport.events("http://x/api/events"))
+
+
 def test_a_redirect_is_visible_to_the_caller(redirecting_server) -> None:
     """
     The floors hand the redirect back instead of resolving it, so whoever
@@ -134,6 +211,172 @@ def test_a_redirect_is_visible_to_the_caller(redirecting_server) -> None:
     assert response.status == 307
     assert response.header("Location") == FORBIDDEN
     assert response.header("location") == FORBIDDEN  # case-insensitive, as HTTP is
+
+
+# --- a known, unclosed gap: a custom httpx.BaseTransport -------------------
+
+
+class _RedirectingToAnotherHost(BaseHTTPRequestHandler):
+    """Answers the one allowed write with a redirect to a *different* host."""
+
+    target: str = ""
+
+    def _handle(self) -> None:
+        length = int(self.headers.get("Content-Length") or 0)
+        if length:
+            self.rfile.read(length)
+        if self.path == VIEW_STATE:
+            self.send_response(307)
+            self.send_header("Location", type(self).target)
+            self.end_headers()
+            return
+        self.send_response(204)
+        self.end_headers()
+
+    do_GET = do_PUT = do_POST = do_DELETE = _handle
+
+    def log_message(self, *args: object) -> None:
+        """Quiet: the test reads self.seen on the other server, not the console."""
+
+
+class _ForbiddenHost(BaseHTTPRequestHandler):
+    """The redirect's target. Records everything it receives."""
+
+    seen: list[tuple[str, str, dict[str, str], bytes]] = []
+
+    def _handle(self) -> None:
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length) if length else b""
+        type(self).seen.append((self.command, self.path, dict(self.headers), body))
+        self.send_response(204)
+        self.end_headers()
+
+    do_GET = do_PUT = do_POST = do_DELETE = _handle
+
+    def log_message(self, *args: object) -> None:
+        """Quiet: the test reads self.seen, not the console."""
+
+
+@pytest.fixture
+def cross_host_redirect():
+    """Two localhost servers: one redirects the write, the other records the hit."""
+    _ForbiddenHost.seen = []
+    forbidden = HTTPServer(("127.0.0.1", 0), _ForbiddenHost)
+    threading.Thread(target=forbidden.serve_forever, daemon=True).start()
+    host_b, port_b = forbidden.server_address[:2]
+
+    _RedirectingToAnotherHost.target = f"http://{host_b}:{port_b}{FORBIDDEN}"
+    redirecting = HTTPServer(("127.0.0.1", 0), _RedirectingToAnotherHost)
+    threading.Thread(target=redirecting.serve_forever, daemon=True).start()
+
+    try:
+        yield redirecting, _ForbiddenHost
+    finally:
+        redirecting.shutdown()
+        redirecting.server_close()
+        forbidden.shutdown()
+        forbidden.server_close()
+
+
+def test_a_custom_base_transport_that_follows_redirects_is_not_caught(
+    cross_host_redirect,
+) -> None:
+    """
+    A known gap, named in :class:`hgis.client.RequestGuard`'s own docstring,
+    kept as a test rather than only as prose -- so it stays demonstrated
+    instead of merely asserted, and a future change that happens to close it
+    is noticed here rather than only in a docstring nobody re-reads.
+
+    ``HttpxTransport._require_no_follow_redirects`` reads one attribute on
+    the ``httpx.Client`` it is handed. This never touches that attribute: the
+    redirect is resolved one layer further down, inside a custom
+    ``httpx.BaseTransport`` -- official, public httpx API, the same
+    extension point a retry or caching wrapper would use -- built on its own,
+    separate, following ``httpx.Client``. The *outer* client
+    ``HttpxTransport`` actually inspects still has ``follow_redirects=False``,
+    so the check passes, and :class:`RequestGuard`'s own one-hop-at-a-time
+    loop never runs a second iteration, because it never sees a 3xx: the one
+    response it gets back from ``self.inner.request(...)`` is already final.
+
+    Measured, not assumed: the write reaches the second, forbidden host in
+    full -- method, body and the ``X-Hgis-Client`` header -- and nothing on
+    the response tells the two cases apart. ``response.url``,
+    ``response.history`` and ``response.request.url`` all still read back the
+    *original* URL, the same values an ordinary, un-redirected 204 would
+    carry.
+    """
+    import httpx
+
+    server, forbidden_host = cross_host_redirect
+    host, port = server.server_address[:2]
+
+    class _FollowsRedirectsItself(httpx.BaseTransport):
+        """
+        Stands in for a legitimate-looking transport plugin that resolves
+        redirects on its own, below ``httpx.Client``'s own
+        ``follow_redirects`` switch entirely.
+        """
+
+        def __init__(self) -> None:
+            self._inner = httpx.Client(follow_redirects=True, timeout=5)
+
+        def handle_request(self, request: httpx.Request) -> httpx.Response:
+            return self._inner.request(
+                request.method,
+                str(request.url),
+                content=request.read(),
+                headers=request.headers,
+            )
+
+    outer_client = httpx.Client(transport=_FollowsRedirectsItself(), follow_redirects=False)
+    transport = HttpxTransport(client=outer_client)  # passes: follow_redirects is False here
+    guard = RequestGuard(transport)
+
+    response = guard.request(
+        "PUT",
+        f"http://{host}:{port}{VIEW_STATE}",
+        json={"version": 1},
+        headers={"X-Hgis-Client": "agent-a"},
+    )
+
+    # The redirect was resolved inside the custom transport; RequestGuard saw
+    # one call and one final answer, not the 3xx its loop exists to catch.
+    assert response.status == 204
+
+    assert forbidden_host.seen, "Der zweite Host wurde nicht erreicht -- der Fund wäre geschlossen."
+    method, path, headers, body = forbidden_host.seen[0]
+    assert method == "PUT"
+    assert path == FORBIDDEN
+    assert headers.get("X-Hgis-Client") == "agent-a"
+    assert json.loads(body) == {"version": 1}
+
+
+def test_the_same_cross_host_redirect_is_caught_without_the_custom_transport(
+    cross_host_redirect,
+) -> None:
+    """
+    The gap above isolated to the one thing that causes it: the same two
+    servers, the same redirect, the same write -- but through a plain
+    :class:`HttpxTransport` with no custom ``httpx.BaseTransport`` involved.
+    This must still be refused, the same way :func:`test_a_hop_to_another_host_is_refused`
+    already shows for a scripted transport. If it were not, the test above
+    would be demonstrating a broken test server rather than the reported gap.
+    """
+    server, forbidden_host = cross_host_redirect
+    host, port = server.server_address[:2]
+
+    guard = RequestGuard(HttpxTransport())
+
+    with pytest.raises(hgis.GuardError) as error:
+        guard.request(
+            "PUT",
+            f"http://{host}:{port}{VIEW_STATE}",
+            json={"version": 1},
+            headers={"X-Hgis-Client": "agent-a"},
+        )
+
+    assert "anderen Server" in str(error.value)
+    assert not forbidden_host.seen, "Der zweite Host haette nicht erreicht werden duerfen."
 
 
 # --- the hop rules, without a server --------------------------------------
@@ -163,7 +406,7 @@ def test_an_allowed_hop_is_followed() -> None:
     moves a path. A hop that lands somewhere allowed is fine.
     """
     inner = _Scripted(_redirect(307, VIEW_STATE), Response(204, ""))
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
     response = guard.request("PUT", f"http://host{VIEW_STATE}", json={"a": 1})
 
@@ -177,7 +420,7 @@ def test_the_body_does_not_travel_when_the_method_changes() -> None:
     send a body that belonged to a different request.
     """
     inner = _Scripted(_redirect(303, "/api/projects"), Response(200, "{}"))
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
     guard.request("PUT", f"http://host{VIEW_STATE}", json={"a": 1})
 
@@ -197,7 +440,7 @@ def test_the_client_name_comes_off_a_rewritten_get() -> None:
     than a header that does no harm.
     """
     inner = _Scripted(_redirect(303, "/api/projects"), Response(200, "{}"))
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
     guard.request(
         "PUT",
@@ -215,7 +458,7 @@ def test_the_client_name_stays_on_a_hop_that_keeps_the_method() -> None:
     """307 and 308 stay a write, so the name still belongs on them."""
     inner = _Scripted(_redirect(307, VIEW_STATE), Response(204, ""))
 
-    ReadOnlyGuard(inner).request(
+    RequestGuard(inner).request(
         "PUT",
         f"http://host{VIEW_STATE}",
         json={"a": 1},
@@ -232,9 +475,9 @@ def test_a_hop_to_another_host_is_refused() -> None:
     so injecting one needs no malicious server -- only the network in between.
     """
     inner = _Scripted(_redirect(307, f"http://anderer-host{VIEW_STATE}"))
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
-    with pytest.raises(hgis.ReadOnlyError) as error:
+    with pytest.raises(hgis.GuardError) as error:
         guard.request("PUT", f"http://host{VIEW_STATE}", json={})
 
     assert "anderen Server" in str(error.value)
@@ -244,16 +487,16 @@ def test_a_hop_to_another_host_is_refused() -> None:
 def test_a_hop_to_another_scheme_is_refused() -> None:
     """https and http are different origins; a downgrade is a change of one."""
     inner = _Scripted(_redirect(307, f"https://host{VIEW_STATE}"))
-    with pytest.raises(hgis.ReadOnlyError):
-        ReadOnlyGuard(inner).request("PUT", f"http://host{VIEW_STATE}", json={})
+    with pytest.raises(hgis.GuardError):
+        RequestGuard(inner).request("PUT", f"http://host{VIEW_STATE}", json={})
 
 
 def test_a_relative_location_is_resolved_against_the_current_url() -> None:
     """``Location: ../order`` is a redirect like any other and gets checked."""
     inner = _Scripted(_redirect(307, "../../layers/x/order"))
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
-    with pytest.raises(hgis.ReadOnlyError) as error:
+    with pytest.raises(hgis.GuardError) as error:
         guard.request("PUT", f"http://host{VIEW_STATE}", json={})
 
     assert "/api/layers/x/order" in str(error.value)
@@ -262,7 +505,7 @@ def test_a_relative_location_is_resolved_against_the_current_url() -> None:
 def test_a_redirect_loop_ends() -> None:
     """A server pointing at itself must not spin this in place."""
     inner = _Scripted(*[_redirect(307, VIEW_STATE) for _ in range(20)])
-    guard = ReadOnlyGuard(inner)
+    guard = RequestGuard(inner)
 
     with pytest.raises(hgis.TransportError) as error:
         guard.request("PUT", f"http://host{VIEW_STATE}", json={})
@@ -274,7 +517,7 @@ def test_a_redirect_loop_ends() -> None:
 def test_a_redirect_without_a_location_is_handed_back() -> None:
     """Nothing to follow, so nothing to check; the caller sees what came."""
     inner = _Scripted(Response(307, ""))
-    response = ReadOnlyGuard(inner).request("GET", "http://host/api/projects")
+    response = RequestGuard(inner).request("GET", "http://host/api/projects")
     assert response.status == 307
 
 
@@ -285,7 +528,7 @@ def test_reads_are_redirected_normally(redirecting_server) -> None:
     """
     server, handler = redirecting_server
     host, port = server.server_address[:2]
-    guard = ReadOnlyGuard(HttpxTransport())
+    guard = RequestGuard(HttpxTransport())
 
     response = guard.request("GET", f"http://{host}:{port}{VIEW_STATE}")
 
