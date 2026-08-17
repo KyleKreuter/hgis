@@ -612,6 +612,53 @@ class LayerStyleTest {
 				""".formatted("x".repeat(65))).andExpect(status().isBadRequest());
 	}
 
+	/**
+	 * The catalogue check (review: the frontend's own catalogue at the time did not know
+	 * {@code inferno} or {@code viridis}, and an unknown ramp resolved to a silent fallback
+	 * to blue instead of an error -- see {@code LayerStyleService#COLOR_RAMPS}). Checked on
+	 * both renderer types {@code ramp} applies to; {@link #rejectsARampNameOverSixtyFourCharacters}
+	 * already covers the length check this one leaves alone.
+	 *
+	 * <p>Asserts the message text itself, not just the status: this rejection exists
+	 * specifically so its wording is the way out for a caller who cannot see the source --
+	 * the Python library passes it through unchanged (see {@code LayerStyleService#validateRamp}).
+	 * A test that only checked {@code isBadRequest()} could not tell a helpful message from
+	 * a bare "invalid".
+	 */
+	@Test
+	@DisplayName("an unknown ramp name is refused on both graduated and heatmap, naming the valid ones")
+	void rejectsAnUnknownRampName() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "graduated", "field": "gebaeudehoehe",
+				  "ramp": "rainbow",
+				  "classes": [ { "min": 0, "max": 10,
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.detail").value("Unbekannter Farbverlauf für ramp: rainbow. "
+						+ "Erlaubt sind blues, diverging, greens, greys, inferno, reds, viridis."));
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner", "ramp": "rainbow" } } }
+				""")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.detail").value("Unbekannter Farbverlauf für ramp: rainbow. "
+						+ "Erlaubt sind blues, diverging, greens, greys, inferno, reds, viridis."));
+	}
+
+	/** Every one of the seven catalogue names round-trips -- not only the two ({@code viridis}, {@code inferno}) the rest of this class already exercises. */
+	@Test
+	@DisplayName("every ramp in the catalogue is accepted")
+	void acceptsEveryRampInTheCatalogue() throws Exception {
+		for (String ramp : new String[] { "blues", "reds", "greens", "greys", "diverging", "inferno", "viridis" }) {
+			patchStyle("""
+					{ "style": { "renderer": { "type": "heatmap", "field": "einwohner", "ramp": "%s" } } }
+					""".formatted(ramp))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.style.renderer.ramp").value(ramp));
+		}
+	}
+
 	private static String graduatedStyleWithClassCount(int classCount) {
 		return """
 				{ "style": { "renderer": { "type": "graduated", "field": "gebaeudehoehe",

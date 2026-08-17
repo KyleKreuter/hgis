@@ -76,6 +76,32 @@ public class LayerStyleService {
 	private static final int MAX_DISPLAY_NAME_LENGTH = 64;
 
 	/**
+	 * {@code ramp}'s complete catalogue -- graduated and heatmap alike -- kept byte for byte
+	 * identical to the frontend's {@code COLOR_RAMPS} ({@code frontend/src/styling/defaults.ts}).
+	 *
+	 * <p>Found on review: the contract's own text names {@code viridis} and {@code inferno}
+	 * as examples, the Python library's README shows a heatmap styled with one of them in
+	 * three lines, and this class's own tests used them throughout -- but the frontend's
+	 * catalogue at the time only knew {@code blues}, {@code reds}, {@code greens},
+	 * {@code greys} and {@code diverging}. Neither side was wrong on its own; nothing here
+	 * ever checked the two agreed. {@code styleToMapLibre.ts} resolves an unknown
+	 * {@code rampId} with {@code COLOR_RAMPS.find(...) ?? COLOR_RAMPS[0]} -- a silent
+	 * fallback to blue, no error, no warning. A typo, or a name this catalogue has not
+	 * caught up with yet, was stored, rendered wrong, and never said why.
+	 *
+	 * <p>Unlike {@link #validateDisplayName}, which {@code palette} still goes through
+	 * unchanged: {@code palette}'s colours are never resolved by name on their own (a
+	 * categorized renderer's colours live in {@code categories[].symbol}, {@code palette}
+	 * is descriptive only), so an unknown one has no failure mode to guard against. A
+	 * bench-measured read of the running application's own layers found not one single
+	 * {@code ramp} or {@code palette} value ever stored, and {@code graduated}'s own colours
+	 * likewise live in {@code classes[].symbol} -- so this catalogue closes a real gap
+	 * without breaking anything that already exists.
+	 */
+	private static final Set<String> COLOR_RAMPS = Set.of(
+			"blues", "reds", "greens", "greys", "diverging", "inferno", "viridis");
+
+	/**
 	 * The three "no style set" symbols a renderer reset by {@link #cleanupAfterFieldRemoval}
 	 * falls back to as a last resort. Kept byte for byte identical to the frontend's
 	 * {@code defaults.ts} -- the monochrome look of a layer nobody has styled yet -- so a
@@ -366,7 +392,7 @@ public class LayerStyleService {
 				validateSymbol(renderer.fallbackSymbol(), "fallbackSymbol"),
 				validateMethod(renderer.method()),
 				validateClassCount(renderer.classCount()),
-				validateDisplayName(renderer.ramp(), "ramp"),
+				validateRamp(renderer.ramp()),
 				validateDisplayName(renderer.palette(), "palette"),
 				renderer.radius(),
 				renderer.intensity());
@@ -416,7 +442,7 @@ public class LayerStyleService {
 		return classCount;
 	}
 
-	/** Length only, on {@code ramp} and {@code palette} alike: neither is a value this class interprets. */
+	/** Length only -- {@code palette} is a display name this class never resolves itself; see {@link #validateRamp} for {@code ramp}. */
 	private static String validateDisplayName(String value, String what) {
 		if (value == null) {
 			return null;
@@ -424,6 +450,33 @@ public class LayerStyleService {
 		if (value.length() > MAX_DISPLAY_NAME_LENGTH) {
 			throw new BadRequestException(what + " darf höchstens " + MAX_DISPLAY_NAME_LENGTH
 					+ " Zeichen lang sein. Die Länge war " + value.length() + ".");
+		}
+		return value;
+	}
+
+	/**
+	 * {@code ramp} must name one of {@link #COLOR_RAMPS} -- see that constant for why this
+	 * is checked at all where {@code palette} is not. The rejection names every valid value:
+	 * for a browser client this is one message among several a form could show next to the
+	 * field the user just touched, but the Python library passes this exact text straight
+	 * through as the exception it raises (it keeps no catalogue of its own on purpose, see
+	 * the library's own style validation) -- so this message is the <em>only</em> thing a
+	 * script author calling {@code set_style(ramp=...)} ever sees, and it is also what a
+	 * caller who only meant to change {@code opacity} sees if an old style already carried a
+	 * name from before this check existed. Either reader needs the same thing: not just
+	 * "invalid", but the list to pick a working one from.
+	 */
+	private static String validateRamp(String value) {
+		if (value == null) {
+			return null;
+		}
+		if (value.length() > MAX_DISPLAY_NAME_LENGTH) {
+			throw new BadRequestException("ramp darf höchstens " + MAX_DISPLAY_NAME_LENGTH
+					+ " Zeichen lang sein. Die Länge war " + value.length() + ".");
+		}
+		if (!COLOR_RAMPS.contains(value)) {
+			throw new BadRequestException("Unbekannter Farbverlauf für ramp: " + value
+					+ ". Erlaubt sind " + String.join(", ", COLOR_RAMPS.stream().sorted().toList()) + ".");
 		}
 		return value;
 	}
