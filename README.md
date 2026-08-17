@@ -204,10 +204,16 @@ wie fein jemand digitalisiert hat, und nicht den Sachverhalt.
 
 Das Gewicht rechnet das Programm vom Nullpunkt aus, nicht vom kleinsten vorkommenden
 Wert. Ein Segment von 0,5 km trägt neben einem von 6,2 km also rund acht Prozent bei und
-nicht nichts. Bei Feldern, deren Werte weit über null beginnen — Jahreszahlen etwa —
-liegen die Gewichte dadurch dicht beieinander, und die Heatmap zeigt eher die Verteilung
-der Objekte als ihre Unterschiede. Enthält ein Feld negative Werte, rechnet das Programm
-wie bisher vom kleinsten Wert aus; der kleinste Wert trägt dann nichts bei.
+nicht nichts.
+
+**Achtung: Wählen Sie als Gewicht ein Feld, bei dem die Null etwas bedeutet.** Länge,
+Fläche, Anzahl und Anteil sind solche Felder. Eine Jahreszahl ist es nicht: Bei Baujahren
+von 1950 bis 2020 liegen alle Gewichte zwischen 0,97 und 1,00, und die Karte zeigt siebzig
+Jahre Unterschied als gleichmäßige Hitze. Das Programm erkennt das nicht — es prüft nur,
+ob negative Werte vorkommen.
+
+Enthält ein Feld negative Werte, rechnet das Programm vom kleinsten Wert aus. Der kleinste
+Wert trägt dann nichts bei.
 
 ### Einen Bereich zuschneiden
 
