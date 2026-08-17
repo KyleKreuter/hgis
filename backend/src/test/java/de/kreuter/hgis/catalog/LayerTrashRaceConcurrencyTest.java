@@ -15,6 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * {@code restore} and {@code purge} racing on the same trashed layer, and two {@code
@@ -54,6 +57,9 @@ class LayerTrashRaceConcurrencyTest {
 
 	private static final int TIMEOUT_SECONDS = 20;
 
+	/** Bounds {@link #plainReadIsNotBlockedByAConcurrentPurgesLock}'s read -- see there. */
+	private static final int READ_STATEMENT_TIMEOUT_MS = 5000;
+
 	@Autowired
 	private LayerService layerService;
 
@@ -68,6 +74,9 @@ class LayerTrashRaceConcurrencyTest {
 
 	@Autowired
 	private DataSource dataSource;
+
+	@Autowired
+	private PlatformTransactionManager transactionManager;
 
 	private Project project;
 	private Layer layer;
@@ -202,19 +211,50 @@ class LayerTrashRaceConcurrencyTest {
 				lock.executeQuery();
 			}
 
-			long start = System.nanoTime();
-			// An ordinary read -- LayerService#get, the same path GET /api/layers/{id}
-			// takes -- while the purge lock above is still held and uncommitted.
-			LayerDtos.Detail detail = layerService.get(layer.getId());
-			long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+			try {
+				long start = System.nanoTime();
+				// An ordinary read -- LayerService#get, the same path GET /api/layers/{id}
+				// takes -- while the purge lock above is still held and uncommitted.
+				// Wrapped in #readWithStatementTimeout on purpose: without a bound of its
+				// own, a regressed read that really did wait on the purge lock would hang
+				// this single thread forever -- the lock is only ever released by
+				// purgeConnection.rollback() below, on this very same thread, after this
+				// call returns. A review found the test itself capable of exactly that
+				// unbounded hang (confirmed: the process had to be killed after five
+				// minutes), where JUnit's own @Timeout cannot help, since it does not
+				// interrupt a blocking JDBC read. PostgreSQL's statement_timeout can:
+				// it turns the wait into a thrown exception with a clear reason instead.
+				LayerDtos.Detail detail = readWithStatementTimeout(() -> layerService.get(layer.getId()));
+				long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
-			assertThat(detail.name()).isEqualTo("Wettlauf");
-			assertThat(elapsedMs)
-					.as("a plain read must return immediately, not wait for the purge lock to release")
-					.isLessThan(2000);
-
-			purgeConnection.rollback();
+				assertThat(detail.name()).isEqualTo("Wettlauf");
+				assertThat(elapsedMs)
+						.as("a plain read must return immediately, not wait for the purge lock to release")
+						.isLessThan(2000);
+			}
+			finally {
+				// Must run whether the read above returned normally or the statement
+				// timeout above threw -- the lock must not outlive this test either way,
+				// or every later test sharing this database would stall behind it too.
+				purgeConnection.rollback();
+			}
 		}
+	}
+
+	/**
+	 * Runs {@code action} with PostgreSQL's own {@code statement_timeout} bounding it --
+	 * the actual safety net {@link #plainReadIsNotBlockedByAConcurrentPurgesLock} depends
+	 * on, not merely the elapsed-time assertion after the call returns. {@code SET LOCAL}
+	 * only applies within the transaction it runs in, so the timeout is set inside the
+	 * very same {@link TransactionTemplate} transaction {@code action} then runs in --
+	 * {@code LayerService#get}'s own {@code @Transactional(readOnly = true)} joins it via
+	 * ordinary REQUIRED propagation, the same connection throughout.
+	 */
+	private <T> T readWithStatementTimeout(Supplier<T> action) {
+		return new TransactionTemplate(transactionManager).execute(status -> {
+			jdbc.sql("SET LOCAL statement_timeout = " + READ_STATEMENT_TIMEOUT_MS).update();
+			return action.get();
+		});
 	}
 
 	// --- the other side of each race, played on a connection of its own ----------------
