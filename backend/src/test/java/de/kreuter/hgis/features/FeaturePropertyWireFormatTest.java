@@ -326,6 +326,111 @@ class FeaturePropertyWireFormatTest {
 	}
 
 	/**
+	 * The reported bug, verbatim: before {@code EditService.asBoundedInteger} existed,
+	 * {@code 3000000000} -- past {@link Integer#MAX_VALUE}, so it decodes as a {@link Long}
+	 * -- passed straight through {@link Number#intValue()}, which silently wraps instead of
+	 * throwing. The value that ended up in the database was {@code -1294967296}, with a
+	 * plain 200 OK and nothing anywhere to say the write had not done what it looked like.
+	 * Measured against the real endpoint before writing this test, not assumed.
+	 */
+	@Test
+	@DisplayName("an integer value past 32-bit range is a 400 naming the field, not a silently wrapped number")
+	void rejectsAnIntegerOverflowWith400NotSilentWraparound() throws Exception {
+		MockHttpServletResponse response = putProperties(filledFid, "{\"intcol\":3000000000}");
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+		assertThat(body).as("names the field by its source name").contains("Ganzzahl");
+
+		Object stored = jdbc.sql("SELECT intcol FROM " + table() + " WHERE fid = :fid")
+				.param("fid", filledFid).query().singleRow().get("intcol");
+		assertThat(stored).as("must keep its original value, not a wrapped one").isEqualTo(STORED_INT);
+	}
+
+	/**
+	 * The {@code bigint} counterpart: {@code 9223372036854775808} is {@link Long#MAX_VALUE}
+	 * plus one, so it decodes as a {@link java.math.BigInteger} -- Jackson's fallback once a
+	 * JSON integer no longer fits even a {@code long}. {@link Number#longValue()} on that
+	 * wraps the same way {@code intValue()} does, to {@link Long#MIN_VALUE} measured against
+	 * the real endpoint. {@code bigint} looks unreachable by an "everyday" typo the way
+	 * {@code integer} is, but it is the one column type on this endpoint no client-side
+	 * numeric type can even represent without already having lost precision, which makes it
+	 * an easy value to construct without ever intending to overflow anything.
+	 */
+	@Test
+	@DisplayName("a bigint value past 64-bit range is a 400 naming the field, not a silently wrapped number")
+	void rejectsABigintOverflowWith400NotSilentWraparound() throws Exception {
+		MockHttpServletResponse response = putProperties(filledFid, "{\"bigcol\":9223372036854775808}");
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		String body = response.getContentAsString(StandardCharsets.UTF_8);
+		assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+		assertThat(body).as("names the field by its source name").contains("Große Zahl");
+
+		Object stored = jdbc.sql("SELECT bigcol FROM " + table() + " WHERE fid = :fid")
+				.param("fid", filledFid).query().singleRow().get("bigcol");
+		assertThat(((Number) stored).longValue())
+				.as("must keep its original value, not a wrapped one").isEqualTo(STORED_BIGINT);
+	}
+
+	/**
+	 * {@code smallint} is a different shape of the same gap: before this fix it shared
+	 * {@code integer}'s {@code intValue()} conversion, so a value like {@code 40000} --
+	 * outside {@code smallint}'s real range but a perfectly ordinary {@code int} -- was
+	 * never wrapped, only handed to PostgreSQL as-is. PostgreSQL already rejected it (
+	 * {@code numeric field overflow}, the {@code ProblemDetailAdvice} handler this package
+	 * added earlier), so this was never silent data corruption the way {@code integer}/
+	 * {@code bigint} were -- but the rejection carried no field name, because
+	 * {@code ProblemDetailAdvice} cannot know which column of a multi-column statement
+	 * overflowed. Catching it here, before the statement is even built, recovers that name.
+	 *
+	 * <p>Its own layer with a dedicated {@code smallint} column: the shared fixture this
+	 * class otherwise uses has none.
+	 */
+	@Test
+	@DisplayName("a smallint value past 16-bit range is a 400 naming the field")
+	void rejectsASmallintOverflowWith400NamingTheField() throws Exception {
+		Project smallintProject = projectRepository.saveAndFlush(
+				new Project("Smallint-Test " + UUID.randomUUID(), null, 25832, "osm"));
+		UUID smallintLayerId = UUID.randomUUID();
+		String smallintTableName = SqlIdentifier.tableName(smallintLayerId);
+		try {
+			jdbc.sql("""
+					CREATE TABLE %s (
+					    fid      bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+					    geom     geometry(MultiPolygon, 25832) NOT NULL,
+					    smallcol smallint
+					)
+					""".formatted(SqlIdentifier.quoteLayerTable(smallintTableName))).update();
+			Layer smallintLayer = layerRepository.saveAndFlush(new Layer(
+					smallintLayerId, smallintProject, "Smallint", smallintTableName, "MULTIPOLYGON", 25832));
+			fieldRepository.saveAndFlush(new LayerField(smallintLayer, "Kleine Zahl", "smallcol", "smallint", 0));
+
+			long fid = jdbc.sql("INSERT INTO " + SqlIdentifier.quoteLayerTable(smallintTableName)
+							+ " (geom) VALUES (ST_Multi(ST_MakeEnvelope(0, 0, 10, 10, 25832))) RETURNING fid")
+					.query(Long.class)
+					.single();
+
+			MockHttpServletResponse response = mockMvc.perform(post(
+							"/api/layers/" + smallintLayer.getId() + "/edits")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"updates\":[{\"fid\":" + fid + ",\"properties\":{\"smallcol\":40000}}]}"))
+					.andReturn().getResponse();
+
+			assertThat(response.getStatus()).isEqualTo(400);
+			String body = response.getContentAsString(StandardCharsets.UTF_8);
+			assertThat(body).contains("\"title\":\"Ungültige Anfrage\"");
+			assertThat(body).as("names the field by its source name").contains("Kleine Zahl");
+		}
+		finally {
+			jdbc.sql("DROP TABLE IF EXISTS " + SqlIdentifier.quoteLayerTable(smallintTableName)).update();
+			layerRepository.findById(smallintLayerId).ifPresent(layerRepository::delete);
+			projectRepository.deleteById(smallintProject.getId());
+		}
+	}
+
+	/**
 	 * PostgreSQL rejects a signed {@code NaN} outright ({@code invalid input syntax for
 	 * type numeric}), unlike the four signed spellings of Infinity {@link
 	 * #acceptsEverySignedSpellingOfInfinity} below confirms all work. A review of an

@@ -13,6 +13,7 @@ import de.kreuter.hgis.common.SqlIdentifier;
 import de.kreuter.hgis.features.dto.EditDtos;
 import de.kreuter.hgis.features.dto.FeatureDtos;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
@@ -368,8 +369,9 @@ public class EditService {
 		}
 		String type = field.getDataType().toLowerCase(Locale.ROOT);
 		return switch (type) {
-			case "integer", "smallint" -> asNumber(field, value).intValue();
-			case "bigint" -> asNumber(field, value).longValue();
+			case "smallint" -> asBoundedInteger(field, value, Short.MIN_VALUE, Short.MAX_VALUE).intValue();
+			case "integer" -> asBoundedInteger(field, value, Integer.MIN_VALUE, Integer.MAX_VALUE).intValue();
+			case "bigint" -> asBoundedInteger(field, value, Long.MIN_VALUE, Long.MAX_VALUE).longValue();
 			case "double precision", "real" -> asNumber(field, value).doubleValue();
 			case "numeric", "decimal" -> asBigDecimal(field, value);
 			case "boolean" -> asBoolean(field, value);
@@ -389,6 +391,41 @@ public class EditService {
 			return number;
 		}
 		throw typeMismatch(field, value);
+	}
+
+	/**
+	 * Enforces PostgreSQL's real range for {@code smallint}/{@code integer}/{@code bigint}
+	 * before {@link Number#intValue()}/{@link Number#longValue()} ever run -- a review
+	 * found neither checks anything, it silently narrows. A JSON integer past 32-bit range
+	 * decodes as a {@link Long} or {@link java.math.BigInteger}, not an error, and calling
+	 * {@code intValue()}/{@code longValue()} on either wraps around instead of throwing:
+	 * {@code 3000000000} into an {@code integer} column used to become {@code
+	 * -1294967296} in the database with an ordinary 200 OK, no error anywhere for either
+	 * the writer or a later reader to notice. {@code smallint} shared {@code integer}'s
+	 * conversion before this method existed, which is its own gap: {@code smallint}'s true
+	 * range is far tighter than a 32-bit int, so a value like {@code 40000} narrowed to a
+	 * valid {@code int} and only PostgreSQL's own {@code numeric field overflow} caught it
+	 * -- correctly, but without a field name (see {@code ProblemDetailAdvice}).
+	 *
+	 * <p>Compares as {@link BigInteger} throughout, not {@code long}: the whole point is
+	 * that a {@code long} comparison can itself already have silently lost the value this
+	 * method exists to catch.
+	 *
+	 * @param min the column type's own minimum ({@link Short#MIN_VALUE} for smallint, not
+	 *            {@link Integer#MIN_VALUE} -- the two must not be conflated the way the
+	 *            unchecked conversion this replaces did)
+	 */
+	private static BigInteger asBoundedInteger(LayerField field, Object value, long min, long max) {
+		Number number = asNumber(field, value);
+		BigInteger exact = number instanceof BigInteger bigInteger
+				? bigInteger
+				: BigInteger.valueOf(number.longValue());
+		if (exact.compareTo(BigInteger.valueOf(min)) < 0 || exact.compareTo(BigInteger.valueOf(max)) > 0) {
+			throw new BadRequestException("Feld " + field.getSourceName() + " erwartet einen Wert zwischen "
+					+ min + " und " + max + " für den Typ " + field.getDataType()
+					+ ". Erhalten: " + exact + ".");
+		}
+		return exact;
 	}
 
 	/**
