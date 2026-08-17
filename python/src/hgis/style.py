@@ -17,10 +17,12 @@ are: which members carry meaning depends on :attr:`Renderer.type` and
 :attr:`Symbol.kind`. This module builds and reads the JSON; it does not
 repeat the server's validation -- colour format, numeric ranges, whether a
 field name really belongs to the layer are all checked once, on the server,
-and its answer names what would have been valid. The one exception is
-:attr:`Renderer.type` itself: a typo there is caught before the request
-leaves, see :func:`to_style_json`, because the alternative is an HTTP 400
-that repeats the same four names in the server's own words.
+and its answer names what would have been valid. Two members are the
+exception: :attr:`Renderer.type` and :attr:`Style.version` are each a small,
+fixed set the server checks by simple equality, not a range or a format --
+so a typo or a stale version is caught before the request leaves, see
+:func:`to_style_json`, because the alternative is an HTTP 400 that repeats
+the same few names in the server's own words.
 """
 
 from __future__ import annotations
@@ -29,6 +31,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from .errors import InvalidArgumentError
+
+#: The only schema version this library and the server understand today --
+#: see SUPPORTED_VERSION in the server's LayerStyleService.
+SUPPORTED_VERSION = 1
 
 #: The four renderers ``layer.style.renderer.type`` accepts.
 RENDERER_SINGLE = "single"
@@ -321,7 +327,8 @@ class Style:
     :param labels: the optional label layer
     :param opacity: 0..1, applied to fill, line and marker alike
     :param min_zoom: style-level zoom window, independent of the layer's own one
-    :param version: schema version; only 1 exists so far
+    :param version: schema version; :data:`SUPPORTED_VERSION` is the only one
+        that exists, and the only one :func:`to_style_json` lets through
     """
 
     renderer: Renderer
@@ -329,7 +336,7 @@ class Style:
     opacity: float | None = None
     min_zoom: int | None = None
     max_zoom: int | None = None
-    version: int = 1
+    version: int = SUPPORTED_VERSION
 
     def to_json(self) -> dict[str, Any]:
         return _drop_none(
@@ -354,7 +361,7 @@ class Style:
             opacity=data.get("opacity"),
             min_zoom=data.get("minZoom"),
             max_zoom=data.get("maxZoom"),
-            version=data.get("version", 1),
+            version=data.get("version", SUPPORTED_VERSION),
         )
 
 
@@ -368,14 +375,17 @@ def to_style_json(style: "Style | dict[str, Any] | None") -> dict[str, Any] | No
     ranges, whether a field really belongs to the layer -- is the server's
     job, and its answer already names what would have been valid; repeating
     that here would only add a second place to keep in step with the first.
-    ``renderer.type`` is different: it is not looked up anywhere, so a typo
-    reaches the server as a plain unknown string and comes back as an HTTP
-    400 that says, in the server's own words, what this function can say
-    just as well before anything was sent.
+    ``version`` and ``renderer.type`` are different: each is a small, fixed
+    set the server checks by simple equality rather than by a range or a
+    format, so a stale version or a typo in the renderer name reaches the
+    server as a plain unrecognised value and comes back as an HTTP 400 that
+    says, in the server's own words, what this function can say just as well
+    before anything was sent.
 
     :raises hgis.errors.InvalidArgumentError: ``style`` is neither a
-        :class:`Style` nor a ``dict``, or its ``renderer.type`` is not one of
-        the four that exist -- naming them
+        :class:`Style` nor a ``dict``; its ``version`` is present and not
+        :data:`SUPPORTED_VERSION`; or its ``renderer.type`` is not one of the
+        four that exist -- naming what was found and what is allowed
     """
     if style is None:
         return None
@@ -384,6 +394,13 @@ def to_style_json(style: "Style | dict[str, Any] | None") -> dict[str, Any] | No
     if not isinstance(body, dict):
         raise InvalidArgumentError(
             f"Ein Style muss ein hgis.Style oder ein dict sein, nicht {type(style).__name__}."
+        )
+
+    version = body.get("version")
+    if version is not None and version != SUPPORTED_VERSION:
+        raise InvalidArgumentError(
+            f"Unbekannte Style-Version: {version!r}. Der Server unterstützt nur "
+            f"Version {SUPPORTED_VERSION}."
         )
 
     renderer = body.get("renderer")

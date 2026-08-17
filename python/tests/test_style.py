@@ -239,6 +239,34 @@ def test_none_needs_no_renderer_it_means_reset() -> None:
     assert to_style_json(None) is None
 
 
+def test_an_unsupported_version_is_refused_before_it_reaches_the_server() -> None:
+    """
+    Structurally the same case as the renderer-type typo above: a small,
+    fixed set the server checks by equality, not by a range -- so it is
+    caught here too, rather than reaching the server and coming back as an
+    HTTP 400 that only repeats what this function already knows.
+    """
+
+    def handle(request: object) -> Response:  # pragma: no cover - must not run
+        raise AssertionError("Eine unbekannte Version haette nichts senden duerfen.")
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+    renderer = hgis.Renderer(hgis.RENDERER_SINGLE, symbol=hgis.Symbol("marker"))
+
+    with pytest.raises(hgis.InvalidArgumentError) as error:
+        layer.set_style(hgis.Style(renderer, version=2))
+
+    assert transport.count == 0
+    assert "2" in str(error.value)
+    assert str(hgis.style.SUPPORTED_VERSION) in str(error.value)
+
+
+def test_a_style_with_no_version_at_all_is_not_refused() -> None:
+    """A dict built by hand, without a version key, means the same as version=None on the server."""
+    assert to_style_json({"renderer": {"type": "single", "symbol": {"kind": "marker"}}}) is not None
+
+
 # --- the guard: still just the one already-open PATCH path -----------------
 
 
