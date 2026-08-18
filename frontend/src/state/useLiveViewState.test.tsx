@@ -454,8 +454,9 @@ describe('useLiveViewState', () => {
   /**
    * `onProjectDataState` is a plain pass-through -- what a data-state event *means* is
    * `useLiveDataState`'s job, tested on its own. What belongs here is only that this hook
-   * forwards it under the same rules as everything else on the channel: scoped to this
-   * project, filtered against this client's own writes, and caught up on reconnect.
+   * forwards it under its own rules: scoped to this project, deliberately *not* filtered
+   * against this client's own writes (unlike the working-state event below -- see
+   * `isForThisProject`'s comment in `api/events.ts` for why), and caught up on reconnect.
    */
   describe('Datenzustand', () => {
     function announceData(origin: string | null, version = 2) {
@@ -473,14 +474,18 @@ describe('useLiveViewState', () => {
       expect(onProjectDataState).toHaveBeenCalledTimes(1)
     })
 
-    it('meldet nichts, wenn das eigene Schreiben zurückkommt', () => {
+    it('meldet auch das eigene Echo -- anders als beim Arbeitsstand', () => {
+      // Ein Import laeuft als Hintergrundauftrag; die auslösende Kachel hat sonst keinen
+      // Weg zu erfahren, dass er fertig ist -- das eigene Echo ist dort die Nachricht,
+      // auf die gewartet wird (Befund des Prüfers). Anders als beim Arbeitsstand schreibt
+      // eine Nachlese hier auch nichts zurück, es gibt also keine Schleife zu vermeiden.
       const onProjectDataState = vi.fn()
       stubFetch([{ match: 'view-state', body: documentWith([]) }])
       renderWithQueryClient(<Probe onProjectDataState={onProjectDataState} />)
 
       announceData(CLIENT_ID)
 
-      expect(onProjectDataState).not.toHaveBeenCalled()
+      expect(onProjectDataState).toHaveBeenCalledTimes(1)
     })
 
     it('lässt ein Datenzustands-Ereignis eines anderen Projekts liegen', () => {

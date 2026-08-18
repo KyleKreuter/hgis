@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { CLIENT_ID, connectLiveChannel, shouldReadBack } from '@/api/events'
+import { CLIENT_ID, connectLiveChannel, isForThisProject, shouldReadBack } from '@/api/events'
 import { viewStateQuery } from '@/api/projects'
 import { applyRemoteSelection, useSelection } from '@/state/selection'
 import { activeLayerJumpTarget, layerStateOf } from './viewState'
@@ -36,14 +36,20 @@ export interface LiveViewStateOptions {
    */
   onActiveLayerMoved: (layerId: string) => void
   /**
-   * Someone changed this project's *data* -- a layer's data, style, clip or render
-   * version, or the catalog itself. Passed through with nothing but the fact that it
-   * happened: what changed and what to do about it are not this hook's business (its
-   * job is the working state, not the data), only that the moment happened -- see
+   * This project's data changed -- a layer's data, style, clip or render version, or
+   * the catalog itself. Passed through with nothing but the fact that it happened: what
+   * changed and what to do about it are not this hook's business (its job is the
+   * working state, not the data), only that the moment happened -- see
    * `state/useLiveDataState.ts` for what actually reacts to it. Wired onto the same
    * connection this hook already owns, not a second one: the stream is one resource
    * per open project, and the two kinds of state sharing it is exactly what a "second
    * listener" (contract section 2.1) means.
+   *
+   * Filtered by project only (`isForThisProject`), *not* by origin the way the
+   * working-state event below is: a data-state refetch never writes anything back, so
+   * there is no echo loop here to break by skipping this client's own writes -- and for
+   * a background job such as an import, this client's own echo is the only way it ever
+   * learns the job finished. See `isForThisProject`'s own comment in `api/events.ts`.
    */
   onProjectDataState?: () => void
 }
@@ -113,7 +119,7 @@ export function useLiveViewState(
         read()
       },
       onProjectDataState: (event) => {
-        if (!shouldReadBack(event, { projectId, clientId: CLIENT_ID })) return
+        if (!isForThisProject(event, projectId)) return
         optionsRef.current.onProjectDataState?.()
       },
     })

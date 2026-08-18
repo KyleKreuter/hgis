@@ -118,6 +118,34 @@ export function shouldReadBack(
   return event.origin !== clientId
 }
 
+/**
+ * Whether a *data*-state event is worth reacting to -- scoped to this project, and
+ * nothing more.
+ *
+ * Deliberately not filtered by origin the way {@link shouldReadBack} filters a
+ * working-state event. That filter exists to break a write/read loop: applying a
+ * working-state read back to the map is itself worth saving, so skipping a client's own
+ * echo of it is what keeps the loop from ever starting. A data-state refetch never
+ * writes anything back -- it only asks the catalog what it now holds -- so there is no
+ * loop here to break, and suppressing the echo has nothing to gain.
+ *
+ * It has something to lose, though. Several writes -- an import running as a background
+ * job above all -- answer with 202-style "started", not with the result, and today do
+ * not even populate `origin` along the way (measured across six write paths: reordering,
+ * a field rename, adding a Kartenbild, import, duplicating a project, and every project
+ * route but the working state). For a background import, this client's own echo *is*
+ * the only way it ever learns the import finished -- the tab that started it has no
+ * other signal. Filtering that echo out the way `shouldReadBack` does would mean the one
+ * client waiting on the news never gets it. A style change is the opposite case: its
+ * writer already holds the result in the PATCH response, so a read-back on its own echo
+ * is unneeded -- but, since it only costs one redundant, already-debounced refetch and
+ * never a write, "unneeded" here is harmless where "unneeded" on the working-state side
+ * would not be.
+ */
+export function isForThisProject(event: ProjectDataStateEvent, projectId: string): boolean {
+  return event.projectId === projectId
+}
+
 /** First wait after the browser gives up on its own, before doubling. */
 const RECONNECT_BASE_MS = 2000
 /** The longest this client ever waits. A full server has to be reachable again eventually. */
