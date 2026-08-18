@@ -201,13 +201,13 @@ neu.purge()                # endgültig -- siehe unten
 als Serverfehler zurück, der die gültigen Typen nennt.
 
 `delete()` und `purge()` melden, was geschehen ist: `TrashEntry` (`id`,
-`name`, `deleted_at`, `feature_count`, `deleted_by`) -- **sofern der Server
-das mitschickt.** Heute antworten beide Endpunkte noch mit einem leeren 204,
-also ist `eintrag` zurzeit `None`. Das ist bewusst kein geratener Wert: die
-Bibliothek erfindet keine Objektzahl aus dem, was sie vor dem Aufruf über den
-Layer wusste, weil das inzwischen nicht mehr stimmen muss. Sobald der Server
-eine Antwort im Format von `LayerDtos.TrashEntry` mitschickt, füllt sich
-`eintrag` von selbst -- ohne eine weitere Änderung in dieser Bibliothek.
+`name`, `deleted_at`, `feature_count`, `deleted_by`). Bei `purge()`
+beschreiben `deleted_at`/`deleted_by` das vorangegangene `delete()`, nicht
+den Löschvorgang selbst -- der Layer existiert danach nicht mehr, um dazu
+etwas zu berichten. Die Rückgabe bleibt `TrashEntry | None`: Antwortet ein
+Endpunkt einmal mit einem leeren 204 statt einem Rumpf, liefert die
+Bibliothek `None`, statt eine Objektzahl aus dem zu raten, was sie vor dem
+Aufruf über den Layer wusste -- das könnte inzwischen nicht mehr stimmen.
 
 ### Stil setzen
 
@@ -295,16 +295,16 @@ layer.delete_field(feld)              # auch nach Name oder Id: layer.delete_fie
 ```python
 fid = layer.insert(
     {"type": "Point", "coordinates": [9.99, 53.55]},
-    {"Gattung": "Tilia", "Pflanzjahr": 2024},
+    {"gattung": "Tilia", "pflanzjahr": 2024},
 )
 
 fids = layer.insert_many([
-    hgis.NewFeature({"type": "Point", "coordinates": [9.98, 53.54]}, {"Gattung": "Acer"}),
-    hgis.NewFeature({"type": "Point", "coordinates": [9.97, 53.53]}, {"Gattung": "Quercus"}),
+    hgis.NewFeature({"type": "Point", "coordinates": [9.98, 53.54]}, {"gattung": "Acer"}),
+    hgis.NewFeature({"type": "Point", "coordinates": [9.97, 53.53]}, {"gattung": "Quercus"}),
 ])
 
 objekt = layer.feature(fid)
-layer.update_feature(fid, objekt.row_version, properties={"Pflanzjahr": 2025})
+layer.update_feature(fid, objekt.row_version, properties={"pflanzjahr": 2025})
 
 layer.delete_features([fid])          # nennt jede Kennung einzeln, siehe unten
 ```
@@ -313,6 +313,14 @@ layer.delete_features([fid])          # nennt jede Kennung einzeln, siehe unten
 jede Abfrage). Stimmt sie nicht mehr mit der Serverzeile überein, wirft die
 Bibliothek `hgis.ConflictError`; `error.current` trägt die Zeile, wie sie
 gerade auf dem Server steht.
+
+**`properties` ist strikt nach Spaltenname geschlüsselt**, nicht nach dem
+Anzeigenamen, den `create_layer()`/`create_field()` bekamen -- oben wird aus
+`"Gattung"` die Spalte `gattung`. Ein Anzeigename an dieser Stelle scheitert
+mit `Unbekanntes Feld`. Das ist nicht überall die Regel: ein Filterausdruck,
+`order_by()` und `field=` in der Symbologie nehmen wahlweise Anzeigename oder
+Spaltenname entgegen -- siehe [Mehrdeutige Feldnamen](#mehrdeutige-feldnamen)
+oben.
 
 Alle vier Aufrufe sind Kurzformen von `layer.edit(creates=..., updates=...,
 deletes=...)`, das einen ganzen Stapel in einer Transaktion sendet und dabei
@@ -341,20 +349,32 @@ und 3 löschen. Die Bibliothek lehnt eine Zeichenkette hier mit
 
 Für gelöschte Felder und Objekte führt der Server ein Änderungsprotokoll
 (`GET /api/projects/{id}/changes`), das bei einer Objektlöschung die
-vollständige Zeile mitschreibt -- Geometrie und Attribute. Das ist die
-einzige Rückfallebene: Wiederherstellen heißt, die Zeile von dort zu lesen
-und mit `layer.insert(...)` neu anzulegen. Diese Bibliothek liest das
-Protokoll nicht für Sie; `client.get(f"/api/projects/{project_id}/changes")`
-funktioniert bereits, denn Lesen ist uneingeschränkt.
+vollständige Zeile mitschreibt -- Geometrie und Attribute, unter
+`deletedRows`. Das ist die einzige Rückfallebene: Wiederherstellen heißt,
+die Zeile von dort zu lesen und mit `layer.insert(...)` neu anzulegen.
+Diese Bibliothek liest das Protokoll nicht für Sie; **`deletedRows` reist
+nur mit, wenn Sie es ausdrücklich anfordern:**
+
+```python
+client.get(
+    f"/api/projects/{project_id}/changes",
+    includeDeletedRows=True,
+)
+```
+
+Ohne `includeDeletedRows=True` (Vorgabe: `False`) fehlt der Schlüssel
+`deletedRows` in jedem `feature.delete`-Eintrag ganz -- kein leeres Feld,
+sondern keins. Lesen bleibt trotzdem uneingeschränkt; nur dieser eine
+Parameter ist es nicht von selbst.
 
 ### Was der Wächter durchlässt
 
 `RequestGuard` prüft jede Anfrage gegen eine feste Liste, bevor sie den
-Transport erreicht -- egal ob sie über `client.get(...)` kommt oder über
-`client._transport.request(...)` direkt. Erlaubt sind lesende Anfragen
-(jedes `GET`) sowie genau die Schreibvorgänge oben. Alles andere -- Layer neu
-ordnen, Objekte teilen oder zusammenführen, ein Projekt löschen -- lehnt die
-Bibliothek mit `hgis.GuardError` ab, bevor der Server sie sieht.
+Transport erreicht -- egal ob sie über `client.get(...)` kommt oder direkt
+über `client._send(...)`. Erlaubt sind lesende Anfragen (jedes `GET`) sowie
+genau die Schreibvorgänge oben. Alles andere -- Layer neu ordnen, Objekte
+teilen oder zusammenführen, ein Projekt löschen -- lehnt die Bibliothek mit
+`hgis.GuardError` ab, bevor der Server sie sieht.
 
 ```python
 >>> client._send("PUT", f"/api/projects/{pid}/layers/order", json={})
