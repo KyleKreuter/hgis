@@ -159,6 +159,32 @@ class CatalogEventStreamTest {
 		assertThat(catalogEventsOf(stream)).isEmpty();
 	}
 
+	/**
+	 * Found on review: {@code LayerService.update} logs {@code layer.update} to the change
+	 * log unconditionally, even when every field of the request is null and nothing about
+	 * the layer actually changes -- Hibernate's own dirty checking then skips the {@code
+	 * UPDATE} outright, the trigger never fires, and {@code catalog_version} does not move.
+	 * Without {@code CatalogEventBridge}'s own de-duplication, this PATCH would still have
+	 * reached the channel a second time under the very same version it already reported.
+	 */
+	@Test
+	@DisplayName("a PATCH that changes nothing produces no event, even though it still logs layer.update")
+	void aNoOpUpdateProducesNoEvent() throws Exception {
+		MvcResult createResult = createLayer(null).andExpect(status().isCreated()).andReturn();
+		UUID layerId = UUID.fromString(JsonFields.tree(createResult).get("id").stringValue());
+
+		MvcResult stream = openStream();
+		mockMvc.perform(patch("/api/layers/{layerId}", layerId)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(
+								new LayerDtos.UpdateRequest(null, null, null, null, null, null, null, null, null))))
+				.andExpect(status().isOk());
+
+		assertThat(catalogEventsOf(stream))
+				.as("nothing about the layer changed, so nothing should have been reported")
+				.isEmpty();
+	}
+
 	@Test
 	@DisplayName("renaming the project itself produces no catalog event -- its own detail is not what the receiver would reread")
 	void aPlainProjectWriteProducesNoCatalogEvent() throws Exception {

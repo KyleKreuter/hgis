@@ -3,6 +3,8 @@ package de.kreuter.hgis.events;
 import de.kreuter.hgis.catalog.CatalogChanged;
 import de.kreuter.hgis.catalog.ProjectViewStateChanged;
 import de.kreuter.hgis.events.dto.EventDtos;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -29,6 +31,31 @@ class CatalogEventBridge {
 	private final EventStreams streams;
 	private final JdbcClient jdbc;
 
+	/**
+	 * The {@code catalog_version} this class last actually published, per project -- see
+	 * {@link #onCatalogChanged} for why. In-memory, per JVM, on purpose; three questions
+	 * worth asking of exactly that choice, all with the same answer:
+	 *
+	 * <ul>
+	 * <li><b>Unbounded growth?</b> One entry per project ever touched since this process
+	 *     started, never evicted -- a UUID and a long each. hGIS runs single-tenant today
+	 *     (CONTRACT.md's own "bewusst spaeter" on multi-user access control); a project
+	 *     count that made this worth engineering around is not a shape this deployment
+	 *     produces.
+	 * <li><b>Restart?</b> Empties the map. The next event for a project then finds no
+	 *     entry and publishes -- once more than strictly necessary, never fewer. The map
+	 *     can make this class over-announce; it can never make it under-announce.
+	 * <li><b>Several instances behind a load balancer?</b> Would defeat the deduplication
+	 *     for whichever instance did not just handle the write -- but {@link EventStreams}
+	 *     is exactly as single-instance as this map already: its open streams live in one
+	 *     JVM's memory too, so a browser connected to a different instance would never see
+	 *     any event at all, from this method or {@link #onProjectViewStateChanged} alike.
+	 *     Several instances break the whole channel first, long before this map's own
+	 *     locality would be the thing to fix.
+	 * </ul>
+	 */
+	private final ConcurrentHashMap<UUID, Long> lastPublishedCatalogVersion = new ConcurrentHashMap<>();
+
 	CatalogEventBridge(EventStreams streams, JdbcClient jdbc) {
 		this.streams = streams;
 		this.jdbc = jdbc;
@@ -54,6 +81,21 @@ class CatalogEventBridge {
 	 * <p>The project can, in principle, already be gone by the time this runs -- deleted in
 	 * a transaction that committed between the write this event describes and this read.
 	 * Nothing is published then: there is no one left to read the version back for.
+	 *
+	 * <p>Found on review: {@link CatalogTouch} announces on every write <em>attempt</em>
+	 * {@code ChangeLogService.record} sees, not on every write that actually changed a row
+	 * -- a {@code PATCH} that sets a field to the value it already has, or an empty one,
+	 * still logs {@code layer.update} and still calls {@code touch}, but Hibernate's own
+	 * dirty checking skips the {@code UPDATE} entirely, so the trigger never fires and
+	 * {@code catalog_version} does not move. Fixing that further upstream would mean
+	 * teaching every write path -- or {@code ChangeLogService.record} itself -- to know
+	 * whether its own write actually did anything, which is exactly the kind of per-path
+	 * bookkeeping the trigger exists to make unnecessary. Comparing the version read here
+	 * against the one last published for this project is cheaper and lives in the one place
+	 * that already reads it: a no-op write still reaches this method, but is silently
+	 * dropped rather than announced a second time under the same version -- which is what
+	 * actually enforces "an event reports a state" rather than merely relying on every
+	 * caller to have earned the event it triggered.
 	 */
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	void onCatalogChanged(CatalogChanged changed) {
@@ -61,7 +103,19 @@ class CatalogEventBridge {
 				.param("id", changed.projectId())
 				.query(Long.class)
 				.optional()
+				.filter(version -> versionIsNewFor(changed.projectId(), version))
 				.ifPresent(version -> streams.publish(EventDtos.EventNames.PROJECT_CATALOG,
 						new EventDtos.ProjectCatalog(changed.projectId(), version, changed.origin())));
+	}
+
+	/**
+	 * @return whether {@code version} differs from the one last recorded for {@code
+	 *     projectId} -- and, in the same atomic step, records it as the new last-known
+	 *     value regardless of the answer, so two concurrent calls for the same project
+	 *     never both see "unchanged" for two genuinely different versions.
+	 */
+	private boolean versionIsNewFor(UUID projectId, long version) {
+		Long previous = lastPublishedCatalogVersion.put(projectId, version);
+		return previous == null || previous != version;
 	}
 }
