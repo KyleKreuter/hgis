@@ -244,6 +244,24 @@ layer.set_style(hgis.Style(hgis.Renderer(
 )))
 ```
 
+Ein Zahlenfeld mit Ausreißern macht die automatische Normierung fast leer: Sie
+läuft von 0 bis zum tatsächlichen Maximum, und ein einzelner Ausreißer zieht
+jedes normale Gebäude auf ein Gewicht nahe null. `weight_min`/`weight_max`
+legen den Bezugsbereich stattdessen selbst fest -- hier auf das
+95.-Perzentil als Obergrenze, statt auf das Maximum:
+
+```python
+layer.set_style(hgis.Style(hgis.Renderer(
+    hgis.RENDERER_HEATMAP, field="waermebedarf_unsaniert", ramp="inferno",
+    weight_min=0, weight_max=1_225_563,
+)))
+```
+
+Nur beim Renderer-Typ heatmap erlaubt, und nur zusammen: Wer `weight_min`
+setzt, muss auch `weight_max` setzen, und umgekehrt -- fehlen beide, gilt die
+automatische Normierung unverändert. Der Server prüft das, wie den Rest des
+Stils.
+
 `set_style(None)` setzt den Layer auf die monochrome Standarddarstellung
 zurück.
 

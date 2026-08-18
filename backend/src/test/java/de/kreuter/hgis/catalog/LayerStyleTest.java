@@ -776,6 +776,80 @@ class LayerStyleTest {
 	}
 
 	@Test
+	@DisplayName("a heatmap's explicit weight range round-trips instead of the automatic normalisation")
+	void acceptsAHeatmapRendererWithAnExplicitWeightRange() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner",
+				  "weightMin": 0, "weightMax": 1225563, "ramp": "inferno" } } }
+				""")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.style.renderer.weightMin").value(0.0))
+				.andExpect(jsonPath("$.style.renderer.weightMax").value(1225563.0));
+	}
+
+	/**
+	 * {@code weightMin}/{@code weightMax} describe one normalisation window, not two
+	 * independent overrides -- setting only one would leave the other computed from the
+	 * layer's current data outside this validation entirely, so a lone {@code weightMin}
+	 * above the (here unknown) automatic maximum could not be caught here at all. See
+	 * {@code LayerStyleService#requireWeightRange}.
+	 */
+	@Test
+	@DisplayName("weightMin and weightMax are only allowed together, never just one")
+	void rejectsWeightMinOrWeightMaxAlone() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner", "weightMin": 0 } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner", "weightMax": 100 } } }
+				""").andExpect(status().isBadRequest());
+	}
+
+	/**
+	 * Equal or descending bounds are not a range MapLibre's {@code interpolate} can parse --
+	 * the same class of bug the review found for {@code normalisationFloor} against a
+	 * negative-only span, see {@code LayerStyleService#requireWeightRange}.
+	 */
+	@Test
+	@DisplayName("weightMax must be strictly greater than weightMin")
+	void rejectsAWeightMaxNotGreaterThanWeightMin() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner",
+				  "weightMin": 100, "weightMax": 100 } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "heatmap", "field": "einwohner",
+				  "weightMin": 100, "weightMax": 50 } } }
+				""").andExpect(status().isBadRequest());
+	}
+
+	@Test
+	@DisplayName("weightMin and weightMax are refused on every renderer type but heatmap")
+	void rejectsWeightRangeOnNonHeatmapRenderers() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "single",
+				  "symbol": { "kind": "fill", "fillColor": "#e74c3c" },
+				  "weightMin": 0, "weightMax": 1 } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "graduated", "field": "gebaeudehoehe",
+				  "weightMin": 0, "weightMax": 1,
+				  "classes": [ { "min": 0, "max": 10,
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""").andExpect(status().isBadRequest());
+
+		patchStyle("""
+				{ "style": { "renderer": { "type": "categorized", "field": "nutzungsart",
+				  "weightMin": 0, "weightMax": 1,
+				  "categories": [ { "value": "Wohnen",
+				                     "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""").andExpect(status().isBadRequest());
+	}
+
+	@Test
 	@DisplayName("switching a heatmap's weight field raises style_version, recolouring the ramp does not")
 	void changingTheHeatmapWeightFieldInvalidatesTiles() throws Exception {
 		long unstyled = styleVersion();
