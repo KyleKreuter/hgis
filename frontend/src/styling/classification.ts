@@ -297,8 +297,17 @@ export interface HeatmapWeightSuggestion {
  * deliberate choice, not a gap: measured against the field this was built for
  * (`waermebedarf_unsaniert`, 46 233 real buildings), 11/12 already lifts the median's
  * weight from 0,0042 (today's plain maximum) to roughly 0,21 -- a factor of about fifty --
- * against 0,154 at a true, unreachable 95th percentile. The distance left to close is
- * fine-tuning next to the distance already covered.
+ * against 0,154 at a true, unreachable 95th percentile.
+ *
+ * That is not 11/12 beating a true 95th percentile -- it is a lower cutoff buying a higher
+ * median weight at the cost of clamping more objects to the same colour: 11/12 clamps
+ * about 8,3 % of this field's buildings (3 855 of 46 233, measured), a true 95th percentile
+ * only 5 %. 11/12 sits closer to p90's trade-off (10 % clamped, median weight 0,242) than
+ * to p95's. The distance from 11/12 to a true 95th percentile is fine-tuning next to the
+ * distance 11/12 has already closed from today's plain maximum -- but it is a trade, not a
+ * win already banked (team review, package 2 addendum: the first version of this
+ * paragraph read as the opposite, comparing the two weights alone without ever naming
+ * either one's clamped share).
  */
 const WEIGHT_SUGGESTION_CLASSES = 12
 
