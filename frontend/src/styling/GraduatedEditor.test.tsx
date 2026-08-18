@@ -306,4 +306,49 @@ describe('Leere Randklasse (neutraler Hinweis, keine Warnfarbe)', () => {
     )
     expect(screen.queryByText('Die oberste Klasse ist im aktuellen Datenbestand leer.')).not.toBeInTheDocument()
   })
+
+  /** Derselbe Ausschluss wie oben, gespiegelt an der Untergrenze -- dieselbe Algebra
+   *  (`classes[i].max >= classes[i].min` für jede gültige Klasse) trägt beide Seiten,
+   *  aber bisher war nur die obere separat getestet (team review). */
+  it('zeigt keinen unteren Hinweis, wenn die untere Überschreitungs-Warnung bereits greift -- beides schließt sich aus', async () => {
+    // Tiefstwert -200 unterschreitet die untere Grenze (0); die unterste Klasse ist
+    // damit per Konstruktion nicht leer (der Tiefstwert selbst faellt farblich in sie).
+    stubFetch([{ match: 'classes=2', body: { field: 'hoehe', method: 'quantile', breaks: [-200, 900], min: -200, max: 900, nullCount: 0 } }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    await screen.findByLabelText(
+      'Untere Klassengrenze. Der aktuelle Datenbestand reicht bereits darunter -- die Klassifizierung passt nicht mehr zu den Daten. Werte darunter zeigen dieselbe Farbe wie die unterste Klasse.',
+    )
+    expect(screen.queryByText('Die unterste Klasse ist im aktuellen Datenbestand leer.')).not.toBeInTheDocument()
+  })
+
+  /**
+   * Der Ausschluss gilt je Ende, nicht über beide Enden hinweg -- die beiden Blöcke
+   * (Bernstein-Schloss oben, neutraler Hinweis unten) werden unabhängig voneinander
+   * gerendert, ohne gemeinsamen Zustand. Dieser Test hält fest, dass zwei unabhängig
+   * wahre Aussagen über zwei verschiedene Ränder auch beide gleichzeitig erscheinen --
+   * kein Versehen, wenn hier später jemand eine Verzweigung einbaut, die annimmt, zwei
+   * Meldungen gleichzeitig seien ein Widerspruch (team review).
+   */
+  it('zeigt beide Hinweise gleichzeitig, wenn die Daten an einem Ende wachsen und am anderen ausdünnen', async () => {
+    // Tiefstwert 350 liegt über dem Ende der untersten Klasse (300) -- sie ist leer.
+    // Höchstwert 1200 überschreitet gleichzeitig die obere Grenze (900).
+    stubFetch([{ match: 'classes=2', body: { field: 'hoehe', method: 'quantile', breaks: [350, 1200], min: 350, max: 1200, nullCount: 0 } }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    expect(
+      await screen.findByLabelText(
+        'Obere Klassengrenze. Der aktuelle Datenbestand reicht bereits darüber hinaus -- die Klassifizierung passt nicht mehr zu den Daten. Werte darüber zeigen dieselbe Farbe wie die oberste Klasse.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Die unterste Klasse ist im aktuellen Datenbestand leer.')).toBeInTheDocument()
+    // Nicht die kombinierte "beide Randklassen"-Formulierung -- nur die untere ist leer.
+    expect(screen.queryByText('Die unterste und die oberste Klasse sind im aktuellen Datenbestand leer.')).not.toBeInTheDocument()
+  })
 })
