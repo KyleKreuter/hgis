@@ -1,6 +1,7 @@
 package de.kreuter.hgis.wms;
 
 import de.kreuter.hgis.catalog.dto.LayerDtos;
+import de.kreuter.hgis.common.ClientId;
 import de.kreuter.hgis.wms.dto.MapLayerDtos;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -28,8 +30,9 @@ class MapLayerController {
 
 	@PostMapping("/api/projects/{projectId}/map-layers")
 	public ResponseEntity<LayerDtos.Summary> create(@PathVariable UUID projectId,
-			@Valid @RequestBody MapLayerDtos.CreateRequest request) {
-		LayerDtos.Summary created = service.create(projectId, request);
+			@Valid @RequestBody MapLayerDtos.CreateRequest request,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		LayerDtos.Summary created = service.create(projectId, request, ClientId.require(origin));
 		return ResponseEntity.created(URI.create("/api/layers/" + created.id())).body(created);
 	}
 }

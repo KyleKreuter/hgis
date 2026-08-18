@@ -95,8 +95,9 @@ public class LayerController {
 	 */
 	@PutMapping("/api/projects/{projectId}/layers/order")
 	public List<LayerDtos.Summary> reorder(@PathVariable UUID projectId,
-			@Valid @RequestBody LayerDtos.ReorderRequest request) {
-		return service.reorder(projectId, request.layerIdsBottomToTop());
+			@Valid @RequestBody LayerDtos.ReorderRequest request,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		return service.reorder(projectId, request.layerIdsBottomToTop(), ClientId.require(origin));
 	}
 
 	/**
@@ -151,8 +152,9 @@ public class LayerController {
 	/** Renames an existing field's display name; column and type are immutable. */
 	@PatchMapping("/api/layers/{layerId}/fields/{fieldId}")
 	public LayerDtos.Field renameField(@PathVariable UUID layerId, @PathVariable UUID fieldId,
-			@Valid @RequestBody LayerDtos.RenameFieldRequest request) {
-		return fieldService.renameField(layerId, fieldId, request);
+			@Valid @RequestBody LayerDtos.RenameFieldRequest request,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		return fieldService.renameField(layerId, fieldId, request, ClientId.require(origin));
 	}
 
 	/**

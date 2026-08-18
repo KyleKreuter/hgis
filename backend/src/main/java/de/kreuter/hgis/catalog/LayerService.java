@@ -52,10 +52,11 @@ public class LayerService {
 	private final TableCreator tableCreator;
 	private final ChangeLogService changeLog;
 	private final JdbcClient jdbc;
+	private final CatalogTouch catalogTouch;
 
 	LayerService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
 			ProjectRepository projectRepository, LayerStyleService styleService, TableCreator tableCreator,
-			ChangeLogService changeLog, JdbcClient jdbc) {
+			ChangeLogService changeLog, JdbcClient jdbc, CatalogTouch catalogTouch) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.projectRepository = projectRepository;
@@ -63,6 +64,7 @@ public class LayerService {
 		this.tableCreator = tableCreator;
 		this.changeLog = changeLog;
 		this.jdbc = jdbc;
+		this.catalogTouch = catalogTouch;
 	}
 
 	@Transactional(readOnly = true)
@@ -192,9 +194,14 @@ public class LayerService {
 	 * impossible; either all indices move or none do.
 	 *
 	 * @param ordered every layer of the project, bottom first
+	 * @param origin  who is writing, from {@code X-Hgis-Client}, or null. Reorder never
+	 *     logs to the change log -- z_index alone is not one of {@link ChangeLogAction}'s
+	 *     tokens -- so this is the one write path in this class that has to announce
+	 *     itself to {@link CatalogTouch} directly rather than through {@link
+	 *     ChangeLogService#record}.
 	 */
 	@Transactional
-	public List<LayerDtos.Summary> reorder(UUID projectId, List<UUID> ordered) {
+	public List<LayerDtos.Summary> reorder(UUID projectId, List<UUID> ordered, String origin) {
 		if (!projectRepository.existsById(projectId)) {
 			throw new NotFoundException("Projekt " + projectId + " existiert nicht");
 		}
@@ -219,6 +226,7 @@ public class LayerService {
 			byId.get(ordered.get(index)).setZIndex(index);
 		}
 		layerRepository.flush();
+		catalogTouch.touch(projectId, origin);
 
 		// Moving a layer across a mask changes what clips it without touching the layer
 		// itself, so its clipVersion has to be recomputed from the new order too.

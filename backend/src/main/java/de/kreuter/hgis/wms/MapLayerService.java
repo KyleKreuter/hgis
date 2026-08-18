@@ -70,7 +70,7 @@ public class MapLayerService {
 	}
 
 	@Transactional
-	public LayerDtos.Summary create(UUID projectId, MapLayerDtos.CreateRequest request) {
+	public LayerDtos.Summary create(UUID projectId, MapLayerDtos.CreateRequest request, String clientName) {
 		Project project = projectRepository.findById(projectId)
 				.orElseThrow(() -> new NotFoundException("Projekt " + projectId + " existiert nicht"));
 
@@ -122,10 +122,9 @@ public class MapLayerService {
 
 		layer = layerRepository.save(layer);
 
-		// No client name: a map image is created through this endpoint alone, and it
-		// carries none today (see ClientId) -- and no feature.insert either, a map
-		// image has no payload table of its own to hold rows.
-		changeLog.record(projectId, layer.getId(), layer.getName(), ChangeLogAction.LAYER_CREATE, null, 1, null);
+		// No feature.insert: a map image has no payload table of its own to hold rows.
+		changeLog.record(projectId, layer.getId(), layer.getName(), ChangeLogAction.LAYER_CREATE,
+				clientName, 1, null);
 
 		return layerService.getSummary(layer.getId());
 	}

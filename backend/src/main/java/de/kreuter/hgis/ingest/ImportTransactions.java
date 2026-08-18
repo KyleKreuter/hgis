@@ -133,10 +133,20 @@ class ImportTransactions {
 		// whole by compensateAndFail and never existed as far as CONTRACT.md's protocol
 		// is concerned -- logging at begin() would leave a change_log entry for a layer
 		// that was never real. featureCount can be 0 (every row skipped), and
-		// ChangeLogService.record requires affected_count > 0, hence the guard. No
-		// client name: an import carries none today (see ClientId) -- one entry per
-		// operation, not one per batch, matches CONTRACT.md's own "vollständige Zeilen
-		// nur beim Löschen" scope.
+		// ChangeLogService.record requires affected_count > 0, hence the guard. One entry
+		// per operation, not one per batch, matches CONTRACT.md's own "vollständige Zeilen
+		// nur beim Löschen" scope -- and also happens to be what keeps ChangeLogService's
+		// hook into CatalogTouch from announcing this import once per batch: neither
+		// begin() nor writeBatch() ever calls record(), only this method does, exactly
+		// once per import.
+		//
+		// No client name, deliberately, not merely because none exists today: an import
+		// runs as a background job, so the client that started it has no fresher copy of
+		// the finished layer than anyone else -- unlike a synchronous write, its own echo
+		// here is not stale news to filter out but the one signal it is waiting for
+		// (plan "Der Live-Kanal meldet auch Datenaenderungen", the origin question). Naming
+		// a client here would risk exactly that client's own UI suppressing the
+		// notification it needs most.
 		changeLog.record(layer.getProject().getId(), layer.getId(), layer.getName(),
 				ChangeLogAction.LAYER_CREATE, null, 1, null);
 		if (featureCount > 0) {

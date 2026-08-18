@@ -45,7 +45,7 @@ public class ProjectDuplicateService {
 			for (UUID sourceLayerId : start.sourceLayerIds()) {
 				transactions.copyLayer(jobId, sourceLayerId, start.targetProjectId(), start.totalFeatures());
 			}
-			transactions.complete(jobId);
+			transactions.complete(jobId, start.targetProjectId());
 		} catch (Exception e) {
 			log.error("Duplicate {} failed, compensating target {}", jobId, start.targetProjectId(), e);
 			transactions.compensateAndFail(jobId, start.targetProjectId(), describe(e));

@@ -86,6 +86,18 @@ public class Project {
 	@Column(name = "view_state_version", nullable = false, updatable = false)
 	private long viewStateVersion = 1;
 
+	/**
+	 * Rises with every write to any layer or field of this project -- everything about it
+	 * that is not {@link #viewState}. Unlike {@link #viewStateVersion}, bumped by a
+	 * database trigger on {@code layer} and {@code layer_field}
+	 * ({@code V14__catalog_version.sql}), not by a plain UPDATE from Java -- see that
+	 * migration for why. {@code updatable = false} for the same reason it holds for {@link
+	 * #viewStateVersion}: Hibernate must never write a value back over one the trigger has
+	 * since moved on.
+	 */
+	@Column(name = "catalog_version", nullable = false, updatable = false)
+	private long catalogVersion = 1;
+
 	@Column(name = "last_opened_at")
 	private Instant lastOpenedAt;
 
@@ -189,6 +201,15 @@ public class Project {
 	 */
 	public long getViewStateVersion() {
 		return viewStateVersion;
+	}
+
+	/**
+	 * @return the version as it was when this entity was loaded. A trigger-driven bump
+	 *     that happened since is not visible here -- {@code CatalogEventBridge} reads the
+	 *     current value fresh with a plain query instead of through this entity.
+	 */
+	public long getCatalogVersion() {
+		return catalogVersion;
 	}
 
 	public Instant getLastOpenedAt() {

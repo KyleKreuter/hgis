@@ -26,10 +26,11 @@ class ProjectDuplicateTransactions {
 	private final JobService jobService;
 	private final JdbcClient jdbc;
 	private final ChangeLogService changeLog;
+	private final CatalogTouch catalogTouch;
 
 	ProjectDuplicateTransactions(ProjectRepository projectRepository, LayerRepository layerRepository,
 			LayerFieldRepository fieldRepository, ProjectDeletionService deletionService, JobService jobService,
-			JdbcClient jdbc, ChangeLogService changeLog) {
+			JdbcClient jdbc, ChangeLogService changeLog, CatalogTouch catalogTouch) {
 		this.projectRepository = projectRepository;
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
@@ -37,6 +38,7 @@ class ProjectDuplicateTransactions {
 		this.jobService = jobService;
 		this.jdbc = jdbc;
 		this.changeLog = changeLog;
+		this.catalogTouch = catalogTouch;
 	}
 
 	@Transactional
@@ -96,10 +98,17 @@ class ProjectDuplicateTransactions {
 		// takes every change_log row logged against it along), so nothing is left
 		// orphaned if this never reaches complete(). No client name -- duplicating a
 		// project carries none today (see ClientId).
-		changeLog.record(targetProjectId, copy.getId(), copy.getName(), ChangeLogAction.LAYER_CREATE, null, 1, null);
+		//
+		// recordWithoutTouch, not record: this method runs once per layer, each its own
+		// transaction (see the loop in ProjectDuplicateService), so the ordinary hook
+		// would turn one duplicate into as many catalog-changed events as it has layers.
+		// complete() announces the finished copy once instead -- see ChangeLogService's
+		// own javadoc.
+		changeLog.recordWithoutTouch(targetProjectId, copy.getId(), copy.getName(),
+				ChangeLogAction.LAYER_CREATE, null, 1, null);
 		if (source.getFeatureCount() > 0) {
 			long inserted = Math.min(source.getFeatureCount(), Integer.MAX_VALUE);
-			changeLog.record(targetProjectId, copy.getId(), copy.getName(),
+			changeLog.recordWithoutTouch(targetProjectId, copy.getId(), copy.getName(),
 					ChangeLogAction.FEATURE_INSERT, null, (int) inserted, null);
 		}
 
@@ -201,9 +210,19 @@ class ProjectDuplicateTransactions {
 		return tableName + "_" + columnPart + suffix;
 	}
 
+	/**
+	 * @param targetProjectId announced to the live channel here, and only here -- see
+	 *     {@link #copyLayer} for why the per-layer writes leading up to this stay silent.
+	 *     No origin: duplicating a project runs as a background job, and the client that
+	 *     started it has no fresher copy of the target project than anyone else -- unlike
+	 *     a synchronous write, its own echo is not stale news to suppress but the one
+	 *     signal it is waiting for, the same reasoning {@code ImportTransactions#complete}
+	 *     follows.
+	 */
 	@Transactional
-	void complete(UUID jobId) {
+	void complete(UUID jobId, UUID targetProjectId) {
 		jobService.markSucceeded(jobId, null);
+		catalogTouch.touch(targetProjectId, null);
 	}
 
 	@Transactional
