@@ -269,12 +269,36 @@ export interface HeatmapWeightSuggestion {
 
 /**
  * Classes requested for the weight-bound suggestion's quantile breaks -- the server's own
- * ceiling (`ClassificationService.MAX_CLASSES`, backend), the finest split `/classify` can
- * compute without any new server capability. Twelve classes give breaks at 0, 1/12, 2/12,
- * ..., 11/12, 1 -- i.e. roughly the 0th, 8.3rd, 16.7th, ..., 91.7th and 100th percentile.
- * A true 95th percentile would need a 20-way split (0.95 = 19/20), which `classes <= 12`
- * cannot express; 11/12 ≈ 91.7 % is the closest available stand-in, and it is exactly what
- * `weightSuggestionFromBreaks` below hands back as the "upper" suggestion.
+ * ceiling (`ClassificationService.MAX_CLASSES = 12`, backend), the finest split `/classify`
+ * can compute without any new server capability. Twelve classes give breaks at 0, 1/12,
+ * 2/12, ..., 11/12, 1 -- i.e. roughly the 0th, 8.3rd, 16.7th, ..., 91.7th and 100th
+ * percentile, and 11/12 ≈ 91.7 % is exactly what `weightSuggestionFromBreaks` below hands
+ * back as the "upper" suggestion.
+ *
+ * 11/12 is the reachable optimum, not a rough stand-in -- checked exhaustively, not just
+ * argued: for every `classes` from 2 to 12, `k/classes` was compared against 0.95, and no
+ * combination lands closer than 11/12 (team review, package 2, in reply to "zieh auf p95
+ * nach"). A true 95th percentile needs a 20-way split (0.95 = 19/20, i.e. `classes = 20`),
+ * which the server's own `classes <= 12` rejects with a 400 before this code ever runs.
+ *
+ * Interpolating between 11/12 and the true maximum (index `breaks.length - 1`, always
+ * available) to approximate 0.95 more closely was considered and rejected: for a
+ * `waermebedarf_unsaniert`-shaped field the true maximum *is* the outlier this whole
+ * mechanism exists to stay away from (45 280 554 against a median of 188 843), so
+ * interpolating toward it pulls the estimate back toward the very value being avoided,
+ * worse the more skewed the field is -- exactly backwards for what a suggestion near the
+ * top end is supposed to do.
+ *
+ * Raising `MAX_CLASSES` to reach 19/20 was considered and rejected too, deliberately not
+ * here: that ceiling exists for legend readability (`ClassificationService`, "above twelve
+ * no legend is readable any more"), a reason this internal, non-legend caller does not
+ * share -- but weakening a clear limit for one caller's convenience turns it into one with
+ * an exception, and the next exception then has this one to point to. Left as a
+ * deliberate choice, not a gap: measured against the field this was built for
+ * (`waermebedarf_unsaniert`, 46 233 real buildings), 11/12 already lifts the median's
+ * weight from 0,0042 (today's plain maximum) to roughly 0,21 -- a factor of about fifty --
+ * against 0,154 at a true, unreachable 95th percentile. The distance left to close is
+ * fine-tuning next to the distance already covered.
  */
 const WEIGHT_SUGGESTION_CLASSES = 12
 
