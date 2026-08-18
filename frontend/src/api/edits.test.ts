@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { QueryClient } from '@tanstack/react-query'
-import { applyEditsOptions, type EditResponse } from './edits'
+import { applyEditsOptions, applyFeatureWriteResult, type EditResponse } from './edits'
 import { layerKeys } from './layers'
 import { projectKeys } from './projects'
 
@@ -65,11 +65,35 @@ describe('applyEditsOptions', () => {
    * cache -- own-session edits used to be invisible to a heatmap's weight normalisation
    * and to its legend's "did the data outgrow this fixed bound" check for up to the
    * query's own five-minute `staleTime`.
+   *
+   * Not this test's own proof on its own, though: `invalidateAfterFeatureWrite` also
+   * invalidates `layerKeys.detail(LAYER)` (`['layers', LAYER]`), which as a prefix already
+   * covers `['layers', LAYER, 'classify', ...]` under TanStack Query's default partial-key
+   * matching -- this assertion would stay green even without `invalidateFeatureData`'s own
+   * classify line (mutation testing, package 2: deleting that line left this test passing).
+   * It stays anyway, as the actually-taken path's documented behaviour; the split/merge
+   * test right below is the one that isolates the line itself, on the one path that never
+   * invalidates `layerKeys.detail` at all.
    */
   it('erklärt die Feldspanne (heatmapFieldRangeQuery) für ungültig', () => {
     const client = seededClient()
 
     runOnSuccess(client)
+
+    expect(isStale(client, layerKeys.classify(LAYER, 'waermebedarf', 'quantile', 12))).toBe(true)
+  })
+
+  /**
+   * `applyFeatureWriteResult` (split/merge, section 12) writes `layerKeys.detail` with
+   * `setQueryData` -- an optimistic update, not an invalidation -- so unlike the ordinary
+   * edit path above, nothing here marks the classify cache stale by an unrelated prefix
+   * match. Whatever staleness shows up here can only have come from
+   * `invalidateFeatureData`'s own classify invalidation.
+   */
+  it('erklärt die Feldspanne auch beim Teilen/Zusammenführen für ungültig', () => {
+    const client = seededClient()
+
+    applyFeatureWriteResult(client, LAYER, PROJECT, { dataVersion: 9, featureCount: 43 })
 
     expect(isStale(client, layerKeys.classify(LAYER, 'waermebedarf', 'quantile', 12))).toBe(true)
   })

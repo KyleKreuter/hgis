@@ -332,19 +332,28 @@ describe('useLiveDataState', () => {
 
     /**
      * Ein Layer, der im vorherigen Stand noch gar nicht bekannt war (neu erschienen, oder
-     * die Liste war zuvor gar nicht geladen), hat keinen Zwischenspeicher, den es zu
-     * invalidieren gäbe -- `previousVersions.get(...)` liefert `undefined`, und das darf
-     * nicht als "hat sich geändert" gelesen werden.
+     * die Liste war zuvor gar nicht geladen), hat realistisch keinen Zwischenspeicher, den
+     * es zu invalidieren gäbe -- `previousVersions.get(...)` liefert `undefined`, und das
+     * darf nicht als "hat sich geändert" gelesen und `undefined !== dataVersion` daher
+     * fälschlich als wahr behandelt werden.
+     *
+     * Der Eintrag wird hier trotzdem gesät -- realitätsfremd für einen wirklich neuen
+     * Layer, aber die einzige Art, die Wächter-Bedingung selbst beobachtbar zu machen:
+     * ohne sie (Mutationsprobe, package 2) läuft dieser Test durch, ohne je zu prüfen, ob
+     * `invalidateQueries` fälschlich doch aufgerufen wurde.
      */
-    it('wirft nicht, wenn ein Layer im vorherigen Stand noch nicht bekannt war', async () => {
+    it('lässt die Feldspanne eines neu erschienenen Layers unangetastet -- kein vorheriger Stand zum Vergleichen', async () => {
       const client = clientKeepingSeededData()
       client.setQueryData(layerKeys.list(PROJECT), [])
+      client.setQueryData(CLASSIFY_KEY, {})
       const { calls } = stubFetch([{ match: LAYERS_URL, body: [summary(ACTIVE, 'Kanäle')] }])
       renderWithQueryClient(<Probe activeLayerId={null} />, client)
 
-      expect(() => act(() => probeApi!.notify())).not.toThrow()
+      act(() => probeApi!.notify())
 
       await waitFor(() => expect(calls).toHaveLength(1), { timeout: 2000 })
+      await pastTheSettleWindow()
+      expect(isInvalidated(client, CLASSIFY_KEY)).toBe(false)
     })
   })
 })
