@@ -60,13 +60,14 @@ class TrashEntry:
     for field, the same shape :meth:`hgis.project.Project.trash` would read
     from ``GET /api/projects/{id}/trash``.
 
-    As of this writing, ``DELETE /api/layers/{id}`` and its ``/purge``
-    sibling still answer 204 with no body, so :meth:`Layer.delete` and
-    :meth:`Layer.purge` return None rather than one of these -- there is
-    nothing here to build one from, and guessing from what was known before
-    the call would report a count that might no longer be true. Once the
-    backend starts sending a body shaped like this, both methods build one
-    without any further change on this side.
+    ``DELETE /api/layers/{id}`` and its ``/purge`` sibling answer with a body
+    shaped like this today. :meth:`Layer.delete` and :meth:`Layer.purge`
+    still return ``None`` rather than raising if an answer ever comes back
+    without one -- there would be nothing here to build one from, and
+    guessing from what was known before the call would report a count that
+    might no longer be true. That stays defensive rather than a promise this
+    backend needs: nothing here assumes a 204 will happen, only that it
+    would be handled if it did.
 
     :param id: the layer, unchanged by the trip through the trash
     :param name: the layer's name at the time it was deleted or purged
@@ -363,8 +364,8 @@ class Layer:
         every query do not, until it is restored.
 
         :return: the trash entry the server reports -- how many objects moved
-            with it, when, by whom -- or None while the backend still answers
-            this endpoint with an empty 204. See :class:`TrashEntry`.
+            with it, when, by whom. None only if an answer without a body
+            ever arrives; see :class:`TrashEntry`.
         """
         body = self._client.delete_layer(self.id)
         return _to_trash_entry(body) if body else None
@@ -382,9 +383,10 @@ class Layer:
         :meth:`delete`. Call :meth:`delete` first and look at what is in the
         trash if there is any doubt.
 
-        :return: what was destroyed -- or None while the backend still
-            answers this endpoint with an empty 204. See :class:`TrashEntry`
-            and :meth:`delete`; the same gap, for the same reason.
+        :return: what was destroyed -- ``deleted_at``/``deleted_by`` describe
+            the preceding :meth:`delete`, not the purge itself, see
+            :class:`TrashEntry`. None only if an answer without a body ever
+            arrives, the same defensive case :meth:`delete` allows for.
         """
         body = self._client.purge_layer(self.id)
         return _to_trash_entry(body) if body else None
