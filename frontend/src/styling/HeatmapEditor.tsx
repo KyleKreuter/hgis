@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatAttributeNumber } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import {
   columnNameOfField,
   fieldIdOfColumn,
@@ -347,6 +348,20 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState, weightMin, weig
   // problem this component exists to avoid on the other end of the scale.
   const stillLoading = isFetching && !bothFixed
 
+  /**
+   * The real case the team lead measured: `waermebedarf_unsaniert`'s `weightMax`
+   * (1 225 354, its p95) copied onto `waermebedarf_saniert` -- same field, same
+   * building stock, an obviously related layer to reuse a bound on. That field's true
+   * maximum is only 23 165 761, well under the copied ceiling, so the hottest saniertes
+   * Gebäude lands at weight 0,51 -- which reads as "sanieren half, the whole scale is
+   * used" when it is actually "the fixed ceiling no longer matches this field's data".
+   * Nothing about a plain locked number says which of the two is true (team lead,
+   * package 2 measurement) -- this is that missing signal, computed from data this
+   * component already has in scope (`range`) rather than a second request.
+   */
+  const dataExceedsMin = weightMin !== undefined && range !== undefined && range.min < weightMin
+  const dataExceedsMax = weightMax !== undefined && range !== undefined && range.max > weightMax
+
   return (
     <div className="grid gap-1 py-1">
       <div className="h-3 w-full rounded-sm" style={{ background: `linear-gradient(to right, ${colors.join(', ')})` }} />
@@ -361,8 +376,26 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState, weightMin, weig
           {hasField && stillLoading && <span>Wird geladen…</span>}
           {hasField && !stillLoading && known && (
             <>
-              <LegendBound value={effectiveMin!} fixed={weightMin !== undefined} description="Feste Untergrenze. Werte darunter zeigen dieselbe Farbe wie dieser Wert." />
-              <LegendBound value={effectiveMax!} fixed={weightMax !== undefined} description="Feste Obergrenze. Werte darüber zeigen dieselbe Farbe wie dieser Wert." />
+              <LegendBound
+                value={effectiveMin!}
+                fixed={weightMin !== undefined}
+                stale={dataExceedsMin}
+                description={
+                  dataExceedsMin
+                    ? 'Feste Untergrenze. Der aktuelle Datenbestand reicht bereits darunter -- die Grenze passt nicht mehr zu den Daten. Werte darunter zeigen dieselbe Farbe wie dieser Wert.'
+                    : 'Feste Untergrenze. Werte darunter zeigen dieselbe Farbe wie dieser Wert.'
+                }
+              />
+              <LegendBound
+                value={effectiveMax!}
+                fixed={weightMax !== undefined}
+                stale={dataExceedsMax}
+                description={
+                  dataExceedsMax
+                    ? 'Feste Obergrenze. Der aktuelle Datenbestand reicht bereits darüber hinaus -- die Grenze passt nicht mehr zu den Daten. Werte darüber zeigen dieselbe Farbe wie dieser Wert.'
+                    : 'Feste Obergrenze. Werte darüber zeigen dieselbe Farbe wie dieser Wert.'
+                }
+              />
             </>
           )}
           {hasField && !stillLoading && !known && <span>Spanne nicht verfügbar</span>}
@@ -407,9 +440,20 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState, weightMin, weig
   )
 }
 
+interface LegendBoundProps {
+  value: number
+  fixed: boolean
+  /** The live range has grown past this fixed bound -- an amber lock instead of a neutral
+   *  one, the same colour convention `NumberInput`'s range validation and every other
+   *  warning text in this app already use, so "fixed and current" and "fixed and stale"
+   *  are told apart without reading the tooltip first. */
+  stale: boolean
+  description: string
+}
+
 /** One legend end -- a plain formatted number, or the same number with a lock icon and
  *  its own tooltip when `weightMin`/`weightMax` fixed it rather than the automatic stretch. */
-function LegendBound({ value, fixed, description }: { value: number; fixed: boolean; description: string }) {
+function LegendBound({ value, fixed, stale, description }: LegendBoundProps) {
   if (!fixed) return <span>{formatAttributeNumber(value)}</span>
   return (
     <span className="inline-flex items-center gap-1">
@@ -417,7 +461,11 @@ function LegendBound({ value, fixed, description }: { value: number; fixed: bool
       <Tooltip>
         <TooltipTrigger
           render={
-            <span tabIndex={0} className="shrink-0 text-muted-foreground" aria-label={description}>
+            <span
+              tabIndex={0}
+              className={cn('shrink-0', stale ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground')}
+              aria-label={description}
+            >
               <Lock className="size-3" />
             </span>
           }
