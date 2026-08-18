@@ -25,6 +25,7 @@ function seededClient() {
   client.setQueryData(layerKeys.list(PROJECT), [])
   client.setQueryData(layerKeys.detail(LAYER), {})
   client.setQueryData(['layers', LAYER, 'features', 'page'], {})
+  client.setQueryData(layerKeys.classify(LAYER, 'waermebedarf', 'quantile', 12), {})
   client.setQueryData(projectKeys.list(''), {})
   client.setQueryData(projectKeys.list('such'), {})
   client.setQueryData(projectKeys.detail(PROJECT), {})
@@ -56,6 +57,21 @@ describe('applyEditsOptions', () => {
     expect(isStale(client, layerKeys.list(PROJECT))).toBe(true)
     expect(isStale(client, layerKeys.detail(LAYER))).toBe(true)
     expect(isStale(client, ['layers', LAYER, 'features', 'page'])).toBe(true)
+  })
+
+  /**
+   * Team review, package 2 (Prüfer): a write can move a field's min or max, and this was
+   * the one write path with no invalidation of its own for `heatmapFieldRangeQuery`'s
+   * cache -- own-session edits used to be invisible to a heatmap's weight normalisation
+   * and to its legend's "did the data outgrow this fixed bound" check for up to the
+   * query's own five-minute `staleTime`.
+   */
+  it('erklärt die Feldspanne (heatmapFieldRangeQuery) für ungültig', () => {
+    const client = seededClient()
+
+    runOnSuccess(client)
+
+    expect(isStale(client, layerKeys.classify(LAYER, 'waermebedarf', 'quantile', 12))).toBe(true)
   })
 
   it('erklärt jede Seitenkette der Projektliste für ungültig', () => {

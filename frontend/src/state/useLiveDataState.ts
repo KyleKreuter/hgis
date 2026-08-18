@@ -153,15 +153,15 @@ async function refresh(
 ): Promise<void> {
   const targetLayerId = optionsRef.current.activeLayerId
   // Read before the fetch below overwrites the cache -- once the layer is confirmed
-  // gone, this is the only place its name can still be read from.
-  const before = targetLayerId
-    ? queryClient
-        .getQueryData<LayerSummary[]>(layerKeys.list(projectId))
-        ?.find((layer) => layer.id === targetLayerId)
-    : undefined
+  // gone, this is the only place its name can still be read from, and the only place
+  // every layer's previous `dataVersion` can still be compared against
+  // (`invalidateChangedDataVersions` below).
+  const previousLayers = queryClient.getQueryData<LayerSummary[]>(layerKeys.list(projectId)) ?? []
+  const before = targetLayerId ? previousLayers.find((layer) => layer.id === targetLayerId) : undefined
 
   try {
     const layers = await queryClient.fetchQuery({ ...layerListQuery(projectId), staleTime: 0 })
+    invalidateChangedDataVersions(queryClient, previousLayers, layers)
     if (!targetLayerId || !before) return
     // Checked again on arrival, not only when the request was sent: the user may have
     // left this layer themselves while it was in flight, and closing whatever they have
@@ -173,5 +173,42 @@ async function refresh(
     // A refetch that fails is not worth interrupting the user over -- same reasoning as
     // `useLiveViewState.ts`'s own read. The next data-state event, or the next
     // reconnect, asks again.
+  }
+}
+
+/**
+ * A heatmap's weight field range (`layerKeys.classify`, `styling/classification.ts`'s
+ * `heatmapFieldRangeQuery`) has a plain five-minute `staleTime` and, until this, no write
+ * path ever invalidated it early -- a remote write moving a field's min or max stayed
+ * invisible to a heatmap's weight normalisation and to its legend's "did the data outgrow
+ * this fixed bound" check (`HeatmapEditor.tsx`) for up to five minutes, or forever if
+ * nothing else happened to remount the query first (found by the Prüfer, package 2's
+ * stale-bound warning made this observable for the first time -- own-session edits have
+ * the matching fix in `api/edits.ts`'s `invalidateFeatureData`).
+ *
+ * Invalidated only for a layer whose `dataVersion` actually moved between the previous
+ * catalog and the one just fetched, not for every layer on every catalog event: a
+ * `dataVersion` bump is the one signal that a layer's *rows* changed (`layerSpecs.ts`'s
+ * `buildTileUrl` already keys tile caching off exactly this number), and
+ * `invalidateQueries` on a layer nobody currently has a heatmap panel or map layer open
+ * for costs nothing until something observes it again -- TanStack Query only refetches an
+ * *active* query. Asking `/classify` for every heatmap layer on every catalog event,
+ * regardless of whether that event even touched its data, would be the more expensive
+ * habit this avoids.
+ *
+ * A layer absent from `previousVersions` (new since the last catalog snapshot) is left
+ * alone on purpose: nothing has been cached for it yet, so there is nothing to invalidate.
+ */
+function invalidateChangedDataVersions(
+  queryClient: QueryClient,
+  previousLayers: LayerSummary[],
+  nextLayers: LayerSummary[],
+): void {
+  const previousVersions = new Map(previousLayers.map((layer) => [layer.id, layer.dataVersion]))
+  for (const layer of nextLayers) {
+    const previousVersion = previousVersions.get(layer.id)
+    if (previousVersion !== undefined && previousVersion !== layer.dataVersion) {
+      queryClient.invalidateQueries({ queryKey: ['layers', layer.id, 'classify'] })
+    }
   }
 }

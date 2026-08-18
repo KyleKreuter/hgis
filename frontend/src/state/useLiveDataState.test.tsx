@@ -287,4 +287,64 @@ describe('useLiveDataState', () => {
       expect(calls).toHaveLength(1)
     })
   })
+
+  /**
+   * Vom Prüfer gefunden (package 2): `heatmapFieldRangeQuery`s Zwischenspeicher hatte
+   * vor diesem Fix keinen einzigen Schreibweg, der ihn frühzeitig für ungültig erklärt --
+   * nur die eigene Fünf-Minuten-`staleTime`. Ein fremder Schreibvorgang, der ein Feld
+   * über eine gesetzte Grenze hinaus verschiebt, blieb dadurch für die Legende und für
+   * `heatmapWeight` unsichtbar, bis das Fenster von selbst ablief.
+   */
+  describe('Feldspanne bei Datenänderung (heatmapFieldRangeQuery)', () => {
+    const CLASSIFY_KEY = layerKeys.classify(ACTIVE, 'wert', 'quantile', 12)
+
+    function isInvalidated(client: QueryClient, queryKey: readonly unknown[]): boolean {
+      const query = client.getQueryCache().find({ queryKey, exact: true })
+      if (!query) throw new Error(`Kein Eintrag für ${JSON.stringify(queryKey)}`)
+      return query.isStale()
+    }
+
+    it('erklärt die Feldspanne eines Layers für ungültig, dessen dataVersion sich geändert hat', async () => {
+      const client = clientKeepingSeededData()
+      client.setQueryData(layerKeys.list(PROJECT), [{ ...summary(ACTIVE, 'Kanäle'), dataVersion: 1 }])
+      client.setQueryData(CLASSIFY_KEY, {})
+      stubFetch([{ match: LAYERS_URL, body: [{ ...summary(ACTIVE, 'Kanäle'), dataVersion: 2 }] }])
+      renderWithQueryClient(<Probe activeLayerId={null} />, client)
+
+      act(() => probeApi!.notify())
+
+      await waitFor(() => expect(isInvalidated(client, CLASSIFY_KEY)).toBe(true), { timeout: 2000 })
+    })
+
+    it('lässt die Feldspanne eines Layers mit unveränderter dataVersion in Ruhe', async () => {
+      const client = clientKeepingSeededData()
+      client.setQueryData(layerKeys.list(PROJECT), [{ ...summary(ACTIVE, 'Kanäle'), dataVersion: 1 }])
+      client.setQueryData(CLASSIFY_KEY, {})
+      const { calls } = stubFetch([{ match: LAYERS_URL, body: [{ ...summary(ACTIVE, 'Kanäle'), dataVersion: 1 }] }])
+      renderWithQueryClient(<Probe activeLayerId={null} />, client)
+
+      act(() => probeApi!.notify())
+
+      await waitFor(() => expect(calls).toHaveLength(1), { timeout: 2000 })
+      await pastTheSettleWindow()
+      expect(isInvalidated(client, CLASSIFY_KEY)).toBe(false)
+    })
+
+    /**
+     * Ein Layer, der im vorherigen Stand noch gar nicht bekannt war (neu erschienen, oder
+     * die Liste war zuvor gar nicht geladen), hat keinen Zwischenspeicher, den es zu
+     * invalidieren gäbe -- `previousVersions.get(...)` liefert `undefined`, und das darf
+     * nicht als "hat sich geändert" gelesen werden.
+     */
+    it('wirft nicht, wenn ein Layer im vorherigen Stand noch nicht bekannt war', async () => {
+      const client = clientKeepingSeededData()
+      client.setQueryData(layerKeys.list(PROJECT), [])
+      const { calls } = stubFetch([{ match: LAYERS_URL, body: [summary(ACTIVE, 'Kanäle')] }])
+      renderWithQueryClient(<Probe activeLayerId={null} />, client)
+
+      expect(() => act(() => probeApi!.notify())).not.toThrow()
+
+      await waitFor(() => expect(calls).toHaveLength(1), { timeout: 2000 })
+    })
+  })
 })

@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Info, Loader2, Lock, Wand2 } from 'lucide-react'
+import { Info, Loader2, Lock, LockOpen, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { LayerField } from '@/api/layers'
 import { Button } from '@/components/ui/button'
@@ -361,6 +361,27 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState, weightMin, weig
    */
   const dataExceedsMin = weightMin !== undefined && range !== undefined && range.min < weightMin
   const dataExceedsMax = weightMax !== undefined && range !== undefined && range.max > weightMax
+  /**
+   * Whether that comparison could even run. `range` needs a *resolved* `FieldRangeState`
+   * (`typeof rangeState === 'object'`), and `'error'`/`'invalid'` never resolve to one, no
+   * matter how long this panel stays open -- unlike "still loading" (`rangeState ===
+   * undefined`), which resolves on its own once the request settles and is deliberately
+   * excluded here (`stillLoading` above already covers it without a false-positive
+   * warning; the Prüfer confirmed that half is right).
+   *
+   * A fixed bound keeps rendering correctly on the map regardless -- `heatmapWeight` only
+   * needs `range` when a bound is *not* fixed. But the "does the data still fit" check
+   * above silently *cannot* run while `range` is unavailable, and `dataExceeds*` reads
+   * exactly like "checked, and it fits" in that case -- there is no third value it could
+   * return instead. Found by the Prüfer: "eine Warnung, die stillschweigend nie kommt, ist
+   * schlimmer als gar keine. Sie erzeugt Vertrauen, das sie nicht trägt." This is what
+   * keeps that silence from being mistaken for an answer -- `LegendBound` renders a
+   * different icon for it, not just a different tooltip sentence, so the distinction
+   * survives even for someone who never hovers.
+   */
+  const checkFailed = rangeState === 'error' || rangeState === 'invalid'
+  const checkUnavailableMin = weightMin !== undefined && checkFailed
+  const checkUnavailableMax = weightMax !== undefined && checkFailed
 
   return (
     <div className="grid gap-1 py-1">
@@ -379,21 +400,25 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState, weightMin, weig
               <LegendBound
                 value={effectiveMin!}
                 fixed={weightMin !== undefined}
-                stale={dataExceedsMin}
+                state={checkUnavailableMin ? 'unknown' : dataExceedsMin ? 'stale' : 'current'}
                 description={
-                  dataExceedsMin
-                    ? 'Feste Untergrenze. Der aktuelle Datenbestand reicht bereits darunter -- die Grenze passt nicht mehr zu den Daten. Werte darunter zeigen dieselbe Farbe wie dieser Wert.'
-                    : 'Feste Untergrenze. Werte darunter zeigen dieselbe Farbe wie dieser Wert.'
+                  checkUnavailableMin
+                    ? 'Feste Untergrenze. Konnte nicht geprüft werden, ob der aktuelle Datenbestand schon darunter reicht -- die Wertespanne ließ sich gerade nicht laden.'
+                    : dataExceedsMin
+                      ? 'Feste Untergrenze. Der aktuelle Datenbestand reicht bereits darunter -- die Grenze passt nicht mehr zu den Daten. Werte darunter zeigen dieselbe Farbe wie dieser Wert.'
+                      : 'Feste Untergrenze. Werte darunter zeigen dieselbe Farbe wie dieser Wert.'
                 }
               />
               <LegendBound
                 value={effectiveMax!}
                 fixed={weightMax !== undefined}
-                stale={dataExceedsMax}
+                state={checkUnavailableMax ? 'unknown' : dataExceedsMax ? 'stale' : 'current'}
                 description={
-                  dataExceedsMax
-                    ? 'Feste Obergrenze. Der aktuelle Datenbestand reicht bereits darüber hinaus -- die Grenze passt nicht mehr zu den Daten. Werte darüber zeigen dieselbe Farbe wie dieser Wert.'
-                    : 'Feste Obergrenze. Werte darüber zeigen dieselbe Farbe wie dieser Wert.'
+                  checkUnavailableMax
+                    ? 'Feste Obergrenze. Konnte nicht geprüft werden, ob der aktuelle Datenbestand schon darüber hinausreicht -- die Wertespanne ließ sich gerade nicht laden.'
+                    : dataExceedsMax
+                      ? 'Feste Obergrenze. Der aktuelle Datenbestand reicht bereits darüber hinaus -- die Grenze passt nicht mehr zu den Daten. Werte darüber zeigen dieselbe Farbe wie dieser Wert.'
+                      : 'Feste Obergrenze. Werte darüber zeigen dieselbe Farbe wie dieser Wert.'
                 }
               />
             </>
@@ -440,20 +465,28 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState, weightMin, weig
   )
 }
 
+/**
+ * `current`: fixed, and the live range confirms it still fits -- a neutral lock.
+ * `stale`: fixed, and the live range has grown past it -- an amber lock, the same colour
+ * convention `NumberInput`'s range validation and every other warning text in this app
+ * already use.
+ * `unknown`: fixed, but the live range could not be checked at all (`'error'`/`'invalid'`,
+ * `HeatmapLegend`'s `checkFailed`) -- an open lock, deliberately not the same neutral
+ * colour `current` uses: "verified fine" and "never checked" must not look alike, or the
+ * check might as well not exist (Prüfer, package 2).
+ */
+type BoundCheckState = 'current' | 'stale' | 'unknown'
+
 interface LegendBoundProps {
   value: number
   fixed: boolean
-  /** The live range has grown past this fixed bound -- an amber lock instead of a neutral
-   *  one, the same colour convention `NumberInput`'s range validation and every other
-   *  warning text in this app already use, so "fixed and current" and "fixed and stale"
-   *  are told apart without reading the tooltip first. */
-  stale: boolean
+  state: BoundCheckState
   description: string
 }
 
 /** One legend end -- a plain formatted number, or the same number with a lock icon and
  *  its own tooltip when `weightMin`/`weightMax` fixed it rather than the automatic stretch. */
-function LegendBound({ value, fixed, stale, description }: LegendBoundProps) {
+function LegendBound({ value, fixed, state, description }: LegendBoundProps) {
   if (!fixed) return <span>{formatAttributeNumber(value)}</span>
   return (
     <span className="inline-flex items-center gap-1">
@@ -463,10 +496,10 @@ function LegendBound({ value, fixed, stale, description }: LegendBoundProps) {
           render={
             <span
               tabIndex={0}
-              className={cn('shrink-0', stale ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground')}
+              className={cn('shrink-0', state === 'stale' ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground')}
               aria-label={description}
             >
-              <Lock className="size-3" />
+              {state === 'unknown' ? <LockOpen className="size-3" /> : <Lock className="size-3" />}
             </span>
           }
         />

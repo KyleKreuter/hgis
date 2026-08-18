@@ -72,6 +72,16 @@ export function invalidateAfterFeatureWrite(
 function invalidateFeatureData(queryClient: QueryClient, layerId: string): void {
   // Feature pages and single features are both stale now; the key prefix covers both.
   queryClient.invalidateQueries({ queryKey: ['layers', layerId, 'features'] })
+  // A heatmap's weight field range (`layerKeys.classify`, `styling/classification.ts`'s
+  // `heatmapFieldRangeQuery`) is stale too -- a write can move a field's min or max, and
+  // this used to be the one write path with no invalidation of its own, resting only on
+  // the query's plain five-minute `staleTime` (found by the Prüfer, package 2's
+  // stale-bound warning made the gap observable: writing a higher value in this very
+  // session left the panel's own "did the data outgrow this fixed bound" check reading
+  // the pre-write range, sometimes for the rest of the five minutes). The key prefix
+  // covers every `field`/`method`/`classes` combination cached for this layer, same
+  // convention as the `'features'` prefix just above.
+  queryClient.invalidateQueries({ queryKey: ['layers', layerId, 'classify'] })
   // The browser's feature count and extent, and nothing else about the project.
   // `projectKeys.all` would have covered the open project's own detail and its
   // working state too: the detail refetches with `?open=true`, which stamps a fresh
