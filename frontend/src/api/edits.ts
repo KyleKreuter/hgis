@@ -73,14 +73,24 @@ function invalidateFeatureData(queryClient: QueryClient, layerId: string): void 
   // Feature pages and single features are both stale now; the key prefix covers both.
   queryClient.invalidateQueries({ queryKey: ['layers', layerId, 'features'] })
   // A heatmap's weight field range (`layerKeys.classify`, `styling/classification.ts`'s
-  // `heatmapFieldRangeQuery`) is stale too -- a write can move a field's min or max, and
-  // this used to be the one write path with no invalidation of its own, resting only on
-  // the query's plain five-minute `staleTime` (found by the Prüfer, package 2's
-  // stale-bound warning made the gap observable: writing a higher value in this very
-  // session left the panel's own "did the data outgrow this fixed bound" check reading
-  // the pre-write range, sometimes for the rest of the five minutes). The key prefix
-  // covers every `field`/`method`/`classes` combination cached for this layer, same
-  // convention as the `'features'` prefix just above.
+  // `heatmapFieldRangeQuery`) is stale too -- a write can move a field's min or max. The
+  // key prefix covers every `field`/`method`/`classes` combination cached for this layer,
+  // same convention as the `'features'` prefix just above.
+  //
+  // Keep this even though `invalidateAfterFeatureWrite`'s own `layerKeys.detail(layerId)`
+  // call above -- `['layers', layerId]` -- already matches this prefix under TanStack
+  // Query's partial-key comparison, making this line individually redundant *there*
+  // (confirmed by mutation testing: deleting it left every test through that path green).
+  // It is not redundant through `applyFeatureWriteResult` below, which only ever
+  // `setQueryData`s `layerKeys.detail` -- a write, not an invalidation, so nothing else on
+  // that path would mark this stale at all. And even on the `invalidateAfterFeatureWrite`
+  // path, today's redundancy rests entirely on `layerKeys.detail` happening to still be
+  // `['layers', layerId]` -- reshape that key for any unrelated reason (`['layers',
+  // layerId, 'detail']`, say) and the coincidental coverage breaks silently, with no test
+  // anywhere positioned to notice, since nothing asserts the *coupling*, only its current
+  // effect. This line is what keeps the field range correct regardless of that key ever
+  // changing shape -- not a leftover to prune as "obviously covered already" (team review,
+  // package 2 addendum: found by the Prüfer's own re-check of the mutation result above).
   queryClient.invalidateQueries({ queryKey: ['layers', layerId, 'classify'] })
   // The browser's feature count and extent, and nothing else about the project.
   // `projectKeys.all` would have covered the open project's own detail and its
