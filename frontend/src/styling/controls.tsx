@@ -1,5 +1,8 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { Lock, LockOpen } from 'lucide-react'
 import { Label } from '@/components/ui/label'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { formatAttributeNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 /**
@@ -145,5 +148,60 @@ export function NumberInput({ value, onChange, label, min, max, step = 1, classN
         className="h-6 w-14 min-w-0 rounded border border-input bg-transparent px-1.5 text-xs tabular-nums outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
       />
     </div>
+  )
+}
+
+/**
+ * `current`: fixed, and the live range confirms it still fits -- a neutral lock.
+ * `stale`: fixed, and the live range has grown past it -- an amber lock, the same colour
+ * convention `NumberInput`'s range validation and every other warning text in this app
+ * already use.
+ * `unknown`: fixed, but the live range could not be checked at all (a `/classify` request
+ * that failed or came back unusable, `resolveRangeState`'s `'error'`/`'invalid'`) -- an
+ * open lock, deliberately not the same neutral colour `current` uses: "verified fine" and
+ * "never checked" must not look alike, or the check might as well not exist (Prüfer,
+ * package 2).
+ *
+ * Shared by `HeatmapEditor`'s legend (`weightMin`/`weightMax` against the field's live
+ * range) and `GraduatedEditor`'s class bounds (the stored classes' own min/max against
+ * the same live range) -- both are "a number fixed at classification time, checked
+ * against what the data looks like now," just fixed by a different action.
+ */
+export type BoundCheckState = 'current' | 'stale' | 'unknown'
+
+interface BoundIndicatorProps {
+  value: number
+  fixed: boolean
+  state: BoundCheckState
+  description: string
+}
+
+/**
+ * One fixed value from a classification -- a plain formatted number, or the same number
+ * with a lock icon and its own tooltip once there is something to check it against.
+ * `fixed=false` is `HeatmapEditor`'s "no manual override, the automatic stretch is
+ * showing" case; `GraduatedEditor`'s class bounds are always `fixed=true`, since a
+ * graduated renderer's classes are always explicitly stored, never automatic.
+ */
+export function BoundIndicator({ value, fixed, state, description }: BoundIndicatorProps) {
+  if (!fixed) return <span>{formatAttributeNumber(value)}</span>
+  return (
+    <span className="inline-flex items-center gap-1">
+      {formatAttributeNumber(value)}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              tabIndex={0}
+              className={cn('shrink-0', state === 'stale' ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground')}
+              aria-label={description}
+            >
+              {state === 'unknown' ? <LockOpen className="size-3" /> : <Lock className="size-3" />}
+            </span>
+          }
+        />
+        <TooltipContent className="max-w-xs">{description}</TooltipContent>
+      </Tooltip>
+    </span>
   )
 }

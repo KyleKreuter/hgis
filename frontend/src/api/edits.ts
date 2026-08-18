@@ -92,6 +92,20 @@ function invalidateFeatureData(queryClient: QueryClient, layerId: string): void 
   // changing shape -- not a leftover to prune as "obviously covered already" (team review,
   // package 2 addendum: found by the Prüfer's own re-check of the mutation result above).
   queryClient.invalidateQueries({ queryKey: ['layers', layerId, 'classify'] })
+  // A categorized renderer's distinct-value list (`layerKeys.values`,
+  // `styling/classification.ts`'s `layerValuesQuery`) is stale for the same reason: a
+  // write can introduce a value that never appeared before. The map does not lie about
+  // it in the meantime -- `matchExpression` sends any value with no matching category
+  // visibly to `fallbackSymbol` -- but the editor panel's own category list would go on
+  // missing it. Same prefix convention as `classify` just above.
+  //
+  // Same redundancy shape as `classify`, and the same reason to keep it anyway: through
+  // `invalidateAfterFeatureWrite`, `layerKeys.detail(layerId)` above already covers this
+  // prefix, so this line is individually redundant *there* -- but not through
+  // `applyFeatureWriteResult` below, which only `setQueryData`s `layerKeys.detail`
+  // rather than invalidating it. See the `classify` comment above for why the
+  // "redundant today" half is not a reason to leave this line out.
+  queryClient.invalidateQueries({ queryKey: ['layers', layerId, 'values'] })
   // The browser's feature count and extent, and nothing else about the project.
   // `projectKeys.all` would have covered the open project's own detail and its
   // working state too: the detail refetches with `?open=true`, which stamps a fresh

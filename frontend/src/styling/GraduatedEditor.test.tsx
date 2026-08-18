@@ -95,3 +95,128 @@ describe('GraduatedEditor „Methode ändern“ (team review, package 3 addendum
     })
   })
 })
+
+/**
+ * Klassengrenzen (`renderer.classes`) leben im gespeicherten Stil, nicht nur im
+ * Zwischenspeicher -- eine Neuberechnung schreibt sie fest hinein, und danach malt die
+ * Karte genau diese gespeicherten Grenzen weiter, auch wenn sich die Daten seitdem
+ * bewegt haben. `stepExpression` klemmt jeden Wert außerhalb an die Randfarbe -- ein
+ * neues Objekt über dem alten Maximum sieht farblich aus wie eines aus der obersten
+ * Klasse, ohne dass irgendetwas das anzeigt.
+ *
+ * Diese Suite prüft die Warnung, die genau das sichtbar macht: einen Vergleich der
+ * gespeicherten Klassengrenzen gegen die *aktuelle* Feldspanne (`/classify` mit
+ * `quantile`/2 Klassen, derselbe Aufruf, den `HeatmapEditor`s Legende für ihre eigenen
+ * festen Grenzen schon macht).
+ */
+describe('Klassengrenzen gegen die aktuelle Datenlage (Warnung bei Überschreitung)', () => {
+  function graduatedRenderer(): Extract<Renderer, { type: 'graduated' }> {
+    return {
+      type: 'graduated',
+      field: 'hoehe',
+      // Grenzen 0..900, drei Klassen -- klassisches Ergebnis einer früheren
+      // Berechnung, unabhängig vom Live-Check hier gesetzt.
+      classes: buildClasses([0, 300, 600, 900], 'MULTIPOLYGON', DEFAULT_RAMP),
+      fallbackSymbol: defaultSymbolFor('MULTIPOLYGON'),
+      method: 'quantile',
+      classCount: 3,
+      ramp: DEFAULT_RAMP,
+    }
+  }
+
+  it('zeigt einen unauffälligen Zustand, wenn die aktuelle Spanne genau in den gespeicherten Grenzen liegt', async () => {
+    stubFetch([{ match: 'classes=2', body: { field: 'hoehe', method: 'quantile', breaks: [0, 900], min: 0, max: 900, nullCount: 0 } }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    expect(await screen.findByLabelText('Untere Klassengrenze. Werte darunter zeigen dieselbe Farbe wie die unterste Klasse.')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Obere Klassengrenze. Werte darüber zeigen dieselbe Farbe wie die oberste Klasse.')).toBeInTheDocument()
+  })
+
+  /**
+   * Die Daten liegen enger als die gespeicherten Grenzen -- "füllen sie nicht mehr aus"
+   * (Vertrag). Jeder Wert landet weiterhin in seiner eigenen, richtig eingefärbten
+   * Klasse; nichts klemmt an einer Randfarbe. Bewusst keine Warnung: die andere der
+   * beiden Arten, wie Grenzen veralten können, ist keine Anzeigefalschheit.
+   */
+  it('warnt nicht, wenn die aktuelle Spanne die gespeicherten Grenzen nur nicht mehr ausfüllt', async () => {
+    stubFetch([{ match: 'classes=2', body: { field: 'hoehe', method: 'quantile', breaks: [100, 800], min: 100, max: 800, nullCount: 0 } }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    expect(await screen.findByLabelText('Untere Klassengrenze. Werte darunter zeigen dieselbe Farbe wie die unterste Klasse.')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Obere Klassengrenze. Werte darüber zeigen dieselbe Farbe wie die oberste Klasse.')).toBeInTheDocument()
+  })
+
+  it('warnt, wenn die aktuelle Spanne über die gespeicherte Obergrenze hinausreicht', async () => {
+    stubFetch([{ match: 'classes=2', body: { field: 'hoehe', method: 'quantile', breaks: [0, 1200], min: 0, max: 1200, nullCount: 0 } }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    expect(
+      await screen.findByLabelText(
+        'Obere Klassengrenze. Der aktuelle Datenbestand reicht bereits darüber hinaus -- die Klassifizierung passt nicht mehr zu den Daten. Werte darüber zeigen dieselbe Farbe wie die oberste Klasse.',
+      ),
+    ).toBeInTheDocument()
+    // Die Untergrenze ist von dieser Überschreitung unberührt.
+    expect(screen.getByLabelText('Untere Klassengrenze. Werte darunter zeigen dieselbe Farbe wie die unterste Klasse.')).toBeInTheDocument()
+  })
+
+  it('warnt, wenn die aktuelle Spanne unter die gespeicherte Untergrenze reicht', async () => {
+    stubFetch([{ match: 'classes=2', body: { field: 'hoehe', method: 'quantile', breaks: [-200, 900], min: -200, max: 900, nullCount: 0 } }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    expect(
+      await screen.findByLabelText(
+        'Untere Klassengrenze. Der aktuelle Datenbestand reicht bereits darunter -- die Klassifizierung passt nicht mehr zu den Daten. Werte darunter zeigen dieselbe Farbe wie die unterste Klasse.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt „nicht geprüft“, wenn die aktuelle Spanne nicht geladen werden konnte', async () => {
+    stubFetch([{ match: 'classes=2', body: {}, status: 500 }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    expect(
+      await screen.findByLabelText(
+        'Untere Klassengrenze. Konnte nicht geprüft werden, ob der aktuelle Datenbestand schon darunter reicht -- die Wertespanne ließ sich gerade nicht laden.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(
+        'Obere Klassengrenze. Konnte nicht geprüft werden, ob der aktuelle Datenbestand schon darüber hinausreicht -- die Wertespanne ließ sich gerade nicht laden.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt keine Grenzen-Anzeige, solange noch keine Klassen berechnet wurden', () => {
+    const renderer: Extract<Renderer, { type: 'graduated' }> = {
+      type: 'graduated',
+      field: '',
+      classes: [],
+      fallbackSymbol: defaultSymbolFor('MULTIPOLYGON'),
+    }
+    // Kein Stub-Aufruf erwartet: ohne Klassen bleibt der Live-Check ungestartet
+    // (`enabled: classes.length > 0`); ein unbekannter Request würde
+    // `stubFetch` selbst laut fehlschlagen lassen.
+    stubFetch([])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={renderer} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    expect(screen.queryByText('Grenzen:')).not.toBeInTheDocument()
+  })
+})
