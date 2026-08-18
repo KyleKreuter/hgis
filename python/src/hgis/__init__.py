@@ -28,6 +28,14 @@ reaches the server -- see :class:`hgis.errors.GuardError`.
 works without them.
 """
 
+from .channel import (
+    PROJECT_CATALOG_EVENT,
+    PROJECT_VIEW_STATE_EVENT,
+    Change,
+    ChannelItem,
+    Connected,
+    for_project,
+)
 from .client import (
     DEFAULT_BASE_URL,
     Client,
@@ -88,6 +96,13 @@ __all__ = [
     "LayerDescription",
     "FieldSummary",
     "TrashEntry",
+    # the live channel, see Client.watch and Client.wait_for
+    "Change",
+    "Connected",
+    "ChannelItem",
+    "for_project",
+    "PROJECT_VIEW_STATE_EVENT",
+    "PROJECT_CATALOG_EVENT",
     # writing
     "NewFeature",
     "FeatureUpdate",

@@ -6,9 +6,12 @@ import os
 import re
 import threading
 import uuid
-from typing import TYPE_CHECKING, Any, Iterable, Iterator
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator
 from urllib.parse import urljoin, urlsplit
 
+from .channel import ChannelItem
+from .channel import wait_for as _wait_for
+from .channel import watch as _watch
 from .errors import (
     ApiError,
     ConflictError,
@@ -702,12 +705,15 @@ class Client:
         """
         The live channel, ``GET /api/events``, as a stream of :class:`Event`.
 
-        Groundwork for a later stage: nothing in this one reads from it, and
-        this method does no more than open the connection through
-        :class:`RequestGuard` and hand back the iterator. What a real reader
-        will need on top -- recognising :attr:`Client.client_id` in an event's
-        ``origin`` to skip its own echo, reconnecting after a drop -- belongs
-        to that stage, not this one.
+        The raw primitive: one connection, the wire-format :class:`Event`
+        exactly as the server sent it, nothing interpreted, nothing retried
+        when it ends. That is deliberate -- it is the floor
+        :meth:`watch` is built on, not a shortcut around it. Reach for this
+        directly only when :meth:`watch`'s :class:`~hgis.channel.Change` /
+        :class:`~hgis.channel.Connected` shape does not fit; everything else
+        described there -- reconnecting after the server's own
+        ``stream-timeout`` ends this cleanly, recognising the gap a reconnect
+        opens -- has to be built again by hand on top of this method alone.
 
         >>> for event in client.events():
         ...     print(event.name, event.data)
@@ -719,6 +725,28 @@ class Client:
         return self._transport.events(
             url, timeout=timeout if timeout is not None else self._timeout
         )
+
+    def watch(self, *, timeout: float | None = None) -> Iterator[ChannelItem]:
+        """
+        The live channel, interpreted and reconnecting -- see
+        :func:`hgis.channel.watch`, which this calls straight through to.
+
+        The method to reach for by default; :meth:`events` is the raw form
+        underneath it.
+        """
+        return _watch(self, timeout=timeout)
+
+    def wait_for(
+        self,
+        predicate: Callable[[ChannelItem], bool],
+        *,
+        timeout: float | None = None,
+    ) -> ChannelItem | None:
+        """
+        Block on :meth:`watch` until ``predicate`` matches -- see
+        :func:`hgis.channel.wait_for`, which this calls straight through to.
+        """
+        return _wait_for(self, predicate, timeout=timeout)
 
     def _send(
         self,
