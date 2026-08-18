@@ -53,7 +53,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .transport import Event, TransportError
+from .transport import Event, TransportError, TransportTimeout
 
 if TYPE_CHECKING:
     from .client import Client
@@ -202,10 +202,13 @@ def watch(
     Every :class:`Event` this reads comes from one call to
     :meth:`hgis.client.Client.events`, forwarding ``timeout`` -- see that
     method for what it bounds (the connection, and how long a single read
-    may stay silent; not the stream's total lifetime). A connection that
-    ends cleanly -- the server's own ``stream-timeout`` -- is reopened
-    immediately, no backoff: that is a healthy, expected end, not a failure.
-    A connection that fails to open, or breaks while open
+    may stay silent; not the stream's total lifetime). Two things end a
+    connection without it having actually failed, and neither backs off:
+    the server's own ``stream-timeout`` ends it cleanly, and ``timeout``
+    itself can end a read that simply had nothing to read
+    (:class:`~hgis.transport.TransportTimeout`) -- both are reopened at
+    once, since the server is healthy either way. A connection that fails
+    to open, or breaks while open, for any other reason
     (:class:`~hgis.transport.TransportError`), is retried after
     :func:`_reconnect_delay`, doubling on repeated failures.
 
@@ -255,6 +258,20 @@ def watch(
                 failures = 0
             # A clean end is the server's own stream-timeout, not a failure:
             # reconnect right away, same as a browser's EventSource would.
+        except TransportTimeout:
+            # Nothing arrived within `timeout` -- not the same as a broken
+            # connection (see TransportTimeout's own docstring), and treated
+            # the same as a clean end: no backoff, and still a Connected if
+            # this attempt had not signalled one yet. Without this, a
+            # caller who set `timeout` specifically to bound a wait (see
+            # wait_for) would never see anything at all on an otherwise
+            # quiet channel: signalled stays False, the branch above is
+            # skipped because this is an exception, not a normal return --
+            # and a deadline nothing is ever checked against never expires.
+            if not signalled:
+                yield Connected(reconnected=reconnected)
+                reconnected = True
+            failures = 0
         except TransportError:
             delay = _reconnect_delay(failures)
             failures += 1
@@ -327,26 +344,34 @@ def wait_for(
 
     **Best-effort on the deadline, not exact.** The wait can only recheck
     ``timeout`` when something arrives from :func:`watch` to recheck it
-    against -- and the heartbeat that keeps an otherwise idle connection
-    from looking dead also keeps it from yielding anything at all. ``timeout``
-    is also forwarded as the connection's own read timeout (see
-    :meth:`hgis.client.Client.events`), so a ``timeout`` shorter than the
-    server's heartbeat interval (25s by default) bounds the wait tightly: a
-    silent connection times out and reconnects well before the deadline, and
-    :class:`Connected` gives the next chance to recheck it. Left at its
-    default (None, which falls back to the client's own connect timeout,
-    30s by default -- comfortably longer than one heartbeat) or set past
-    that interval, a heartbeat can keep an otherwise idle connection open
-    indefinitely, and the first thing to recheck the deadline against may
-    then be the :class:`Connected` that only arrives once the server's own
-    ``stream-timeout`` ends that connection (five minutes by default) -- so
-    the wait can run past its deadline, by as much as one ``stream-timeout``
-    cycle. Named here rather than hidden: closing it exactly would need a
-    watchdog thread this synchronous library does not otherwise have. In
-    practice this matters little for what ``wait_for`` is for -- waiting on
-    something that is expected to actually happen, such as a job already
-    running -- and not at all once the first real event arrives, since every
-    yielded item is a fresh chance to recheck the deadline.
+    against. ``timeout`` is also forwarded as the connection's own read
+    timeout (see :meth:`hgis.client.Client.events`), so a ``timeout``
+    shorter than the server's heartbeat interval (25s by default) bounds
+    the wait tightly: a silent connection raises
+    :class:`~hgis.transport.TransportTimeout` well before the deadline,
+    :func:`watch` turns that into a :class:`Connected` rather than a
+    failure -- see its own handling of that exception -- and this rechecks
+    the deadline right there. Without that, this would be an easy way to
+    build a wait that never returns: the heartbeat that keeps an otherwise
+    idle connection from looking dead is a comment, never a
+    :class:`~hgis.transport.Event`, so a naive read of "nothing dispatched
+    means nothing to recheck against" would leave a quiet channel with
+    literally nothing to check the deadline on.
+
+    Left at its default (None, which falls back to the client's own connect
+    timeout, 30s by default -- comfortably longer than one heartbeat) or set
+    past that interval, a heartbeat keeps resetting the read timeout before
+    it can fire, so :class:`TransportTimeout` never happens either -- an
+    otherwise idle connection stays open until the server's own
+    ``stream-timeout`` ends it (five minutes by default), and *that* is the
+    next chance to recheck the deadline. So the wait can still run past its
+    deadline there, by as much as one ``stream-timeout`` cycle. Named here
+    rather than hidden: closing that gap too would need a watchdog thread
+    this synchronous library does not otherwise have. In practice this
+    matters little for what ``wait_for`` is for -- waiting on something
+    that is expected to actually happen, such as a job already running --
+    and not at all once the first real event arrives, since every yielded
+    item is a fresh chance to recheck the deadline.
     """
     deadline = None if timeout is None else time.monotonic() + timeout
     stream = watch(client, timeout=timeout)

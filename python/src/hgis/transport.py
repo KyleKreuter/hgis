@@ -333,6 +333,8 @@ class HttpxTransport(Transport):
             response = self._client.request(
                 method, url, json=json, timeout=timeout, headers=headers
             )
+        except httpx.TimeoutException as error:
+            raise TransportTimeout(f"{url} antwortet nicht innerhalb der Frist: {error}") from error
         except httpx.HTTPError as error:
             raise TransportError(f"{url} ist nicht erreichbar: {error}") from error
         return Response(response.status_code, response.text, dict(response.headers))
@@ -354,6 +356,15 @@ class HttpxTransport(Transport):
                         f"{url} antwortet mit Status {response.status_code} statt 200."
                     )
                 yield from _parse_sse(response.iter_lines())
+        except httpx.TimeoutException as error:
+            # Distinct from every other failure below: the connection may be
+            # perfectly healthy, there was simply nothing to read within
+            # ``timeout``. A stream sends a heartbeat comment every few
+            # seconds precisely so this only fires when ``timeout`` is
+            # shorter than that interval -- a caller who asked for exactly
+            # that (see hgis.channel.wait_for) needs to tell this apart from
+            # a connection that is actually gone.
+            raise TransportTimeout(f"{url} antwortet nicht innerhalb der Frist: {error}") from error
         except httpx.HTTPError as error:
             raise TransportError(f"{url} ist nicht erreichbar: {error}") from error
 
@@ -444,6 +455,26 @@ class PyodideTransport(Transport):
 
 class MissingHttpLibrary(TransportError):
     """No HTTP library for this interpreter. The message names what to install."""
+
+
+class TransportTimeout(TransportError):
+    """
+    A request or stream produced nothing within its own ``timeout`` --
+    connect, read, write or pool, whichever httpx category it was.
+
+    Still a :class:`TransportError`, so existing ``except TransportError``
+    code keeps working unchanged; a caller that cares about the difference
+    catches this first. The difference is real: every other
+    :class:`TransportError` this floor raises means the request or
+    connection is actually gone (refused, reset, answered with the wrong
+    status). This one does not -- a stream that is simply quiet for longer
+    than ``timeout`` raises the same exception a truly dead one would,
+    *unless* it is told apart here. :meth:`hgis.channel.watch` is the one
+    caller that currently does: see its own handling of this, and
+    :func:`hgis.channel.wait_for`'s docstring for why the distinction is
+    what makes a short deadline on an otherwise idle channel possible at
+    all.
+    """
 
 
 def _parse_headers(raw: str | None) -> dict[str, str]:

@@ -370,6 +370,21 @@ class RequestGuard(Transport):
         reads: :class:`hgis.transport.PyodideTransport` cannot intercept a
         redirect at all, and relies on exactly this fact.
 
+        That argument is why a *followed* redirect would be harmless here --
+        it is not why one never happens. What actually keeps a redirect from
+        being followed at all is one floor below this method, not in it:
+        :meth:`hgis.transport.HttpxTransport.events` raises on any status
+        but 200 before it ever reads ``Location``, so this method never even
+        sees a 3xx to decide about. This class has no per-hop loop for
+        ``events`` the way :meth:`request` has one -- there is nothing here
+        that *would* follow one if the floor changed its mind. Worth naming
+        because the GET argument above would keep reading as true even if
+        that changed -- a floor that started following redirects on its own
+        (a load balancer rewriting ``/api/events``, say) would restore
+        exactly the risk :meth:`request`'s own docstring describes, and
+        nothing in this method would notice, since :meth:`request`'s
+        per-hop origin check has no counterpart here.
+
         What this still refuses, which a bare ``self.inner.events(...)``
         would not: a call whose *path* is not the one live channel this stage
         knows about, before anything reaches the network.

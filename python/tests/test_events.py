@@ -12,12 +12,20 @@ exactly the kind of thing a stub would keep passing through even if broken.
 from __future__ import annotations
 
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
 import hgis
-from hgis.transport import Event, HttpxTransport, PyodideTransport, TransportError, _parse_sse
+from hgis.transport import (
+    Event,
+    HttpxTransport,
+    PyodideTransport,
+    TransportError,
+    TransportTimeout,
+    _parse_sse,
+)
 
 # --- the parser, without a server -------------------------------------------
 
@@ -193,3 +201,72 @@ def test_a_status_other_than_200_is_reported(streaming_server) -> None:
         list(transport.events(f"http://{host}:{port}/nicht-die-events-route"))
 
     assert "404" in str(error.value)
+
+
+# --- a real socket that stays open but says nothing: TransportTimeout -----
+
+
+class _OpensThenSaysNothing(BaseHTTPRequestHandler):
+    """
+    Sends the greeting, then holds the connection open without writing
+    anything else -- what a stream looks like from the caller's side
+    between two heartbeats. Comfortably longer than the 0.3s ``timeout``
+    used against it below, and short on purpose: this thread blocks inside
+    the sleep for as long as it runs, and teardown has to wait it out.
+    """
+
+    def do_GET(self) -> None:
+        if self.path != "/api/events":
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        self.wfile.write(b": Live-Kanal offen\n\n")
+        self.wfile.flush()
+        time.sleep(1.0)
+
+    def log_message(self, *args: object) -> None:
+        """Quiet: the test reads the exception, not the console."""
+
+
+@pytest.fixture
+def silent_stream_server():
+    server = HTTPServer(("127.0.0.1", 0), _OpensThenSaysNothing)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_a_read_timeout_on_an_open_stream_is_a_transport_timeout(silent_stream_server) -> None:
+    """
+    The proof this distinction needed: not that ``TransportTimeout`` is a
+    subclass with the right name, but that a *real* httpx read timeout,
+    against a *real* connection that opened fine and simply said nothing,
+    actually surfaces as one -- see ``hgis.channel.watch``, the one caller
+    that treats this differently from every other :class:`TransportError`.
+    """
+    host, port = silent_stream_server.server_address[:2]
+    transport = HttpxTransport()
+
+    with pytest.raises(TransportTimeout) as error:
+        list(transport.events(f"http://{host}:{port}/api/events", timeout=0.3))
+
+    # Still a plain TransportError to anyone who does not care about the
+    # difference -- see its own docstring.
+    assert isinstance(error.value, TransportError)
+
+
+def test_a_read_timeout_is_also_distinguished_on_request(silent_stream_server) -> None:
+    """The same distinction on the request/response side, not only on events()."""
+    host, port = silent_stream_server.server_address[:2]
+    transport = HttpxTransport()
+
+    with pytest.raises(TransportTimeout):
+        transport.request("GET", f"http://{host}:{port}/api/events", timeout=0.3)

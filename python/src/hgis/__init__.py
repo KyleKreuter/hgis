@@ -75,7 +75,14 @@ from .style import (
     Style,
     Symbol,
 )
-from .transport import Event, HttpxTransport, PyodideTransport, Response, Transport
+from .transport import (
+    Event,
+    HttpxTransport,
+    PyodideTransport,
+    Response,
+    Transport,
+    TransportTimeout,
+)
 
 __version__ = "0.1.0"
 
@@ -127,6 +134,7 @@ __all__ = [
     "NotFoundError",
     "ConflictError",
     "TransportError",
+    "TransportTimeout",
     "UnknownNameError",
     "GuardError",
     "InvalidClientIdError",

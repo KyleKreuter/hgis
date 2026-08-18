@@ -23,6 +23,7 @@ for the floor underneath this one:
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -43,7 +44,7 @@ from hgis.channel import (
     _reconnect_delay,
     for_project,
 )
-from hgis.transport import Event, Response, Transport, TransportError
+from hgis.transport import Event, Response, Transport, TransportError, TransportTimeout
 
 # --- a scripted floor, no socket at all ---------------------------------
 
@@ -311,6 +312,77 @@ def test_several_failures_in_a_row_each_back_off(monkeypatch) -> None:
     assert attempts == [0, 1, 2]
 
 
+def test_a_transport_timeout_signals_connected_without_backing_off(monkeypatch) -> None:
+    """
+    Nothing arrived within ``timeout`` on a connection that opened fine --
+    not the same as a broken one. See ``TransportTimeout``'s own docstring
+    for why, and ``watch()``'s handling of it for what this guards: without
+    it, this is exactly the branch a plain ``except TransportError`` would
+    take instead, backing off and never yielding anything -- see
+    ``test_wait_for_returns_none_on_a_channel_that_never_dispatches_anything``
+    for why that is the expensive version of this bug.
+    """
+
+    def no_sleeping(seconds: float) -> None:
+        raise AssertionError(f"watch() hat auf einen Lese-Timeout hin geschlafen: {seconds}s")
+
+    monkeypatch.setattr(channel.time, "sleep", no_sleeping)
+
+    def silent() -> Iterator[Event]:
+        raise TransportTimeout("nichts angekommen")
+        yield  # pragma: no cover -- makes this a generator function
+
+    def recovered() -> Iterator[Event]:
+        yield _catalog_event("p1", 1, None)
+
+    it = _client([silent, recovered]).watch()
+    try:
+        items = [next(it), next(it)]
+    finally:
+        it.close()
+
+    assert items == [
+        Connected(reconnected=False),
+        Connected(reconnected=True),
+    ]
+
+
+def test_transport_timeout_does_not_count_toward_backoff(monkeypatch) -> None:
+    attempts: list[int] = []
+
+    def recorded_delay(attempt: int, jitter: float | None = None) -> float:
+        attempts.append(attempt)
+        return 0.0
+
+    monkeypatch.setattr(channel, "_reconnect_delay", recorded_delay)
+    monkeypatch.setattr(channel.time, "sleep", lambda seconds: None)
+
+    def silent() -> Iterator[Event]:
+        raise TransportTimeout("nichts")
+        yield  # pragma: no cover
+
+    def broken() -> Iterator[Event]:
+        raise TransportError("kaputt")
+        yield  # pragma: no cover
+
+    def recovered() -> Iterator[Event]:
+        yield _catalog_event("p1", 1, None)
+
+    it = _client([silent, silent, broken, recovered]).watch()
+    try:
+        next(it)  # Connected, from the first silent() TransportTimeout
+        next(it)  # Connected, from the second -- still no failure counted
+        next(it)  # Connected, from recovered() -- after broken() backed off once
+    finally:
+        it.close()
+
+    # broken() is the only real failure here; both TransportTimeouts before
+    # it left `failures` at 0, so _reconnect_delay is called exactly once,
+    # for attempt 0 -- not 2, which is what it would be if a TransportTimeout
+    # counted the same as a TransportError.
+    assert attempts == [0]
+
+
 def test_the_echo_is_not_filtered() -> None:
     """
     A caller who wants to skip its own write compares ``origin`` against
@@ -355,6 +427,32 @@ def test_wait_for_gives_up_after_the_deadline(monkeypatch) -> None:
         yield _view_state_event("other", 2, None)
 
     result = _client([conn]).wait_for(for_project("p1"), timeout=5)
+
+    assert result is None
+
+
+def test_wait_for_returns_none_on_a_channel_that_never_dispatches_anything(monkeypatch) -> None:
+    """
+    The regression this guards: a connection that opens fine and then has
+    nothing to say -- no event, not even the greeting, which is a comment
+    and never dispatches -- used to leave ``watch()`` with nothing to yield
+    at all once the read timed out, because a plain
+    ``except TransportError`` swallowed it without reaching the
+    ``Connected`` after the loop (that branch only runs on a *normal* exit).
+    ``wait_for``'s own deadline check lives inside ``for item in stream``,
+    so with nothing ever yielded, it was never reached either --
+    ``wait_for(..., timeout=5)`` did not return after 5 seconds; it did not
+    return at all. See ``TransportTimeout`` and its handling in ``watch()``.
+    """
+    times = iter([0.0, 0.0, 0.0, 10.0])
+    monkeypatch.setattr(channel.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(channel.time, "sleep", lambda seconds: None)
+
+    def silent() -> Iterator[Event]:
+        raise TransportTimeout("nichts angekommen")
+        yield  # pragma: no cover -- makes this a generator function
+
+    result = _client([silent, silent, silent]).wait_for(lambda item: False, timeout=5)
 
     assert result is None
 
@@ -439,3 +537,64 @@ def test_watch_reconnects_over_a_real_socket_that_really_closes(ending_stream_se
     assert [c.reconnected for c in connected] == [False, True, True]
     assert [c.version for c in changes] == sorted(c.version for c in changes)
     assert len(changes) == 3
+
+
+class _SilentChannel(BaseHTTPRequestHandler):
+    """
+    Opens the stream, sends the greeting (a comment -- never dispatches,
+    see ``_parse_sse``) and then says nothing else for longer than the
+    ``wait_for`` deadline used against it below. What ends the wait has to
+    be the deadline, not the server going quiet on its own or closing --
+    this one does neither before the test does. Kept short on purpose: this
+    thread blocks inside the sleep for as long as it runs, and teardown has
+    to wait it out.
+    """
+
+    def do_GET(self) -> None:
+        if self.path != "/api/events":
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        self.wfile.write(b": Live-Kanal offen\n\n")
+        self.wfile.flush()
+        time.sleep(1.8)
+
+    def log_message(self, *args: object) -> None:
+        """Quiet: the test reads elapsed time, not the console."""
+
+
+@pytest.fixture
+def silent_channel_server():
+    server = HTTPServer(("127.0.0.1", 0), _SilentChannel)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_wait_for_honours_a_short_deadline_on_a_real_silent_channel(silent_channel_server) -> None:
+    """
+    The proof the scripted regression test above cannot give by itself: not
+    that the logic is right in principle, but that a real, open, healthy
+    connection that genuinely says nothing makes ``wait_for`` return close
+    to its own deadline -- not after the server's 1.8s silence, and not
+    never.
+    """
+    host, port = silent_channel_server.server_address[:2]
+    client = hgis.connect(f"http://{host}:{port}", timeout=30)
+
+    start = time.monotonic()
+    result = client.wait_for(lambda item: False, timeout=0.5)
+    elapsed = time.monotonic() - start
+
+    assert result is None
+    # Generous margin above the 0.5s deadline for reconnect overhead --
+    # nowhere near the server's 1.8s silence or a stream-timeout.
+    assert elapsed < 1.5, f"wait_for lief {elapsed:.2f}s statt sich an die Frist zu halten"
