@@ -220,3 +220,90 @@ describe('Klassengrenzen gegen die aktuelle Datenlage (Warnung bei Überschreitu
     expect(screen.queryByText('Grenzen:')).not.toBeInTheDocument()
   })
 })
+
+/**
+ * Der Gegenpart zur Überschreitungs-Warnung oben: Daten, die die gespeicherten Grenzen
+ * nicht mehr ausfüllen, sind kein Anzeigefehler -- jeder verbliebene Wert landet weiter
+ * in seiner eigenen, richtig eingefärbten Klasse. Trotzdem gibt es einen scharfen,
+ * methodenunabhängigen Fall, der es wert ist, gezeigt zu werden: die äußerste Klasse
+ * ist *nachweislich* leer, wenn der aktuelle Höchst-/Tiefstwert nicht mehr bis an ihren
+ * Start heranreicht (`classification.ts`'s `upperClassIsEmpty`/`lowerClassIsEmpty`).
+ * Bewusst neutral (`text-muted-foreground`), nicht in derselben Warnfarbe wie die
+ * Überschreitungs-Warnung -- sonst konkurrieren ein echter Korrektheitsfehler und ein
+ * bloßer Auflösungsverlust um dieselbe Aufmerksamkeit (team review).
+ */
+describe('Leere Randklasse (neutraler Hinweis, keine Warnfarbe)', () => {
+  function graduatedRenderer(): Extract<Renderer, { type: 'graduated' }> {
+    return {
+      type: 'graduated',
+      field: 'hoehe',
+      // Grenzen 0..300..600..900 -- oberste Klasse beginnt bei 600, unterste endet bei 300.
+      classes: buildClasses([0, 300, 600, 900], 'MULTIPOLYGON', DEFAULT_RAMP),
+      fallbackSymbol: defaultSymbolFor('MULTIPOLYGON'),
+      method: 'quantile',
+      classCount: 3,
+      ramp: DEFAULT_RAMP,
+    }
+  }
+
+  it('zeigt den Hinweis, wenn der aktuelle Höchstwert nicht mehr bis an den Start der obersten Klasse reicht', async () => {
+    stubFetch([{ match: 'classes=2', body: { field: 'hoehe', method: 'quantile', breaks: [0, 450], min: 0, max: 450, nullCount: 0 } }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    const hint = await screen.findByText('Die oberste Klasse ist im aktuellen Datenbestand leer.')
+    expect(hint).toBeInTheDocument()
+    expect(hint.className).toContain('text-muted-foreground')
+    expect(hint.className).not.toContain('amber')
+  })
+
+  it('zeigt keinen Hinweis, solange der Höchstwert die oberste Klasse noch erreicht', async () => {
+    stubFetch([{ match: 'classes=2', body: { field: 'hoehe', method: 'quantile', breaks: [0, 600], min: 0, max: 600, nullCount: 0 } }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    // Wartet auf denselben Request, bevor negativ geprüft wird -- sonst prüft
+    // `queryByText` unter Umständen, bevor die Antwort überhaupt verarbeitet wurde.
+    await screen.findByLabelText('Obere Klassengrenze. Werte darüber zeigen dieselbe Farbe wie die oberste Klasse.')
+    expect(screen.queryByText('Die oberste Klasse ist im aktuellen Datenbestand leer.')).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Hinweis für die unterste Klasse spiegelbildlich', async () => {
+    stubFetch([{ match: 'classes=2', body: { field: 'hoehe', method: 'quantile', breaks: [450, 900], min: 450, max: 900, nullCount: 0 } }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    expect(await screen.findByText('Die unterste Klasse ist im aktuellen Datenbestand leer.')).toBeInTheDocument()
+  })
+
+  it('nennt beide Randklassen, wenn beide leer sind', async () => {
+    stubFetch([{ match: 'classes=2', body: { field: 'hoehe', method: 'quantile', breaks: [350, 400], min: 350, max: 400, nullCount: 0 } }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    expect(await screen.findByText('Die unterste und die oberste Klasse sind im aktuellen Datenbestand leer.')).toBeInTheDocument()
+  })
+
+  it('zeigt keinen Hinweis, wenn die Überschreitungs-Warnung bereits greift -- beides schließt sich aus', async () => {
+    // Höchstwert 1200 überschreitet die obere Grenze (900); die oberste Klasse ist damit
+    // per Konstruktion nicht leer (der Höchstwert selbst faellt farblich in sie).
+    stubFetch([{ match: 'classes=2', body: { field: 'hoehe', method: 'quantile', breaks: [0, 1200], min: 0, max: 1200, nullCount: 0 } }])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={graduatedRenderer()} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    await screen.findByLabelText(
+      'Obere Klassengrenze. Der aktuelle Datenbestand reicht bereits darüber hinaus -- die Klassifizierung passt nicht mehr zu den Daten. Werte darüber zeigen dieselbe Farbe wie die oberste Klasse.',
+    )
+    expect(screen.queryByText('Die oberste Klasse ist im aktuellen Datenbestand leer.')).not.toBeInTheDocument()
+  })
+})

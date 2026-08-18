@@ -435,6 +435,36 @@ export function resolveRangeState(result: RangeQueryResult | undefined): FieldRa
   return { min: data.min, max: data.max }
 }
 
+/**
+ * Whether a graduated renderer's outermost class is *guaranteed* to hold nothing from
+ * the current data -- not a percentage, not a simulation of where quantile/equalInterval
+ * would redraw the breaks, just the one comparison the class boundaries themselves
+ * already answer.
+ *
+ * `classes[classes.length - 1].min` is exactly where the top class's own range starts --
+ * `buildClasses` keeps every class's `max` equal to the next one's `min`, so this is the
+ * same value as `classes[classes.length - 2].max`, under whichever name is at hand. A
+ * live maximum below it cannot put anything inside that class's `[min, max)` range,
+ * independent of `method` or how the other classes are shaped: this follows straight
+ * from `stepExpression`'s own semantics (`styleToMapLibre.ts`), the same one
+ * `GraduatedEditor`'s "data exceeds the stored bound" check reads.
+ *
+ * `classes.length < 2` (one class, or none) returns `false` rather than throwing --
+ * there is no second-to-last boundary to compare against, and a single class is
+ * trivially never "empty above itself" in the sense this function checks.
+ */
+export function upperClassIsEmpty(classes: Pick<StyleClass, 'min' | 'max'>[], liveMax: number): boolean {
+  if (classes.length < 2) return false
+  return liveMax < classes[classes.length - 1].min
+}
+
+/** The lower-bound counterpart to {@link upperClassIsEmpty} -- same reasoning, the other
+ *  end: `classes[0].max` is where the bottom class's own range ends. */
+export function lowerClassIsEmpty(classes: Pick<StyleClass, 'min' | 'max'>[], liveMin: number): boolean {
+  if (classes.length < 2) return false
+  return liveMin > classes[0].max
+}
+
 export interface CategorizedClassification {
   categories: StyleCategory[]
   result: FieldValuesResult

@@ -10,10 +10,12 @@ import {
   fieldIdOfColumn,
   heatmapFieldRangeQuery,
   initialGraduatedControls,
+  lowerClassIsEmpty,
   requestGraduatedClasses,
   resolveRangeState,
   sharedSymbolOf,
   sourceNameOfField,
+  upperClassIsEmpty,
   withSharedSymbol,
   withSharedSymbolShape,
 } from './classification'
@@ -100,19 +102,29 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
   const upperBound = classes[classes.length - 1]?.max
 
   /**
-   * Only "the data now reaches past a stored boundary" counts as stale -- not "the data
-   * no longer reaches all the way to it". The first is the correctness problem above:
-   * a value outside the stored bounds gets an edge class's colour it does not actually
-   * belong to. The second is not a correctness problem at all -- every value still
-   * inside the stored bounds keeps landing in its own, correctly coloured class no
-   * matter how much of that range the current data actually uses; the classification is
-   * merely no longer the best possible split of today's data, which is exactly the
-   * "not automatically fixed" gap "Kein automatisches Neuberechnen" leaves to a
-   * deliberate "Klassen neu berechnen" instead (package 3's own framing: the two ways
-   * bounds can go stale do not share a warning, because only one of them is wrong).
+   * "The data now reaches past a stored boundary" is the one case that gets the amber
+   * warning below -- a value outside the stored bounds gets an edge class's colour it
+   * does not actually belong to, the same correctness failure `HeatmapEditor`s legend
+   * already warns about for its own fixed bounds.
+   *
+   * "The data no longer reaches all the way to a stored boundary" is a different kind
+   * of stale and, on purpose, not the same warning -- every value still inside the
+   * stored bounds keeps landing in its own, correctly coloured class no matter how much
+   * of that range the current data actually uses. `upperClassIsEmpty`/
+   * `lowerClassIsEmpty` below name the one sharp, checkable fact worth surfacing from
+   * that side: not "the range shrank by some amount" (meaningless on its own --
+   * `quantile`'s classes are balanced by population, not by span, so a range that
+   * shrank 80% by dropping the top 5% of objects can still leave every class non-empty,
+   * while `equalInterval` can empty four of five classes from the same 5%; team
+   * review), but "the outermost class is *provably* empty", the one statement that
+   * holds regardless of method. Neither case gets the amber lock -- a neutral hint
+   * instead, so the one real correctness warning does not have to compete with it for
+   * attention (team review).
    */
   const dataExceedsLower = liveRange !== undefined && lowerBound !== undefined && liveRange.min < lowerBound
   const dataExceedsUpper = liveRange !== undefined && upperBound !== undefined && liveRange.max > upperBound
+  const lowerClassEmpty = liveRange !== undefined && lowerClassIsEmpty(classes, liveRange.min)
+  const upperClassEmpty = liveRange !== undefined && upperClassIsEmpty(classes, liveRange.max)
   // Same "the check itself could not run" distinction `HeatmapEditor`'s legend makes
   // (`checkFailed` there): `'error'`/`'invalid'` never resolve to a `liveRange`, no
   // matter how long the panel stays open, so `dataExceeds*` above reads exactly like
@@ -309,6 +321,20 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
                   : 'Obere Klassengrenze. Werte darüber zeigen dieselbe Farbe wie die oberste Klasse.'
             }
           />
+        </p>
+      )}
+
+      {(lowerClassEmpty || upperClassEmpty) && (
+        // Neutral on purpose -- text-muted-foreground, not the amber the two
+        // BoundIndicators above use for a real correctness problem. An empty outer
+        // class is not a wrong colour anywhere on the map; it is a resolution loss a
+        // deliberate "Klassen neu berechnen" can fix, not a silent misrepresentation.
+        <p className="py-1 text-xs text-muted-foreground">
+          {lowerClassEmpty && upperClassEmpty
+            ? 'Die unterste und die oberste Klasse sind im aktuellen Datenbestand leer.'
+            : upperClassEmpty
+              ? 'Die oberste Klasse ist im aktuellen Datenbestand leer.'
+              : 'Die unterste Klasse ist im aktuellen Datenbestand leer.'}
         </p>
       )}
 

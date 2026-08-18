@@ -7,12 +7,14 @@ import {
   buildClasses,
   columnNameOfField,
   fieldIdOfColumn,
+  lowerClassIsEmpty,
   requestCategorizedCategories,
   requestGraduatedClasses,
   requestHeatmapWeightSuggestion,
   resolveRangeState,
   resolveWeightBounds,
   sharedSymbolOf,
+  upperClassIsEmpty,
   weightSuggestionFromBreaks,
   withSharedSymbol,
   withSharedSymbolShape,
@@ -337,6 +339,51 @@ describe('resolveRangeState', () => {
    */
   it('liest ein verdrehtes Paar (min > max) als "invalid", obwohl der echte Endpunkt es nicht liefern kann', () => {
     expect(resolveRangeState({ isError: false, data: { min: 100, max: 10 } })).toBe('invalid')
+  })
+})
+
+describe('upperClassIsEmpty / lowerClassIsEmpty', () => {
+  // classes[0] = 0..100, classes[1] = 100..200, classes[2] = 200..300 (oberste Klasse).
+  const classes = buildClasses([0, 100, 200, 300], 'MULTIPOLYGON', DEFAULT_RAMP)
+
+  it('erkennt eine leere oberste Klasse, wenn der Höchstwert nicht bis an ihren Start reicht', () => {
+    // 150 liegt klar unter dem Start der obersten Klasse (200) -- sie ist leer.
+    expect(upperClassIsEmpty(classes, 150)).toBe(true)
+  })
+
+  /**
+   * Gegenbeispiel gegen eine zunächst vorgeschlagene, aber falsche Formel
+   * (`classes[classes.length - 2].min`, hier 100 statt der tatsächlichen zweithöchsten
+   * Grenze 200): 150 < 100 ist falsch, die Formel hätte diese leere oberste Klasse
+   * übersehen. Der tatsächliche Start der obersten Klasse ist
+   * `classes[classes.length - 1].min` (== `classes[classes.length - 2].max`) -- hier 200.
+   */
+  it('übersieht keine leere oberste Klasse nur weil der Wert über der zweituntersten Grenze liegt', () => {
+    expect(classes[classes.length - 2].min).toBe(100)
+    expect(classes[classes.length - 1].min).toBe(200)
+    expect(upperClassIsEmpty(classes, 150)).toBe(true)
+  })
+
+  it('hält die oberste Klasse für belegt, sobald der Höchstwert ihren Start erreicht', () => {
+    // Exakt an der Grenze zählt als belegt, nicht als leer -- derselbe Wert würde in der
+    // obersten Klasse gerendert.
+    expect(upperClassIsEmpty(classes, 200)).toBe(false)
+    expect(upperClassIsEmpty(classes, 300)).toBe(false)
+  })
+
+  it('erkennt die spiegelbildliche leere unterste Klasse', () => {
+    expect(lowerClassIsEmpty(classes, 150)).toBe(true)
+    expect(lowerClassIsEmpty(classes, 100)).toBe(false)
+    expect(lowerClassIsEmpty(classes, 0)).toBe(false)
+  })
+
+  it('meldet nie leer bei weniger als zwei Klassen -- es gibt keine zweite Grenze zum Vergleichen', () => {
+    const single = buildClasses([0, 300], 'MULTIPOLYGON', DEFAULT_RAMP)
+    expect(single).toHaveLength(1)
+    expect(upperClassIsEmpty(single, -1000)).toBe(false)
+    expect(lowerClassIsEmpty(single, 1000)).toBe(false)
+    expect(upperClassIsEmpty([], 0)).toBe(false)
+    expect(lowerClassIsEmpty([], 0)).toBe(false)
   })
 })
 
