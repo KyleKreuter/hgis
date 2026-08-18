@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { QueryClient } from '@tanstack/react-query'
 import type { CircleLayerSpecification, FillLayerSpecification, SymbolLayerSpecification } from 'maplibre-gl'
 import type { LayerField, VectorLayerSummary } from '@/api/layers'
 import {
@@ -6,6 +7,9 @@ import {
   buildClasses,
   columnNameOfField,
   fieldIdOfColumn,
+  requestCategorizedCategories,
+  requestGraduatedClasses,
+  requestHeatmapWeightSuggestion,
   resolveRangeState,
   resolveWeightBounds,
   sharedSymbolOf,
@@ -398,5 +402,65 @@ describe('resolveWeightBounds', () => {
   it('behandelt 0 als echten Wert, nicht als "nicht gesetzt"', () => {
     expect(resolveWeightBounds(0, 10)).toEqual({ min: 0, max: 10 })
     expect(resolveWeightBounds(-10, 0)).toEqual({ min: -10, max: 0 })
+  })
+})
+
+/**
+ * Team review, package 2: `requestHeatmapWeightSuggestion`/`requestGraduatedClasses`/
+ * `requestCategorizedCategories` all set `staleTime: 0` on their `fetchQuery` call, so a
+ * user action -- pressing "Klassen neu berechnen", clicking the heatmap's suggestion
+ * button -- always reaches the server, never a stale answer up to five minutes old from
+ * `layerClassifyQuery`/`layerValuesQuery`'s own cache. Tested against the effect, not the
+ * line itself: `staleTime: 0` reads as an easy "the query already has one" deletion during
+ * cleanup, and nothing about the line's own shape would stop that -- only a test that
+ * fails once the second call is served from the cache instead of asking again.
+ */
+describe('Frische bei Berechnungs-Aktionen (staleTime: 0)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /** Answers every request with the same body, so two calls differ only in whether a
+   *  second request was actually sent -- what each test here counts. */
+  function stubGetJson(body: unknown) {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  const CLASSIFY_BODY = { field: 'wert', method: 'quantile', breaks: [0, 1, 2, 3], min: 0, max: 3, nullCount: 0 }
+
+  it('requestHeatmapWeightSuggestion fragt zweimal am Server nach, statt die zweite Antwort aus dem Zwischenspeicher zu bedienen', async () => {
+    const fetchMock = stubGetJson(CLASSIFY_BODY)
+    const queryClient = new QueryClient()
+
+    await requestHeatmapWeightSuggestion(queryClient, 'layer-1', 'wert')
+    await requestHeatmapWeightSuggestion(queryClient, 'layer-1', 'wert')
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('requestGraduatedClasses fragt zweimal am Server nach', async () => {
+    const fetchMock = stubGetJson(CLASSIFY_BODY)
+    const queryClient = new QueryClient()
+    const symbol = defaultSymbolFor('MULTIPOLYGON')
+
+    await requestGraduatedClasses(queryClient, 'layer-1', 'MULTIPOLYGON', 'wert', 'quantile', 3, 'blues', [], symbol)
+    await requestGraduatedClasses(queryClient, 'layer-1', 'MULTIPOLYGON', 'wert', 'quantile', 3, 'blues', [], symbol)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('requestCategorizedCategories fragt zweimal am Server nach', async () => {
+    const fetchMock = stubGetJson({ field: 'wert', values: [{ value: 'a', count: 1 }], truncated: false })
+    const queryClient = new QueryClient()
+    const symbol = defaultSymbolFor('MULTIPOLYGON')
+
+    await requestCategorizedCategories(queryClient, 'layer-1', 'MULTIPOLYGON', 'wert', 'blues', [], symbol)
+    await requestCategorizedCategories(queryClient, 'layer-1', 'MULTIPOLYGON', 'wert', 'blues', [], symbol)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
