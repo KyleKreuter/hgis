@@ -231,16 +231,40 @@ function clamp(value: number, min: number, max: number): number {
  * real data to look at. Left as min/max for now (team review, package 2) -- if a layer's
  * heatmap looks suspiciously empty, this stretch, not a bug, is the first thing to check.
  *
- * Falls back to a constant weight of 1 -- every point counts equally -- in three cases:
- * no field at all (density mode, the renderer contract's default), the range for a
- * freshly chosen field not having loaded yet (a transient state the map recovers from on
- * its own once the query resolves and `MapLayerSync` re-runs), and a degenerate range
- * (`max` not strictly greater than `min`, e.g. every object shares one value) that would
- * otherwise divide by zero.
+ * Falls back to a constant weight of 1 -- every point counts equally -- whenever the low
+ * or the high end cannot be resolved: no field at all (density mode, the renderer
+ * contract's default), the range for a freshly chosen field not having loaded yet (a
+ * transient state the map recovers from on its own once the query resolves and
+ * `MapLayerSync` re-runs), or a degenerate span (high not strictly greater than low, e.g.
+ * every object shares one value) that would otherwise divide by zero.
+ *
+ * `weightMin`/`weightMax` (renderer contract, package 2 -- "Gewichtsbereich") override the
+ * low/high end the automatic stretch would otherwise pick, independently of one another:
+ * either, both or neither may be set. Set alone, the other end still needs `range` to fall
+ * back to (`normalisationFloor`/`range.max`, exactly as before this parameter existed) --
+ * so the "range not loaded yet" fallback above still applies to that end. Set for *both*
+ * ends, `range` is not consulted at all: the expression built below only ever reads
+ * `low`/`high`, so a heatmap with both bounds fixed renders correctly the instant the
+ * style loads, without waiting on `/classify`'s field-range round trip, and keeps
+ * rendering correctly through a range request that fails or comes back invalid --
+ * `heatmapPaint` still swaps `heatmap-color` to the diagnostic ramp on that failure
+ * (that signal is about trusting the *live* range, unrelated to whether a weight can be
+ * computed), but the weight itself no longer depends on the request having succeeded.
  */
-function heatmapWeight(field: string | null, range: FieldRange | undefined): PaintValue<number> {
-  if (!field || !range || !(range.max > range.min)) return 1
-  const low = normalisationFloor(range)
+function heatmapWeight(
+  field: string | null,
+  range: FieldRange | undefined,
+  weightMin: number | undefined,
+  weightMax: number | undefined,
+): PaintValue<number> {
+  if (!field) return 1
+  // A `range` with `max` not strictly above `min` is as unusable here as no range at all
+  // -- checked once, on the raw range, so a caller-supplied `weightMin`/`weightMax` can
+  // never be contaminated by it (see `hasRange`'s two uses below).
+  const hasRange = range !== undefined && range.max > range.min
+  const low = weightMin ?? (hasRange ? normalisationFloor(range) : undefined)
+  const high = weightMax ?? (hasRange ? range.max : undefined)
+  if (low === undefined || high === undefined || !(high > low)) return 1
   return [
     'case',
     // An object without this field is not the same thing as one whose value happens to
@@ -282,7 +306,7 @@ function heatmapWeight(field: string | null, range: FieldRange | undefined): Pai
       ['to-number', ['get', field], low],
       low,
       0,
-      range.max,
+      high,
       1,
     ],
   ] as unknown as ExpressionSpecification
@@ -334,8 +358,16 @@ function heatmapWeight(field: string | null, range: FieldRange | undefined): Pai
  * ascend, and `0, ..., max` descends the moment `max < 0`. A negative-only range does not
  * just deserve the old anchor; with a floor of 0 it could not produce a valid expression
  * at all.
+ *
+ * Only ever consulted for the low end when `weightMin` (renderer contract, package 2) is
+ * *not* set -- a field whose automatic floor is wrong (`baujahr`, this function's own
+ * running example) is exactly what `weightMin` exists to override by hand, this function
+ * having no way to know a value is meaningful rather than "nothing" without being told.
+ * Exported for `HeatmapEditor`'s legend and its bound input's placeholder, which show the
+ * same automatic floor a field would get if `weightMin` were cleared -- computed once,
+ * here, rather than re-derived a second time and risking the two drifting apart.
  */
-function normalisationFloor(range: FieldRange): number {
+export function normalisationFloor(range: FieldRange): number {
   return range.min >= 0 ? 0 : range.min
 }
 
@@ -423,7 +455,7 @@ function heatmapPaint(
     // A failed range is not a range `heatmapWeight` can use either -- it falls back to
     // the same constant weight "still loading" gets, the colour is what carries the
     // distinction.
-    'heatmap-weight': heatmapWeight(renderer.field, failed ? undefined : fieldRange),
+    'heatmap-weight': heatmapWeight(renderer.field, failed ? undefined : fieldRange, renderer.weightMin, renderer.weightMax),
     'heatmap-radius': clamp(numberOr(renderer.radius, DEFAULT_HEATMAP_RADIUS), 1, 100),
     'heatmap-intensity': clamp(numberOr(renderer.intensity, DEFAULT_HEATMAP_INTENSITY), 0.1, 5),
     'heatmap-color': failed ? heatmapErrorColorRamp() : heatmapColorRamp(renderer.ramp),

@@ -260,6 +260,65 @@ export function heatmapFieldRangeQuery(layerId: string, field: string) {
   return layerClassifyQuery(layerId, field, RANGE_METHOD, RANGE_CLASS_COUNT)
 }
 
+/** A one-click `weightMin`/`weightMax` starting point (`types.ts`, renderer contract
+ *  package 2), e.g. `{ min: 12, max: 187 }`. */
+export interface HeatmapWeightSuggestion {
+  min: number
+  max: number
+}
+
+/**
+ * Classes requested for the weight-bound suggestion's quantile breaks -- the server's own
+ * ceiling (`ClassificationService.MAX_CLASSES`, backend), the finest split `/classify` can
+ * compute without any new server capability. Twelve classes give breaks at 0, 1/12, 2/12,
+ * ..., 11/12, 1 -- i.e. roughly the 0th, 8.3rd, 16.7th, ..., 91.7th and 100th percentile.
+ * A true 95th percentile would need a 20-way split (0.95 = 19/20), which `classes <= 12`
+ * cannot express; 11/12 ≈ 91.7 % is the closest available stand-in, and it is exactly what
+ * `weightSuggestionFromBreaks` below hands back as the "upper" suggestion.
+ */
+const WEIGHT_SUGGESTION_CLASSES = 12
+
+/**
+ * Turns one `/classify` quantile response's `breaks` into a `weightMin`/`weightMax`
+ * suggestion -- the near-8th and near-92nd percentile (see `WEIGHT_SUGGESTION_CLASSES`
+ * above for why not exactly 8th/92nd), one step in from either true end so an outlier at
+ * the very top or bottom of the field never becomes the suggestion itself.
+ *
+ * `undefined` below four breaks: with three breaks or fewer (a field with very few
+ * distinct values, after the server's own `strictlyAscending` dedup drops repeats) index 1
+ * and index `length - 2` either coincide or invert -- at `length === 2` (`[min, max]`),
+ * index 1 *is* `max` and index `length - 2` *is* `min`, which would silently swap the two
+ * ends instead of producing a narrower one. Four breaks is the smallest count where index 1
+ * and index `length - 2` are still two genuinely different, correctly ordered interior
+ * points (`length === 4`: indices 1 and 2). Below that there is no meaningful interior
+ * quantile to suggest -- the field's plain min/max (already what the automatic stretch
+ * uses) is the honest answer, not a fabricated "percentile" that happens to equal one end.
+ *
+ * Pure and exported on its own so this rule is tested directly against `breaks` arrays of
+ * every length that matters, without a network round trip standing in the way.
+ */
+export function weightSuggestionFromBreaks(breaks: number[]): HeatmapWeightSuggestion | undefined {
+  if (breaks.length < 4) return undefined
+  return { min: breaks[1], max: breaks[breaks.length - 2] }
+}
+
+/**
+ * Fetches the quantile breaks `weightSuggestionFromBreaks` needs and turns them into a
+ * suggestion -- the one place a user action (`HeatmapEditor`'s suggestion buttons) asks
+ * `/classify` for this. `queryClient.fetchQuery` shares `layerClassifyQuery`'s ordinary
+ * 5-minute cache, the same one `GraduatedEditor`'s classes and this field's own weight
+ * range already draw from -- clicking a suggestion button for a field whose classes were
+ * just computed, or whose range the legend already shows, costs no second round trip.
+ */
+export async function requestHeatmapWeightSuggestion(
+  queryClient: QueryClient,
+  layerId: string,
+  field: string,
+): Promise<HeatmapWeightSuggestion | undefined> {
+  const result = await queryClient.fetchQuery(layerClassifyQuery(layerId, field, 'quantile', WEIGHT_SUGGESTION_CLASSES))
+  return weightSuggestionFromBreaks(result.breaks)
+}
+
 /**
  * One query result, narrowed to the two members `resolveRangeState` reads --
  * structural on purpose so this stays independent of exactly which `useQueries`/

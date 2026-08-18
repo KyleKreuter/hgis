@@ -8,6 +8,7 @@ import {
   fieldIdOfColumn,
   resolveRangeState,
   sharedSymbolOf,
+  weightSuggestionFromBreaks,
   withSharedSymbol,
   withSharedSymbolShape,
 } from './classification'
@@ -331,5 +332,37 @@ describe('resolveRangeState', () => {
    */
   it('liest ein verdrehtes Paar (min > max) als "invalid", obwohl der echte Endpunkt es nicht liefern kann', () => {
     expect(resolveRangeState({ isError: false, data: { min: 100, max: 10 } })).toBe('invalid')
+  })
+})
+
+describe('weightSuggestionFromBreaks', () => {
+  /** Zwölf Klassen, wie `WEIGHT_SUGGESTION_CLASSES` sie anfragt: 13 Bruchpunkte, wenn
+   *  keiner der Werte doppelt vorkommt. */
+  const TWELVE_CLASS_BREAKS = [0, 8, 16, 25, 33, 41, 50, 58, 66, 75, 83, 91, 100]
+
+  it('nimmt den zweiten und den vorletzten Bruchpunkt -- nah an den Rändern, aber nicht die Ränder selbst', () => {
+    expect(weightSuggestionFromBreaks(TWELVE_CLASS_BREAKS)).toEqual({ min: 8, max: 91 })
+  })
+
+  it('liefert nichts bei drei oder weniger Bruchpunkten -- kein echter innerer Quantilwert vorhanden', () => {
+    expect(weightSuggestionFromBreaks([])).toBeUndefined()
+    expect(weightSuggestionFromBreaks([10])).toBeUndefined()
+    expect(weightSuggestionFromBreaks([10, 20])).toBeUndefined()
+    expect(weightSuggestionFromBreaks([10, 20, 30])).toBeUndefined()
+  })
+
+  /**
+   * Der Grenzfall, der die Vier-Bruchpunkte-Regel begründet: bei genau zwei
+   * Bruchpunkten (Feld mit sehr wenigen unterschiedlichen Werten, nach dem
+   * `strictlyAscending`-Dedup des Servers) ist Index 1 bereits das Maximum und Index
+   * `length - 2` bereits das Minimum -- ohne die Untergrenze würde der "untere"
+   * Vorschlag zum Maximum und umgekehrt, exakt vertauscht statt bloß ungenau.
+   */
+  it('vertauscht die Enden nicht bei zu wenigen Bruchpunkten', () => {
+    expect(weightSuggestionFromBreaks([10, 20])).toBeUndefined()
+  })
+
+  it('liefert bei genau vier Bruchpunkten zwei unterschiedliche, aufsteigend geordnete innere Punkte', () => {
+    expect(weightSuggestionFromBreaks([10, 20, 30, 40])).toEqual({ min: 20, max: 30 })
   })
 })

@@ -738,4 +738,101 @@ describe('styleToMapLibre heatmap', () => {
     expect(label.type).toBe('symbol')
     expect(label.layout?.['symbol-placement']).toBe('point')
   })
+
+  /**
+   * Team contract, package 2: `weightMin`/`weightMax` override one end each of the
+   * automatic stretch, independently of one another. Every test above this point sets
+   * neither and stays green unmodified -- the proof that the default path is untouched.
+   */
+  describe('weightMin/weightMax', () => {
+    it('überschreibt nur die Obergrenze, wenn nur weightMax gesetzt ist -- die Untergrenze bleibt automatisch', () => {
+      const paint = heatmapPaintOf(heatmapStyle({ field: 'waermebedarf', weightMax: 1_200_000 }), makeLayer(), { min: 5000, max: 45_280_554 })
+      const weight = paint['heatmap-weight']
+
+      // Automatischer Boden bleibt 0 (Spanne durchweg nichtnegativ) -- unveraendert.
+      expect(evaluateHeatmapWeight(weight, { waermebedarf: 0 })).toBe(0)
+      expect(evaluateHeatmapWeight(weight, { waermebedarf: 600_000 })).toBeCloseTo(0.5, 10)
+      expect(evaluateHeatmapWeight(weight, { waermebedarf: 1_200_000 })).toBe(1)
+    })
+
+    it('überschreibt nur die Untergrenze, wenn nur weightMin gesetzt ist -- die Obergrenze bleibt range.max', () => {
+      const paint = heatmapPaintOf(heatmapStyle({ field: 'baujahr', weightMin: 1900 }), makeLayer(), { min: 1950, max: 2020 })
+      const weight = paint['heatmap-weight']
+
+      expect(evaluateHeatmapWeight(weight, { baujahr: 1900 })).toBe(0)
+      expect(evaluateHeatmapWeight(weight, { baujahr: 1960 })).toBeCloseTo(60 / 120, 10)
+      expect(evaluateHeatmapWeight(weight, { baujahr: 2020 })).toBe(1)
+    })
+
+    it('überschreibt beide Enden, wenn beide gesetzt sind', () => {
+      const paint = heatmapPaintOf(heatmapStyle({ field: 'baujahr', weightMin: 1900, weightMax: 2100 }), makeLayer(), { min: 1950, max: 2020 })
+      const weight = paint['heatmap-weight']
+
+      expect(evaluateHeatmapWeight(weight, { baujahr: 1900 })).toBe(0)
+      expect(evaluateHeatmapWeight(weight, { baujahr: 2000 })).toBeCloseTo(100 / 200, 10)
+      expect(evaluateHeatmapWeight(weight, { baujahr: 2100 })).toBe(1)
+    })
+
+    /**
+     * Gemessen, nicht angenommen (Vertrag: "`interpolate` klemmt an seinen Stützpunkten
+     * von selbst -- prüf das, statt es anzunehmen"). Ein Wert unterhalb von weightMin
+     * bzw. oberhalb von weightMax darf nicht negativ bzw. über 1 hinauslaufen -- sonst
+     * würde ein einzelner Ausreißer außerhalb der gewählten Grenzen jeden anderen Punkt
+     * der Karte überstrahlen, genau das Problem, das die Grenzen lösen sollen.
+     */
+    it('klemmt Werte außerhalb von weightMin..weightMax auf exakt 0 bzw. 1, statt zu extrapolieren', () => {
+      const paint = heatmapPaintOf(
+        heatmapStyle({ field: 'waermebedarf', weightMin: 50_000, weightMax: 1_200_000 }),
+        makeLayer(),
+        { min: 5000, max: 45_280_554 },
+      )
+      const weight = paint['heatmap-weight']
+
+      // Weit unterhalb der Untergrenze -- nicht negativ, exakt 0.
+      expect(evaluateHeatmapWeight(weight, { waermebedarf: 5000 })).toBe(0)
+      // Der eigentliche Fall aus dem Vertrag: der 240-fache Median liegt weit über
+      // weightMax -- exakt 1, nicht 37 oder eine andere extrapolierte Zahl.
+      expect(evaluateHeatmapWeight(weight, { waermebedarf: 45_280_554 })).toBe(1)
+    })
+
+    it('fällt bei weightMin >= weightMax auf ein konstantes Gewicht zurück, wie bei jeder anderen entarteten Spanne', () => {
+      const paint = heatmapPaintOf(heatmapStyle({ field: 'baujahr', weightMin: 2020, weightMax: 1950 }), makeLayer(), { min: 1950, max: 2020 })
+
+      expect(paint['heatmap-weight']).toBe(1)
+    })
+
+    /**
+     * Mit nur einer Seite fest bleibt die andere von `range` abhängig -- ohne eine
+     * geladene Spanne fehlt der fehlenden Seite ihr Wert, und das Ergebnis ist dasselbe
+     * "noch nicht geladen"-Verhalten wie ganz ohne feste Grenze.
+     */
+    it('fällt bei nur einer festen Grenze und noch nicht geladener Spanne auf ein konstantes Gewicht zurück', () => {
+      expect(heatmapPaintOf(heatmapStyle({ field: 'baujahr', weightMin: 1900 }))['heatmap-weight']).toBe(1)
+      expect(heatmapPaintOf(heatmapStyle({ field: 'waermebedarf', weightMax: 1_200_000 }))['heatmap-weight']).toBe(1)
+    })
+
+    /**
+     * Der eigentliche Gewinn fester Grenzen: mit *beiden* Enden gesetzt braucht das
+     * Gewicht `range` überhaupt nicht mehr -- weder während die Anfrage noch lädt noch
+     * wenn sie endgültig scheitert. Eine Heatmap mit von Hand gewählten Grenzen zeigt
+     * damit sofort korrekt gewichtete Punkte, statt bis zum ersten `/classify`-Erfolg
+     * (oder für immer, bei einer scheiternden Anfrage) auf Dichte zurückzufallen.
+     */
+    it.each([undefined, 'error', 'invalid'] as const)(
+      'normiert mit beiden festen Grenzen weiterhin korrekt, auch ohne geladene Spanne (%s)',
+      (fieldRange) => {
+        const paint = heatmapPaintOf(heatmapStyle({ field: 'baujahr', weightMin: 1900, weightMax: 2100 }), makeLayer(), fieldRange)
+        const weight = paint['heatmap-weight']
+
+        expect(evaluateHeatmapWeight(weight, { baujahr: 2000 })).toBeCloseTo(100 / 200, 10)
+      },
+    )
+
+    it('behandelt ein fehlendes Feld weiterhin als Gewicht 0, auch mit festen Grenzen', () => {
+      const paint = heatmapPaintOf(heatmapStyle({ field: 'baujahr', weightMin: 1900, weightMax: 2100 }), makeLayer(), { min: 1950, max: 2020 })
+
+      expect(evaluateHeatmapWeight(paint['heatmap-weight'], {})).toBe(0)
+      expect(evaluateHeatmapWeight(paint['heatmap-weight'], { baujahr: null })).toBe(0)
+    })
+  })
 })
