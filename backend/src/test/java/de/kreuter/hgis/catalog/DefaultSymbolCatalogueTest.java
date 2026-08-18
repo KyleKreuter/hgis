@@ -26,6 +26,21 @@ import tools.jackson.databind.ObjectMapper;
  * <p>Deliberately free of Spring and Testcontainers, same reasoning as {@code
  * ColorRampCatalogueTest}: this is a comparison of two small, static documents, and it should
  * not wait on a database to say the two stacks disagree.
+ *
+ * <p>This is one link in a four-place chain, not the only one -- reading only this class makes
+ * {@code layerSpecs.ts} look unguarded, and it is not:
+ *
+ * <pre>
+ * layerSpecs.ts  &lt;-&gt;  defaults.ts  &lt;-&gt;  defaultSymbols.json  &lt;-&gt;  LayerStyleService.java
+ *    (defaults.test.ts)              (this class)
+ * </pre>
+ *
+ * {@code layerSpecs.ts}' {@code CIRCLE_PAINT}/{@code LINE_PAINT}/{@code FILL_PAINT} -- the
+ * MapLibre paint an unstyled layer actually renders with -- are pinned against {@code
+ * defaults.ts}' {@code DEFAULT_MARKER}/{@code DEFAULT_LINE}/{@code DEFAULT_FILL} by the
+ * frontend's own {@code defaults.test.ts}, value for value. This class picks up the chain from
+ * there: {@code defaults.ts} reads {@code defaultSymbols.json}, and this class holds that same
+ * JSON against the backend's constants. Neither test alone closes the loop; both do.
  */
 class DefaultSymbolCatalogueTest {
 
