@@ -108,6 +108,15 @@ export function useLiveViewState(
           // repeats "the catalog changed" once the moment that would have said so has
           // passed. So this is unconditional, the same as the read above, rather than
           // waiting for an event this client happened to still be connected to see.
+          //
+          // The price is a refetch with no event behind it, and `stream-timeout` (5m)
+          // makes that a regular occurrence rather than an exception. Anyone counting
+          // network requests against events will therefore find one too many and go
+          // looking for a bug in the debounce -- we did, and measured our way back out:
+          // provoking a reconnect with an 8s timeout and writing nothing at all still
+          // produced two `GET .../layers`, twelve seconds apart. The rule is that a
+          // client makes at most one request per (burst of events + reconnect), not per
+          // burst alone.
           optionsRef.current.onProjectDataState?.()
         }
       },
