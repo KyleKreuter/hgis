@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CLIENT_ID,
-  PROJECT_DATA_STATE_EVENT,
+  PROJECT_CATALOG_EVENT,
   PROJECT_VIEW_STATE_EVENT,
   connectLiveChannel,
   isForThisProject,
@@ -179,7 +179,7 @@ describe('connectLiveChannel', () => {
     const onProjectDataState = vi.fn()
     const close = connectLiveChannel({ onProjectDataState })
 
-    latest().emit(PROJECT_DATA_STATE_EVENT, '{"projectId":"p-1","version":3,"origin":null}')
+    latest().emit(PROJECT_CATALOG_EVENT, '{"projectId":"p-1","version":3,"origin":null}')
 
     expect(onProjectDataState).toHaveBeenCalledWith({ projectId: 'p-1', version: 3, origin: null })
     close()
@@ -190,7 +190,7 @@ describe('connectLiveChannel', () => {
     const onProjectDataState = vi.fn()
     const close = connectLiveChannel({ onProjectViewState, onProjectDataState })
 
-    latest().emit(PROJECT_DATA_STATE_EVENT, '{"projectId":"p-1","version":1,"origin":null}')
+    latest().emit(PROJECT_CATALOG_EVENT, '{"projectId":"p-1","version":1,"origin":null}')
 
     expect(onProjectDataState).toHaveBeenCalledTimes(1)
     expect(onProjectViewState).not.toHaveBeenCalled()

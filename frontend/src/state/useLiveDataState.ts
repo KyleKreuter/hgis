@@ -71,7 +71,7 @@ export interface LiveDataState {
  * Keeps the layer catalog in step with whoever else is writing to this project's data.
  *
  * The channel only ever reports that *something* moved (`api/events.ts`'s
- * `PROJECT_DATA_STATE_EVENT`, forwarded here through `useLiveViewState`'s single
+ * `PROJECT_CATALOG_EVENT`, forwarded here through `useLiveViewState`'s single
  * connection -- see the comment on its own `onProjectDataState` option for why this
  * shares that connection instead of opening a second one). Reacting to it is, on
  * purpose, almost nothing: invalidate the layer list query. `MapLayerSync`

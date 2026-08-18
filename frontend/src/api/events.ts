@@ -26,7 +26,7 @@ export const PROJECT_VIEW_STATE_EVENT = 'project-view-state'
  * Placeholder pending alignment with the backend package (`.teams/CONTRACT.md`, "Der
  * Name des Ereignisses"): this is the one line to change once that settles.
  */
-export const PROJECT_DATA_STATE_EVENT = 'project-data-state'
+export const PROJECT_CATALOG_EVENT = 'project-catalog'
 
 /** Header naming this client on a write, so its own change comes back recognisable. */
 export const CLIENT_HEADER = 'X-Hgis-Client'
@@ -189,7 +189,7 @@ export interface LiveChannelHandlers {
   onProjectViewState?: (event: ProjectViewStateEvent) => void
   /**
    * A project's data changed -- a layer's data, style, clip or render version, or the
-   * layer catalog itself (`PROJECT_DATA_STATE_EVENT`). Parsed the same way as the event
+   * layer catalog itself (`PROJECT_CATALOG_EVENT`). Parsed the same way as the event
    * above and handed over whole; `state/useLiveDataState.ts` (wired in through
    * `useLiveViewState`'s own options, since the connection is one resource per open
    * project) is what decides what it means.
@@ -246,7 +246,7 @@ export function connectLiveChannel(handlers: LiveChannelHandlers): () => void {
       if (parsed) handlers.onProjectViewState?.(parsed)
     })
 
-    next.addEventListener(PROJECT_DATA_STATE_EVENT, (event) => {
+    next.addEventListener(PROJECT_CATALOG_EVENT, (event) => {
       const parsed = parseProjectDataState((event as MessageEvent<string>).data)
       if (parsed) handlers.onProjectDataState?.(parsed)
     })

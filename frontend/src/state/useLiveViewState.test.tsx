@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { waitFor } from '@testing-library/react'
-import { CLIENT_ID, PROJECT_DATA_STATE_EVENT, PROJECT_VIEW_STATE_EVENT } from '@/api/events'
+import { CLIENT_ID, PROJECT_CATALOG_EVENT, PROJECT_VIEW_STATE_EVENT } from '@/api/events'
 import { isRemoteSelection, useSelection } from '@/state/selection'
 import { JUMP_SETTLE_MS, useLiveViewState } from '@/state/useLiveViewState'
 import { FakeEventSource, installFakeEventSource } from '@/test/fakeEventSource'
@@ -461,7 +461,7 @@ describe('useLiveViewState', () => {
   describe('Datenzustand', () => {
     function announceData(origin: string | null, version = 2) {
       const source = FakeEventSource.instances[FakeEventSource.instances.length - 1]
-      source.emit(PROJECT_DATA_STATE_EVENT, JSON.stringify({ projectId: PROJECT, version, origin }))
+      source.emit(PROJECT_CATALOG_EVENT, JSON.stringify({ projectId: PROJECT, version, origin }))
     }
 
     it('meldet ein fremdes Datenzustands-Ereignis weiter', () => {
@@ -495,7 +495,7 @@ describe('useLiveViewState', () => {
 
       const source = FakeEventSource.instances[0]
       source.emit(
-        PROJECT_DATA_STATE_EVENT,
+        PROJECT_CATALOG_EVENT,
         JSON.stringify({ projectId: 'ein-anderes-projekt', version: 3, origin: 'anderer-tab' }),
       )
 
