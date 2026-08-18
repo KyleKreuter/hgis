@@ -189,12 +189,19 @@ async function refresh(
  * Invalidated only for a layer whose `dataVersion` actually moved between the previous
  * catalog and the one just fetched, not for every layer on every catalog event: a
  * `dataVersion` bump is the one signal that a layer's *rows* changed (`layerSpecs.ts`'s
- * `buildTileUrl` already keys tile caching off exactly this number), and
- * `invalidateQueries` on a layer nobody currently has a heatmap panel or map layer open
- * for costs nothing until something observes it again -- TanStack Query only refetches an
- * *active* query. Asking `/classify` for every heatmap layer on every catalog event,
- * regardless of whether that event even touched its data, would be the more expensive
- * habit this avoids.
+ * `buildTileUrl` already keys tile caching off exactly this number).
+ *
+ * Not because asking `/classify` for every heatmap layer on every catalog event would be
+ * expensive -- measured, it is not: ~23 ms for a 46 233-row layer, ~135 ms total for
+ * twenty of those in flight at once (team measurement, package 2). An earlier version of
+ * this comment argued cost; that argument does not survive the measurement, and is left
+ * out rather than repeated wrong. The real reason is simpler and holds regardless of what
+ * `/classify` costs: a catalog event whose `dataVersion` did not move for this layer means
+ * this layer's rows did not change, and asking anyway would be traffic nobody benefits
+ * from -- not a resource worth guarding, just work with no point to it. Practically free
+ * either way: `invalidateQueries` on a layer nobody currently has a heatmap panel or map
+ * layer open for costs nothing until something observes it again, since TanStack Query
+ * only refetches an *active* query.
  *
  * A layer absent from `previousVersions` (new since the last catalog snapshot) is left
  * alone on purpose: nothing has been cached for it yet, so there is nothing to invalidate.

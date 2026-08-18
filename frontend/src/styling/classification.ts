@@ -159,9 +159,16 @@ export interface GraduatedClassification {
 
 /**
  * Turns "field, method, classCount, ramp" into stored classes -- the one place
- * `/classify` is asked for a graduated renderer's classes. `queryClient.fetchQuery`
- * keeps the same 5-minute cache `layerClassifyQuery` already carries, so revisiting a
- * combination that was just requested does not cost another round trip.
+ * `/classify` is asked for a graduated renderer's classes.
+ *
+ * `staleTime: 0` overrides `layerClassifyQuery`'s ordinary 5-minute cache: this only ever
+ * runs from a user action -- "Klassen neu berechnen", a changed method or class count --
+ * and every one of those is a request for a fresh answer (team review, package 2). Without
+ * it, an identical `(field, method, classCount)` combination requested again inside the
+ * five-minute window silently served the cached result, even though the layer's data may
+ * have moved since. Cheap to always ask again -- a `/classify` call answers in tens of
+ * milliseconds even on a large layer (team measurement, package 2) -- so nothing about
+ * caching this particular read was actually saving anything worth keeping.
  *
  * Called only from a user action: the Methode/Klassen/Farbverlauf controls in
  * `GraduatedEditor`, its own Feld picker, and `SymbologyPanel` when a renderer switch
@@ -180,7 +187,7 @@ export async function requestGraduatedClasses(
   existingClasses: StyleClass[],
   fallbackSymbol: LayerSymbol,
 ): Promise<GraduatedClassification> {
-  const result = await queryClient.fetchQuery(layerClassifyQuery(layerId, field, method, classCount))
+  const result = await queryClient.fetchQuery({ ...layerClassifyQuery(layerId, field, method, classCount), staleTime: 0 })
   const fresh = buildClasses(result.breaks, geometryType, ramp)
   // Carries the existing size/width across, same as `GraduatedEditor`'s old effect did
   // -- see `sharedSymbolOf` for why an empty `existingClasses` (a field that just
@@ -338,17 +345,28 @@ export function weightSuggestionFromBreaks(breaks: number[]): HeatmapWeightSugge
 /**
  * Fetches the quantile breaks `weightSuggestionFromBreaks` needs and turns them into a
  * suggestion -- the one place a user action (`HeatmapEditor`'s suggestion button) asks
- * `/classify` for this. `queryClient.fetchQuery` shares `layerClassifyQuery`'s ordinary
- * 5-minute cache, the same one `GraduatedEditor`'s classes and this field's own weight
- * range already draw from -- clicking the suggestion button for a field whose classes were
- * just computed, or whose range the legend already shows, costs no second round trip.
+ * `/classify` for this.
+ *
+ * `staleTime: 0` overrides `layerClassifyQuery`'s ordinary 5-minute cache on purpose (team
+ * review, package 2 -- found alongside `requestGraduatedClasses`'s matching issue, same
+ * fix applied there too): someone pressing a button that computes something has asked for
+ * a fresh answer, not whatever answer happened to already sit in the cache from up to five
+ * minutes ago -- and `WEIGHT_SUGGESTION_CLASSES = 12` can coincide with a `GraduatedEditor`
+ * classification's own `classCount`, sharing the very cache entry a stale read here would
+ * silently reuse. The cost of asking again is not worth avoiding to begin with -- a
+ * `/classify` call answers in tens of milliseconds even on a large layer (team
+ * measurement, package 2) -- so there is no efficiency this trades away, only a
+ * correctness gap it closes.
  */
 export async function requestHeatmapWeightSuggestion(
   queryClient: QueryClient,
   layerId: string,
   field: string,
 ): Promise<HeatmapWeightSuggestion | undefined> {
-  const result = await queryClient.fetchQuery(layerClassifyQuery(layerId, field, 'quantile', WEIGHT_SUGGESTION_CLASSES))
+  const result = await queryClient.fetchQuery({
+    ...layerClassifyQuery(layerId, field, 'quantile', WEIGHT_SUGGESTION_CLASSES),
+    staleTime: 0,
+  })
   return weightSuggestionFromBreaks(result.breaks)
 }
 
@@ -422,7 +440,10 @@ export interface CategorizedClassification {
   result: FieldValuesResult
 }
 
-/** The categorized counterpart to {@link requestGraduatedClasses}, same rules. */
+/** The categorized counterpart to {@link requestGraduatedClasses}, same rules --
+ *  including `staleTime: 0` (team review, package 2), for the same reason: a user action
+ *  asking to re-list a field's values has asked for a fresh list, not `layerValuesQuery`'s
+ *  ordinary 5-minute cache. */
 export async function requestCategorizedCategories(
   queryClient: QueryClient,
   layerId: string,
@@ -432,7 +453,7 @@ export async function requestCategorizedCategories(
   existingCategories: StyleCategory[],
   fallbackSymbol: LayerSymbol,
 ): Promise<CategorizedClassification> {
-  const result = await queryClient.fetchQuery(layerValuesQuery(layerId, field))
+  const result = await queryClient.fetchQuery({ ...layerValuesQuery(layerId, field), staleTime: 0 })
   const fresh = buildCategories(result.values, geometryType, palette)
   const shared = sharedSymbolOf(existingCategories, fallbackSymbol)
   return { categories: withSharedSymbol(fresh, shared), result }
