@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import json as jsonlib
 import random
+import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -182,10 +183,23 @@ def _parse_change(event: Event) -> Change | None:
     return Change(name=event.name, project_id=project_id, version=version, origin=origin)
 
 
+def _wait(seconds: float, stop: threading.Event | None) -> None:
+    """
+    ``time.sleep``, but returns early once ``stop`` is set -- what makes the
+    backoff in :func:`watch` actually respond to ``stop`` promptly instead
+    of finishing out whatever delay it was already in.
+    """
+    if stop is not None:
+        stop.wait(seconds)
+    else:
+        time.sleep(seconds)
+
+
 def watch(
     client: "Client",
     *,
     timeout: float | None = None,
+    stop: threading.Event | None = None,
 ) -> Iterator[ChannelItem]:
     """
     The live channel, reconnecting for as long as the caller keeps reading.
@@ -195,9 +209,28 @@ def watch(
     ...         print(item.project_id, "steht jetzt bei", item.version)
 
     Never returns on its own -- a script meant to listen for an hour just
-    keeps iterating. Stop it the ordinary way, by breaking out of the loop
-    or letting it go out of scope; either closes the underlying connection
-    promptly rather than waiting on garbage collection.
+    keeps iterating. **From the thread that is iterating it**, stop it the
+    ordinary way: break out of the loop, or let it go out of scope. Either
+    closes the underlying connection promptly rather than waiting on
+    garbage collection.
+
+    That does not extend to a *second* thread wanting to stop a listener
+    running in the first: a generator is not reentrant, and Python refuses
+    outright rather than doing something unsafe --
+    ``ValueError: generator already executing`` on a plain ``.close()``
+    called on this while another thread has it mid-``next()``, measured
+    against exactly the shape this is meant for -- a background thread
+    reading, a foreground thread deciding when to stop it. ``stop`` is the
+    safe way to ask from outside: set it and this ends at its next chance to
+    check, without ever touching the generator from the wrong thread.
+    That chance comes at the same points a reconnect already happens --
+    between one connection and the next, and while backing off after a
+    failure, which this also cuts short rather than sleeping out -- so with
+    it left at its default (None) a short ``timeout`` keeps ``stop``
+    responsive for the same reason it keeps a deadline honest; see
+    :func:`hgis.channel.wait_for`'s own note on that. Two ``watch()`` calls
+    on the same :class:`~hgis.client.Client` share nothing, so stopping one
+    with its own ``stop`` never touches the other.
 
     Every :class:`Event` this reads comes from one call to
     :meth:`hgis.client.Client.events`, forwarding ``timeout`` -- see that
@@ -226,6 +259,9 @@ def watch(
     server -- filtering to the one a caller cares about is this function's
     job to make easy, not the caller's job to reinvent; see :func:`for_project`.
 
+    :param stop: set from another thread to end this from outside -- see
+        above for why this exists instead of just closing the iterator, and
+        for the latency that comes with it
     :raises hgis.errors.GuardError: the client's transport refuses the one
         path this opens (:class:`hgis.client.RequestGuard`) -- a
         misconfigured ``base_url`` or a substituted transport, not something
@@ -235,6 +271,8 @@ def watch(
     failures = 0
 
     while True:
+        if stop is not None and stop.is_set():
+            return
         stream = client.events(timeout=timeout)
         signalled = False
         try:
@@ -275,7 +313,7 @@ def watch(
         except TransportError:
             delay = _reconnect_delay(failures)
             failures += 1
-            time.sleep(delay)
+            _wait(delay, stop)
         finally:
             stream.close()
 
@@ -317,6 +355,7 @@ def wait_for(
     predicate: Callable[[ChannelItem], bool],
     *,
     timeout: float | None = None,
+    stop: threading.Event | None = None,
 ) -> ChannelItem | None:
     """
     Block on :func:`watch` until ``predicate`` matches something it yields,
@@ -372,9 +411,14 @@ def wait_for(
     that is expected to actually happen, such as a job already running --
     and not at all once the first real event arrives, since every yielded
     item is a fresh chance to recheck the deadline.
+
+    :param stop: forwarded to :func:`watch` -- set from another thread to
+        end a wait blocking a background thread; see its own docstring for
+        why this exists and the latency it carries, which is the same
+        latency ``timeout`` already has here.
     """
     deadline = None if timeout is None else time.monotonic() + timeout
-    stream = watch(client, timeout=timeout)
+    stream = watch(client, timeout=timeout, stop=stop)
     try:
         for item in stream:
             if predicate(item):
@@ -383,4 +427,5 @@ def wait_for(
                 return None
     finally:
         stream.close()
-    return None  # pragma: no cover -- watch() does not stop on its own
+    # Reached when `watch` ends on its own -- only possible via `stop`.
+    return None

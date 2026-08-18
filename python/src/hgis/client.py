@@ -741,7 +741,12 @@ class Client:
             url, timeout=timeout if timeout is not None else self._timeout
         )
 
-    def watch(self, *, timeout: float | None = None) -> Iterator[ChannelItem]:
+    def watch(
+        self,
+        *,
+        timeout: float | None = None,
+        stop: threading.Event | None = None,
+    ) -> Iterator[ChannelItem]:
         """
         The live channel, interpreted and reconnecting -- see
         :func:`hgis.channel.watch`, which this calls straight through to.
@@ -749,19 +754,20 @@ class Client:
         The method to reach for by default; :meth:`events` is the raw form
         underneath it.
         """
-        return _watch(self, timeout=timeout)
+        return _watch(self, timeout=timeout, stop=stop)
 
     def wait_for(
         self,
         predicate: Callable[[ChannelItem], bool],
         *,
         timeout: float | None = None,
+        stop: threading.Event | None = None,
     ) -> ChannelItem | None:
         """
         Block on :meth:`watch` until ``predicate`` matches -- see
         :func:`hgis.channel.wait_for`, which this calls straight through to.
         """
-        return _wait_for(self, predicate, timeout=timeout)
+        return _wait_for(self, predicate, timeout=timeout, stop=stop)
 
     def _send(
         self,

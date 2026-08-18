@@ -39,6 +39,7 @@ from hgis.channel import (
     RECONNECT_BASE_SECONDS,
     RECONNECT_MAX_SECONDS,
     Change,
+    ChannelItem,
     Connected,
     _parse_change,
     _reconnect_delay,
@@ -402,6 +403,122 @@ def test_the_echo_is_not_filtered() -> None:
 
     assert isinstance(change, Change)
     assert change.origin == "me" == client.client_id
+
+
+# --- stop: the safe way for a second thread to end watch() ---------------
+
+
+def test_stop_ends_watch_from_another_thread_without_a_generator_error() -> None:
+    """
+    The crash this replaces: calling ``.close()`` on a generator from a
+    thread other than the one currently running it raises
+    ``ValueError: generator already executing`` -- measured against exactly
+    this shape, a background thread reading and a foreground thread
+    deciding when to stop it. ``stop`` never touches the generator from the
+    wrong thread; it is a plain, thread-safe flag this checks for itself,
+    between connections.
+    """
+    stop = threading.Event()
+    seen: list[ChannelItem] = []
+    ready = threading.Event()
+    failures: list[BaseException] = []
+
+    def first() -> Iterator[Event]:
+        yield _catalog_event("p1", 1, None)
+
+    def idle() -> Iterator[Event]:
+        # A small delay per attempt: the scripted transport has no real
+        # timeout to wait out, so without this the background thread could
+        # race through every scripted connection before the main thread
+        # gets to call stop.set() at all.
+        time.sleep(0.002)
+        raise TransportTimeout("nichts")
+        yield  # pragma: no cover -- makes this a generator function
+
+    connections = [first] + [idle] * 500
+
+    def run() -> None:
+        try:
+            for item in _client(connections).watch(stop=stop):
+                seen.append(item)
+                ready.set()
+        except BaseException as error:  # noqa: BLE001 -- caught to report, not to hide
+            failures.append(error)
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    assert ready.wait(timeout=2), "watch() hat im Hintergrund-Thread nichts geliefert"
+
+    stop.set()  # the safe cross-thread call; not .close() on the iterator
+    thread.join(timeout=5)
+
+    assert not thread.is_alive(), "watch() hat auf stop.set() nicht reagiert"
+    # Not just "the thread ended" -- it must have ended *because of* stop,
+    # not because the scripted transport ran out of connections while
+    # stop went unchecked (which would also end the thread, just far later
+    # and with an AssertionError from _ScriptedTransport instead of a
+    # clean return).
+    assert failures == []
+    assert seen  # the first connection's Connected/Change did arrive
+
+
+def test_stop_interrupts_a_backoff_sleep_rather_than_waiting_it_out(monkeypatch) -> None:
+    """
+    Not just checked before the next connection attempt -- ``stop`` cuts a
+    sleep already in progress short, via ``Event.wait`` instead of
+    ``time.sleep``. Without this, a caller stopping a listener mid-backoff
+    would still have to wait out the full delay.
+
+    The delay itself is pinned well above the assertion's margin -- jitter
+    in the real one (see ``_reconnect_delay``) would otherwise sometimes
+    land under the threshold on its own and pass for the wrong reason.
+    """
+    monkeypatch.setattr(channel, "_reconnect_delay", lambda attempt, jitter=None: 10.0)
+    stop = threading.Event()
+
+    def broken() -> Iterator[Event]:
+        raise TransportError("kaputt")
+        yield  # pragma: no cover
+
+    def run() -> None:
+        for _ in _client([broken] * 1000).watch(stop=stop):
+            pass  # pragma: no cover -- broken() never yields anything
+
+    thread = threading.Thread(target=run)
+    start = time.monotonic()
+    thread.start()
+    time.sleep(0.05)  # let it enter the first backoff sleep
+    stop.set()
+    thread.join(timeout=5)
+    elapsed = time.monotonic() - start
+
+    assert not thread.is_alive(), "watch() hat den Backoff-Schlaf nicht unterbrochen"
+    # Pinned delay is 10s; a generous margin above the 0.05s head start,
+    # nowhere near the full delay a plain time.sleep(10) would have forced.
+    assert elapsed < 2.0, f"stop hat den Backoff-Schlaf nicht unterbrochen: {elapsed:.2f}s"
+
+
+def test_wait_for_stop_ends_a_blocking_wait_from_another_thread() -> None:
+    """The same mechanism, through wait_for -- see its own ``stop`` parameter."""
+    stop = threading.Event()
+    result_holder: list[ChannelItem | None] = []
+
+    def idle() -> Iterator[Event]:
+        time.sleep(0.002)  # see the same note in the test above
+        raise TransportTimeout("nichts")
+        yield  # pragma: no cover
+
+    def run() -> None:
+        result_holder.append(_client([idle] * 500).wait_for(lambda item: False, stop=stop))
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    time.sleep(0.05)
+    stop.set()
+    thread.join(timeout=5)
+
+    assert not thread.is_alive(), "wait_for hat auf stop.set() nicht reagiert"
+    assert result_holder == [None]
 
 
 # --- wait_for(): scripted, deterministic ---------------------------------
