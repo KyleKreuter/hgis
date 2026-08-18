@@ -26,6 +26,7 @@ function seededClient() {
   client.setQueryData(layerKeys.detail(LAYER), {})
   client.setQueryData(['layers', LAYER, 'features', 'page'], {})
   client.setQueryData(layerKeys.classify(LAYER, 'waermebedarf', 'quantile', 12), {})
+  client.setQueryData(layerKeys.values(LAYER, 'kategorie'), {})
   client.setQueryData(projectKeys.list(''), {})
   client.setQueryData(projectKeys.list('such'), {})
   client.setQueryData(projectKeys.detail(PROJECT), {})
@@ -96,6 +97,35 @@ describe('applyEditsOptions', () => {
     applyFeatureWriteResult(client, LAYER, PROJECT, { dataVersion: 9, featureCount: 43 })
 
     expect(isStale(client, layerKeys.classify(LAYER, 'waermebedarf', 'quantile', 12))).toBe(true)
+  })
+
+  /**
+   * Der `categorized`-Renderer-Gegenpart zum Feldspanne-Test oben: ein Schreiben kann
+   * einen bisher nie gesehenen Wert einführen, und die Kategorienliste
+   * (`layerKeys.values`, `styling/classification.ts`'s `layerValuesQuery`) hatte dafür
+   * bislang keine eigene Invalidierung.
+   *
+   * Wie bei der Feldspanne beweist dieser Test allein noch nicht, dass die eigene
+   * `values`-Zeile in `invalidateFeatureData` etwas tut: `layerKeys.detail(LAYER)`
+   * (`['layers', LAYER]`) deckt als Präfix auch `['layers', LAYER, 'values', ...]` ab,
+   * also bliebe diese Prüfung auch ohne die eigene Zeile grün. Der Test direkt danach
+   * isoliert sie über den Teilen/Zusammenführen-Pfad, der `layerKeys.detail` nur
+   * schreibt statt zu invalidieren.
+   */
+  it('erklärt die Werteliste (layerValuesQuery) für ungültig', () => {
+    const client = seededClient()
+
+    runOnSuccess(client)
+
+    expect(isStale(client, layerKeys.values(LAYER, 'kategorie'))).toBe(true)
+  })
+
+  it('erklärt die Werteliste auch beim Teilen/Zusammenführen für ungültig', () => {
+    const client = seededClient()
+
+    applyFeatureWriteResult(client, LAYER, PROJECT, { dataVersion: 9, featureCount: 43 })
+
+    expect(isStale(client, layerKeys.values(LAYER, 'kategorie'))).toBe(true)
   })
 
   it('erklärt jede Seitenkette der Projektliste für ungültig', () => {

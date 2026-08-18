@@ -186,6 +186,18 @@ async function refresh(
  * stale-bound warning made this observable for the first time -- own-session edits have
  * the matching fix in `api/edits.ts`'s `invalidateFeatureData`).
  *
+ * A graduated renderer's stored class bounds have exactly the same gap, one layer
+ * further down: `GraduatedEditor`'s own bound check reads this very `classify` cache
+ * entry live (`RANGE_METHOD`/`RANGE_CLASS_COUNT` in `classification.ts`), so
+ * invalidating it here is what lets a remote write that pushes the data past a stored
+ * class boundary surface its warning without a reload -- see that component for what the
+ * warning itself does and does not cover.
+ *
+ * A categorized renderer's distinct-value list (`layerKeys.values`,
+ * `layerValuesQuery`) is invalidated below for the matching reason on the write side --
+ * see `api/edits.ts`'s `invalidateFeatureData` for the full argument, including why the
+ * line stays even though nothing here currently reads that cache entry live.
+ *
  * Invalidated only for a layer whose `dataVersion` actually moved between the previous
  * catalog and the one just fetched, not for every layer on every catalog event: a
  * `dataVersion` bump is the one signal that a layer's *rows* changed (`layerSpecs.ts`'s
@@ -216,6 +228,7 @@ function invalidateChangedDataVersions(
     const previousVersion = previousVersions.get(layer.id)
     if (previousVersion !== undefined && previousVersion !== layer.dataVersion) {
       queryClient.invalidateQueries({ queryKey: ['layers', layer.id, 'classify'] })
+      queryClient.invalidateQueries({ queryKey: ['layers', layer.id, 'values'] })
     }
   }
 }

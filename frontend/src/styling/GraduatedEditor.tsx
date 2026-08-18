@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ClassifyMethod, ClassifyResult, GeometryType, LayerField } from '@/api/layers'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -8,14 +8,18 @@ import { formatCount } from '@/lib/format'
 import {
   columnNameOfField,
   fieldIdOfColumn,
+  heatmapFieldRangeQuery,
   initialGraduatedControls,
+  lowerClassIsEmpty,
   requestGraduatedClasses,
+  resolveRangeState,
   sharedSymbolOf,
   sourceNameOfField,
+  upperClassIsEmpty,
   withSharedSymbol,
   withSharedSymbolShape,
 } from './classification'
-import { ColorInput, NumberInput, Row } from './controls'
+import { BoundIndicator, ColorInput, NumberInput, Row, type BoundCheckState } from './controls'
 import { primaryColorOf, withPrimaryColor } from './defaults'
 import { isNumericField } from './fields'
 import { PaletteSelect } from './PaletteSelect'
@@ -68,6 +72,67 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
   // need to track something automatically again, it has to be a `useState` initial value
   // (see `initial` above) or a user action (see `request` below), never a reactive watch.
   const numericFields = fields.filter(isNumericField)
+
+  /**
+   * Whether the stored classes still fit the field's *current* data -- what "Kein
+   * automatisches Neuberechnen" (package 3) leaves silently unchecked otherwise.
+   *
+   * `classes[0].min`/`classes[classes.length - 1].max` are the classification's own
+   * outer bounds -- not the field's range at the time it was computed, but the range
+   * `stepExpression` (`styleToMapLibre.ts`) actually clamps against today, on every
+   * render. A live value below the first or above the last clamps to that edge class's
+   * colour instead of getting a colour of its own: the map goes on looking finished,
+   * exactly the failure this check exists to surface (package 3: "Es sieht richtig aus.
+   * Niemand merkt es.").
+   *
+   * Reuses `heatmapFieldRangeQuery`/`resolveRangeState` as-is (`classification.ts`) --
+   * a plain min/max read, the same one `HeatmapEditor`'s legend already checks its own
+   * fixed bounds against, and the same cache entry: both write paths that invalidate
+   * `layerKeys.classify` (`api/edits.ts`, `useLiveDataState.ts`) already cover it, so a
+   * remote write that pushes the data past a stored boundary surfaces here without
+   * anything new to invalidate.
+   */
+  const rangeQuery = useQuery({
+    ...heatmapFieldRangeQuery(layerId, renderer.field),
+    enabled: classes.length > 0,
+  })
+  const rangeState = resolveRangeState(rangeQuery)
+  const liveRange = typeof rangeState === 'object' ? rangeState : undefined
+  const lowerBound = classes[0]?.min
+  const upperBound = classes[classes.length - 1]?.max
+
+  /**
+   * "The data now reaches past a stored boundary" is the one case that gets the amber
+   * warning below -- a value outside the stored bounds gets an edge class's colour it
+   * does not actually belong to, the same correctness failure `HeatmapEditor`s legend
+   * already warns about for its own fixed bounds.
+   *
+   * "The data no longer reaches all the way to a stored boundary" is a different kind
+   * of stale and, on purpose, not the same warning -- every value still inside the
+   * stored bounds keeps landing in its own, correctly coloured class no matter how much
+   * of that range the current data actually uses. `upperClassIsEmpty`/
+   * `lowerClassIsEmpty` below name the one sharp, checkable fact worth surfacing from
+   * that side: not "the range shrank by some amount" (meaningless on its own --
+   * `quantile`'s classes are balanced by population, not by span, so a range that
+   * shrank 80% by dropping the top 5% of objects can still leave every class non-empty,
+   * while `equalInterval` can empty four of five classes from the same 5%; team
+   * review), but "the outermost class is *provably* empty", the one statement that
+   * holds regardless of method. Neither case gets the amber lock -- a neutral hint
+   * instead, so the one real correctness warning does not have to compete with it for
+   * attention (team review).
+   */
+  const dataExceedsLower = liveRange !== undefined && lowerBound !== undefined && liveRange.min < lowerBound
+  const dataExceedsUpper = liveRange !== undefined && upperBound !== undefined && liveRange.max > upperBound
+  const lowerClassEmpty = liveRange !== undefined && lowerClassIsEmpty(classes, liveRange.min)
+  const upperClassEmpty = liveRange !== undefined && upperClassIsEmpty(classes, liveRange.max)
+  // Same "the check itself could not run" distinction `HeatmapEditor`'s legend makes
+  // (`checkFailed` there): `'error'`/`'invalid'` never resolve to a `liveRange`, no
+  // matter how long the panel stays open, so `dataExceeds*` above reads exactly like
+  // "checked, and it fits" for those two states -- indistinguishable from a real pass
+  // unless something renders the difference on purpose.
+  const checkFailed = rangeState === 'error' || rangeState === 'invalid'
+  const lowerState: BoundCheckState = checkFailed ? 'unknown' : dataExceedsLower ? 'stale' : 'current'
+  const upperState: BoundCheckState = checkFailed ? 'unknown' : dataExceedsUpper ? 'stale' : 'current'
 
   /**
    * The only place `/classify` is asked for and the result written back. Called from
@@ -225,6 +290,51 @@ export function GraduatedEditor({ layerId, geometryType, renderer, fields, onCha
         <p className="py-1 text-xs text-muted-foreground">
           Das Feld hat zu wenige verschiedene Werte für {formatCount(classCount)} Klassen. Es sind
           nur {formatCount(classes.length)} geworden.
+        </p>
+      )}
+
+      {classes.length > 0 && lowerBound !== undefined && upperBound !== undefined && (
+        <p className="flex items-center gap-1 py-1 text-xs text-muted-foreground tabular-nums">
+          <span>Grenzen:</span>
+          <BoundIndicator
+            value={lowerBound}
+            fixed
+            state={lowerState}
+            description={
+              checkFailed
+                ? 'Untere Klassengrenze. Konnte nicht geprüft werden, ob der aktuelle Datenbestand schon darunter reicht -- die Wertespanne ließ sich gerade nicht laden.'
+                : dataExceedsLower
+                  ? 'Untere Klassengrenze. Der aktuelle Datenbestand reicht bereits darunter -- die Klassifizierung passt nicht mehr zu den Daten. Werte darunter zeigen dieselbe Farbe wie die unterste Klasse.'
+                  : 'Untere Klassengrenze. Werte darunter zeigen dieselbe Farbe wie die unterste Klasse.'
+            }
+          />
+          <span>–</span>
+          <BoundIndicator
+            value={upperBound}
+            fixed
+            state={upperState}
+            description={
+              checkFailed
+                ? 'Obere Klassengrenze. Konnte nicht geprüft werden, ob der aktuelle Datenbestand schon darüber hinausreicht -- die Wertespanne ließ sich gerade nicht laden.'
+                : dataExceedsUpper
+                  ? 'Obere Klassengrenze. Der aktuelle Datenbestand reicht bereits darüber hinaus -- die Klassifizierung passt nicht mehr zu den Daten. Werte darüber zeigen dieselbe Farbe wie die oberste Klasse.'
+                  : 'Obere Klassengrenze. Werte darüber zeigen dieselbe Farbe wie die oberste Klasse.'
+            }
+          />
+        </p>
+      )}
+
+      {(lowerClassEmpty || upperClassEmpty) && (
+        // Neutral on purpose -- text-muted-foreground, not the amber the two
+        // BoundIndicators above use for a real correctness problem. An empty outer
+        // class is not a wrong colour anywhere on the map; it is a resolution loss a
+        // deliberate "Klassen neu berechnen" can fix, not a silent misrepresentation.
+        <p className="py-1 text-xs text-muted-foreground">
+          {lowerClassEmpty && upperClassEmpty
+            ? 'Die unterste und die oberste Klasse sind im aktuellen Datenbestand leer.'
+            : upperClassEmpty
+              ? 'Die oberste Klasse ist im aktuellen Datenbestand leer.'
+              : 'Die unterste Klasse ist im aktuellen Datenbestand leer.'}
         </p>
       )}
 

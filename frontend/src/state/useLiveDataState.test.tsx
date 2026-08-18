@@ -297,6 +297,7 @@ describe('useLiveDataState', () => {
    */
   describe('Feldspanne bei Datenänderung (heatmapFieldRangeQuery)', () => {
     const CLASSIFY_KEY = layerKeys.classify(ACTIVE, 'wert', 'quantile', 12)
+    const VALUES_KEY = layerKeys.values(ACTIVE, 'kategorie')
 
     function isInvalidated(client: QueryClient, queryKey: readonly unknown[]): boolean {
       const query = client.getQueryCache().find({ queryKey, exact: true })
@@ -308,18 +309,24 @@ describe('useLiveDataState', () => {
       const client = clientKeepingSeededData()
       client.setQueryData(layerKeys.list(PROJECT), [{ ...summary(ACTIVE, 'Kanäle'), dataVersion: 1 }])
       client.setQueryData(CLASSIFY_KEY, {})
+      client.setQueryData(VALUES_KEY, {})
       stubFetch([{ match: LAYERS_URL, body: [{ ...summary(ACTIVE, 'Kanäle'), dataVersion: 2 }] }])
       renderWithQueryClient(<Probe activeLayerId={null} />, client)
 
       act(() => probeApi!.notify())
 
       await waitFor(() => expect(isInvalidated(client, CLASSIFY_KEY)).toBe(true), { timeout: 2000 })
+      // Dieselbe Erklärung für ungültig gilt für die Kategorienliste
+      // (`layerValuesQuery`) -- ein fremdes Schreiben kann auch dort einen bisher
+      // unbekannten Wert eingeführt haben.
+      expect(isInvalidated(client, VALUES_KEY)).toBe(true)
     })
 
     it('lässt die Feldspanne eines Layers mit unveränderter dataVersion in Ruhe', async () => {
       const client = clientKeepingSeededData()
       client.setQueryData(layerKeys.list(PROJECT), [{ ...summary(ACTIVE, 'Kanäle'), dataVersion: 1 }])
       client.setQueryData(CLASSIFY_KEY, {})
+      client.setQueryData(VALUES_KEY, {})
       const { calls } = stubFetch([{ match: LAYERS_URL, body: [{ ...summary(ACTIVE, 'Kanäle'), dataVersion: 1 }] }])
       renderWithQueryClient(<Probe activeLayerId={null} />, client)
 
@@ -328,6 +335,7 @@ describe('useLiveDataState', () => {
       await waitFor(() => expect(calls).toHaveLength(1), { timeout: 2000 })
       await pastTheSettleWindow()
       expect(isInvalidated(client, CLASSIFY_KEY)).toBe(false)
+      expect(isInvalidated(client, VALUES_KEY)).toBe(false)
     })
 
     /**
@@ -346,6 +354,7 @@ describe('useLiveDataState', () => {
       const client = clientKeepingSeededData()
       client.setQueryData(layerKeys.list(PROJECT), [])
       client.setQueryData(CLASSIFY_KEY, {})
+      client.setQueryData(VALUES_KEY, {})
       const { calls } = stubFetch([{ match: LAYERS_URL, body: [summary(ACTIVE, 'Kanäle')] }])
       renderWithQueryClient(<Probe activeLayerId={null} />, client)
 
@@ -354,6 +363,7 @@ describe('useLiveDataState', () => {
       await waitFor(() => expect(calls).toHaveLength(1), { timeout: 2000 })
       await pastTheSettleWindow()
       expect(isInvalidated(client, CLASSIFY_KEY)).toBe(false)
+      expect(isInvalidated(client, VALUES_KEY)).toBe(false)
     })
   })
 })

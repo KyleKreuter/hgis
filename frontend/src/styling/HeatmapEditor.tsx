@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Info, Loader2, Lock, LockOpen, Wand2 } from 'lucide-react'
+import { Info, Loader2, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { LayerField } from '@/api/layers'
 import { Button } from '@/components/ui/button'
@@ -8,8 +8,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { formatAttributeNumber } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import {
   columnNameOfField,
   fieldIdOfColumn,
@@ -20,7 +18,7 @@ import {
   sourceNameOfField,
   type FieldRangeState,
 } from './classification'
-import { NumberInput, Row } from './controls'
+import { BoundIndicator, NumberInput, Row } from './controls'
 import { COLOR_RAMPS, sampleRamp } from './defaults'
 import { isNumericField } from './fields'
 import { PaletteSelect } from './PaletteSelect'
@@ -375,7 +373,7 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState, weightMin, weig
    * exactly like "checked, and it fits" in that case -- there is no third value it could
    * return instead. Found by the Prüfer: "eine Warnung, die stillschweigend nie kommt, ist
    * schlimmer als gar keine. Sie erzeugt Vertrauen, das sie nicht trägt." This is what
-   * keeps that silence from being mistaken for an answer -- `LegendBound` renders a
+   * keeps that silence from being mistaken for an answer -- `BoundIndicator` renders a
    * different icon for it, not just a different tooltip sentence, so the distinction
    * survives even for someone who never hovers.
    */
@@ -397,7 +395,7 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState, weightMin, weig
           {hasField && stillLoading && <span>Wird geladen…</span>}
           {hasField && !stillLoading && known && (
             <>
-              <LegendBound
+              <BoundIndicator
                 value={effectiveMin!}
                 fixed={weightMin !== undefined}
                 state={checkUnavailableMin ? 'unknown' : dataExceedsMin ? 'stale' : 'current'}
@@ -409,7 +407,7 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState, weightMin, weig
                       : 'Feste Untergrenze. Werte darunter zeigen dieselbe Farbe wie dieser Wert.'
                 }
               />
-              <LegendBound
+              <BoundIndicator
                 value={effectiveMax!}
                 fixed={weightMax !== undefined}
                 state={checkUnavailableMax ? 'unknown' : dataExceedsMax ? 'stale' : 'current'}
@@ -437,7 +435,7 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState, weightMin, weig
          * gebraucht würde (team review, package 2, wie schon bei `RectangleSelectToolbar`s
          * Zuschnitt-Hinweis).
          *
-         * Only while neither bound is fixed: once one is, `LegendBound`'s own lock icon
+         * Only while neither bound is fixed: once one is, `BoundIndicator`'s own lock icon
          * already says the more specific, more useful thing right next to the number it
          * is about -- a second, generic tooltip next to it would only repeat the warning
          * for a problem the user has, by setting that bound, already started to solve.
@@ -462,50 +460,6 @@ function HeatmapLegend({ ramp, hasField, isFetching, rangeState, weightMin, weig
         )}
       </div>
     </div>
-  )
-}
-
-/**
- * `current`: fixed, and the live range confirms it still fits -- a neutral lock.
- * `stale`: fixed, and the live range has grown past it -- an amber lock, the same colour
- * convention `NumberInput`'s range validation and every other warning text in this app
- * already use.
- * `unknown`: fixed, but the live range could not be checked at all (`'error'`/`'invalid'`,
- * `HeatmapLegend`'s `checkFailed`) -- an open lock, deliberately not the same neutral
- * colour `current` uses: "verified fine" and "never checked" must not look alike, or the
- * check might as well not exist (Prüfer, package 2).
- */
-type BoundCheckState = 'current' | 'stale' | 'unknown'
-
-interface LegendBoundProps {
-  value: number
-  fixed: boolean
-  state: BoundCheckState
-  description: string
-}
-
-/** One legend end -- a plain formatted number, or the same number with a lock icon and
- *  its own tooltip when `weightMin`/`weightMax` fixed it rather than the automatic stretch. */
-function LegendBound({ value, fixed, state, description }: LegendBoundProps) {
-  if (!fixed) return <span>{formatAttributeNumber(value)}</span>
-  return (
-    <span className="inline-flex items-center gap-1">
-      {formatAttributeNumber(value)}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span
-              tabIndex={0}
-              className={cn('shrink-0', state === 'stale' ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground')}
-              aria-label={description}
-            >
-              {state === 'unknown' ? <LockOpen className="size-3" /> : <Lock className="size-3" />}
-            </span>
-          }
-        />
-        <TooltipContent className="max-w-xs">{description}</TooltipContent>
-      </Tooltip>
-    </span>
   )
 }
 
