@@ -263,6 +263,12 @@ class Renderer:
     :param palette: categorized only: the colour palette's display name
     :param radius: heatmap only -- influence radius in screen pixels, 1..100
     :param intensity: heatmap only -- a multiplier, 0.1..5.0
+    :param weight_min: heatmap only -- the field value mapped to weight 0. Optional;
+        absent together with ``weight_max`` means the automatic window (0, or the data
+        minimum once negative values occur, up to the field's maximum). Either both are
+        given or neither is -- the server checks that, see the module docstring
+    :param weight_max: heatmap only -- the field value mapped to weight 1, checked by the
+        server to be strictly greater than ``weight_min``
     """
 
     type: str
@@ -277,6 +283,8 @@ class Renderer:
     palette: str | None = None
     radius: float | None = None
     intensity: float | None = None
+    weight_min: float | None = None
+    weight_max: float | None = None
 
     def to_json(self) -> dict[str, Any]:
         return _drop_none(
@@ -301,6 +309,8 @@ class Renderer:
                 "palette": self.palette,
                 "radius": self.radius,
                 "intensity": self.intensity,
+                "weightMin": self.weight_min,
+                "weightMax": self.weight_max,
             }
         )
 
@@ -321,6 +331,8 @@ class Renderer:
             palette=data.get("palette"),
             radius=data.get("radius"),
             intensity=data.get("intensity"),
+            weight_min=data.get("weightMin"),
+            weight_max=data.get("weightMax"),
         )
 
 

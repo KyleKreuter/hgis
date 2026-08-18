@@ -97,6 +97,14 @@ public final class StyleDtos {
 	 * @param intensity  heatmap only: a multiplier on the computed density, 0.1..5.0,
 	 *                   default 1.0. Same role as {@code radius}: range-checked, otherwise
 	 *                   the client's own concern.
+	 * @param weightMin  heatmap only: the field value mapped to weight 0. Optional; absent
+	 *                   together with {@code weightMax} means the automatic window -- 0 (or
+	 *                   the data minimum, once negative values occur) to the field's maximum.
+	 *                   Either both are present or neither is, see {@code LayerStyleService}.
+	 * @param weightMax  heatmap only: the field value mapped to weight 1. Must be strictly
+	 *                   greater than {@code weightMin} where both are given -- an equal or
+	 *                   descending window is not a range MapLibre's {@code interpolate} can
+	 *                   parse.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record Renderer(
@@ -111,7 +119,9 @@ public final class StyleDtos {
 			String ramp,
 			String palette,
 			Double radius,
-			Double intensity) {
+			Double intensity,
+			Double weightMin,
+			Double weightMax) {
 	}
 
 	/**

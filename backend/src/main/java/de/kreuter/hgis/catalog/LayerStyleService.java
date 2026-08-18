@@ -306,11 +306,12 @@ public class LayerStyleService {
 			StyleDtos.Symbol symbol = renderer.symbol() != null ? renderer.symbol()
 					: renderer.fallbackSymbol() != null ? renderer.fallbackSymbol()
 					: defaultSymbolFor(geometryType);
-			// method, classCount, ramp, palette, radius and intensity describe a
-			// classification or a heatmap -- dropped along with it, not carried over onto
-			// a renderer type that no longer has any use for them.
+			// method, classCount, ramp, palette, radius, intensity, weightMin and weightMax
+			// describe a classification or a heatmap -- dropped along with it, not carried
+			// over onto a renderer type that no longer has any use for them.
 			renderer = new StyleDtos.Renderer(
-					StyleDtos.RENDERER_SINGLE, symbol, null, null, null, null, null, null, null, null, null, null);
+					StyleDtos.RENDERER_SINGLE, symbol, null, null, null, null, null, null, null, null, null, null,
+					null, null);
 		}
 		if (labelsHit) {
 			labels = new StyleDtos.Labels(false, null, labels.size(), labels.color(), labels.haloColor(),
@@ -387,6 +388,7 @@ public class LayerStyleService {
 
 		requireRange(renderer.radius(), MIN_HEATMAP_RADIUS, MAX_HEATMAP_RADIUS, "radius");
 		requireRange(renderer.intensity(), MIN_HEATMAP_INTENSITY, MAX_HEATMAP_INTENSITY, "intensity");
+		requireWeightRange(type, renderer.weightMin(), renderer.weightMax());
 
 		return new StyleDtos.Renderer(
 				type,
@@ -400,7 +402,45 @@ public class LayerStyleService {
 				validateRamp(renderer.ramp()),
 				validateDisplayName(renderer.palette(), "palette"),
 				renderer.radius(),
-				renderer.intensity());
+				renderer.intensity(),
+				renderer.weightMin(),
+				renderer.weightMax());
+	}
+
+	/**
+	 * {@code weightMin}/{@code weightMax}: only meaningful for heatmap, where they replace
+	 * the renderer's automatic normalisation window (0, or the data minimum once negative
+	 * values occur, up to the field's maximum) with an explicit one. Present on any other
+	 * renderer type, they are a 400 -- there is no normalisation there to redirect.
+	 *
+	 * <p>Both or neither, never just one. The automatic end of the window is computed from
+	 * the layer's current data, entirely outside this validation -- so a lone
+	 * {@code weightMin} above the field's true (but here unknown) maximum could not be
+	 * caught at save time, only fail later as a descending MapLibre {@code interpolate} the
+	 * client cannot parse -- the exact failure mode {@link #requireNoClassificationMembers}
+	 * already exists to keep out of a heatmap document. Requiring both keeps the
+	 * {@code weightMax > weightMin} check below total: whenever it runs, both sides are
+	 * known, never one explicit value compared against a guess.
+	 */
+	private static void requireWeightRange(String type, Double weightMin, Double weightMax) {
+		if (!StyleDtos.RENDERER_HEATMAP.equals(type)) {
+			if (weightMin != null || weightMax != null) {
+				throw new BadRequestException(
+						"weightMin und weightMax sind nur beim Renderer-Typ heatmap erlaubt");
+			}
+			return;
+		}
+
+		if ((weightMin == null) != (weightMax == null)) {
+			throw new BadRequestException(
+					"weightMin und weightMax müssen entweder beide gesetzt sein oder beide fehlen");
+		}
+		requireFinite(weightMin, "weightMin");
+		requireFinite(weightMax, "weightMax");
+		if (weightMin != null && weightMax <= weightMin) {
+			throw new BadRequestException("weightMax (" + weightMax + ") muss größer als weightMin ("
+					+ weightMin + ") sein");
+		}
 	}
 
 	/**

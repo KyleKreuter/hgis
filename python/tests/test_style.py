@@ -239,6 +239,103 @@ def test_an_unknown_ramp_is_reported_by_the_server_readably() -> None:
     assert error.value.status == 400
 
 
+# --- the server's own weight-range rule (weightMin/weightMax) -------------
+
+
+def test_set_style_sends_the_optional_weight_range_only_when_given() -> None:
+    """
+    ``weight_min``/``weight_max`` travel through ``to_json`` like every other
+    optional member -- present only when given, via the same ``_drop_none``
+    mechanism :meth:`test_set_style_sends_only_the_style_key` already proves
+    for ``intensity``. What the server sends back is what ``result`` and
+    ``layer.style`` read -- the column name the field resolved to, and the
+    range echoed back unchanged.
+    """
+
+    def handle_with_range(request: object) -> Response:
+        return Response(
+            200,
+            f'{{"id":"{LAYER_ID}","name":"N","kind":"VECTOR",'
+            '"geometryType":"MULTIPOLYGON","srid":25832,"featureCount":1003,'
+            '"visible":true,"fields":[],'
+            '"style":{"version":1,"renderer":{"type":"heatmap","field":"waermebedarf_unsaniert",'
+            '"ramp":"inferno","weightMin":0.0,"weightMax":1225563.0}}}',
+        )
+
+    client, transport = _client(handle_with_range)
+    layer = _layer(client)
+
+    renderer = hgis.Renderer(
+        hgis.RENDERER_HEATMAP,
+        field="waermebedarf_unsaniert",
+        ramp="inferno",
+        weight_min=0,
+        weight_max=1_225_563,
+    )
+    result = layer.set_style(hgis.Style(renderer))
+
+    sent_renderer = transport.bodies[-1]["style"]["renderer"]
+    assert sent_renderer["weightMin"] == 0
+    assert sent_renderer["weightMax"] == 1_225_563
+    assert result.renderer.weight_min == 0.0
+    assert result.renderer.weight_max == 1225563.0
+
+    def handle_without_range(request: object) -> Response:
+        return Response(
+            200,
+            f'{{"id":"{LAYER_ID}","name":"N","kind":"VECTOR",'
+            '"geometryType":"MULTIPOLYGON","srid":25832,"featureCount":1003,'
+            '"visible":true,"fields":[],'
+            '"style":{"version":1,"renderer":{"type":"heatmap","field":"waermebedarf_unsaniert",'
+            '"ramp":"inferno"}}}',
+        )
+
+    client, transport = _client(handle_without_range)
+    layer = _layer(client)
+    renderer = hgis.Renderer(
+        hgis.RENDERER_HEATMAP, field="waermebedarf_unsaniert", ramp="inferno"
+    )
+    result = layer.set_style(hgis.Style(renderer))
+
+    sent_renderer = transport.bodies[-1]["style"]["renderer"]
+    assert "weightMin" not in sent_renderer
+    assert "weightMax" not in sent_renderer
+    assert result.renderer.weight_min is None
+    assert result.renderer.weight_max is None
+
+
+def test_a_one_sided_weight_range_is_reported_by_the_server_readably() -> None:
+    """
+    This library keeps no check of its own on ``weight_min``/``weight_max`` --
+    same reasoning as :func:`test_an_unknown_ramp_is_reported_by_the_server_readably`:
+    the server is the sole authority on the rule (here: both or neither, and
+    ``weightMax`` strictly greater than ``weightMin``, see
+    ``LayerStyleService.requireWeightRange``), so a caller setting only one of
+    the two reaches the server and gets its message back unchanged.
+    """
+
+    def handle(request: object) -> Response:
+        return Response(
+            400,
+            '{"title":"Ungültige Anfrage","status":400,'
+            '"detail":"weightMin und weightMax müssen entweder beide gesetzt sein oder '
+            'beide fehlen",'
+            f'"instance":"/api/layers/{LAYER_ID}"}}',
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+    renderer = hgis.Renderer(hgis.RENDERER_HEATMAP, field="waermebedarf_unsaniert", weight_min=0)
+
+    with pytest.raises(hgis.ApiError) as error:
+        layer.set_style(hgis.Style(renderer))
+
+    assert transport.count == 1  # reached the server -- this library keeps no local rule
+    assert "weightMin" in str(error.value)
+    assert "weightMax" in str(error.value)
+    assert error.value.status == 400
+
+
 # --- the local check, before anything is sent -----------------------------
 
 
