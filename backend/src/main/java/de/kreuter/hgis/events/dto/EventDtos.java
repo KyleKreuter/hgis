@@ -32,6 +32,9 @@ public final class EventDtos {
 		/** {@link ProjectViewState}. */
 		public static final String PROJECT_VIEW_STATE = "project-view-state";
 
+		/** {@link ProjectCatalog}. */
+		public static final String PROJECT_CATALOG = "project-catalog";
+
 		private EventNames() {
 		}
 	}
@@ -48,5 +51,20 @@ public final class EventDtos {
 	 *     that provokes the next write.
 	 */
 	public record ProjectViewState(UUID projectId, long version, String origin) {
+	}
+
+	/**
+	 * A project's catalog -- its layer list, a layer's properties, its style, its data --
+	 * now stands at {@code version}. Read it from
+	 * {@code GET /api/projects/{projectId}/layers}: the layer summaries that comes back
+	 * carry {@code dataVersion}, {@code styleVersion} and {@code clipVersion} individually,
+	 * so re-reading that list is enough to notice and refetch whatever tiles moved.
+	 *
+	 * @param version rises with every write to any layer or field of this project.
+	 *     Unlike {@link ProjectViewState#version}, moved by a database trigger rather than
+	 *     the write path that caused it -- see {@code CatalogChanged}'s own javadoc for why.
+	 * @param origin  same rule as {@link ProjectViewState#origin}.
+	 */
+	public record ProjectCatalog(UUID projectId, long version, String origin) {
 	}
 }

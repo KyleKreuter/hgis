@@ -1,5 +1,6 @@
 package de.kreuter.hgis.changelog;
 
+import de.kreuter.hgis.catalog.CatalogTouch;
 import de.kreuter.hgis.catalog.ProjectRepository;
 import de.kreuter.hgis.changelog.dto.ChangeLogDtos;
 import de.kreuter.hgis.common.BadRequestException;
@@ -13,6 +14,24 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Writes and reads the change log every layer- and feature-write leaves behind
  * (CONTRACT.md "Schreibstufe" 1.2).
+ *
+ * <p>{@link #record} is also where almost every catalog-changing write path announces
+ * itself to the live channel (plan "Der Live-Kanal meldet auch Datenaenderungen"): nearly
+ * all of them already call it for the change log's own sake, so hooking {@link
+ * CatalogTouch} in here reaches them for free instead of asking each one to remember a
+ * second call. The two write paths that never log to the change log at all -- {@code
+ * LayerService#reorder} and {@code LayerFieldService#renameField} -- call
+ * {@link CatalogTouch} directly instead.
+ *
+ * <p>{@link #recordWithoutTouch} is the one deliberate exception, for {@code
+ * ProjectDuplicateTransactions#copyLayer} alone: it runs once per layer, each its own
+ * transaction, so hooking {@link CatalogTouch} into it the ordinary way would turn one
+ * duplicate of several layers into that many separate catalog-changed events -- each
+ * showing the target project only partly copied. The change log still gets every entry,
+ * one per layer, exactly as before; only the live-channel announcement is deferred to
+ * {@code ProjectDuplicateTransactions#complete}, which is called once and reaches the
+ * channel with the finished copy -- the same "one operation, one event" rule {@code
+ * ImportTransactions#complete} already follows for an import's many batches.
  */
 @Service
 public class ChangeLogService {
@@ -22,10 +41,13 @@ public class ChangeLogService {
 
 	private final ChangeLogRepository repository;
 	private final ProjectRepository projectRepository;
+	private final CatalogTouch catalogTouch;
 
-	ChangeLogService(ChangeLogRepository repository, ProjectRepository projectRepository) {
+	ChangeLogService(ChangeLogRepository repository, ProjectRepository projectRepository,
+			CatalogTouch catalogTouch) {
 		this.repository = repository;
 		this.projectRepository = projectRepository;
+		this.catalogTouch = catalogTouch;
 	}
 
 	/**
@@ -47,6 +69,17 @@ public class ChangeLogService {
 	 *                      ChangeLogAction#FEATURE_DELETE}; null for every other action
 	 */
 	public void record(UUID projectId, UUID layerId, String layerName, String action,
+			String clientName, int affectedCount, String deletedRowsJson) {
+		repository.save(new ChangeLogEntry(
+				projectId, layerId, layerName, action, clientName, affectedCount, deletedRowsJson));
+		catalogTouch.touch(projectId, clientName);
+	}
+
+	/**
+	 * Same entry as {@link #record}, but does not announce it to the live channel -- see
+	 * this class's own javadoc for the one caller this exists for and why.
+	 */
+	public void recordWithoutTouch(UUID projectId, UUID layerId, String layerName, String action,
 			String clientName, int affectedCount, String deletedRowsJson) {
 		repository.save(new ChangeLogEntry(
 				projectId, layerId, layerName, action, clientName, affectedCount, deletedRowsJson));

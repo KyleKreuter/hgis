@@ -27,6 +27,21 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
+/**
+ * <p>Deliberately outside the scope of {@code CatalogChanged} (plan "Der Live-Kanal
+ * meldet auch Datenaenderungen"), unlike almost every write path in {@code
+ * de.kreuter.hgis.catalog}'s other services: {@link #create}, {@link #update} and {@link
+ * #delete} never touch {@code layer} or {@code layer_field}, so the trigger that drives
+ * {@code catalog_version} (V14__catalog_version.sql) never fires for them, and the event
+ * documents its receiver's reaction as "reread {@code GET .../layers}" -- a project's own
+ * name, description, basemap and last viewport are simply not in that response. Publishing
+ * the event anyway would either be a lie (nothing to reread that actually reflects the
+ * change) or would silently widen what the event means for {@code de.kreuter.hgis.events}'
+ * documented contract, mid-plan, while the frontend package is being built against it in
+ * parallel. {@code duplicate}'s own target-project announcement is the one exception, and
+ * it is made by {@link ProjectDuplicateTransactions#complete}, which knows when the copy is
+ * actually finished -- not by this class, which only starts the job.
+ */
 @Service
 public class ProjectService {
 

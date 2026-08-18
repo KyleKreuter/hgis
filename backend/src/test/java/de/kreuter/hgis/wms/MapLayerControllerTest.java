@@ -144,6 +144,36 @@ class MapLayerControllerTest {
 		assertThat(entries.get(0).getAffectedCount()).isEqualTo(1);
 	}
 
+	/**
+	 * Found on review (plan "Der Live-Kanal meldet auch Datenaenderungen"): this endpoint
+	 * answers synchronously with the created layer, so its writer benefits from the same
+	 * echo-suppression a layer created through {@code LayerController} already gets -- but
+	 * {@code X-Hgis-Client} was never wired here at all, so {@code MapLayerService.create}
+	 * always logged (and would have announced) {@code null}, indistinguishable from an
+	 * anonymous writer.
+	 */
+	@Test
+	@DisplayName("the writer's name reaches the change log, the same as any other layer creation")
+	void theWritersNameReachesTheChangeLog() throws Exception {
+		given(capabilitiesService.capabilities(SERVICE_URL)).willReturn(twoLayerCapabilities());
+
+		String result = mockMvc.perform(post("/api/projects/{projectId}/map-layers", project.getId())
+						.header(de.kreuter.hgis.common.ClientId.HEADER, "cli-map-layer")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(requestBody("[\"stadtplan\"]", null, null)))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+
+		UUID layerId = UUID.fromString(tools.jackson.databind.json.JsonMapper.builder().build()
+				.readTree(result).get("id").asString());
+		ChangeLogEntry entry = changeLogRepository
+				.findByProjectIdOrderByOccurredAtDescIdDesc(project.getId(), org.springframework.data.domain.PageRequest.of(0, 10))
+				.stream()
+				.filter(e -> layerId.equals(e.getLayerId()))
+				.findFirst().orElseThrow();
+		assertThat(entry.getClientName()).isEqualTo("cli-map-layer");
+	}
+
 	@Test
 	@DisplayName("no name given falls back to the first chosen layer's title")
 	void defaultsNameToTheFirstChosenLayersTitle() throws Exception {

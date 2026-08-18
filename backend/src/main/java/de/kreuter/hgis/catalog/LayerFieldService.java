@@ -50,16 +50,18 @@ public class LayerFieldService {
 	private final LayerStyleService styleService;
 	private final ChangeLogService changeLog;
 	private final JdbcClient jdbc;
+	private final CatalogTouch catalogTouch;
 
 	LayerFieldService(LayerRepository layerRepository, LayerFieldRepository fieldRepository,
 			TableCreator tableCreator, LayerStyleService styleService, ChangeLogService changeLog,
-			JdbcClient jdbc) {
+			JdbcClient jdbc, CatalogTouch catalogTouch) {
 		this.layerRepository = layerRepository;
 		this.fieldRepository = fieldRepository;
 		this.tableCreator = tableCreator;
 		this.styleService = styleService;
 		this.changeLog = changeLog;
 		this.jdbc = jdbc;
+		this.catalogTouch = catalogTouch;
 	}
 
 	/**
@@ -95,9 +97,15 @@ public class LayerFieldService {
 	/**
 	 * Changes only {@code source_name}. {@code column_name} and {@code data_type} are the
 	 * physical column and stay exactly as they are (CONTRACT.md phase 11, trap 3).
+	 *
+	 * @param clientName who is writing, from {@code X-Hgis-Client}, or null. A rename is
+	 *     not one of {@link ChangeLogAction}'s tokens -- it never reaches the change log
+	 *     at all -- so this is announced to {@link CatalogTouch} directly rather than
+	 *     through {@link ChangeLogService#record}.
 	 */
 	@Transactional
-	public LayerDtos.Field renameField(UUID layerId, UUID fieldId, LayerDtos.RenameFieldRequest request) {
+	public LayerDtos.Field renameField(UUID layerId, UUID fieldId, LayerDtos.RenameFieldRequest request,
+			String clientName) {
 		Layer layer = requireLayer(layerId);
 		layer.requireNotTrashed();
 		List<LayerField> fields = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
@@ -122,6 +130,7 @@ public class LayerFieldService {
 		}
 
 		field.rename(name);
+		catalogTouch.touch(layer.getProject().getId(), clientName);
 		return toDto(field);
 	}
 
