@@ -208,9 +208,26 @@ nicht nichts.
 
 **Achtung: Wählen Sie als Gewicht ein Feld, bei dem die Null etwas bedeutet.** Länge,
 Fläche, Anzahl und Anteil sind solche Felder. Eine Jahreszahl ist es nicht: Bei Baujahren
-von 1950 bis 2020 liegen alle Gewichte zwischen 0,97 und 1,00, und die Karte zeigt siebzig
-Jahre Unterschied als gleichmäßige Hitze. Das Programm erkennt das nicht — es prüft nur,
-ob negative Werte vorkommen.
+von 1900 bis 2019 liegen 94 Prozent der Skala vor dem ersten echten Wert, und die Karte
+zeigt hundert Jahre Unterschied als gleichmäßige Hitze. Das Programm erkennt das nicht —
+es prüft nur, ob negative Werte vorkommen.
+
+**Sie können beide Grenzen selbst festlegen.** Der Schalter „Grenzen manuell festlegen" im
+Symbologie-Panel übernimmt zunächst die automatischen Werte; ein Knopf daneben schlägt
+Grenzen vor, die Ausreißer aussparen. Das ist der Ausweg für zwei Fälle: Felder ohne
+natürlichen Nullpunkt (Jahreszahlen) und Felder mit wenigen sehr großen Werten.
+
+Der zweite Fall ist der häufigere. Beim Wärmebedarf Hamburger Gebäude ist der größte Wert
+das 240-fache des mittleren; ohne Grenze trägt ein typisches Gebäude vier Promille Gewicht
+und die Karte bleibt fast leer. Mit einer Obergrenze bei rund 880 000 kWh/a trägt es 21
+Prozent. Die Legende zeigt eine feste Grenze mit einem Schloss und färbt es bernstein,
+sobald die Daten darüber hinausgewachsen sind.
+
+**Grenze und Intensität wirken zusammen.** Wenn Sie eine Obergrenze setzen, steigt das
+Gewicht aller Objekte — und wo viele Objekte dicht beieinanderliegen, addiert sich das bis
+zur vollen Sättigung. Die Karte ist dann überall gleich hell. Senken Sie in diesem Fall die
+Intensität, bis die Unterschiede wieder sichtbar werden. Bei 46 000 Gebäuden über ganz
+Hamburg lag ein brauchbarer Wert bei etwa 0,12 statt 1,0.
 
 Enthält ein Feld negative Werte, rechnet das Programm vom kleinsten Wert aus. Der kleinste
 Wert trägt dann nichts bei.
