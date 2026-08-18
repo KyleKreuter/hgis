@@ -40,11 +40,13 @@ describe('useLiveDataState', () => {
   function Probe({
     activeLayerId = ACTIVE as string | null,
     onActiveLayerDeleted = () => {},
+    workAtRisk = false,
   }: {
     activeLayerId?: string | null
     onActiveLayerDeleted?: (layer: Pick<LayerSummary, 'id' | 'name'>) => void
+    workAtRisk?: boolean
   } = {}) {
-    probeApi = useLiveDataState(PROJECT, { activeLayerId, onActiveLayerDeleted })
+    probeApi = useLiveDataState(PROJECT, { activeLayerId, onActiveLayerDeleted, workAtRisk })
     return null
   }
 
@@ -198,5 +200,91 @@ describe('useLiveDataState', () => {
 
     await pastTheSettleWindow()
     expect(calls).toHaveLength(0)
+  })
+
+  /**
+   * Vom Prüfer gefunden: `activeVectorLayer` in `projects.$projectId.tsx` wird direkt
+   * aus der Layerliste berechnet, und `DrawController`/`AttributeTable` haengen genau
+   * daran. Ein Reload, der den aktiven Layer verschwinden liesse, wuerde die
+   * Zeichenoberflaeche also austragen, noch bevor `onActiveLayerDeleted` oder
+   * `leaveGuard` ueberhaupt zum Zug kaemen. `workAtRisk` haelt den Reload deshalb
+   * komplett zurueck, nicht nur dessen Folge.
+   */
+  describe('workAtRisk', () => {
+    it('lädt nicht nach, solange Arbeit auf dem Spiel steht', async () => {
+      const { calls } = stubFetch([{ match: LAYERS_URL, body: [] }])
+      renderWithQueryClient(<Probe workAtRisk />)
+
+      act(() => probeApi!.notify())
+
+      await pastTheSettleWindow()
+      expect(calls).toHaveLength(0)
+    })
+
+    it('holt eine zurückgehaltene Aktualisierung nach, sobald nichts mehr auf dem Spiel steht', async () => {
+      const { calls } = stubFetch([{ match: LAYERS_URL, body: [] }])
+      const view = renderWithQueryClient(<Probe workAtRisk />)
+
+      act(() => probeApi!.notify())
+      await pastTheSettleWindow()
+      expect(calls).toHaveLength(0)
+
+      act(() => view.rerender(<Probe workAtRisk={false} />))
+
+      await waitFor(() => expect(calls).toHaveLength(1), { timeout: 2000 })
+    })
+
+    it('erkennt einen geloeschten aktiven Layer erst, nachdem die Arbeit gesichert wurde', async () => {
+      const client = clientKeepingSeededData()
+      client.setQueryData(layerKeys.list(PROJECT), [summary(ACTIVE, 'Kanäle')])
+      const onActiveLayerDeleted = vi.fn()
+      stubFetch([{ match: LAYERS_URL, body: [] }])
+      const view = renderWithQueryClient(
+        <Probe activeLayerId={ACTIVE} onActiveLayerDeleted={onActiveLayerDeleted} workAtRisk />,
+        client,
+      )
+
+      act(() => probeApi!.notify())
+      await pastTheSettleWindow()
+      expect(onActiveLayerDeleted).not.toHaveBeenCalled()
+
+      act(() =>
+        view.rerender(
+          <Probe
+            activeLayerId={ACTIVE}
+            onActiveLayerDeleted={onActiveLayerDeleted}
+            workAtRisk={false}
+          />,
+        ),
+      )
+
+      await waitFor(
+        () =>
+          expect(onActiveLayerDeleted).toHaveBeenCalledWith(
+            expect.objectContaining({ id: ACTIVE, name: 'Kanäle' }),
+          ),
+        { timeout: 2000 },
+      )
+    })
+
+    it('lädt nicht doppelt nach, wenn mehrere Ereignisse zurückgehalten wurden', async () => {
+      const { calls } = stubFetch([{ match: LAYERS_URL, body: [] }])
+      const view = renderWithQueryClient(<Probe workAtRisk />)
+
+      act(() => probeApi!.notify())
+      await pastTheSettleWindow()
+      act(() => probeApi!.notify())
+      await pastTheSettleWindow()
+      expect(calls).toHaveLength(0)
+
+      act(() => view.rerender(<Probe workAtRisk={false} />))
+
+      await waitFor(() => expect(calls).toHaveLength(1), { timeout: 2000 })
+      // Kein zweiter Nachschlag für das zweite zurückgehaltene Ereignis -- ein
+      // zurückgehaltener Reload sagt bereits "seitdem hat sich etwas geändert",
+      // ein zweiter davor sagt nichts mehr dazu.
+      await pastTheSettleWindow()
+      expect(calls).toHaveLength(1)
+    })
   })
 })

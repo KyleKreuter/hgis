@@ -322,7 +322,10 @@ function Workspace() {
 
   /**
    * The layer this window has open no longer exists -- someone else deleted it while it
-   * was open here (contract section 2.3's "Sonderfall").
+   * was open here (contract section 2.3's "Sonderfall"). Only ever called with nothing
+   * at risk: `useLiveDataState`'s `workAtRisk` gate holds the whole refresh back while
+   * an edit or table session on this layer has unsaved work, so by the time this runs
+   * there is no buffer left for `leaveGuard` to ask about either.
    *
    * Deliberately not routed through `deferredJump`: that hook holds a jump back while
    * there is unsaved work, because its destination still exists and is worth waiting
@@ -330,10 +333,37 @@ function Workspace() {
    * is the empty workspace, not another layer, and there is no "waiting" that would
    * change what has to happen; the layer will not un-delete itself. So this closes it
    * immediately, straight through `selectLayer`, the same call the local delete path
-   * uses (`LayerTree.tsx`'s `DeleteLayerDialog.onDeleted`) -- which already answers the
-   * unsaved-work question on its own: it still runs through `leaveGuard` below, so an
-   * open edit session on exactly this layer still gets the ordinary "verwerfen?"
-   * question, just for a reason of someone else's making instead of the user's own.
+   * uses (`LayerTree.tsx`'s `DeleteLayerDialog.onDeleted`).
+   *
+   * `selectLayer` *saves* the switch (`viewState.writeActiveLayer`), which is exactly
+   * what `jumpToLayer` above deliberately avoids -- "answering someone else's change
+   * with a change of our own". This is not that loop: `jumpToLayer` answers a
+   * *working*-state event with another working-state write, which is what would repeat.
+   * This answers a *data*-state event (a deletion) with a working-state write, and nothing
+   * reads a working-state event back into a data-state refetch (`readBackOnce` in
+   * `useLiveViewState.ts` never touches `layerListQuery`), so there is no cycle for it to
+   * join. Checked through explicitly (Prüfer's three questions):
+   *
+   * <ul>
+   * <li><b>Does it settle?</b> Two windows with the same active layer both react to the
+   *     same deletion and each writes `null` once -- at most two `project-view-state`
+   *     events. Each is read back by the other (`shouldReadBack`), but a `stored: null`
+   *     never schedules a jump (`activeLayerJumpTarget`'s own "falls out as null on its
+   *     own"), so neither read provokes a further write. Three events total, then quiet.
+   * <li><b>Does it overwrite another window's choice?</b> Yes, and knowingly:
+   *     `activeLayerId` is one shared field, not one per window, so writing `null` here
+   *     can leave it naming nothing even while a second window is still actively looking
+   *     at a *different* layer. That window is unaffected either way -- its own address
+   *     wins, and `null` is never a jump target -- but a third, freshly opened tab with
+   *     no `?layer=` of its own would now restore to "nothing" instead of to what that
+   *     second window has open. Accepted, not new: the *local* delete of one's own
+   *     active layer already overwrites the field the same way (`LayerTree.tsx`), and it
+   *     has never been more than a best-effort hint for a session with no layer choice
+   *     of its own yet -- this path just makes a rarer trigger for an existing trade-off.
+   * <li><b>Is there a way back?</b> No: a working-state event never triggers a data-state
+   *     refetch (see above), so the two event types cannot alternate. The settling in
+   *     the first point is the whole story, not a temporary lull.
+   * </ul>
    */
   function handleActiveLayerDeleted(layer: Pick<LayerSummary, 'id' | 'name'>) {
     toast.error(`Der Layer „${layer.name}“ wurde von außen gelöscht`, {
@@ -348,10 +378,14 @@ function Workspace() {
   const deferredJump = useDeferredLayerJump(workAtRisk, jumpToLayer)
 
   // Keeps the layer catalog (`layerListQuery`) in step with whoever else is writing to
-  // this project's data -- see the hook for why reacting to that is almost nothing.
+  // this project's data -- see the hook for why reacting to that is almost nothing, and
+  // for why it is held back entirely while `workAtRisk`: refreshing it out from under a
+  // running edit session would unmount the drawing surface or the attribute table the
+  // instant the fetch landed, taking the buffer's only visible way back with it.
   const dataState = useLiveDataState(projectId, {
     activeLayerId: activeLayerId ?? null,
     onActiveLayerDeleted: handleActiveLayerDeleted,
+    workAtRisk,
   })
 
   // Held by this route rather than by the map or the table: the stream belongs to the open

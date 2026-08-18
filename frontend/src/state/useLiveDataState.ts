@@ -35,6 +35,31 @@ export interface LiveDataStateOptions {
    * `projects.$projectId.tsx`'s `handleActiveLayerDeleted`.
    */
   onActiveLayerDeleted: (layer: Pick<LayerSummary, 'id' | 'name'>) => void
+  /**
+   * Whether this session would lose something by having the layer catalog refreshed
+   * right now -- the same question, and the same value, `useDeferredLayerJump` already
+   * asks (`hasUnsavedWork`: buffered map or table edits, or a shape mid-sketch).
+   *
+   * Found by the Prüfer: `activeVectorLayer` in `projects.$projectId.tsx` is computed
+   * straight from the layer list query (`layers.find(...)`), and `DrawController` and
+   * `AttributeTable` are both mounted on it being non-null. A refresh that drops the
+   * active layer therefore unmounts whichever of the two is running -- clearing the
+   * drawing surface and ending the buffer's only visible way back -- the instant the
+   * fetch lands, before `onActiveLayerDeleted` or `leaveGuard` ever get a turn to ask
+   * anything. `deleteLocked` (`DeleteLayerDialog.tsx`) is the same protection for the
+   * *local* delete, built on state that exists only in this tab; there is no such lock
+   * across tabs, which is exactly why a remote delete needs one here.
+   *
+   * While true, a refresh that arrives is held rather than run -- not dropped: the
+   * moment this flips back to false (the buffer saved or discarded, the sketch finished
+   * or abandoned), the held refresh runs on its own, the same shape as
+   * `useDeferredLayerJump`'s own catch-up effect. The cost is the one the Prüfer named
+   * outright: a remote change is not seen until this session's own work is settled,
+   * which for a long session is a long wait -- accepted for the same reason
+   * `hasPendingWrite` already makes `useLiveViewState` wait rather than overwrite a
+   * write in flight.
+   */
+  workAtRisk: boolean
 }
 
 export interface LiveDataState {
@@ -54,7 +79,8 @@ export interface LiveDataState {
  * every render, and the tile URL it builds already carries the version numbers that
  * make a changed layer fetch new tiles by itself -- so a refetch is the whole fix, and
  * nothing here touches the map, a paint property or a camera directly (contract section
- * 2.1, "Mehr soll nicht passieren").
+ * 2.1, "Mehr soll nicht passieren"). See {@link LiveDataStateOptions.workAtRisk} for the
+ * one condition under which even that refetch is held back.
  *
  * The one thing worth more than silence: the layer this window has *open* turning out
  * to be gone. Every other change to the catalog -- a layer appearing, a layer nobody has
@@ -76,6 +102,10 @@ export function useLiveDataState(projectId: string, options: LiveDataStateOption
   optionsRef.current = options
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // A refresh that arrived while `workAtRisk` was true and was held back for it. Not a
+  // queue -- one held refresh already means "the catalog moved since this session was
+  // last known to be current", and a second one before the first runs says nothing more.
+  const owed = useRef(false)
 
   useEffect(() => {
     // Leaving the project must not leave a timer that refetches a query nobody is
@@ -87,6 +117,17 @@ export function useLiveDataState(projectId: string, options: LiveDataStateOption
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Runs the refresh a burst left held back, on the render where there is nothing left
+  // to lose by it -- the same shape as `useDeferredLayerJump`'s own catch-up effect, and
+  // for the same reason: `owed` is a ref, so setting it renders nothing, and nothing
+  // else here is watching for the moment `workAtRisk` clears.
+  useEffect(() => {
+    if (options.workAtRisk) return
+    if (!owed.current) return
+    owed.current = false
+    void refresh(queryClient, projectId, optionsRef)
+  }, [options.workAtRisk, queryClient, projectId])
+
   function notify() {
     // Collects a burst into one refetch: every further call within the window pushes
     // the deadline back out, so a run of them ends in a single request once the burst
@@ -94,6 +135,10 @@ export function useLiveDataState(projectId: string, options: LiveDataStateOption
     if (timerRef.current !== null) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       timerRef.current = null
+      if (optionsRef.current.workAtRisk) {
+        owed.current = true
+        return
+      }
       void refresh(queryClient, projectId, optionsRef)
     }, DATA_STATE_SETTLE_MS)
   }
