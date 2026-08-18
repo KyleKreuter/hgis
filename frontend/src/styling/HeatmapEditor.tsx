@@ -1,9 +1,11 @@
 import { useId, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Info, Loader2, Lock, Wand2, X } from 'lucide-react'
+import { Info, Loader2, Lock, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { LayerField } from '@/api/layers'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatAttributeNumber } from '@/lib/format'
@@ -13,6 +15,7 @@ import {
   heatmapFieldRangeQuery,
   requestHeatmapWeightSuggestion,
   resolveRangeState,
+  resolveWeightBounds,
   sourceNameOfField,
   type FieldRangeState,
 } from './classification'
@@ -54,9 +57,6 @@ export function HeatmapEditor({ layerId, renderer, fields, onChange }: HeatmapEd
   const queryClient = useQueryClient()
   const numericFields = fields.filter(isNumericField)
   const field = renderer.field
-  // Which bound's suggestion button is mid-fetch, if any -- disables both buttons (one
-  // `/classify` request at a time is enough) and drives the spinner on the one clicked.
-  const [suggesting, setSuggesting] = useState<'min' | 'max' | null>(null)
 
   const query = useQuery({
     ...heatmapFieldRangeQuery(layerId, field ?? ''),
@@ -69,13 +69,38 @@ export function HeatmapEditor({ layerId, renderer, fields, onChange }: HeatmapEd
   const rangeState = resolveRangeState(query)
   const range = typeof rangeState === 'object' ? rangeState : undefined
 
+  // Seeded once from the saved renderer, the same `useState`-initial-value convention
+  // `GraduatedEditor`'s method/classCount/ramp follow (CONTRACT.md package B1) -- never
+  // re-derived from `renderer` afterwards, or a reopened panel would look like the user
+  // just changed something. `manual` mirrors the one state the server actually accepts:
+  // both bounds set or neither, never a lone `weightMin`/`weightMax`
+  // (`LayerStyleService.requireWeightRange`, backend decision, package 2 sync).
+  const [manual, setManual] = useState(renderer.weightMin !== undefined && renderer.weightMax !== undefined)
+  // The two inputs' own in-progress values -- distinct from `renderer.weightMin`/
+  // `.weightMax` so that typing one end while the other is still empty, or while the pair
+  // does not yet ascend, never fires a PATCH the server would 400 on. `onChange` only
+  // ever sees a complete, ascending pair (`commitIfValid` below).
+  const [draftMin, setDraftMin] = useState<number | undefined>(renderer.weightMin)
+  const [draftMax, setDraftMax] = useState<number | undefined>(renderer.weightMax)
+  const [suggesting, setSuggesting] = useState(false)
+
+  // One check (`resolveWeightBounds`) behind both the commit decision below and these two
+  // hints -- they cannot disagree about what counts as valid, because there is only one
+  // place that decides.
+  const draftBounds = resolveWeightBounds(draftMin, draftMax)
+  const draftIncomplete = manual && !draftBounds && (draftMin === undefined || draftMax === undefined)
+  const draftDescending = manual && !draftBounds && draftMin !== undefined && draftMax !== undefined
+
   function selectField(value: string) {
-    // `weightMin`/`weightMax` are one specific field's bounds -- carrying them across a
-    // field change would silently misweight the new field (a `baujahr` floor of 1950
-    // applied to `waermebedarf_unsaniert` clamps almost everything to weight 0) instead
-    // of falling back to the automatic stretch the new field has never been checked
-    // against. Cleared on every change, including into density mode, where they mean
-    // nothing at all.
+    // One field's bounds carried onto another would silently misweight it -- a `baujahr`
+    // floor of 1950 applied to `waermebedarf_unsaniert` clamps almost everything to
+    // weight 0, instead of falling back to the new (unrelated) field's own automatic
+    // stretch. Cleared on every change, including into density mode, where they mean
+    // nothing at all -- the manual toggle goes with them, so the new field starts
+    // automatic rather than carrying the old field's mode forward.
+    setManual(false)
+    setDraftMin(undefined)
+    setDraftMax(undefined)
     onChange({
       ...renderer,
       field: value === DENSITY_VALUE ? null : columnNameOfField(fields, value),
@@ -85,29 +110,74 @@ export function HeatmapEditor({ layerId, renderer, fields, onChange }: HeatmapEd
   }
 
   /**
-   * The one-click suggestion (renderer contract, package 2 -- "der häufigste Fall darf
-   * kein Rechnen verlangen"): fetches the field's quantile breaks and applies the near-8th
-   * or near-92nd percentile to whichever bound was clicked, leaving the other untouched.
-   * `requestHeatmapWeightSuggestion` shares `layerClassifyQuery`'s cache, so a second click
-   * -- the other bound, or the same one again -- costs no further round trip inside the
-   * 5-minute window.
+   * The one place either draft reaches `renderer` -- gated by `resolveWeightBounds`, the
+   * same check `draftIncomplete`/`draftDescending` above read. An incomplete or descending
+   * pair is held here, in this component, rather than sent -- the server would 400 on
+   * exactly this shape (`requireWeightRange`).
    */
-  async function applySuggestion(bound: 'min' | 'max') {
+  function commitIfValid(min: number | undefined, max: number | undefined) {
+    const bounds = resolveWeightBounds(min, max)
+    if (bounds) onChange({ ...renderer, weightMin: bounds.min, weightMax: bounds.max })
+  }
+
+  function setDraftMinValue(value: number | undefined) {
+    setDraftMin(value)
+    commitIfValid(value, draftMax)
+  }
+
+  function setDraftMaxValue(value: number | undefined) {
+    setDraftMax(value)
+    commitIfValid(draftMin, value)
+  }
+
+  /**
+   * Turning manual mode on seeds both fields from the automatic stretch already in
+   * effect -- the same numbers the map already renders with -- so it starts from a
+   * working pair instead of two empty boxes (team lead, package 2 backend sync: "damit
+   * der Nutzer nicht bei null anfängt"). Off clears both together and falls back to the
+   * automatic stretch, the same single `onChange` call `selectField` above makes.
+   */
+  function toggleManual(checked: boolean) {
+    setManual(checked)
+    if (!checked) {
+      setDraftMin(undefined)
+      setDraftMax(undefined)
+      onChange({ ...renderer, weightMin: undefined, weightMax: undefined })
+      return
+    }
+    const seedMin = range ? normalisationFloor(range) : undefined
+    const seedMax = range?.max
+    setDraftMin(seedMin)
+    setDraftMax(seedMax)
+    commitIfValid(seedMin, seedMax)
+  }
+
+  /**
+   * The one-click fix for the outlier case (renderer contract, package 2 -- "der
+   * häufigste Fall darf kein Rechnen verlangen"): fetches the field's quantile breaks and
+   * sets *both* bounds at once to the near-8th/92nd percentile, turning manual mode on if
+   * it was not already. Both move together on purpose -- the server no longer accepts a
+   * "just fix the top end" state, so neither does this button.
+   */
+  async function applySuggestion() {
     if (!field) return
-    setSuggesting(bound)
+    setSuggesting(true)
     try {
       const suggestion = await requestHeatmapWeightSuggestion(queryClient, layerId, field)
       if (!suggestion) {
         toast.error(`Für „${sourceNameOfField(fields, fieldIdOfColumn(fields, field))}" gibt es zu wenige unterschiedliche Werte für einen Vorschlag.`)
         return
       }
-      onChange(bound === 'min' ? { ...renderer, weightMin: suggestion.min } : { ...renderer, weightMax: suggestion.max })
+      setManual(true)
+      setDraftMin(suggestion.min)
+      setDraftMax(suggestion.max)
+      onChange({ ...renderer, weightMin: suggestion.min, weightMax: suggestion.max })
     }
     catch {
       toast.error('Das Programm konnte keinen Vorschlag berechnen.')
     }
     finally {
-      setSuggesting(null)
+      setSuggesting(false)
     }
   }
 
@@ -139,55 +209,61 @@ export function HeatmapEditor({ layerId, renderer, fields, onChange }: HeatmapEd
         </p>
       )}
 
-      {/*
-       * Only with a field chosen -- density mode has no weight to bound at all. The
-       * automatic stretch (`normalisationFloor(range)`..`range.max`) stays the default;
-       * these two only override one end each, independently, and only once someone types
-       * a number or clicks a suggestion (`BoundInput`, `applySuggestion` above).
-       */}
+      {/* Only with a field chosen -- density mode has no weight to bound at all. */}
       {field && (
         <>
-          <Row label="Untergrenze">
-            <BoundInput
-              value={renderer.weightMin}
-              placeholder={range ? normalisationFloor(range) : undefined}
-              onChange={(weightMin) => onChange({ ...renderer, weightMin })}
-              ariaLabel="Untergrenze des Gewichts"
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 py-1">
+            <Checkbox
+              id="heatmap-weight-manual"
+              checked={manual}
+              // Turning it on seeds both fields from `range` (`toggleManual` above) --
+              // disabled until that exists, rather than turning on into two empty boxes
+              // with nothing to seed them from.
+              disabled={!range}
+              onCheckedChange={(checked) => toggleManual(checked === true)}
             />
+            <Label htmlFor="heatmap-weight-manual" className="text-xs font-normal">
+              Grenzen manuell festlegen
+            </Label>
+            {!range && (
+              <span className="text-xs text-muted-foreground">
+                {query.isFetching ? 'Spanne wird geladen…' : 'Spanne nicht verfügbar'}
+              </span>
+            )}
             <SuggestButton
-              pending={suggesting === 'min'}
-              disabled={suggesting !== null}
-              onClick={() => applySuggestion('min')}
-              tooltip="Setzt die Untergrenze auf einen Wert nah am unteren Rand der Daten, ohne den äußersten Ausreißer."
-              ariaLabel="Vorschlag für die Untergrenze"
+              pending={suggesting}
+              disabled={suggesting}
+              onClick={applySuggestion}
+              tooltip="Setzt beide Grenzen auf einen Bereich nah an den Rändern der Daten, ohne die äußersten Ausreißer. Das hilft, wenn die Heatmap fast leer aussieht."
+              ariaLabel="Vorschlag für den Gewichtsbereich"
             />
-          </Row>
-          <Row label="Obergrenze">
-            <BoundInput
-              value={renderer.weightMax}
-              placeholder={range?.max}
-              onChange={(weightMax) => onChange({ ...renderer, weightMax })}
-              ariaLabel="Obergrenze des Gewichts"
-            />
-            <SuggestButton
-              pending={suggesting === 'max'}
-              disabled={suggesting !== null}
-              onClick={() => applySuggestion('max')}
-              tooltip="Setzt die Obergrenze auf einen Wert nah am oberen Rand der Daten, ohne den äußersten Ausreißer. Das hilft, wenn die Heatmap fast leer aussieht."
-              ariaLabel="Vorschlag für die Obergrenze"
-            />
-          </Row>
-          {/*
-           * `heatmapWeight` itself already falls back to a constant weight whenever the
-           * effective bounds do not ascend (`styleToMapLibre.ts`) -- silently, since a map
-           * cannot show *why* it looks like density mode. This is that reason, spelled out,
-           * for the one case both bounds are fixed by hand and can actually be checked here
-           * without needing the field's own range at all.
-           */}
-          {renderer.weightMin !== undefined && renderer.weightMax !== undefined && !(renderer.weightMax > renderer.weightMin) && (
-            <p className="py-1 text-xs text-destructive">
-              Die Obergrenze muss größer sein als die Untergrenze. Sonst zählt die Heatmap jedes Objekt gleich.
-            </p>
+          </div>
+
+          {manual && (
+            <>
+              <Row label="Untergrenze">
+                <BoundInput value={draftMin} onChange={setDraftMinValue} ariaLabel="Untergrenze des Gewichts" />
+              </Row>
+              <Row label="Obergrenze">
+                <BoundInput value={draftMax} onChange={setDraftMaxValue} ariaLabel="Obergrenze des Gewichts" />
+              </Row>
+              {/*
+               * Explains why nothing changed on the map yet -- `commitIfValid` above
+               * silently withholds an incomplete or descending pair rather than sending
+               * it, since the server would 400 on exactly this shape
+               * (`requireWeightRange`). Silence on its own would read as a bug.
+               */}
+              {draftIncomplete && (
+                <p className="py-1 text-xs text-muted-foreground">
+                  Beide Werte werden gebraucht. Bis dahin gilt weiterhin die zuletzt gespeicherte Grenze.
+                </p>
+              )}
+              {draftDescending && (
+                <p className="py-1 text-xs text-destructive">
+                  Die Obergrenze muss größer sein als die Untergrenze.
+                </p>
+              )}
+            </>
           )}
         </>
       )}
@@ -354,54 +430,38 @@ function LegendBound({ value, fixed, description }: { value: number; fixed: bool
 
 interface BoundInputProps {
   value: number | undefined
-  /** The value this bound falls back to while empty -- the same one `heatmapWeight` would
-   *  use (`normalisationFloor(range)`/`range.max`), shown as a ghost, not a real value. */
-  placeholder: number | undefined
   onChange: (value: number | undefined) => void
   ariaLabel: string
 }
 
 /**
- * `weightMin`/`weightMax`'s own control, not `NumberInput` (`controls.tsx`): there is no
- * number that could stand for "automatic" here without also being a value someone might
- * genuinely want to type -- 0 chief among them. Empty is the only unambiguous "not set",
- * so typing nothing clears the override and falls back to the automatic stretch, typing a
- * number sets it, and the automatic value itself shows through as a placeholder -- a ghost,
- * not a value someone could mistake for their own choice.
+ * `weightMin`/`weightMax`'s own control, not `NumberInput` (`controls.tsx`): its value can
+ * sit transiently empty while someone is mid-edit, without that meaning anything final --
+ * `onChange` here only ever updates `HeatmapEditor`'s own draft state, which reaches
+ * `renderer` exclusively through `commitIfValid` once *both* ends hold a valid, ascending
+ * pair. An empty box is not "automatic" any more (that is what turning the manual switch
+ * off is for) -- it is simply "not finished typing yet".
  */
-function BoundInput({ value, placeholder, onChange, ariaLabel }: BoundInputProps) {
+function BoundInput({ value, onChange, ariaLabel }: BoundInputProps) {
   const id = useId()
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1">
-      <input
-        id={id}
-        type="number"
-        aria-label={ariaLabel}
-        value={value ?? ''}
-        placeholder={placeholder === undefined ? 'automatisch' : formatAttributeNumber(placeholder)}
-        onChange={(event) => {
-          const raw = event.target.value
-          if (raw === '') {
-            onChange(undefined)
-            return
-          }
-          const next = event.target.valueAsNumber
-          if (!Number.isFinite(next)) return
-          onChange(next)
-        }}
-        className="h-6 w-full min-w-0 rounded border border-input bg-transparent px-1.5 text-xs tabular-nums outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-      />
-      {value !== undefined && (
-        <button
-          type="button"
-          onClick={() => onChange(undefined)}
-          aria-label={`${ariaLabel} zurücksetzen (automatisch)`}
-          className="shrink-0 text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground"
-        >
-          <X className="size-3.5" />
-        </button>
-      )}
-    </div>
+    <input
+      id={id}
+      type="number"
+      aria-label={ariaLabel}
+      value={value ?? ''}
+      onChange={(event) => {
+        const raw = event.target.value
+        if (raw === '') {
+          onChange(undefined)
+          return
+        }
+        const next = event.target.valueAsNumber
+        if (!Number.isFinite(next)) return
+        onChange(next)
+      }}
+      className="h-6 w-full min-w-0 rounded border border-input bg-transparent px-1.5 text-xs tabular-nums outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+    />
   )
 }
 
@@ -413,8 +473,9 @@ interface SuggestButtonProps {
   ariaLabel: string
 }
 
-/** The one-click suggestion trigger next to a `BoundInput` -- a magic-wand icon button, a
- *  spinner in its place while its own request is in flight (`applySuggestion` above). */
+/** The one-click suggestion trigger next to the manual-mode switch -- a magic-wand icon
+ *  button, a spinner in its place while its own request is in flight (`applySuggestion`
+ *  above). */
 function SuggestButton({ pending, disabled, onClick, tooltip, ariaLabel }: SuggestButtonProps) {
   return (
     <Tooltip>

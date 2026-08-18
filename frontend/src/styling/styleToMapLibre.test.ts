@@ -741,8 +741,15 @@ describe('styleToMapLibre heatmap', () => {
 
   /**
    * Team contract, package 2: `weightMin`/`weightMax` override one end each of the
-   * automatic stretch, independently of one another. Every test above this point sets
-   * neither and stays green unmodified -- the proof that the default path is untouched.
+   * automatic stretch. Every test above this point sets neither and stays green
+   * unmodified -- the proof that the default path is untouched.
+   *
+   * The app itself (`HeatmapEditor`, backend sync) only ever produces two shapes -- both
+   * set or neither, never a lone value -- since the server rejects one on its own
+   * (`LayerStyleService.requireWeightRange`, a 400). `heatmapWeight` resolves each end
+   * independently regardless, as one line of defence against a style that got here some
+   * other way; the "only one set" tests below cover that defence directly, not a state the
+   * running app is expected to produce.
    */
   describe('weightMin/weightMax', () => {
     it('überschreibt nur die Obergrenze, wenn nur weightMax gesetzt ist -- die Untergrenze bleibt automatisch', () => {

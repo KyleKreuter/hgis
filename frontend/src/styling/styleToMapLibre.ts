@@ -239,17 +239,23 @@ function clamp(value: number, min: number, max: number): number {
  * every object shares one value) that would otherwise divide by zero.
  *
  * `weightMin`/`weightMax` (renderer contract, package 2 -- "Gewichtsbereich") override the
- * low/high end the automatic stretch would otherwise pick, independently of one another:
- * either, both or neither may be set. Set alone, the other end still needs `range` to fall
- * back to (`normalisationFloor`/`range.max`, exactly as before this parameter existed) --
- * so the "range not loaded yet" fallback above still applies to that end. Set for *both*
- * ends, `range` is not consulted at all: the expression built below only ever reads
- * `low`/`high`, so a heatmap with both bounds fixed renders correctly the instant the
- * style loads, without waiting on `/classify`'s field-range round trip, and keeps
- * rendering correctly through a range request that fails or comes back invalid --
- * `heatmapPaint` still swaps `heatmap-color` to the diagnostic ramp on that failure
- * (that signal is about trusting the *live* range, unrelated to whether a weight can be
- * computed), but the weight itself no longer depends on the request having succeeded.
+ * low/high end the automatic stretch would otherwise pick. The application's own contract
+ * (`types.ts`) only ever produces one of two shapes -- both set or neither, enforced both
+ * by the server (`LayerStyleService.requireWeightRange`, a 400 on a lone value) and by
+ * `HeatmapEditor` before it ever calls the API -- but resolved here as two independent
+ * `?? `-fallbacks all the same: a lone override is one line of defence away (a style
+ * written by hand, by another client, or predating this pairing rule) rather than a case
+ * this function has to trust never happens. Set alone, the other end still needs `range`
+ * to fall back to (`normalisationFloor`/`range.max`, exactly as before this parameter
+ * existed) -- so the "range not loaded yet" fallback above still applies to that end. Set
+ * for *both* ends -- the only shape the app itself ever produces -- `range` is not
+ * consulted at all: the expression built below only ever reads `low`/`high`, so a heatmap
+ * with both bounds fixed renders correctly the instant the style loads, without waiting on
+ * `/classify`'s field-range round trip, and keeps rendering correctly through a range
+ * request that fails or comes back invalid -- `heatmapPaint` still swaps `heatmap-color`
+ * to the diagnostic ramp on that failure (that signal is about trusting the *live* range,
+ * unrelated to whether a weight can be computed), but the weight itself no longer depends
+ * on the request having succeeded.
  */
 function heatmapWeight(
   field: string | null,

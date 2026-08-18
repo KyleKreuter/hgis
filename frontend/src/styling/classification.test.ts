@@ -7,6 +7,7 @@ import {
   columnNameOfField,
   fieldIdOfColumn,
   resolveRangeState,
+  resolveWeightBounds,
   sharedSymbolOf,
   weightSuggestionFromBreaks,
   withSharedSymbol,
@@ -364,5 +365,38 @@ describe('weightSuggestionFromBreaks', () => {
 
   it('liefert bei genau vier Bruchpunkten zwei unterschiedliche, aufsteigend geordnete innere Punkte', () => {
     expect(weightSuggestionFromBreaks([10, 20, 30, 40])).toEqual({ min: 20, max: 30 })
+  })
+})
+
+describe('resolveWeightBounds', () => {
+  /**
+   * Spiegelt `LayerStyleService.requireWeightRange` (Backend, Paket 2): beides oder
+   * keins, und `weightMax` muss echt größer sein -- Gleichstand zählt als Fehler, nicht
+   * nur eine absteigende Spanne.
+   */
+  it('liefert das Paar, wenn beide gesetzt und aufsteigend sind', () => {
+    expect(resolveWeightBounds(10, 20)).toEqual({ min: 10, max: 20 })
+  })
+
+  it('liefert nichts, wenn nur eine Seite gesetzt ist', () => {
+    expect(resolveWeightBounds(10, undefined)).toBeUndefined()
+    expect(resolveWeightBounds(undefined, 20)).toBeUndefined()
+  })
+
+  it('liefert nichts, wenn keine Seite gesetzt ist', () => {
+    expect(resolveWeightBounds(undefined, undefined)).toBeUndefined()
+  })
+
+  it('liefert nichts bei Gleichstand -- der Server lehnt auch das ab, nicht nur eine absteigende Spanne', () => {
+    expect(resolveWeightBounds(10, 10)).toBeUndefined()
+  })
+
+  it('liefert nichts bei absteigender Spanne', () => {
+    expect(resolveWeightBounds(20, 10)).toBeUndefined()
+  })
+
+  it('behandelt 0 als echten Wert, nicht als "nicht gesetzt"', () => {
+    expect(resolveWeightBounds(0, 10)).toEqual({ min: 0, max: 10 })
+    expect(resolveWeightBounds(-10, 0)).toEqual({ min: -10, max: 0 })
   })
 })

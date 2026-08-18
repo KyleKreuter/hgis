@@ -304,10 +304,10 @@ export function weightSuggestionFromBreaks(breaks: number[]): HeatmapWeightSugge
 
 /**
  * Fetches the quantile breaks `weightSuggestionFromBreaks` needs and turns them into a
- * suggestion -- the one place a user action (`HeatmapEditor`'s suggestion buttons) asks
+ * suggestion -- the one place a user action (`HeatmapEditor`'s suggestion button) asks
  * `/classify` for this. `queryClient.fetchQuery` shares `layerClassifyQuery`'s ordinary
  * 5-minute cache, the same one `GraduatedEditor`'s classes and this field's own weight
- * range already draw from -- clicking a suggestion button for a field whose classes were
+ * range already draw from -- clicking the suggestion button for a field whose classes were
  * just computed, or whose range the legend already shows, costs no second round trip.
  */
 export async function requestHeatmapWeightSuggestion(
@@ -317,6 +317,29 @@ export async function requestHeatmapWeightSuggestion(
 ): Promise<HeatmapWeightSuggestion | undefined> {
   const result = await queryClient.fetchQuery(layerClassifyQuery(layerId, field, 'quantile', WEIGHT_SUGGESTION_CLASSES))
   return weightSuggestionFromBreaks(result.breaks)
+}
+
+/**
+ * Whether a `weightMin`/`weightMax` draft is the one shape `HeatmapEditor` is allowed to
+ * write into `renderer`: both present, and ascending. Mirrors the server's own rule
+ * exactly (`LayerStyleService.requireWeightRange`, backend package 2 decision, both
+ * "either both or neither" and "`weightMax` strictly greater than `weightMin`,
+ * equality included as a rejection") -- catching a violation here, before the PATCH, is
+ * what a user sees as an inline hint instead of a 400 from the server.
+ *
+ * The one place this check lives: `HeatmapEditor` derives its "commit to the renderer"
+ * decision and its two validation hints ("both needed" / "wrong order") from the same
+ * call, so they cannot silently drift apart into disagreeing about what counts as valid.
+ * `undefined` covers both failure shapes at once (incomplete, or complete but not
+ * ascending) -- the caller tells them apart itself where the wording differs (an empty
+ * box reads differently from two full ones in the wrong order).
+ */
+export function resolveWeightBounds(
+  min: number | undefined,
+  max: number | undefined,
+): HeatmapWeightSuggestion | undefined {
+  if (min === undefined || max === undefined || !(max > min)) return undefined
+  return { min, max }
 }
 
 /**
