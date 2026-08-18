@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { waitFor } from '@testing-library/react'
-import { CLIENT_ID, PROJECT_VIEW_STATE_EVENT } from '@/api/events'
+import { CLIENT_ID, PROJECT_DATA_STATE_EVENT, PROJECT_VIEW_STATE_EVENT } from '@/api/events'
 import { isRemoteSelection, useSelection } from '@/state/selection'
 import { JUMP_SETTLE_MS, useLiveViewState } from '@/state/useLiveViewState'
 import { FakeEventSource, installFakeEventSource } from '@/test/fakeEventSource'
@@ -27,12 +27,14 @@ describe('useLiveViewState', () => {
     loadedActiveLayerId = LAYER as string | null,
     ready = true,
     onActiveLayerMoved = () => {},
+    onProjectDataState = () => {},
   } = {}) {
     useLiveViewState(PROJECT, layerId, {
       hasPendingWrite: () => pendingWrite,
       loadedActiveLayerId,
       ready,
       onActiveLayerMoved,
+      onProjectDataState,
     })
     return null
   }
@@ -446,6 +448,88 @@ describe('useLiveViewState', () => {
 
       await pastTheSettleWindow()
       expect(moved).not.toHaveBeenCalled()
+    })
+  })
+
+  /**
+   * `onProjectDataState` is a plain pass-through -- what a data-state event *means* is
+   * `useLiveDataState`'s job, tested on its own. What belongs here is only that this hook
+   * forwards it under its own rules: scoped to this project, deliberately *not* filtered
+   * against this client's own writes (unlike the working-state event below -- see
+   * `isForThisProject`'s comment in `api/events.ts` for why), and caught up on reconnect.
+   */
+  describe('Datenzustand', () => {
+    function announceData(origin: string | null, version = 2) {
+      const source = FakeEventSource.instances[FakeEventSource.instances.length - 1]
+      source.emit(PROJECT_DATA_STATE_EVENT, JSON.stringify({ projectId: PROJECT, version, origin }))
+    }
+
+    it('meldet ein fremdes Datenzustands-Ereignis weiter', () => {
+      const onProjectDataState = vi.fn()
+      stubFetch([{ match: 'view-state', body: documentWith([]) }])
+      renderWithQueryClient(<Probe onProjectDataState={onProjectDataState} />)
+
+      announceData('anderer-tab')
+
+      expect(onProjectDataState).toHaveBeenCalledTimes(1)
+    })
+
+    it('meldet auch das eigene Echo -- anders als beim Arbeitsstand', () => {
+      // Ein Import laeuft als Hintergrundauftrag; die auslösende Kachel hat sonst keinen
+      // Weg zu erfahren, dass er fertig ist -- das eigene Echo ist dort die Nachricht,
+      // auf die gewartet wird (Befund des Prüfers). Anders als beim Arbeitsstand schreibt
+      // eine Nachlese hier auch nichts zurück, es gibt also keine Schleife zu vermeiden.
+      const onProjectDataState = vi.fn()
+      stubFetch([{ match: 'view-state', body: documentWith([]) }])
+      renderWithQueryClient(<Probe onProjectDataState={onProjectDataState} />)
+
+      announceData(CLIENT_ID)
+
+      expect(onProjectDataState).toHaveBeenCalledTimes(1)
+    })
+
+    it('lässt ein Datenzustands-Ereignis eines anderen Projekts liegen', () => {
+      const onProjectDataState = vi.fn()
+      stubFetch([{ match: 'view-state', body: documentWith([]) }])
+      renderWithQueryClient(<Probe onProjectDataState={onProjectDataState} />)
+
+      const source = FakeEventSource.instances[0]
+      source.emit(
+        PROJECT_DATA_STATE_EVENT,
+        JSON.stringify({ projectId: 'ein-anderes-projekt', version: 3, origin: 'anderer-tab' }),
+      )
+
+      expect(onProjectDataState).not.toHaveBeenCalled()
+    })
+
+    it('meldet bei der ersten Verbindung nichts -- die Seite hat gerade geladen', () => {
+      const onProjectDataState = vi.fn()
+      stubFetch([{ match: 'view-state', body: documentWith([]) }])
+      renderWithQueryClient(<Probe onProjectDataState={onProjectDataState} />)
+
+      FakeEventSource.instances[0].connect()
+
+      expect(onProjectDataState).not.toHaveBeenCalled()
+    })
+
+    it('meldet bei jeder Wiederverbindung, weil in der Lücke nichts nachgeliefert wird', () => {
+      // Anders als beim Arbeitsstand: dort holt das nächste Ereignis eine verpasste
+      // Wiederholung nach, hier gibt es keins, das "der Katalog hat sich geändert"
+      // ein zweites Mal sagt. Deshalb unbedingt bei jeder Wiederverbindung, nicht nur
+      // bedingt durch ein Ereignis, das dieses Fenster noch mitbekommen hat.
+      const onProjectDataState = vi.fn()
+      stubFetch([{ match: 'view-state', body: documentWith([]) }])
+      renderWithQueryClient(<Probe onProjectDataState={onProjectDataState} />)
+
+      const source = FakeEventSource.instances[0]
+      source.connect()
+      expect(onProjectDataState).not.toHaveBeenCalled()
+
+      source.connect()
+      expect(onProjectDataState).toHaveBeenCalledTimes(1)
+
+      source.connect()
+      expect(onProjectDataState).toHaveBeenCalledTimes(2)
     })
   })
 })

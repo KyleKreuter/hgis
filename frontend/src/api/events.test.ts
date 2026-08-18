@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CLIENT_ID,
+  PROJECT_DATA_STATE_EVENT,
   PROJECT_VIEW_STATE_EVENT,
   connectLiveChannel,
+  isForThisProject,
+  parseProjectDataState,
   parseProjectViewState,
   reconnectDelay,
   shouldReadBack,
+  type ProjectDataStateEvent,
   type ProjectViewStateEvent,
 } from './events'
 import { FakeEventSource, installFakeEventSource } from '@/test/fakeEventSource'
@@ -38,6 +42,26 @@ describe('parseProjectViewState', () => {
   })
 })
 
+/**
+ * `parseProjectDataState` shares its parser with `parseProjectViewState` (`parseVersionEvent`
+ * in `events.ts`) -- the exhaustive per-field cases above already cover it, so what is
+ * worth its own proof here is only that the two names actually read the wire the same way.
+ */
+describe('parseProjectDataState', () => {
+  it('liest Projekt, Version und Urheber, wie project-view-state es auch täte', () => {
+    expect(parseProjectDataState('{"projectId":"p-1","version":7,"origin":"tab-a"}')).toEqual({
+      projectId: 'p-1',
+      version: 7,
+      origin: 'tab-a',
+    })
+  })
+
+  it('verwirft unlesbare Daten, statt zu werfen', () => {
+    expect(parseProjectDataState('nicht-json')).toBeNull()
+    expect(parseProjectDataState('{"projectId":"p-1"}')).toBeNull()
+  })
+})
+
 describe('shouldReadBack', () => {
   const event = (over: Partial<ProjectViewStateEvent> = {}): ProjectViewStateEvent => ({
     projectId: 'p-1',
@@ -61,6 +85,35 @@ describe('shouldReadBack', () => {
   it('liest nach, wenn niemand als Urheber genannt ist', () => {
     // Ein Schreiber ohne Namen -- etwa curl -- ist für jeden anderen eine fremde Änderung.
     expect(shouldReadBack(event({ origin: null }), { projectId: 'p-1', clientId: 'tab-a' })).toBe(true)
+  })
+})
+
+/**
+ * Anders als `shouldReadBack`: hier zählt nur das Projekt, der Urheber ist ohne Belang --
+ * ein Import lernt sein eigenes Fertigwerden über nichts anderes als dieses Echo.
+ */
+describe('isForThisProject', () => {
+  const event = (over: Partial<ProjectDataStateEvent> = {}): ProjectDataStateEvent => ({
+    projectId: 'p-1',
+    version: 2,
+    origin: null,
+    ...over,
+  })
+
+  it('gilt für ein fremdes Ereignis desselben Projekts', () => {
+    expect(isForThisProject(event({ origin: 'tab-b' }), 'p-1')).toBe(true)
+  })
+
+  it('gilt ebenso für das eigene Echo -- das unterscheidet es von shouldReadBack', () => {
+    expect(isForThisProject(event({ origin: 'tab-a' }), 'p-1')).toBe(true)
+  })
+
+  it('gilt für ein Ereignis ohne benannten Urheber', () => {
+    expect(isForThisProject(event({ origin: null }), 'p-1')).toBe(true)
+  })
+
+  it('gilt nicht für ein fremdes Projekt', () => {
+    expect(isForThisProject(event({ projectId: 'p-2' }), 'p-1')).toBe(false)
   })
 })
 
@@ -119,6 +172,28 @@ describe('connectLiveChannel', () => {
     latest().emit(PROJECT_VIEW_STATE_EVENT, '{"projectId":"p-1","version":9,"origin":null}')
 
     expect(onProjectViewState).toHaveBeenCalledWith({ projectId: 'p-1', version: 9, origin: null })
+    close()
+  })
+
+  it('reicht ein Datenzustands-Ereignis über einen eigenen Zuhörer weiter', () => {
+    const onProjectDataState = vi.fn()
+    const close = connectLiveChannel({ onProjectDataState })
+
+    latest().emit(PROJECT_DATA_STATE_EVENT, '{"projectId":"p-1","version":3,"origin":null}')
+
+    expect(onProjectDataState).toHaveBeenCalledWith({ projectId: 'p-1', version: 3, origin: null })
+    close()
+  })
+
+  it('unterscheidet Arbeitsstand und Datenzustand -- eines löst nicht das andere aus', () => {
+    const onProjectViewState = vi.fn()
+    const onProjectDataState = vi.fn()
+    const close = connectLiveChannel({ onProjectViewState, onProjectDataState })
+
+    latest().emit(PROJECT_DATA_STATE_EVENT, '{"projectId":"p-1","version":1,"origin":null}')
+
+    expect(onProjectDataState).toHaveBeenCalledTimes(1)
+    expect(onProjectViewState).not.toHaveBeenCalled()
     close()
   })
 

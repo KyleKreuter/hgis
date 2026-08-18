@@ -20,6 +20,14 @@
 /** The SSE `event:` name the backend sends. Its own type -- the data carries none. */
 export const PROJECT_VIEW_STATE_EVENT = 'project-view-state'
 
+/**
+ * The SSE `event:` name the backend sends for a project's *data* -- the layer catalog,
+ * and any layer's data/style/clip/render version (`map/layerSpecs.ts#buildTileUrl`).
+ * Placeholder pending alignment with the backend package (`.teams/CONTRACT.md`, "Der
+ * Name des Ereignisses"): this is the one line to change once that settles.
+ */
+export const PROJECT_DATA_STATE_EVENT = 'project-data-state'
+
 /** Header naming this client on a write, so its own change comes back recognisable. */
 export const CLIENT_HEADER = 'X-Hgis-Client'
 
@@ -39,8 +47,13 @@ function newClientId(): string {
   return `c${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
 }
 
-/** A project's working state now stands at `version`. Read it, do not infer from it. */
-export interface ProjectViewStateEvent {
+/**
+ * The shape shared by every version event this channel carries: which project, which
+ * version, and who wrote it. `ProjectViewStateEvent` and `ProjectDataStateEvent` below
+ * are this one shape under two names -- one per concept the two events report on, not
+ * two wire formats that would have to be kept in sync by hand.
+ */
+interface VersionEvent {
   projectId: string
   version: number
   /** The `CLIENT_ID` of whoever wrote it, or null when they named none. */
@@ -48,13 +61,13 @@ export interface ProjectViewStateEvent {
 }
 
 /**
- * The event's data, or null when it cannot be read.
+ * A version event's data, or null when it cannot be read.
  *
  * A stream is a long-lived thing shared with servers and proxies that may be older or
  * newer than this page, so an unreadable line is a possibility rather than an accident.
  * It is dropped: the next event states the same thing again.
  */
-export function parseProjectViewState(data: string): ProjectViewStateEvent | null {
+function parseVersionEvent(data: string): VersionEvent | null {
   let parsed: unknown
   try {
     parsed = JSON.parse(data)
@@ -68,6 +81,24 @@ export function parseProjectViewState(data: string): ProjectViewStateEvent | nul
   const origin = candidate.origin
   if (origin !== null && origin !== undefined && typeof origin !== 'string') return null
   return { projectId: candidate.projectId, version: candidate.version, origin: origin ?? null }
+}
+
+/** A project's working state now stands at `version`. Read it, do not infer from it. */
+export type ProjectViewStateEvent = VersionEvent
+
+export function parseProjectViewState(data: string): ProjectViewStateEvent | null {
+  return parseVersionEvent(data)
+}
+
+/**
+ * A project's *data* now stands at `version` -- the layer catalog, or any one layer's
+ * data/style/clip/render version. Same read-it-do-not-infer-it rule as
+ * {@link ProjectViewStateEvent}; `state/useLiveDataState.ts` is what this triggers.
+ */
+export type ProjectDataStateEvent = VersionEvent
+
+export function parseProjectDataState(data: string): ProjectDataStateEvent | null {
+  return parseVersionEvent(data)
 }
 
 /**
@@ -85,6 +116,34 @@ export function shouldReadBack(
 ): boolean {
   if (event.projectId !== projectId) return false
   return event.origin !== clientId
+}
+
+/**
+ * Whether a *data*-state event is worth reacting to -- scoped to this project, and
+ * nothing more.
+ *
+ * Deliberately not filtered by origin the way {@link shouldReadBack} filters a
+ * working-state event. That filter exists to break a write/read loop: applying a
+ * working-state read back to the map is itself worth saving, so skipping a client's own
+ * echo of it is what keeps the loop from ever starting. A data-state refetch never
+ * writes anything back -- it only asks the catalog what it now holds -- so there is no
+ * loop here to break, and suppressing the echo has nothing to gain.
+ *
+ * It has something to lose, though. Several writes -- an import running as a background
+ * job above all -- answer with 202-style "started", not with the result, and today do
+ * not even populate `origin` along the way (measured across six write paths: reordering,
+ * a field rename, adding a Kartenbild, import, duplicating a project, and every project
+ * route but the working state). For a background import, this client's own echo *is*
+ * the only way it ever learns the import finished -- the tab that started it has no
+ * other signal. Filtering that echo out the way `shouldReadBack` does would mean the one
+ * client waiting on the news never gets it. A style change is the opposite case: its
+ * writer already holds the result in the PATCH response, so a read-back on its own echo
+ * is unneeded -- but, since it only costs one redundant, already-debounced refetch and
+ * never a write, "unneeded" here is harmless where "unneeded" on the working-state side
+ * would not be.
+ */
+export function isForThisProject(event: ProjectDataStateEvent, projectId: string): boolean {
+  return event.projectId === projectId
 }
 
 /** First wait after the browser gives up on its own, before doubling. */
@@ -128,6 +187,14 @@ export interface LiveChannelHandlers {
    */
   onOpen?: (reconnected: boolean) => void
   onProjectViewState?: (event: ProjectViewStateEvent) => void
+  /**
+   * A project's data changed -- a layer's data, style, clip or render version, or the
+   * layer catalog itself (`PROJECT_DATA_STATE_EVENT`). Parsed the same way as the event
+   * above and handed over whole; `state/useLiveDataState.ts` (wired in through
+   * `useLiveViewState`'s own options, since the connection is one resource per open
+   * project) is what decides what it means.
+   */
+  onProjectDataState?: (event: ProjectDataStateEvent) => void
 }
 
 /**
@@ -177,6 +244,11 @@ export function connectLiveChannel(handlers: LiveChannelHandlers): () => void {
     next.addEventListener(PROJECT_VIEW_STATE_EVENT, (event) => {
       const parsed = parseProjectViewState((event as MessageEvent<string>).data)
       if (parsed) handlers.onProjectViewState?.(parsed)
+    })
+
+    next.addEventListener(PROJECT_DATA_STATE_EVENT, (event) => {
+      const parsed = parseProjectDataState((event as MessageEvent<string>).data)
+      if (parsed) handlers.onProjectDataState?.(parsed)
     })
 
     next.addEventListener('error', () => {
