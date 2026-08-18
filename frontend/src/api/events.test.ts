@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CLIENT_ID,
+  PROJECT_DATA_STATE_EVENT,
   PROJECT_VIEW_STATE_EVENT,
   connectLiveChannel,
+  parseProjectDataState,
   parseProjectViewState,
   reconnectDelay,
   shouldReadBack,
@@ -35,6 +37,26 @@ describe('parseProjectViewState', () => {
     ['Urheber als Zahl', '{"projectId":"p-1","version":1,"origin":7}'],
   ])('verwirft %s, statt zu werfen', (_case, data) => {
     expect(parseProjectViewState(data)).toBeNull()
+  })
+})
+
+/**
+ * `parseProjectDataState` shares its parser with `parseProjectViewState` (`parseVersionEvent`
+ * in `events.ts`) -- the exhaustive per-field cases above already cover it, so what is
+ * worth its own proof here is only that the two names actually read the wire the same way.
+ */
+describe('parseProjectDataState', () => {
+  it('liest Projekt, Version und Urheber, wie project-view-state es auch täte', () => {
+    expect(parseProjectDataState('{"projectId":"p-1","version":7,"origin":"tab-a"}')).toEqual({
+      projectId: 'p-1',
+      version: 7,
+      origin: 'tab-a',
+    })
+  })
+
+  it('verwirft unlesbare Daten, statt zu werfen', () => {
+    expect(parseProjectDataState('nicht-json')).toBeNull()
+    expect(parseProjectDataState('{"projectId":"p-1"}')).toBeNull()
   })
 })
 
@@ -119,6 +141,28 @@ describe('connectLiveChannel', () => {
     latest().emit(PROJECT_VIEW_STATE_EVENT, '{"projectId":"p-1","version":9,"origin":null}')
 
     expect(onProjectViewState).toHaveBeenCalledWith({ projectId: 'p-1', version: 9, origin: null })
+    close()
+  })
+
+  it('reicht ein Datenzustands-Ereignis über einen eigenen Zuhörer weiter', () => {
+    const onProjectDataState = vi.fn()
+    const close = connectLiveChannel({ onProjectDataState })
+
+    latest().emit(PROJECT_DATA_STATE_EVENT, '{"projectId":"p-1","version":3,"origin":null}')
+
+    expect(onProjectDataState).toHaveBeenCalledWith({ projectId: 'p-1', version: 3, origin: null })
+    close()
+  })
+
+  it('unterscheidet Arbeitsstand und Datenzustand -- eines löst nicht das andere aus', () => {
+    const onProjectViewState = vi.fn()
+    const onProjectDataState = vi.fn()
+    const close = connectLiveChannel({ onProjectViewState, onProjectDataState })
+
+    latest().emit(PROJECT_DATA_STATE_EVENT, '{"projectId":"p-1","version":1,"origin":null}')
+
+    expect(onProjectDataState).toHaveBeenCalledTimes(1)
+    expect(onProjectViewState).not.toHaveBeenCalled()
     close()
   })
 

@@ -35,6 +35,17 @@ export interface LiveViewStateOptions {
    * actually moves is the caller's decision (see `useDeferredLayerJump`).
    */
   onActiveLayerMoved: (layerId: string) => void
+  /**
+   * Someone changed this project's *data* -- a layer's data, style, clip or render
+   * version, or the catalog itself. Passed through with nothing but the fact that it
+   * happened: what changed and what to do about it are not this hook's business (its
+   * job is the working state, not the data), only that the moment happened -- see
+   * `state/useLiveDataState.ts` for what actually reacts to it. Wired onto the same
+   * connection this hook already owns, not a second one: the stream is one resource
+   * per open project, and the two kinds of state sharing it is exactly what a "second
+   * listener" (contract section 2.1) means.
+   */
+  onProjectDataState?: () => void
 }
 
 /**
@@ -84,7 +95,15 @@ export function useLiveViewState(
       // read here is what closes that gap -- and it is why the server's own timeout on a
       // stream costs nothing: the client comes back and asks.
       onOpen: (reconnected) => {
-        if (reconnected) read()
+        if (reconnected) {
+          read()
+          // The gap that makes a missed *working*-state event harmless (the next one
+          // repeats it) makes a missed *data*-state event the opposite: nothing later
+          // repeats "the catalog changed" once the moment that would have said so has
+          // passed. So this is unconditional, the same as the read above, rather than
+          // waiting for an event this client happened to still be connected to see.
+          optionsRef.current.onProjectDataState?.()
+        }
       },
       onProjectViewState: (event) => {
         // An event this client's own write produced is not a change it has to answer --
@@ -92,6 +111,10 @@ export function useLiveViewState(
         // the user themselves opens.
         if (!shouldReadBack(event, { projectId, clientId: CLIENT_ID })) return
         read()
+      },
+      onProjectDataState: (event) => {
+        if (!shouldReadBack(event, { projectId, clientId: CLIENT_ID })) return
+        optionsRef.current.onProjectDataState?.()
       },
     })
 

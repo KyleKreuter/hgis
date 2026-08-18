@@ -40,10 +40,11 @@ import {
   useIsDrawingSplitLine,
 } from '@/editing'
 import { MeasurementOverlay, MeasurementToolbar, useIsMeasuring } from '@/measurement'
-import { isVectorLayer, layerDetailQuery, layerListQuery } from '@/api/layers'
+import { isVectorLayer, layerDetailQuery, layerListQuery, type LayerSummary } from '@/api/layers'
 import { featureDetailQuery } from '@/api/features'
 import { applyRemoteSelection, useSelection } from '@/state/selection'
 import { useDeferredLayerJump } from '@/state/useDeferredLayerJump'
+import { useLiveDataState } from '@/state/useLiveDataState'
 import { useLiveViewState } from '@/state/useLiveViewState'
 import { useViewStateWriter } from '@/state/useViewState'
 import { layerJumpBackTarget, layerStateOf, shouldRestoreActiveLayer } from '@/state/viewState'
@@ -319,9 +320,39 @@ function Workspace() {
     return layers?.find((layer) => layer.id === layerId)?.name ?? 'ohne Namen'
   }
 
+  /**
+   * The layer this window has open no longer exists -- someone else deleted it while it
+   * was open here (contract section 2.3's "Sonderfall").
+   *
+   * Deliberately not routed through `deferredJump`: that hook holds a jump back while
+   * there is unsaved work, because its destination still exists and is worth waiting
+   * for -- saving first and arriving a moment later loses nothing. Here the destination
+   * is the empty workspace, not another layer, and there is no "waiting" that would
+   * change what has to happen; the layer will not un-delete itself. So this closes it
+   * immediately, straight through `selectLayer`, the same call the local delete path
+   * uses (`LayerTree.tsx`'s `DeleteLayerDialog.onDeleted`) -- which already answers the
+   * unsaved-work question on its own: it still runs through `leaveGuard` below, so an
+   * open edit session on exactly this layer still gets the ordinary "verwerfen?"
+   * question, just for a reason of someone else's making instead of the user's own.
+   */
+  function handleActiveLayerDeleted(layer: Pick<LayerSummary, 'id' | 'name'>) {
+    toast.error(`Der Layer „${layer.name}“ wurde von außen gelöscht`, {
+      id: 'live-layer-deleted',
+      duration: 12_000,
+    })
+    selectLayer(null)
+  }
+
   // Waits out unsaved work before moving the view; see the hook for why saving and
   // discarding are the same thing to it.
   const deferredJump = useDeferredLayerJump(workAtRisk, jumpToLayer)
+
+  // Keeps the layer catalog (`layerListQuery`) in step with whoever else is writing to
+  // this project's data -- see the hook for why reacting to that is almost nothing.
+  const dataState = useLiveDataState(projectId, {
+    activeLayerId: activeLayerId ?? null,
+    onActiveLayerDeleted: handleActiveLayerDeleted,
+  })
 
   // Held by this route rather than by the map or the table: the stream belongs to the open
   // project, so it opens when the project opens and closes when the project is left. A
@@ -331,6 +362,7 @@ function Workspace() {
     loadedActiveLayerId: viewState.document.activeLayerId,
     ready: viewState.ready,
     onActiveLayerMoved: deferredJump.request,
+    onProjectDataState: dataState.notify,
   })
 
   return (
