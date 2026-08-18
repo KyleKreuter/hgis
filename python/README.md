@@ -629,8 +629,9 @@ for item in client.watch():
 `for_project(project_id, name=None)` baut die übliche Filterprüfung:
 
 ```python
+mine = hgis.for_project(project.id)
 for item in client.watch():
-    if hgis.for_project(project.id)(item):
+    if mine(item):
         ...
 ```
 
