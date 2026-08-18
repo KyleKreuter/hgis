@@ -103,6 +103,43 @@ export type Renderer =
       intensity: number
       /** Named colour ramp, the same catalogue `graduated`'s `ramp` draws from. */
       ramp: string
+      /**
+       * The field value that maps to weight 0, overriding `heatmapWeight`'s automatic
+       * floor (`styleToMapLibre.ts`'s `normalisationFloor`). Optional -- absent together
+       * with `weightMax` means the automatic floor; a style predating this field, or one
+       * where the automatic floor is already right, simply omits both.
+       *
+       * Both or neither, never just this one on its own: the server rejects a lone
+       * `weightMin` with a 400 (`LayerStyleService.requireWeightRange`, backend). The
+       * automatic end a lone override would fall back to is computed client-side, from the
+       * layer's current data, at render time -- a value the server cannot see at save
+       * time, so it cannot check `weightMax > weightMin` against it either. `HeatmapEditor`
+       * enforces the pairing before it ever calls the API; `heatmapWeight` itself still
+       * tolerates a lone value defensively (a style written by another client, or a future
+       * relaxation of this rule), but no path in this app produces one.
+       *
+       * Exists for a field with no natural zero point, e.g. `baujahr`: normalised against
+       * 0 by default, seventy years (1950..2020) land in the top 3.5 % of the scale.
+       * There `weightMin` is what lets someone anchor the floor at a value they choose --
+       * 1900, say -- instead of at 0 or at the sample's own minimum (both wrong here for
+       * the same reason `normalisationFloor`'s own doc comment explains).
+       */
+      weightMin?: number
+      /**
+       * The field value that maps to weight 1, overriding `range.max`. Same both-or-neither
+       * rule as `weightMin` above -- see there for why.
+       *
+       * Exists for a skewed field whose true maximum is a rare outlier: normalised
+       * against it, 45 280 554 kWh/a for `waermebedarf_unsaniert` against a median of
+       * 188 843, every ordinary building lands near weight 0 and the heatmap reads as
+       * empty. `weightMax` lets someone cap the scale below the outlier -- a percentile,
+       * typically -- so the ordinary buildings spread back across the visible range.
+       * Values above it clamp to weight 1 rather than overflowing past it
+       * (`ExpressionSpecification`'s `interpolate`, MapLibre's own contract). Must be
+       * strictly greater than `weightMin` where both are given -- the server rejects even
+       * equality (`requireWeightRange`).
+       */
+      weightMax?: number
     }
 
 export interface LabelStyle {

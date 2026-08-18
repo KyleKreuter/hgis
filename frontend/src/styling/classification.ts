@@ -159,9 +159,16 @@ export interface GraduatedClassification {
 
 /**
  * Turns "field, method, classCount, ramp" into stored classes -- the one place
- * `/classify` is asked for a graduated renderer's classes. `queryClient.fetchQuery`
- * keeps the same 5-minute cache `layerClassifyQuery` already carries, so revisiting a
- * combination that was just requested does not cost another round trip.
+ * `/classify` is asked for a graduated renderer's classes.
+ *
+ * `staleTime: 0` overrides `layerClassifyQuery`'s ordinary 5-minute cache: this only ever
+ * runs from a user action -- "Klassen neu berechnen", a changed method or class count --
+ * and every one of those is a request for a fresh answer (team review, package 2). Without
+ * it, an identical `(field, method, classCount)` combination requested again inside the
+ * five-minute window silently served the cached result, even though the layer's data may
+ * have moved since. Cheap to always ask again -- a `/classify` call answers in tens of
+ * milliseconds even on a large layer (team measurement, package 2) -- so nothing about
+ * caching this particular read was actually saving anything worth keeping.
  *
  * Called only from a user action: the Methode/Klassen/Farbverlauf controls in
  * `GraduatedEditor`, its own Feld picker, and `SymbologyPanel` when a renderer switch
@@ -180,7 +187,7 @@ export async function requestGraduatedClasses(
   existingClasses: StyleClass[],
   fallbackSymbol: LayerSymbol,
 ): Promise<GraduatedClassification> {
-  const result = await queryClient.fetchQuery(layerClassifyQuery(layerId, field, method, classCount))
+  const result = await queryClient.fetchQuery({ ...layerClassifyQuery(layerId, field, method, classCount), staleTime: 0 })
   const fresh = buildClasses(result.breaks, geometryType, ramp)
   // Carries the existing size/width across, same as `GraduatedEditor`'s old effect did
   // -- see `sharedSymbolOf` for why an empty `existingClasses` (a field that just
@@ -260,6 +267,132 @@ export function heatmapFieldRangeQuery(layerId: string, field: string) {
   return layerClassifyQuery(layerId, field, RANGE_METHOD, RANGE_CLASS_COUNT)
 }
 
+/** A one-click `weightMin`/`weightMax` starting point (`types.ts`, renderer contract
+ *  package 2), e.g. `{ min: 12, max: 187 }`. */
+export interface HeatmapWeightSuggestion {
+  min: number
+  max: number
+}
+
+/**
+ * Classes requested for the weight-bound suggestion's quantile breaks -- the server's own
+ * ceiling (`ClassificationService.MAX_CLASSES = 12`, backend), the finest split `/classify`
+ * can compute without any new server capability. Twelve classes give breaks at 0, 1/12,
+ * 2/12, ..., 11/12, 1 -- i.e. roughly the 0th, 8.3rd, 16.7th, ..., 91.7th and 100th
+ * percentile, and 11/12 ≈ 91.7 % is exactly what `weightSuggestionFromBreaks` below hands
+ * back as the "upper" suggestion.
+ *
+ * 11/12 is the reachable optimum, not a rough stand-in -- checked exhaustively, not just
+ * argued: for every `classes` from 2 to 12, `k/classes` was compared against 0.95, and no
+ * combination lands closer than 11/12 (team review, package 2, in reply to "zieh auf p95
+ * nach"). A true 95th percentile needs a 20-way split (0.95 = 19/20, i.e. `classes = 20`),
+ * which the server's own `classes <= 12` rejects with a 400 before this code ever runs.
+ *
+ * Interpolating between 11/12 and the true maximum (index `breaks.length - 1`, always
+ * available) to approximate 0.95 more closely was considered and rejected: for a
+ * `waermebedarf_unsaniert`-shaped field the true maximum *is* the outlier this whole
+ * mechanism exists to stay away from (45 280 554 against a median of 188 843), so
+ * interpolating toward it pulls the estimate back toward the very value being avoided,
+ * worse the more skewed the field is -- exactly backwards for what a suggestion near the
+ * top end is supposed to do.
+ *
+ * Raising `MAX_CLASSES` to reach 19/20 was considered and rejected too, deliberately not
+ * here: that ceiling exists for legend readability (`ClassificationService`, "above twelve
+ * no legend is readable any more"), a reason this internal, non-legend caller does not
+ * share -- but weakening a clear limit for one caller's convenience turns it into one with
+ * an exception, and the next exception then has this one to point to. Left as a
+ * deliberate choice, not a gap: measured against the field this was built for
+ * (`waermebedarf_unsaniert`, 46 233 real buildings), 11/12 already lifts the median's
+ * weight from 0,0042 (today's plain maximum) to roughly 0,21 -- a factor of about fifty --
+ * against 0,154 at a true, unreachable 95th percentile.
+ *
+ * That is not 11/12 beating a true 95th percentile -- it is a lower cutoff buying a higher
+ * median weight at the cost of clamping more objects to the same colour: 11/12 clamps
+ * about 8,3 % of this field's buildings (3 855 of 46 233, measured), a true 95th percentile
+ * only 5 %. 11/12 sits closer to p90's trade-off (10 % clamped, median weight 0,242) than
+ * to p95's. The distance from 11/12 to a true 95th percentile is fine-tuning next to the
+ * distance 11/12 has already closed from today's plain maximum -- but it is a trade, not a
+ * win already banked (team review, package 2 addendum: the first version of this
+ * paragraph read as the opposite, comparing the two weights alone without ever naming
+ * either one's clamped share).
+ */
+const WEIGHT_SUGGESTION_CLASSES = 12
+
+/**
+ * Turns one `/classify` quantile response's `breaks` into a `weightMin`/`weightMax`
+ * suggestion -- the near-8th and near-92nd percentile (see `WEIGHT_SUGGESTION_CLASSES`
+ * above for why not exactly 8th/92nd), one step in from either true end so an outlier at
+ * the very top or bottom of the field never becomes the suggestion itself.
+ *
+ * `undefined` below four breaks: with three breaks or fewer (a field with very few
+ * distinct values, after the server's own `strictlyAscending` dedup drops repeats) index 1
+ * and index `length - 2` either coincide or invert -- at `length === 2` (`[min, max]`),
+ * index 1 *is* `max` and index `length - 2` *is* `min`, which would silently swap the two
+ * ends instead of producing a narrower one. Four breaks is the smallest count where index 1
+ * and index `length - 2` are still two genuinely different, correctly ordered interior
+ * points (`length === 4`: indices 1 and 2). Below that there is no meaningful interior
+ * quantile to suggest -- the field's plain min/max (already what the automatic stretch
+ * uses) is the honest answer, not a fabricated "percentile" that happens to equal one end.
+ *
+ * Pure and exported on its own so this rule is tested directly against `breaks` arrays of
+ * every length that matters, without a network round trip standing in the way.
+ */
+export function weightSuggestionFromBreaks(breaks: number[]): HeatmapWeightSuggestion | undefined {
+  if (breaks.length < 4) return undefined
+  return { min: breaks[1], max: breaks[breaks.length - 2] }
+}
+
+/**
+ * Fetches the quantile breaks `weightSuggestionFromBreaks` needs and turns them into a
+ * suggestion -- the one place a user action (`HeatmapEditor`'s suggestion button) asks
+ * `/classify` for this.
+ *
+ * `staleTime: 0` overrides `layerClassifyQuery`'s ordinary 5-minute cache on purpose (team
+ * review, package 2 -- found alongside `requestGraduatedClasses`'s matching issue, same
+ * fix applied there too): someone pressing a button that computes something has asked for
+ * a fresh answer, not whatever answer happened to already sit in the cache from up to five
+ * minutes ago -- and `WEIGHT_SUGGESTION_CLASSES = 12` can coincide with a `GraduatedEditor`
+ * classification's own `classCount`, sharing the very cache entry a stale read here would
+ * silently reuse. The cost of asking again is not worth avoiding to begin with -- a
+ * `/classify` call answers in tens of milliseconds even on a large layer (team
+ * measurement, package 2) -- so there is no efficiency this trades away, only a
+ * correctness gap it closes.
+ */
+export async function requestHeatmapWeightSuggestion(
+  queryClient: QueryClient,
+  layerId: string,
+  field: string,
+): Promise<HeatmapWeightSuggestion | undefined> {
+  const result = await queryClient.fetchQuery({
+    ...layerClassifyQuery(layerId, field, 'quantile', WEIGHT_SUGGESTION_CLASSES),
+    staleTime: 0,
+  })
+  return weightSuggestionFromBreaks(result.breaks)
+}
+
+/**
+ * Whether a `weightMin`/`weightMax` draft is the one shape `HeatmapEditor` is allowed to
+ * write into `renderer`: both present, and ascending. Mirrors the server's own rule
+ * exactly (`LayerStyleService.requireWeightRange`, backend package 2 decision, both
+ * "either both or neither" and "`weightMax` strictly greater than `weightMin`,
+ * equality included as a rejection") -- catching a violation here, before the PATCH, is
+ * what a user sees as an inline hint instead of a 400 from the server.
+ *
+ * The one place this check lives: `HeatmapEditor` derives its "commit to the renderer"
+ * decision and its two validation hints ("both needed" / "wrong order") from the same
+ * call, so they cannot silently drift apart into disagreeing about what counts as valid.
+ * `undefined` covers both failure shapes at once (incomplete, or complete but not
+ * ascending) -- the caller tells them apart itself where the wording differs (an empty
+ * box reads differently from two full ones in the wrong order).
+ */
+export function resolveWeightBounds(
+  min: number | undefined,
+  max: number | undefined,
+): HeatmapWeightSuggestion | undefined {
+  if (min === undefined || max === undefined || !(max > min)) return undefined
+  return { min, max }
+}
+
 /**
  * One query result, narrowed to the two members `resolveRangeState` reads --
  * structural on purpose so this stays independent of exactly which `useQueries`/
@@ -307,7 +440,10 @@ export interface CategorizedClassification {
   result: FieldValuesResult
 }
 
-/** The categorized counterpart to {@link requestGraduatedClasses}, same rules. */
+/** The categorized counterpart to {@link requestGraduatedClasses}, same rules --
+ *  including `staleTime: 0` (team review, package 2), for the same reason: a user action
+ *  asking to re-list a field's values has asked for a fresh list, not `layerValuesQuery`'s
+ *  ordinary 5-minute cache. */
 export async function requestCategorizedCategories(
   queryClient: QueryClient,
   layerId: string,
@@ -317,7 +453,7 @@ export async function requestCategorizedCategories(
   existingCategories: StyleCategory[],
   fallbackSymbol: LayerSymbol,
 ): Promise<CategorizedClassification> {
-  const result = await queryClient.fetchQuery(layerValuesQuery(layerId, field))
+  const result = await queryClient.fetchQuery({ ...layerValuesQuery(layerId, field), staleTime: 0 })
   const fresh = buildCategories(result.values, geometryType, palette)
   const shared = sharedSymbolOf(existingCategories, fallbackSymbol)
   return { categories: withSharedSymbol(fresh, shared), result }

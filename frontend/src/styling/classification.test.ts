@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { QueryClient } from '@tanstack/react-query'
 import type { CircleLayerSpecification, FillLayerSpecification, SymbolLayerSpecification } from 'maplibre-gl'
 import type { LayerField, VectorLayerSummary } from '@/api/layers'
 import {
@@ -6,8 +7,13 @@ import {
   buildClasses,
   columnNameOfField,
   fieldIdOfColumn,
+  requestCategorizedCategories,
+  requestGraduatedClasses,
+  requestHeatmapWeightSuggestion,
   resolveRangeState,
+  resolveWeightBounds,
   sharedSymbolOf,
+  weightSuggestionFromBreaks,
   withSharedSymbol,
   withSharedSymbolShape,
 } from './classification'
@@ -331,5 +337,130 @@ describe('resolveRangeState', () => {
    */
   it('liest ein verdrehtes Paar (min > max) als "invalid", obwohl der echte Endpunkt es nicht liefern kann', () => {
     expect(resolveRangeState({ isError: false, data: { min: 100, max: 10 } })).toBe('invalid')
+  })
+})
+
+describe('weightSuggestionFromBreaks', () => {
+  /** Zwölf Klassen, wie `WEIGHT_SUGGESTION_CLASSES` sie anfragt: 13 Bruchpunkte, wenn
+   *  keiner der Werte doppelt vorkommt. */
+  const TWELVE_CLASS_BREAKS = [0, 8, 16, 25, 33, 41, 50, 58, 66, 75, 83, 91, 100]
+
+  it('nimmt den zweiten und den vorletzten Bruchpunkt -- nah an den Rändern, aber nicht die Ränder selbst', () => {
+    expect(weightSuggestionFromBreaks(TWELVE_CLASS_BREAKS)).toEqual({ min: 8, max: 91 })
+  })
+
+  it('liefert nichts bei drei oder weniger Bruchpunkten -- kein echter innerer Quantilwert vorhanden', () => {
+    expect(weightSuggestionFromBreaks([])).toBeUndefined()
+    expect(weightSuggestionFromBreaks([10])).toBeUndefined()
+    expect(weightSuggestionFromBreaks([10, 20])).toBeUndefined()
+    expect(weightSuggestionFromBreaks([10, 20, 30])).toBeUndefined()
+  })
+
+  /**
+   * Der Grenzfall, der die Vier-Bruchpunkte-Regel begründet: bei genau zwei
+   * Bruchpunkten (Feld mit sehr wenigen unterschiedlichen Werten, nach dem
+   * `strictlyAscending`-Dedup des Servers) ist Index 1 bereits das Maximum und Index
+   * `length - 2` bereits das Minimum -- ohne die Untergrenze würde der "untere"
+   * Vorschlag zum Maximum und umgekehrt, exakt vertauscht statt bloß ungenau.
+   */
+  it('vertauscht die Enden nicht bei zu wenigen Bruchpunkten', () => {
+    expect(weightSuggestionFromBreaks([10, 20])).toBeUndefined()
+  })
+
+  it('liefert bei genau vier Bruchpunkten zwei unterschiedliche, aufsteigend geordnete innere Punkte', () => {
+    expect(weightSuggestionFromBreaks([10, 20, 30, 40])).toEqual({ min: 20, max: 30 })
+  })
+})
+
+describe('resolveWeightBounds', () => {
+  /**
+   * Spiegelt `LayerStyleService.requireWeightRange` (Backend, Paket 2): beides oder
+   * keins, und `weightMax` muss echt größer sein -- Gleichstand zählt als Fehler, nicht
+   * nur eine absteigende Spanne.
+   */
+  it('liefert das Paar, wenn beide gesetzt und aufsteigend sind', () => {
+    expect(resolveWeightBounds(10, 20)).toEqual({ min: 10, max: 20 })
+  })
+
+  it('liefert nichts, wenn nur eine Seite gesetzt ist', () => {
+    expect(resolveWeightBounds(10, undefined)).toBeUndefined()
+    expect(resolveWeightBounds(undefined, 20)).toBeUndefined()
+  })
+
+  it('liefert nichts, wenn keine Seite gesetzt ist', () => {
+    expect(resolveWeightBounds(undefined, undefined)).toBeUndefined()
+  })
+
+  it('liefert nichts bei Gleichstand -- der Server lehnt auch das ab, nicht nur eine absteigende Spanne', () => {
+    expect(resolveWeightBounds(10, 10)).toBeUndefined()
+  })
+
+  it('liefert nichts bei absteigender Spanne', () => {
+    expect(resolveWeightBounds(20, 10)).toBeUndefined()
+  })
+
+  it('behandelt 0 als echten Wert, nicht als "nicht gesetzt"', () => {
+    expect(resolveWeightBounds(0, 10)).toEqual({ min: 0, max: 10 })
+    expect(resolveWeightBounds(-10, 0)).toEqual({ min: -10, max: 0 })
+  })
+})
+
+/**
+ * Team review, package 2: `requestHeatmapWeightSuggestion`/`requestGraduatedClasses`/
+ * `requestCategorizedCategories` all set `staleTime: 0` on their `fetchQuery` call, so a
+ * user action -- pressing "Klassen neu berechnen", clicking the heatmap's suggestion
+ * button -- always reaches the server, never a stale answer up to five minutes old from
+ * `layerClassifyQuery`/`layerValuesQuery`'s own cache. Tested against the effect, not the
+ * line itself: `staleTime: 0` reads as an easy "the query already has one" deletion during
+ * cleanup, and nothing about the line's own shape would stop that -- only a test that
+ * fails once the second call is served from the cache instead of asking again.
+ */
+describe('Frische bei Berechnungs-Aktionen (staleTime: 0)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /** Answers every request with the same body, so two calls differ only in whether a
+   *  second request was actually sent -- what each test here counts. */
+  function stubGetJson(body: unknown) {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  const CLASSIFY_BODY = { field: 'wert', method: 'quantile', breaks: [0, 1, 2, 3], min: 0, max: 3, nullCount: 0 }
+
+  it('requestHeatmapWeightSuggestion fragt zweimal am Server nach, statt die zweite Antwort aus dem Zwischenspeicher zu bedienen', async () => {
+    const fetchMock = stubGetJson(CLASSIFY_BODY)
+    const queryClient = new QueryClient()
+
+    await requestHeatmapWeightSuggestion(queryClient, 'layer-1', 'wert')
+    await requestHeatmapWeightSuggestion(queryClient, 'layer-1', 'wert')
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('requestGraduatedClasses fragt zweimal am Server nach', async () => {
+    const fetchMock = stubGetJson(CLASSIFY_BODY)
+    const queryClient = new QueryClient()
+    const symbol = defaultSymbolFor('MULTIPOLYGON')
+
+    await requestGraduatedClasses(queryClient, 'layer-1', 'MULTIPOLYGON', 'wert', 'quantile', 3, 'blues', [], symbol)
+    await requestGraduatedClasses(queryClient, 'layer-1', 'MULTIPOLYGON', 'wert', 'quantile', 3, 'blues', [], symbol)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('requestCategorizedCategories fragt zweimal am Server nach', async () => {
+    const fetchMock = stubGetJson({ field: 'wert', values: [{ value: 'a', count: 1 }], truncated: false })
+    const queryClient = new QueryClient()
+    const symbol = defaultSymbolFor('MULTIPOLYGON')
+
+    await requestCategorizedCategories(queryClient, 'layer-1', 'MULTIPOLYGON', 'wert', 'blues', [], symbol)
+    await requestCategorizedCategories(queryClient, 'layer-1', 'MULTIPOLYGON', 'wert', 'blues', [], symbol)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
