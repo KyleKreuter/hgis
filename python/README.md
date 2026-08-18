@@ -201,13 +201,13 @@ neu.purge()                # endgültig -- siehe unten
 als Serverfehler zurück, der die gültigen Typen nennt.
 
 `delete()` und `purge()` melden, was geschehen ist: `TrashEntry` (`id`,
-`name`, `deleted_at`, `feature_count`, `deleted_by`) -- **sofern der Server
-das mitschickt.** Heute antworten beide Endpunkte noch mit einem leeren 204,
-also ist `eintrag` zurzeit `None`. Das ist bewusst kein geratener Wert: die
-Bibliothek erfindet keine Objektzahl aus dem, was sie vor dem Aufruf über den
-Layer wusste, weil das inzwischen nicht mehr stimmen muss. Sobald der Server
-eine Antwort im Format von `LayerDtos.TrashEntry` mitschickt, füllt sich
-`eintrag` von selbst -- ohne eine weitere Änderung in dieser Bibliothek.
+`name`, `deleted_at`, `feature_count`, `deleted_by`). Bei `purge()`
+beschreiben `deleted_at`/`deleted_by` das vorangegangene `delete()`, nicht
+den Löschvorgang selbst -- der Layer existiert danach nicht mehr, um dazu
+etwas zu berichten. Die Rückgabe bleibt `TrashEntry | None`: Antwortet ein
+Endpunkt einmal mit einem leeren 204 statt einem Rumpf, liefert die
+Bibliothek `None`, statt eine Objektzahl aus dem zu raten, was sie vor dem
+Aufruf über den Layer wusste -- das könnte inzwischen nicht mehr stimmen.
 
 ### Stil setzen
 
@@ -295,16 +295,16 @@ layer.delete_field(feld)              # auch nach Name oder Id: layer.delete_fie
 ```python
 fid = layer.insert(
     {"type": "Point", "coordinates": [9.99, 53.55]},
-    {"Gattung": "Tilia", "Pflanzjahr": 2024},
+    {"gattung": "Tilia", "pflanzjahr": 2024},
 )
 
 fids = layer.insert_many([
-    hgis.NewFeature({"type": "Point", "coordinates": [9.98, 53.54]}, {"Gattung": "Acer"}),
-    hgis.NewFeature({"type": "Point", "coordinates": [9.97, 53.53]}, {"Gattung": "Quercus"}),
+    hgis.NewFeature({"type": "Point", "coordinates": [9.98, 53.54]}, {"gattung": "Acer"}),
+    hgis.NewFeature({"type": "Point", "coordinates": [9.97, 53.53]}, {"gattung": "Quercus"}),
 ])
 
 objekt = layer.feature(fid)
-layer.update_feature(fid, objekt.row_version, properties={"Pflanzjahr": 2025})
+layer.update_feature(fid, objekt.row_version, properties={"pflanzjahr": 2025})
 
 layer.delete_features([fid])          # nennt jede Kennung einzeln, siehe unten
 ```
@@ -313,6 +313,14 @@ layer.delete_features([fid])          # nennt jede Kennung einzeln, siehe unten
 jede Abfrage). Stimmt sie nicht mehr mit der Serverzeile überein, wirft die
 Bibliothek `hgis.ConflictError`; `error.current` trägt die Zeile, wie sie
 gerade auf dem Server steht.
+
+**`properties` ist strikt nach Spaltenname geschlüsselt**, nicht nach dem
+Anzeigenamen, den `create_layer()`/`create_field()` bekamen -- oben wird aus
+`"Gattung"` die Spalte `gattung`. Ein Anzeigename an dieser Stelle scheitert
+mit `Unbekanntes Feld`. Das ist nicht überall die Regel: ein Filterausdruck,
+`order_by()` und `field=` in der Symbologie nehmen wahlweise Anzeigename oder
+Spaltenname entgegen -- siehe [Mehrdeutige Feldnamen](#mehrdeutige-feldnamen)
+oben.
 
 Alle vier Aufrufe sind Kurzformen von `layer.edit(creates=..., updates=...,
 deletes=...)`, das einen ganzen Stapel in einer Transaktion sendet und dabei
@@ -341,20 +349,32 @@ und 3 löschen. Die Bibliothek lehnt eine Zeichenkette hier mit
 
 Für gelöschte Felder und Objekte führt der Server ein Änderungsprotokoll
 (`GET /api/projects/{id}/changes`), das bei einer Objektlöschung die
-vollständige Zeile mitschreibt -- Geometrie und Attribute. Das ist die
-einzige Rückfallebene: Wiederherstellen heißt, die Zeile von dort zu lesen
-und mit `layer.insert(...)` neu anzulegen. Diese Bibliothek liest das
-Protokoll nicht für Sie; `client.get(f"/api/projects/{project_id}/changes")`
-funktioniert bereits, denn Lesen ist uneingeschränkt.
+vollständige Zeile mitschreibt -- Geometrie und Attribute, unter
+`deletedRows`. Das ist die einzige Rückfallebene: Wiederherstellen heißt,
+die Zeile von dort zu lesen und mit `layer.insert(...)` neu anzulegen.
+Diese Bibliothek liest das Protokoll nicht für Sie; **`deletedRows` reist
+nur mit, wenn Sie es ausdrücklich anfordern:**
+
+```python
+client.get(
+    f"/api/projects/{project_id}/changes",
+    includeDeletedRows=True,
+)
+```
+
+Ohne `includeDeletedRows=True` (Vorgabe: `False`) fehlt der Schlüssel
+`deletedRows` in jedem `feature.delete`-Eintrag ganz -- kein leeres Feld,
+sondern keins. Lesen bleibt trotzdem uneingeschränkt; nur dieser eine
+Parameter ist es nicht von selbst.
 
 ### Was der Wächter durchlässt
 
 `RequestGuard` prüft jede Anfrage gegen eine feste Liste, bevor sie den
-Transport erreicht -- egal ob sie über `client.get(...)` kommt oder über
-`client._transport.request(...)` direkt. Erlaubt sind lesende Anfragen
-(jedes `GET`) sowie genau die Schreibvorgänge oben. Alles andere -- Layer neu
-ordnen, Objekte teilen oder zusammenführen, ein Projekt löschen -- lehnt die
-Bibliothek mit `hgis.GuardError` ab, bevor der Server sie sieht.
+Transport erreicht -- egal ob sie über `client.get(...)` kommt oder direkt
+über `client._send(...)`. Erlaubt sind lesende Anfragen (jedes `GET`) sowie
+genau die Schreibvorgänge oben. Alles andere -- Layer neu ordnen, Objekte
+teilen oder zusammenführen, ein Projekt löschen -- lehnt die Bibliothek mit
+`hgis.GuardError` ab, bevor der Server sie sieht.
 
 ```python
 >>> client._send("PUT", f"/api/projects/{pid}/layers/order", json={})
@@ -600,24 +620,101 @@ zeilenweise; `PyodideTransport.events()` wirft `TransportError` -- eine
 synchrone `XMLHttpRequest` kann einen Strom nicht schrittweise lesen, das
 braucht eine eigene Anbindung, die diese Stufe noch nicht baut.
 
-## Der Ereigniskanal (Grundlage)
+## Der Ereigniskanal
 
-`client.events()` öffnet den Live-Kanal und liefert `hgis.Event` (`name`,
-`data`, `id`) für jedes ankommende Ereignis:
+`client.watch()` liest `GET /api/events` -- projektübergreifend, eine
+Verbindung für alle Projekte auf dem Server, jedes Ereignis nennt seins. Er
+verbindet nach jedem Abbruch neu: egal ob der Server sauber beendet (sein
+eigener `stream-timeout`, alle paar Minuten) oder die Verbindung wirklich
+abreißt, `watch()` merkt es nicht als Fehler, sondern öffnet die nächste.
+
+```python
+for item in client.watch():
+    if isinstance(item, hgis.Change) and item.name == hgis.PROJECT_CATALOG_EVENT:
+        print(item.project_id, "steht jetzt bei Version", item.version)
+```
+
+`watch()` liefert zwei Arten von Elementen:
+
+- `Change(name, project_id, version, origin)` -- ein Projekt steht jetzt bei
+  `version`, auf `name` (`PROJECT_VIEW_STATE_EVENT` für den Arbeitsstand,
+  `PROJECT_CATALOG_EVENT` für den Katalog). Kein Inhalt, nur der Anstoß, neu
+  zu lesen -- den eigentlichen Stand holen Sie über die gewöhnliche API.
+- `Connected(reconnected)` -- der Kanal ist (wieder) offen. `reconnected=True`
+  bei jeder Verbindung nach der ersten heißt: Zwischen Abbruch und
+  Neuverbindung liegen Sekunden, in denen Ereignisse verloren gehen können --
+  der Server führt keine Historie. Wer nichts verpassen will, liest bei
+  jedem `Connected` einmal nach, statt nur auf das nächste Ereignis zu warten.
+
+`for_project(project_id, name=None)` baut die übliche Filterprüfung:
+
+```python
+mine = hgis.for_project(project.id)
+for item in client.watch():
+    if mine(item):
+        ...
+```
+
+`client.wait_for(predicate, timeout=None)` blockiert, bis `predicate` auf
+ein geliefertes Element zutrifft, und gibt es zurück -- `None` nach Ablauf
+der Frist. Zwei Anwendungsfälle, mit gegensätzlichem Umgang mit `origin`:
+
+```python
+# Das eigene Echo überspringen -- der Regelfall.
+match = client.wait_for(
+    lambda item: isinstance(item, hgis.Change) and item.origin != client.client_id
+)
+
+# Auf einen selbst gestarteten Hintergrundauftrag warten (z. B. einen
+# Import): der schreibt mit origin=None, und das eigene Echo ist hier
+# genau die Nachricht, auf die gewartet wird.
+match = client.wait_for(
+    lambda item: (
+        isinstance(item, hgis.Change)
+        and item.project_id == project.id
+        and item.name == hgis.PROJECT_CATALOG_EVENT
+        and item.origin in (client.client_id, None)
+    ),
+    timeout=120,
+)
+```
+
+Ein `watch()` von einem zweiten Thread aus zu beenden, geht nicht über
+`close()` -- Generatoren sind nicht threadsicher, das stürzt mit
+`ValueError: generator already executing` ab. Übergeben Sie stattdessen ein
+`threading.Event` als `stop`. Aus einem beliebigen Thread gesetzt, endet die
+Schleife an der nächsten Gelegenheit -- vor der nächsten Verbindung, oder
+mitten in einem Wiederverbindungs-Warten:
+
+```python
+stop = threading.Event()
+thread = threading.Thread(target=lambda: list(client.watch(stop=stop)))
+thread.start()
+...
+stop.set()
+thread.join()
+```
+
+Ein abgelaufener Lese-Timeout ist dabei kein Fehler: `TransportTimeout`
+(eine `TransportError`-Unterklasse) heißt nur "nichts zu lesen innerhalb der
+Frist" -- die Verbindung ist gesund, `watch()` verbindet ohne Wartezeit neu,
+statt es wie einen echten Abbruch zu behandeln.
+
+Darunter liegt `client.events()`, der rohe Kanal: ein `hgis.Event` (`name`,
+`data`, `id`) je Ereignis, ohne Wiederverbinden, ohne Deutung -- die
+Grundlage, auf der `watch()` aufbaut:
 
 ```python
 for event in client.events():
     print(event.name, event.data)          # z. B. "project-view-state", '{"projectId":...}'
 ```
 
-Diese Stufe baut nur die Grundlage. Sie liest nicht selbst vom Kanal --
-wiederverbinden nach einem Abbruch, das eigene Echo an `origin ==
-client.client_id` erkennen: das ist Sache einer späteren Stufe. Geprüft ist
-hier, dass ein Ereignis tatsächlich ankommt (`tests/test_events.py`, gegen
-einen echten Server auf localhost) und dass der Pfad vom `RequestGuard`
-geprüft wird wie jeder andere auch -- mit einer eigenen, wörtlichen Prüfung
-auf `/api/events`, weil die allgemeine Erlaubnisliste jedes `GET` ohnehin
-durchlässt und daher für einen Strom nichts Eigenes prüfen würde.
+Geprüft ist unter anderem, dass ein Ereignis tatsächlich über einen echten
+Socket ankommt (`tests/test_events.py`), dass `RequestGuard` den Pfad mit
+einer eigenen, wörtlichen Prüfung auf `/api/events` absichert -- die
+allgemeine Erlaubnisliste ließe jedes `GET` durch und prüfte damit nichts
+Eigenes --, und dass `watch()`/`wait_for()` tatsächlich neu verbinden, auch
+über einen echten, sauber schließenden Socket (`tests/test_channel.py`).
 
 ## Tests
 
@@ -652,8 +749,15 @@ python -m pytest -m "not live"                        # ohne
   Methode -- `client.get(".../trash")` und `client.get(".../changes")`
   funktionieren bereits, denn Lesen ist uneingeschränkt; eine eigene,
   typisierte Oberfläche dafür ist nicht Teil dieser Stufe.
-- Der Ereigniskanal ist nur die Grundlage, siehe oben -- kein Wiederverbinden,
-  kein Erkennen des eigenen Echos, kein Konsument, der ihn tatsächlich nutzt.
+- `wait_for()`s Frist ist unterhalb des serverseitigen Heartbeat-Takts (25
+  Sekunden) scharf. Darüber -- auch beim Vorgabewert `timeout=None` -- kann
+  sie um bis zu eine `stream-timeout`-Länge überschritten werden: ein
+  Heartbeat setzt den Lese-Timeout zurück, bevor er greifen kann, und ist
+  selbst kein Ereignis, an dem sich die Frist neu prüfen ließe.
+- `stop` auf `watch()`/`wait_for()` wird nur zwischen zwei Verbindungen und
+  während eines Wiederverbindungs-Wartens geprüft, nie mitten in einem
+  laufenden Lesevorgang. Mit einer kurzen `timeout` reagiert es zeitnah;
+  beim Vorgabewert kann es genauso lange brauchen wie die Frist oben.
 - `PyodideTransport.events()` läuft nicht -- nur unter CPython.
 - Kein MCP-Server.
 - Kein Editor im Browser.

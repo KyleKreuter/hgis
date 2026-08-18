@@ -28,6 +28,14 @@ reaches the server -- see :class:`hgis.errors.GuardError`.
 works without them.
 """
 
+from .channel import (
+    PROJECT_CATALOG_EVENT,
+    PROJECT_VIEW_STATE_EVENT,
+    Change,
+    ChannelItem,
+    Connected,
+    for_project,
+)
 from .client import (
     DEFAULT_BASE_URL,
     Client,
@@ -67,7 +75,14 @@ from .style import (
     Style,
     Symbol,
 )
-from .transport import Event, HttpxTransport, PyodideTransport, Response, Transport
+from .transport import (
+    Event,
+    HttpxTransport,
+    PyodideTransport,
+    Response,
+    Transport,
+    TransportTimeout,
+)
 
 __version__ = "0.1.0"
 
@@ -88,6 +103,13 @@ __all__ = [
     "LayerDescription",
     "FieldSummary",
     "TrashEntry",
+    # the live channel, see Client.watch and Client.wait_for
+    "Change",
+    "Connected",
+    "ChannelItem",
+    "for_project",
+    "PROJECT_VIEW_STATE_EVENT",
+    "PROJECT_CATALOG_EVENT",
     # writing
     "NewFeature",
     "FeatureUpdate",
@@ -112,6 +134,7 @@ __all__ = [
     "NotFoundError",
     "ConflictError",
     "TransportError",
+    "TransportTimeout",
     "UnknownNameError",
     "GuardError",
     "InvalidClientIdError",
