@@ -201,7 +201,10 @@ class Project:
         because the endpoint replaces the state wholesale.
 
         >>> alt = layer.where("pflanzjahr < 1950").fids()
-        >>> project.select(alt)
+        >>> project.select(alt, layer=layer)
+
+        ``layer`` may be omitted once some layer is already active -- the
+        very first call on a fresh project has none yet, so name it there.
 
         :param fids: object ids; an empty list clears the selection
         :param layer: a layer, its name or its id; the active layer when omitted

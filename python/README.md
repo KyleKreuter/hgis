@@ -23,24 +23,43 @@ pip install -e ".[dev]"               # alles, plus pytest
 
 ## Erste Schritte
 
+Diese Zeilen legen ihre eigenen Testdaten an. Kein Vorwissen über ein
+bestimmtes Projekt nötig -- nur ein Projekt muss in Ihrer hGIS-Instanz schon
+existieren (jede Installation hat mindestens eines; die Bibliothek legt
+selbst keine Projekte an, nur Layer darin -- siehe
+[Grenzen dieser Stufe](#grenzen-dieser-stufe)).
+
 ```python
 import hgis
 
 client = hgis.connect()                       # Standard: http://localhost:8080
-project = client.project("Wandsbek, Zuschnitt-Beispiel")
-layer = project.layer("Straßenbaumkataster Hamburg")
+project = client.projects()[0]                # ein vorhandenes Projekt
+
+layer = project.create_layer(
+    "Straßenbäume", "MULTIPOINT",
+    fields={"Gattung": "TEXT", "Pflanzjahr": "INTEGER"},
+)
+
+layer.insert_many([
+    hgis.NewFeature({"type": "Point", "coordinates": [9.99, 53.55]}, {"gattung": "Tilia", "pflanzjahr": 1932}),
+    hgis.NewFeature({"type": "Point", "coordinates": [9.98, 53.54]}, {"gattung": "Acer", "pflanzjahr": 2007}),
+    hgis.NewFeature({"type": "Point", "coordinates": [9.97, 53.53]}, {"gattung": "Quercus", "pflanzjahr": 1958}),
+])
 
 print(layer.describe())
 ```
+
+Die folgenden Abschnitte bauen locker auf `client`, `project` und `layer`
+von hier auf.
 
 ## Die Regel
 
 Der Server rechnet. Python bekommt das Ergebnis.
 
 ```python
-# Falsch: holt 229.876 Zeilen in den Speicher
+# Falsch: holt den ganzen Layer in den Speicher
 df = layer.to_dataframe()
-alt = df[df.pflanzjahr < 1950]
+alt = df[df.Pflanzjahr < 1950]
 
 # Richtig: der Server filtert, Python bekommt nur die Treffer
 alt = layer.where("pflanzjahr < 1950").to_dataframe()
@@ -153,15 +172,21 @@ Ein Feld hat drei Namen. Nur einer davon trifft immer genau ein Feld.
 | Spaltenname | `stammumfang_z` | nein |
 | Feld-Id | `019ff731-1f15-7f4f-...` | ja |
 
-Ein Import kann zwei Felder erzeugen, die sich einen Namen teilen. Im
-Straßenbaumkataster trägt `Stammumfang Quelle` die Spalte `stammumfang`, und
-`Stammumfang` trägt `stammumfang_z`. Das Wort `stammumfang` trifft damit zwei
-Felder. Der Server lehnt es ab und nennt beide.
+Ein Import kann zwei Felder erzeugen, die sich einen Namen teilen -- zum
+Beispiel, wenn eine Quelltabelle die Spalten `stammumfang` und
+`stammumfang_z` mitbringt, aber der Import beide als „Stammumfang"
+anzeigt. Das Wort `stammumfang` trifft dann zwei Felder. Der Server lehnt es
+ab und nennt beide. `layer.create_field()` kann diese Lage nicht erzeugen --
+die Bibliothek weist einen Feldnamen zurück, dessen Spalte schon vergeben
+wäre. Nur ein Import mit eigenen Spaltennamen aus der Quelldatei kommt an
+dieser Prüfung vorbei.
 
 Die Bibliothek hilft Ihnen dabei:
 
 ```python
-layer.ambiguous_names()          # {'stammumfang', 'kronendurchmesser'}
+# Illustration -- ein Layer nach solch einem Import, an den eigenen
+# Testdaten oben nicht nachvollziehbar, siehe Absatz darüber.
+layer.ambiguous_names()          # {'stammumfang'}
 layer.field("stammumfang")       # UnknownNameError, nennt beide Felder und Ids
 layer.field("stammumfang_z")     # findet das Feld
 layer.reference(feld)            # die Schreibweise, die genau dieses Feld trifft
@@ -189,10 +214,13 @@ neu = project.create_layer(
     fields={"Gattung": "TEXT", "Pflanzjahr": "INTEGER"},
 )
 
-neu.update(name="Straßenbäume", visible=True)
+neu.update(name="Parkbäume", visible=True)
 
 eintrag = neu.delete()   # in den Papierkorb
 neu.restore()             # zurück, liest den Layer neu
+
+neu.delete()              # noch einmal in den Papierkorb -- purge() setzt
+                           # das voraus
 neu.purge()                # endgültig -- siehe unten
 ```
 
@@ -214,7 +242,7 @@ Aufruf über den Layer wusste -- das könnte inzwischen nicht mehr stimmen.
 Eine Heatmap in drei Zeilen:
 
 ```python
-renderer = hgis.Renderer(hgis.RENDERER_HEATMAP, field="Lautstärke Wert", ramp="inferno")
+renderer = hgis.Renderer(hgis.RENDERER_HEATMAP, field="Pflanzjahr", ramp="inferno")
 layer.set_style(hgis.Style(renderer))
 ```
 
@@ -248,9 +276,14 @@ Ein Zahlenfeld mit Ausreißern macht die automatische Normierung fast leer: Sie
 läuft von 0 bis zum tatsächlichen Maximum, und ein einzelner Ausreißer zieht
 jedes normale Gebäude auf ein Gewicht nahe null. `weight_min`/`weight_max`
 legen den Bezugsbereich stattdessen selbst fest -- hier auf das
-95.-Perzentil als Obergrenze, statt auf das Maximum:
+95.-Perzentil als Obergrenze, statt auf das Maximum. Das folgende Beispiel
+zeigt echte Werte aus einem großen Wärmebedarfs-Layer -- an den drei
+Testzeilen von oben nicht nachvollziehbar, weil die dafür nötige Streuung
+erst bei vielen Objekten entsteht:
 
 ```python
+# Illustration -- echte Werte aus einem großen Wärmebedarfs-Layer, an den
+# drei Testzeilen oben nicht nachvollziehbar, siehe Absatz darüber.
 layer.set_style(hgis.Style(hgis.Renderer(
     hgis.RENDERER_HEATMAP, field="waermebedarf_unsaniert", ramp="inferno",
     weight_min=0, weight_max=1_225_563,
@@ -357,7 +390,7 @@ nur mit, wenn Sie es ausdrücklich anfordern:**
 
 ```python
 client.get(
-    f"/api/projects/{project_id}/changes",
+    f"/api/projects/{project.id}/changes",
     includeDeletedRows=True,
 )
 ```
@@ -416,8 +449,8 @@ Die Bibliothek reicht die Meldung des Servers unverändert durch.
 
 ```python
 >>> layer.where("hoehe > 10").count()
-hgis.errors.ApiError: Unbekanntes Feld: hoehe. Verfügbar: gid, BaumID,
-Baumnummer, Gattung, ...
+hgis.errors.ApiError: Unbekanntes Feld: hoehe. Verfügbar: fid, Gattung,
+Pflanzjahr.
 ```
 
 Bei eigenen Fehlern nennt die Bibliothek ebenso die vorhandenen Namen.
@@ -425,7 +458,7 @@ Bei eigenen Fehlern nennt die Bibliothek ebenso die vorhandenen Namen.
 ```python
 >>> project.layer("Baeume")
 hgis.errors.UnknownNameError: Unbekannter Layer: Baeume.
-Verfügbar: Straßenbaumkataster Hamburg.
+Verfügbar: Straßenbäume.
 ```
 
 Alle Fehler erben von `hgis.HgisError`.
@@ -532,7 +565,31 @@ macht dreimal so viele Fehler.
 print(layer.describe())
 ```
 
+Für den Layer aus [Erste Schritte](#erste-schritte) gibt das:
+
 ```
+Layer 'Straßenbäume'
+  Geometrie: MULTIPOINT   CRS: EPSG:25832   Objekte: 3
+  Ausschnitt (EPSG:4326): 9.97000, 53.52984, 9.99000, 53.55016
+
+  Felder (2):
+    Gattung (text)  leer 0.0%  häufig: 'Acer' (1), 'Quercus' (1), 'Tilia' (1)
+    Pflanzjahr (integer)  leer 0.0%  von 1932 bis 2007
+
+  Beispielzeilen (3):
+    fid 1: Gattung='Tilia', Pflanzjahr=1932
+    fid 2: Gattung='Acer', Pflanzjahr=2007
+    fid 3: Gattung='Quercus', Pflanzjahr=1958
+```
+
+Die Ausgabe liest sich gedruckt. Genau so landet sie im Kontext eines Agenten.
+
+Bei einem großen, echten Bestand sieht das zum Beispiel so aus -- eine
+Illustration, an den drei Testzeilen oben nicht nachvollziehbar:
+
+```
+# Illustration -- kein echter describe()-Aufruf, an den drei Testzeilen
+# oben nicht nachvollziehbar, siehe Absatz darüber.
 Layer 'Straßenbaumkataster Hamburg'
   Geometrie: MULTIPOINT   CRS: EPSG:25832   Objekte: 229.876
   Ausschnitt (EPSG:4326): 9.73144, 53.39753, 10.32701, 53.72818
@@ -547,8 +604,6 @@ Layer 'Straßenbaumkataster Hamburg'
     fid 1: gid=1, BaumID=10, Baumnummer='1', ...
 ```
 
-Die Ausgabe liest sich gedruckt. Genau so landet sie im Kontext eines Agenten.
-
 `describe()` setzt die Antwort aus mehreren Endpunkten zusammen. Es fragt den
 Layer ab, eine Seite Objekte und eine Statistik je Feld.
 
@@ -561,13 +616,19 @@ Der Server speichert die Auswahl je Layer.
 
 ```python
 alt = layer.where("pflanzjahr < 1950").fids()
-project.select(alt)                  # der Nutzer sieht die Auswahl
+project.select(alt, layer=layer)     # der Nutzer sieht die Auswahl
 
-project.selection()              # <hgis.Selection Layer='...' Objekte=4711>
+project.selection()              # <hgis.Selection Layer='Straßenbäume' Objekte=1>
 ```
 
 `select()` macht den Layer zum aktiven Layer. Eine Auswahl in einem Layer, den
 der Nutzer nicht sieht, ändert nichts für ihn.
+
+`layer=` nennen Sie, solange noch kein Layer aktiv ist -- bei einem frisch
+angelegten Projekt also beim ersten Aufruf. Fehlt `layer` und ist noch keiner
+aktiv, weist die Bibliothek den Aufruf mit `UnknownNameError` zurück, statt
+zu raten, welcher gemeint war. Ist schon ein Layer aktiv, reicht
+`project.select(alt)` allein.
 
 `select()` erhält alles andere. Die Auswahl der anderen Layer, jede Sortierung
 und jede gespeicherte Abfrage bleiben unverändert.
@@ -740,6 +801,10 @@ python -m pytest -m "not live"                        # ohne
 
 ## Grenzen dieser Stufe
 
+- Kein Anlegen eines neuen Projekts über diese Bibliothek -- nur vorhandene
+  Projekte lesen und darin Layer anlegen. Deshalb öffnet
+  [Erste Schritte](#erste-schritte) ein vorhandenes Projekt, statt eines
+  anzulegen.
 - Kein Umbenennen eines Felds (`PATCH .../fields/{id}`) -- nur anlegen und
   löschen.
 - Kein Teilen, Zusammenführen oder Neuordnen von Layern über diese
