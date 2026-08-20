@@ -184,7 +184,7 @@ dieser Prüfung vorbei.
 Die Bibliothek hilft Ihnen dabei:
 
 ```python
-# Beispiel für einen Layer nach solch einem Import -- an den eigenen
+# Illustration -- ein Layer nach solch einem Import, an den eigenen
 # Testdaten oben nicht nachvollziehbar, siehe Absatz darüber.
 layer.ambiguous_names()          # {'stammumfang'}
 layer.field("stammumfang")       # UnknownNameError, nennt beide Felder und Ids
@@ -282,6 +282,8 @@ Testzeilen von oben nicht nachvollziehbar, weil die dafür nötige Streuung
 erst bei vielen Objekten entsteht:
 
 ```python
+# Illustration -- echte Werte aus einem großen Wärmebedarfs-Layer, an den
+# drei Testzeilen oben nicht nachvollziehbar, siehe Absatz darüber.
 layer.set_style(hgis.Style(hgis.Renderer(
     hgis.RENDERER_HEATMAP, field="waermebedarf_unsaniert", ramp="inferno",
     weight_min=0, weight_max=1_225_563,
@@ -586,6 +588,8 @@ Bei einem großen, echten Bestand sieht das zum Beispiel so aus -- eine
 Illustration, an den drei Testzeilen oben nicht nachvollziehbar:
 
 ```
+# Illustration -- kein echter describe()-Aufruf, an den drei Testzeilen
+# oben nicht nachvollziehbar, siehe Absatz darüber.
 Layer 'Straßenbaumkataster Hamburg'
   Geometrie: MULTIPOINT   CRS: EPSG:25832   Objekte: 229.876
   Ausschnitt (EPSG:4326): 9.73144, 53.39753, 10.32701, 53.72818
