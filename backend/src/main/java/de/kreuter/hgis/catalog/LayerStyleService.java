@@ -112,13 +112,19 @@ public class LayerStyleService {
 	 * {@code defaults.ts} -- the monochrome look of a layer nobody has styled yet -- so a
 	 * field's removal never dresses the layer up in a colour nobody chose.
 	 */
-	private static final StyleDtos.Symbol DEFAULT_MARKER = new StyleDtos.Symbol(
+	/*
+	 * Package-private, not private, for one reason only: DefaultSymbolCatalogueTest holds
+	 * these against the frontend's own `defaultSymbols.json`, the file both stacks read
+	 * from. It is not an extension point -- nothing outside this class should resolve a
+	 * default symbol.
+	 */
+	static final StyleDtos.Symbol DEFAULT_MARKER = new StyleDtos.Symbol(
 			StyleDtos.SYMBOL_MARKER, "circle", 3.0, "#404040", "#fafafa", 1.0,
 			null, null, null, null, null, null);
-	private static final StyleDtos.Symbol DEFAULT_LINE = new StyleDtos.Symbol(
+	static final StyleDtos.Symbol DEFAULT_LINE = new StyleDtos.Symbol(
 			StyleDtos.SYMBOL_LINE, null, null, null, null, null,
 			"#404040", 1.25, null, null, null, null);
-	private static final StyleDtos.Symbol DEFAULT_FILL = new StyleDtos.Symbol(
+	static final StyleDtos.Symbol DEFAULT_FILL = new StyleDtos.Symbol(
 			StyleDtos.SYMBOL_FILL, null, null, "#404040", null, null,
 			null, null, null, 0.25, "#262626", 1.0);
 

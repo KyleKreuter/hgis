@@ -1,5 +1,6 @@
 import type { GeometryType } from '@/api/layers'
 import colorRamps from './colorRamps.json'
+import defaultSymbolsJson from './defaultSymbols.json'
 import type {
   FillSymbol,
   LabelStyle,
@@ -15,29 +16,36 @@ import type {
  * (`layerSpecs.ts`), value for value. That is what lets the symbology panel start from
  * a concrete style object without the map changing appearance the moment it is opened
  * -- `defaults.test.ts` pins the two against each other.
+ *
+ * The values themselves live in `defaultSymbols.json`, not here, for the same reason
+ * `COLOR_RAMPS` moved out below: the backend keeps its own copy
+ * (`LayerStyleService.DEFAULT_MARKER`/`DEFAULT_LINE`/`DEFAULT_FILL`) to fall back to when
+ * `cleanupAfterFieldRemoval` strips a renderer's field, and two hand-maintained copies
+ * drift exactly the way the ramp catalogue did. `DefaultSymbolCatalogueTest` reads this
+ * JSON and holds it against the backend's constants.
+ *
+ * `kind` is deliberately not a member of the JSON, unlike `id` in `colorRamps.json`. A
+ * JSON string literal widens to plain `string` on import (measured: assigning
+ * `{ kind: "marker", ... }` straight from a JSON import against a `{ kind: 'marker' }`
+ * discriminant fails with TS2322, "string is not assignable to '\"marker\"'"), so it
+ * could not satisfy `MarkerSymbol` et al. without a cast that would blunt the
+ * discriminated union everywhere else it is used. The object's own key -- `marker`,
+ * `line`, `fill` -- already tells the reader and `DefaultSymbolCatalogueTest` which
+ * shape a block belongs to, so the literal is supplied once, here, in TypeScript.
+ *
+ * The type annotations below are load-bearing the same way `COLOR_RAMPS`' is: a JSON
+ * import is structurally typed, and TypeScript still catches a *missing* member of
+ * `MarkerSymbol`/`LineSymbol`/`FillSymbol` this way (measured: TS2741) -- but not an
+ * *extra* one, because the excess-property check is a property of fresh object literals
+ * and does not fire through a spread from an already-typed source (measured). A stray
+ * key in the JSON would sit there unused and pass silently; `DefaultSymbolCatalogueTest`
+ * checks the key set itself for exactly that reason.
  */
-export const DEFAULT_MARKER: MarkerSymbol = {
-  kind: 'marker',
-  shape: 'circle',
-  size: 3,
-  fillColor: '#404040',
-  strokeColor: '#fafafa',
-  strokeWidth: 1,
-}
+export const DEFAULT_MARKER: MarkerSymbol = { kind: 'marker', ...defaultSymbolsJson.marker }
 
-export const DEFAULT_LINE: LineSymbol = {
-  kind: 'line',
-  color: '#404040',
-  width: 1.25,
-}
+export const DEFAULT_LINE: LineSymbol = { kind: 'line', ...defaultSymbolsJson.line }
 
-export const DEFAULT_FILL: FillSymbol = {
-  kind: 'fill',
-  fillColor: '#404040',
-  fillOpacity: 0.25,
-  outlineColor: '#262626',
-  outlineWidth: 1,
-}
+export const DEFAULT_FILL: FillSymbol = { kind: 'fill', ...defaultSymbolsJson.fill }
 
 export const DEFAULT_SYMBOLS: Record<SymbolRole, LayerSymbol> = {
   point: DEFAULT_MARKER,

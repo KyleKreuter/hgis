@@ -15,7 +15,8 @@
       "@/*": ["./src/*"]
     },
     "allowImportingTsExtensions": true,
-    /* `styling/colorRamps.json` is the one catalogue both stacks read; see defaults.ts. */
+    /* `styling/colorRamps.json` and `styling/defaultSymbols.json` are catalogues both
+       stacks read; see defaults.ts. */
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
