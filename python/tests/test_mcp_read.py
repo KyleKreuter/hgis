@@ -394,6 +394,74 @@ def test_field_values_unknown_name_names_the_available_fields(mcp_client) -> Non
         field_values(LAYER_ID, "osm_id")
 
 
+# --- field_classes -----------------------------------------------------
+
+
+def test_field_classes_reports_breaks_and_extremes(mcp_client) -> None:
+    from hgis.mcp.read_tools import field_classes
+
+    result = field_classes(LAYER_ID, "Baujahr", classes=4)
+
+    assert result.field_name == "Baujahr"
+    assert result.method == "quantile"
+    assert result.breaks == [1900.0, 1957.0, 2019.0]
+    assert result.minimum == 1900.0
+    assert result.maximum == 2019.0
+    assert result.null_count == 3
+
+
+def test_field_classes_passes_classes_and_method_to_the_request(
+    mcp_client, transport
+) -> None:
+    from hgis.mcp.read_tools import field_classes
+
+    field_classes(LAYER_ID, "Höhe", classes=7, method="naturalBreaks")
+
+    request = transport.requests[-1]
+    assert request.path == f"/api/layers/{LAYER_ID}/classify"
+    assert request.param("field") == "Höhe"
+    assert request.param("classes") == "7"
+    assert request.param("method") == "naturalBreaks"
+
+
+def test_field_classes_sends_the_resolved_reference(mcp_client, transport) -> None:
+    """Wie bei order_by/field_values: "hoehe" (Spalte) muss als "Höhe" (Name) ankommen."""
+    from hgis.mcp.read_tools import field_classes
+
+    field_classes(LAYER_ID, "hoehe")
+
+    request = transport.requests[-1]
+    assert request.param("field") == "Höhe"
+
+
+def test_field_classes_rejects_a_text_field_before_any_classify_request(
+    mcp_client, transport
+) -> None:
+    from hgis.mcp.read_tools import field_classes
+
+    with pytest.raises(ToolError, match="nur für Zahlenfelder"):
+        field_classes(LAYER_ID, "Straße")
+
+    assert not any(path.endswith("/classify") for path in transport.paths)
+
+
+def test_field_classes_ambiguous_name_names_both_candidates(mcp_client) -> None:
+    from hgis.mcp.read_tools import field_classes
+
+    with pytest.raises(ToolError, match="Mehrdeutiges Feld") as excinfo:
+        field_classes(AMBIGUOUS_LAYER_ID, "stammumfang")
+    text = str(excinfo.value)
+    assert "Stammumfang Quelle" in text
+    assert "Stammumfang" in text
+
+
+def test_field_classes_unknown_name_names_the_available_fields(mcp_client) -> None:
+    from hgis.mcp.read_tools import field_classes
+
+    with pytest.raises(ToolError, match="Unbekanntes Feld"):
+        field_classes(LAYER_ID, "osm_id")
+
+
 # --- get_style -------------------------------------------------------------
 
 

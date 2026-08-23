@@ -854,7 +854,7 @@ Für Claude Code liegt eine `.mcp.json` im Projektwurzelverzeichnis:
 ```
 
 Gemessen: Genau dieser Start verbindet sich mit einem laufenden hGIS und
-meldet 22 Werkzeuge.
+meldet 23 Werkzeuge.
 
 Für einen anderen Host reicht der Befehl `hgis-mcp` allein -- gleichwertig
 `python -m hgis.mcp`. `HGIS_URL` bestimmt, wohin er sich verbindet; ohne sie
@@ -910,7 +910,7 @@ Name: Höhe, dtype: float64
 
 ### Die Werkzeuge
 
-Neun lesende, dieselbe Oberfläche wie oben in dieser Datei, nur als
+Zehn lesende, dieselbe Oberfläche wie oben in dieser Datei, nur als
 Werkzeugaufruf statt als Methode:
 
 | Aufruf | Antwort |
@@ -920,10 +920,23 @@ Werkzeugaufruf statt als Methode:
 | `describe_layer(layer, stats=, sample=, ...)` | Felder, Wertebereiche, Beispielzeilen -- als Struktur und als Fließtext, siehe [`describe()`](#describe) |
 | `query_features(layer, where=, bbox=, search=, order_by=, limit=, geometry=, ...)` | gefilterte, sortierte, begrenzte Objekte; `truncated` und `match_count` wie bei [`.page()`](#eine-seite-lesen) |
 | `count_features(layer, where=, bbox=, search=, ...)` | nur die Anzahl, kein Datenrumpf |
-| `field_values(layer, field, limit=, ...)` | Werte mit Häufigkeit, `truncated` |
-| `get_style(layer, ...)` | der aktuelle Stil als JSON, `None` für die Standarddarstellung |
+| `field_values(layer, field, limit=, ...)` | Werte eines Textfelds mit Häufigkeit, `truncated` |
+| `field_classes(layer, field, classes=, method=, ...)` | Klassengrenzen eines Zahlenfelds, `minimum`/`maximum`/`null_count` -- das Gegenstück zu `field_values` |
+| `get_style(layer, ...)` | der aktuelle Stil (`hgis.Style`), unverändert an `set_style` zurückgebbar; `None` für die Standarddarstellung |
 | `get_view(project)` | Mitte, Zoom, Ausschnitt, aktiver Layer |
 | `get_selection(project, layer=)` | was gerade ausgewählt ist |
+
+Am Layer "Gebäude Speicherstadt", Feld `Baujahr`, gemessen:
+
+```
+field_classes(layer="Gebäude Speicherstadt", project="Leitungsnetz Nord",
+               field="Baujahr", classes=4)
+→ method="quantile", breaks=[1900.0, 1927.0, 1957.0, 1988.0, 2019.0],
+  minimum=1900.0, maximum=2019.0, null_count=3
+```
+
+`breaks` hat `classes + 1` Einträge -- jede Untergrenze plus das Maximum --,
+außer das Feld hat weniger unterschiedliche Werte, als `classes` verlangt.
 
 Dreizehn schreibende. Auswahl und Ansicht kosten nichts, wenn ein Aufruf
 danebengeht -- der nächste setzt beides wieder zurecht. Objekte, Layer,
@@ -953,7 +966,7 @@ mehr auffindbar, und `delete_layer` nennt die Id in seiner eigenen Antwort.
 
 ### Die volle Oberfläche, ohne Schalter
 
-Alle 22 Werkzeuge stehen von Anfang an bereit, ohne Erlaubnisschalter, der
+Alle 23 Werkzeuge stehen von Anfang an bereit, ohne Erlaubnisschalter, der
 die schreibenden abschalten könnte. Das ist eine ausdrückliche Entscheidung
 des Nutzers, nachdem ihm das Risiko vorgelegt wurde: `purge_layer` löscht
 endgültig, `delete_features` ist über diese Bibliothek nicht rückgängig zu
@@ -962,7 +975,7 @@ machen, und beides ist für jeden Agenten mit Verbindung zum Server erreichbar.
 Die Folge: **Der Docstring jedes Werkzeugs ist die einzige Warnung, die es
 gibt.** Jedes zerstörende Werkzeug nennt im ersten Satz seiner Beschreibung,
 was es zerstört -- das ist keine Höflichkeit, sondern der einzige Schutz, den
-dieser Server bietet. Gemessen: alle 68 Parameter der 22 Werkzeuge tragen
+dieser Server bietet. Gemessen: alle 73 Parameter der 23 Werkzeuge tragen
 eine eigene Beschreibung, nicht nur der Werkzeugname selbst.
 
 ## Tests
