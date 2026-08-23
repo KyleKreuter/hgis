@@ -455,9 +455,8 @@ def test_select_features_reports_fids_that_do_not_exist(mcp_client, transport) -
     result = select_features(PROJECT_ID, [1, 2, 9999], layer=LAYER_ID)
 
     assert result.summary == (
-        "2 von 3 angegebenen fids gibt es in 'Gebäude Speicherstadt'; diese "
-        "sind jetzt ausgewählt, 1 davon gibt es dort nicht und zeigen am "
-        f"Bildschirm ins Leere. {_HIDDEN_LAYER_NOTE}"
+        "3 Objekt(e) in 'Gebäude Speicherstadt' ausgewählt, davon gibt es 2 "
+        f"tatsächlich; 1 zeigen am Bildschirm ins Leere. {_HIDDEN_LAYER_NOTE}"
     )
     put = next(r for r in transport.requests if r.method == "PUT")
     # Trotz der fehlenden fid wird genau das gesetzt, was verlangt wurde --
