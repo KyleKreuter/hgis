@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hgis": {
+      "command": "uv",
+      "args": ["run", "--project", "python", "hgis-mcp"],
+      "env": {
+        "HGIS_URL": "http://localhost:8080"
+      }
+    }
+  }
+}
