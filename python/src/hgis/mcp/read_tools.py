@@ -23,11 +23,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Annotated, Any
+from typing import Annotated
 
 from pydantic import Field
 
-from hgis import Layer, Project, Query
+from hgis import Layer, Project, Query, Style
 from hgis.errors import UnknownNameError
 from hgis.mcp.server import client, server
 from hgis.mcp.shapes import (
@@ -524,10 +524,11 @@ class StyleInfo:
 
     layer_id: str
     layer_name: str
-    #: Der Stil, so wie der Server ihn speichert (camelCase-Schlüssel, wie die
-    #: API) -- oder None, was die monochrome Standarddarstellung bedeutet,
-    #: nicht ein fehlender Wert.
-    style: dict[str, Any] | None
+    #: hgis.Style, dasselbe Schema wie das style-Argument von
+    #: hgis.mcp.write_tools.set_style -- was hier ankommt, kann unverändert
+    #: dorthin zurückgeschrieben werden. None ist die monochrome
+    #: Standarddarstellung, kein fehlender Wert.
+    style: Style | None
 
 
 @server.tool()
@@ -542,14 +543,17 @@ def get_style(
 
     style ist None für die Standarddarstellung -- einfarbig, ohne eigene
     Klassifikation. Das ist kein Fehlerfall.
+
+    Unverändert weitergereicht an hgis.mcp.write_tools.set_style, stellt es
+    genau diesen Stil wieder her -- beide Werkzeuge teilen sich dasselbe
+    Schema (hgis.Style), keine eigene Übersetzung dazwischen.
     """
     try:
         layer_obj = _resolve_layer(layer, project)
-        style = layer_obj.style
         return StyleInfo(
             layer_id=layer_obj.id,
             layer_name=layer_obj.name,
-            style=style.to_json() if style is not None else None,
+            style=layer_obj.style,
         )
     except Exception as error:
         raise tool_error(error, doing=f"Lesen des Stils von {layer!r}") from error

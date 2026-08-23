@@ -404,8 +404,8 @@ def test_get_style_returns_the_stored_renderer(mcp_client) -> None:
 
     assert result.layer_id == LAYER_ID
     assert result.style is not None
-    assert result.style["renderer"]["type"] == "categorized"
-    assert result.style["renderer"]["field"] == "baujahr"
+    assert result.style.renderer.type == "categorized"
+    assert result.style.renderer.field == "baujahr"
 
 
 def test_get_style_none_means_the_default_rendering(mcp_client) -> None:
