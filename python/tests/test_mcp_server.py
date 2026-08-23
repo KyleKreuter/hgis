@@ -7,6 +7,8 @@ The tools themselves are tested in ``test_mcp_read.py`` and
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 import hgis
@@ -130,3 +132,109 @@ def test_list_projects_reads_the_stored_projects(mcp_client) -> None:
     assert first.id and first.name
     assert first.layer_count >= 0
     assert first.extent is None or len(first.extent) == 4
+
+
+class TestStdoutCarriesOnlyTheProtocol:
+    """
+    A stray line on stdout breaks the session, and blames the wrong thing.
+
+    The host parses every stdout line as a JSON-RPC message. One log line, one
+    ``print``, and it reads a malformed message -- reported as a protocol
+    error, which is the last place anyone would look for a logging setting.
+
+    Tested by running the real thing as a subprocess rather than by reading
+    ``main()``: the failure mode is about what lands in a pipe, and only a
+    process has one.
+    """
+
+    def _run(self, extra_env: dict[str, str]) -> tuple[str, str]:
+        """Start the server, speak one request, hand back stdout and stderr."""
+        import json
+        import subprocess
+        import sys
+
+        conversation = "\n".join(
+            json.dumps(message)
+            for message in (
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test", "version": "1"},
+                    },
+                },
+                {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            )
+        )
+        finished = subprocess.run(
+            [sys.executable, "-m", "hgis.mcp"],
+            input=conversation,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={**os.environ, **extra_env},
+        )
+        return finished.stdout, finished.stderr
+
+    def _non_json_lines(self, stream: str) -> list[str]:
+        import json
+
+        offenders = []
+        for line in stream.splitlines():
+            if not line.strip():
+                continue
+            try:
+                json.loads(line)
+            except json.JSONDecodeError:
+                offenders.append(line)
+        return offenders
+
+    def test_stdout_stays_pure_json(self) -> None:
+        out, _ = self._run({})
+        assert out.strip(), "der Server hat gar nicht geantwortet"
+        assert self._non_json_lines(out) == []
+
+    def test_log_handlers_are_moved_off_stdout(self) -> None:
+        """
+        The case ``log_to_stderr()`` exists for, measured directly.
+
+        An embedding program installs a handler on stdout; the server has to
+        take it away, or httpx's request log -- one line per request it makes
+        -- lands in the protocol stream.
+
+        **What this does not cover, and cannot:** whatever writes to stdout
+        *before* ``main()`` is reached is already in the pipe. Measured while
+        writing this test -- a ``sitecustomize`` that logs at import time puts
+        its line there no matter what happens later. Nothing in this package
+        can close that; it belongs to whoever configures the interpreter.
+        """
+        import logging
+        import sys
+
+        from hgis.mcp.server import log_to_stderr
+
+        before = logging.root.handlers[:]
+        try:
+            logging.basicConfig(stream=sys.stdout, force=True)
+            aimed_at_stdout = [
+                handler
+                for handler in logging.root.handlers
+                if getattr(handler, "stream", None) is sys.stdout
+            ]
+            assert aimed_at_stdout, "die Falle wurde gar nicht gestellt, der Test misst nichts"
+
+            log_to_stderr()
+
+            leftover = [
+                handler
+                for handler in logging.root.handlers
+                if getattr(handler, "stream", None) is sys.stdout
+            ]
+            assert leftover == [], "ein Handler zeigt weiterhin auf den Protokollstrom"
+            assert logging.root.handlers, "es blieb gar kein Handler uebrig"
+        finally:
+            logging.root.handlers[:] = before

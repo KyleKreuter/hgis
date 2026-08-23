@@ -80,9 +80,39 @@ def use_client(replacement: Client | None) -> None:
         _client = replacement
 
 
+def log_to_stderr() -> None:
+    """
+    Point every log record at stderr, because stdout carries the protocol.
+
+    ``force=True`` is the whole point: it replaces handlers an embedding
+    program may already have installed, including one on stdout, which is the
+    case this exists for.
+
+    A separate function rather than three lines inside :func:`main` so a test
+    can assert where the handlers end up without starting a server.
+    """
+    import logging
+    import sys
+
+    logging.basicConfig(stream=sys.stderr, force=True)
+
+
 def main() -> None:
-    """Run the server over stdio. This is what ``hgis-mcp`` starts."""
+    """
+    Run the server over stdio. This is what ``hgis-mcp`` starts.
+
+    **stdout carries the protocol and nothing else.** One stray ``print`` or a
+    log handler pointed at stdout puts a non-JSON line into the stream, and the
+    host reads it as a malformed message -- the server then looks broken in a
+    way that says nothing about logging. Today the risk is real but unrealised:
+    ``httpx`` logs every request through :mod:`logging`, whose default stream
+    happens to be stderr. That default is the only thing keeping the protocol
+    clean, and it belongs to a library this package does not control, so it is
+    made explicit here instead of relied upon.
+    """
     import asyncio
+
+    log_to_stderr()
 
     # Importing the tool modules is what registers them. Done here rather than
     # at module import so that `import hgis.mcp.server` in a test does not
