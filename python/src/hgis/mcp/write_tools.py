@@ -215,6 +215,9 @@ def select_features(
     Prüft, wie viele der angegebenen fids es im Layer tatsächlich gibt, und
     sagt es in der summary -- eine veraltete oder erfundene fid ist erlaubt,
     zeigt am Bildschirm aber ins Leere, und das soll nicht unbemerkt bleiben.
+    Ebenso, wenn der Layer selbst gerade ausgeblendet ist (visible=false):
+    die Auswahl wird trotzdem gesetzt, aber die summary sagt, dass sie am
+    Bildschirm nicht zu sehen ist.
     """
     try:
         proj = _project(project)
@@ -239,9 +242,9 @@ def select_features(
         else:
             missing = len(fids) - matched
             parts = [
-                f"{matched} von {len(fids)} angegebenen fids gibt es in "
-                f"'{target.name}'; diese sind jetzt ausgewählt, {missing} davon "
-                "gibt es dort nicht und zeigen am Bildschirm ins Leere"
+                f"{len(fids)} Objekt(e) in '{target.name}' ausgewählt, davon "
+                f"gibt es {matched} tatsächlich; {missing} zeigen am Bildschirm "
+                "ins Leere"
             ]
         note = _visibility_note(target)
         if note:
@@ -288,6 +291,10 @@ def set_view(
     nächste Aufruf setzt Ausschnitt und aktiven Layer wieder um.
 
     Mindestens eines von layer, center oder zoom muss angegeben sein.
+
+    Ist der genannte Layer gerade ausgeblendet (visible=false), wechselt er
+    trotzdem in den aktiven Layer, aber die summary sagt, dass am Bildschirm
+    nichts davon zu sehen ist.
     """
     try:
         if layer is None and center is None and zoom is None:
