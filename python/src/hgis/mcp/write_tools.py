@@ -14,12 +14,24 @@ in a hurry:
 Every docstring for the second kind says plainly what it destroys. That is the
 only safeguard this server has, since it offers the full surface without a
 switch -- the operator's decision, made deliberately.
+
+**Every parameter carries its own description**, the same way
+:mod:`hgis.mcp.read_tools` does it: ``Annotated[type, Field(description=...)]``
+rather than a ``:param:`` line in the docstring. A plain docstring line never
+reaches the JSON schema as a per-parameter description -- only the whole
+docstring does, as the tool's one description -- so a client that shows
+parameter hints while the agent is filling in a call would otherwise show
+nothing next to each one. Destructive tools are exactly where that gap costs
+the most.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import Field
 
 import hgis
 from hgis.client import _looks_like_id
@@ -37,6 +49,20 @@ from hgis.mcp.shapes import WriteResult, tool_error  # noqa: F401
 # tool is a name, and over guessing a project from a bare layer name, because
 # two projects can hold a layer called the same thing and a wrong guess would
 # write to data nobody meant to touch.
+
+#: Repeated on every ``layer`` parameter, so an agent reads the same rule no
+#: matter which tool it is about to call.
+_LAYER_HELP = (
+    "Name oder Id des Layers. Ein Name wird nur zusammen mit project "
+    "aufgelöst -- ohne project ist ausschließlich die Id gültig."
+)
+
+#: Repeated on every optional ``project`` parameter that exists solely to
+#: resolve a ``layer`` name.
+_PROJECT_FOR_LAYER_HELP = (
+    "Name oder Id des Projekts. Nötig, damit layer als Name aufgelöst werden "
+    "kann; bei einer Layer-Id entbehrlich."
+)
 
 
 def _project(name_or_id: str) -> hgis.Project:
@@ -105,11 +131,61 @@ def _fid_summary(fids: list[int]) -> str:
     return ", ".join(str(fid) for fid in fids[:8]) + f", ... ({len(fids)} insgesamt)"
 
 
+def _view_for_extent(extent: tuple[float, float, float, float]) -> tuple[list[float], float]:
+    """
+    A center and a zoom that show this whole extent on screen, roughly.
+
+    Web Mercator distorts latitude, and this ignores that -- it sizes both
+    dimensions from raw degree spans against a generous assumed viewport
+    (900x600 CSS pixels), then backs the result off by one more zoom level.
+    Not what a real ``fitBounds()`` would compute, but wrong in the direction
+    that is safe to be wrong in: a little too far out, never so far in that
+    part of what was asked for is cut off the edge.
+
+    :param extent: (min_lng, min_lat, max_lng, max_lat) in EPSG:4326, as
+        :attr:`hgis.layer.Layer.extent` returns it
+    """
+    min_lng, min_lat, max_lng, max_lat = extent
+    center = [(min_lng + max_lng) / 2, (min_lat + max_lat) / 2]
+
+    lng_span = max(max_lng - min_lng, 1e-9)
+    lat_span = max(max_lat - min_lat, 1e-9)
+    zoom_for_lng = math.log2(900 * 360 / (256 * lng_span))
+    zoom_for_lat = math.log2(600 * 180 / (256 * lat_span))
+    zoom = max(0.0, min(24.0, min(zoom_for_lng, zoom_for_lat) - 1))
+    return center, zoom
+
+
+def _view_change_note(center: list[float] | None, zoom: float | None, computed: bool) -> str:
+    """One clause for a set_view summary, naming whether the numbers came from an extent."""
+    how = "aus seinem Ausschnitt berechnet" if computed else "gesetzt"
+    if center is not None and zoom is not None:
+        return f"Kartenausschnitt {how}: Mitte {center[0]:.5f}, {center[1]:.5f}, Zoom {zoom:.1f}"
+    if center is not None:
+        return f"Kartenmitte {how}: {center[0]:.5f}, {center[1]:.5f}"
+    return f"Zoom {how}: {zoom:.1f}"  # zoom is not None here, since one of the two must be
+
+
 # --- what the person at the screen sees --------------------------------------
 
 
 @server.tool()
-def select_features(project: str, fids: list[int], layer: str | None = None) -> WriteResult:
+def select_features(
+    project: Annotated[str, Field(description="Name oder Id des Projekts.")],
+    fids: Annotated[
+        list[int],
+        Field(description="Die auszuwählenden Objekte. Eine leere Liste hebt die Auswahl auf."),
+    ],
+    layer: Annotated[
+        str | None,
+        Field(
+            description="Name oder Id des Layers. Ohne Angabe der zuletzt aktive Layer "
+            "dieses Projekts -- fehlt der, schlägt der Aufruf fehl und nennt, wie der "
+            "Layer stattdessen anzugeben ist. Der genannte Layer wird dabei zum aktiven "
+            "Layer, falls er es nicht schon war."
+        ),
+    ] = None,
+) -> WriteResult:
     """
     Setzt die Auswahl in einem Layer -- das, was am Bildschirm markiert
     erscheint. Nichts geht dabei verloren: die Objekte selbst bleiben
@@ -117,13 +193,8 @@ def select_features(project: str, fids: list[int], layer: str | None = None) -> 
 
     Das Werkzeug, mit dem ein Agent ein Ergebnis zeigt statt es nur zu
     beschreiben -- zum Beispiel die Treffer einer vorherigen Filterabfrage.
-
-    :param fids: die auszuwählenden Objekte; eine leere Liste hebt die
-        Auswahl auf
-    :param layer: Name oder Id des Layers. Ohne Angabe der zuletzt aktive
-        Layer dieses Projekts -- fehlt der, schlägt der Aufruf fehl und
-        nennt, wie der Layer stattdessen anzugeben ist. Der genannte Layer
-        wird dabei zum aktiven Layer, falls er es nicht schon war.
+    Kombinieren Sie es mit set_view, um den Ausschnitt gleich mit dorthin zu
+    bewegen.
     """
     try:
         proj = _project(project)
@@ -139,32 +210,81 @@ def select_features(project: str, fids: list[int], layer: str | None = None) -> 
 
 
 @server.tool()
-def set_view(project: str, layer: str) -> WriteResult:
+def set_view(
+    project: Annotated[str, Field(description="Name oder Id des Projekts.")],
+    layer: Annotated[
+        str | None,
+        Field(
+            description="Name oder Id des Layers. Wird zum aktiven Layer, seine eigene "
+            "Auswahl bleibt dabei unverändert. Ohne center und zoom berechnet dieses "
+            'Werkzeug beide aus dem Ausschnitt (extent) dieses Layers, damit er ganz '
+            'sichtbar wird -- die übliche Bitte "zeig mir dieses Ergebnis", ohne dass '
+            "der Aufrufer selbst rechnen muss. Ein leerer Layer hat keinen Ausschnitt; "
+            "dann müssen center und/oder zoom selbst angegeben werden."
+        ),
+    ] = None,
+    center: Annotated[
+        list[float] | None,
+        Field(
+            description="[lng, lat] in EPSG:4326. Gegeben, überschreibt es eine aus "
+            "layer berechnete Mitte."
+        ),
+    ] = None,
+    zoom: Annotated[
+        float | None,
+        Field(
+            description="0 bis 24, vom Server geprüft. Gegeben, überschreibt es einen "
+            "aus layer berechneten Zoom.",
+            ge=0,
+            le=24,
+        ),
+    ] = None,
+) -> WriteResult:
     """
-    Macht ``layer`` zum aktiven Layer des Projekts -- das, worauf der
-    Anwender gerade schaut. Nichts geht dabei verloren: Auswahl, Sortierung
-    und Filter jedes Layers, dieses eingeschlossen, bleiben unverändert.
+    Bewegt die Karte des Projekts und/oder wechselt den aktiven Layer -- das,
+    worauf der Anwender gerade schaut. Nichts geht dabei verloren: der
+    nächste Aufruf setzt Ausschnitt und aktiven Layer wieder um.
 
-    Bewegt NICHT den Kartenausschnitt (Zentrum, Zoom): der Server hat dafür
-    einen eigenen Weg, aber die Python-Bibliothek, auf der dieser MCP-Server
-    steht, öffnet ihn in dieser Stufe noch nicht -- siehe die Anmerkungen
-    zu diesem Werkzeug im Bericht der schreibenden Stufe. Wer den Ausschnitt
-    bewegen will, muss das vorerst am Bildschirm selbst tun.
+    Mindestens eines von layer, center oder zoom muss angegeben sein.
     """
     try:
-        proj = _project(project)
-        target = proj.layer(layer)
-        current = proj.selection(layer=target)
-        proj.select(current.fids, layer=target)
-        return WriteResult(
-            summary=(
-                f"'{target.name}' ist jetzt der aktive Layer in '{proj.name}'. "
-                "Der Kartenausschnitt (Zentrum, Zoom) wurde NICHT bewegt -- dieses "
-                "Werkzeug kann das noch nicht, siehe seine Beschreibung."
+        if layer is None and center is None and zoom is None:
+            raise InvalidArgumentError(
+                "Mindestens eines von layer, center oder zoom muss angegeben werden -- "
+                "sonst gibt es nichts zu bewegen."
             )
-        )
+        if center is not None and len(center) != 2:
+            raise InvalidArgumentError(f"center muss [lng, lat] sein: {center!r}.")
+
+        proj = _project(project)
+        parts: list[str] = []
+        computed_from_layer = False
+
+        if layer is not None:
+            target = proj.layer(layer)
+            if center is None and zoom is None and target.extent is None:
+                # Vor jedem Schreiben geprueft: sonst waere der aktive Layer
+                # schon gewechselt, bevor der Aufruf hier doch noch scheitert.
+                raise InvalidArgumentError(
+                    f"Layer '{target.name}' hat keine Objekte, also keinen "
+                    "Ausschnitt. Geben Sie center und/oder zoom selbst an."
+                )
+
+            current = proj.selection(layer=target)
+            proj.select(current.fids, layer=target)
+            parts.append(f"'{target.name}' ist jetzt der aktive Layer in '{proj.name}'")
+
+            if center is None and zoom is None:
+                center, zoom = _view_for_extent(target.extent)
+                computed_from_layer = True
+
+        if center is not None or zoom is not None:
+            proj.update(center=center, zoom=zoom)
+            parts.append(_view_change_note(center, zoom, computed_from_layer))
+
+        return WriteResult(summary=". ".join(parts) + ".")
     except Exception as error:
-        raise tool_error(error, doing=f"Aktivieren des Layers '{layer}' in '{project}'") from error
+        raise tool_error(error, doing=f"Bewegen der Ansicht in '{project}'") from error
 
 
 # --- objects: what is stored --------------------------------------------
@@ -190,7 +310,16 @@ class FeatureChange:
 
 @server.tool()
 def insert_features(
-    layer: str, features: list[hgis.NewFeature], project: str | None = None
+    layer: Annotated[str, Field(description=_LAYER_HELP)],
+    features: Annotated[
+        list[hgis.NewFeature],
+        Field(
+            description="Je Objekt mindestens die Geometrie (GeoJSON, EPSG:4326); "
+            "properties nach Spaltenname -- eine weggelassene Spalte bekommt ihren "
+            "Vorgabewert."
+        ),
+    ],
+    project: Annotated[str | None, Field(description=_PROJECT_FOR_LAYER_HELP)] = None,
 ) -> WriteResult:
     """
     Legt neue Objekte in einem Layer an.
@@ -198,10 +327,6 @@ def insert_features(
     Rückgängig machen lässt sich das nur, indem die zurückgegebenen fids mit
     delete_features wieder gelöscht werden -- ein Fehlgriff hier ist also
     kein Datenverlust, aber ein zweiter Aufruf.
-
-    :param features: je Objekt mindestens die Geometrie (GeoJSON, EPSG:4326);
-        ``properties`` nach Spaltenname, eine weggelassene Spalte bekommt
-        ihren Vorgabewert
     """
     try:
         resolved = _layer(layer, project)
@@ -220,7 +345,15 @@ def insert_features(
 
 @server.tool()
 def update_features(
-    layer: str, updates: list[FeatureChange], project: str | None = None
+    layer: Annotated[str, Field(description=_LAYER_HELP)],
+    updates: Annotated[
+        list[FeatureChange],
+        Field(
+            description="Je Objekt siehe FeatureChange: fid, wahlweise geometry "
+            "und/oder properties."
+        ),
+    ],
+    project: Annotated[str | None, Field(description=_PROJECT_FOR_LAYER_HELP)] = None,
 ) -> WriteResult:
     """
     Ändert Geometrie und/oder Attribute vorhandener Objekte. Ein Fehlgriff
@@ -233,8 +366,6 @@ def update_features(
     Schreiben, meldet der Server einen Konflikt statt die fremde Änderung
     stillschweigend zu überschreiben -- ein erneuter Aufruf löst das dann auf
     Basis des neuen Stands.
-
-    :param updates: je Objekt siehe :class:`FeatureChange`
     """
     try:
         resolved = _layer(layer, project)
@@ -261,16 +392,23 @@ def update_features(
 
 
 @server.tool()
-def delete_features(layer: str, fids: list[int], project: str | None = None) -> WriteResult:
+def delete_features(
+    layer: Annotated[str, Field(description=_LAYER_HELP)],
+    fids: Annotated[
+        list[int],
+        Field(
+            description="Die zu löschenden Objekte, einzeln benannt. Es gibt keinen "
+            'Filter-basierten oder "alles löschen"-Weg -- das würde eine leere oder '
+            "falsch verstandene Auswahl zum ganzen Layer machen."
+        ),
+    ],
+    project: Annotated[str | None, Field(description=_PROJECT_FOR_LAYER_HELP)] = None,
+) -> WriteResult:
     """
     Löscht Objekte aus einem Layer. Nicht rückgängig zu machen über dieses
     Werkzeug oder diese Bibliothek -- nur das Änderungsprotokoll des Servers
     kennt Geometrie und Attribute danach noch. Anders als ein gelöschter
     ganzer Layer (siehe delete_layer), der in den Papierkorb geht.
-
-    :param fids: die zu löschenden Objekte, einzeln benannt. Es gibt keinen
-        Filter-basierten oder "alles löschen"-Weg -- das würde eine leere
-        oder falsch verstandene Auswahl zum ganzen Layer machen.
     """
     try:
         resolved = _layer(layer, project)
@@ -291,23 +429,30 @@ def delete_features(layer: str, fids: list[int], project: str | None = None) -> 
 
 @server.tool()
 def create_layer(
-    project: str,
-    name: str,
-    geometry_type: str,
-    fields: dict[str, str] | None = None,
+    project: Annotated[str, Field(description="Name oder Id des Projekts.")],
+    name: Annotated[str, Field(description="Name des neuen Layers.")],
+    geometry_type: Annotated[
+        str,
+        Field(
+            description="MULTIPOINT, MULTILINESTRING, MULTIPOLYGON oder GEOMETRY -- "
+            "Letzteres für einen Layer, der von Anfang an unterschiedliche "
+            "Geometrietypen mischen soll."
+        ),
+    ],
+    fields: Annotated[
+        dict[str, str] | None,
+        Field(
+            description="Attributfelder, die gleich mitangelegt werden -- Name auf "
+            "Typ. Typ ist einer von TEXT, INTEGER, BIGINT, DOUBLE, NUMERIC, BOOLEAN, "
+            "DATE, TIME, TIMESTAMP. Ohne Angabe ist der Layer gültig, zeigt aber nur "
+            "fid."
+        ),
+    ] = None,
 ) -> WriteResult:
     """
     Legt einen neuen, leeren Layer in einem Projekt an. Rückgängig machen
     lässt sich das mit delete_layer -- ein leerer Layer, der niemandem
     fehlt, ist kein Verlust.
-
-    :param geometry_type: MULTIPOINT, MULTILINESTRING, MULTIPOLYGON oder
-        GEOMETRY -- Letzteres für einen Layer, der von Anfang an
-        unterschiedliche Geometrietypen mischen soll
-    :param fields: Attributfelder, die gleich mitangelegt werden -- Name auf
-        Typ. Typ ist einer von TEXT, INTEGER, BIGINT, DOUBLE, NUMERIC,
-        BOOLEAN, DATE, TIME, TIMESTAMP. Ohne Angabe ist der Layer gültig,
-        zeigt aber nur fid.
     """
     try:
         proj = _project(project)
@@ -325,17 +470,24 @@ def create_layer(
 
 @server.tool()
 def update_layer(
-    layer: str,
-    name: str | None = None,
-    visible: bool | None = None,
-    project: str | None = None,
+    layer: Annotated[str, Field(description=_LAYER_HELP)],
+    name: Annotated[
+        str | None, Field(description="Neuer Name. Weggelassen bleibt der bisherige.")
+    ] = None,
+    visible: Annotated[
+        bool | None,
+        Field(
+            description="Sichtbar schalten (true) oder ausblenden (false). "
+            "Weggelassen bleibt es, wie es war."
+        ),
+    ] = None,
+    project: Annotated[str | None, Field(description=_PROJECT_FOR_LAYER_HELP)] = None,
 ) -> WriteResult:
     """
     Ändert Name und/oder Sichtbarkeit eines Layers. Nichts geht dabei
     verloren -- ein erneuter Aufruf setzt beides wieder zurück.
 
-    Beide Argumente sind einzeln optional; weggelassen bleibt der jeweilige
-    Wert unverändert. Für den Stil siehe set_style, für Löschen delete_layer.
+    Für den Stil siehe set_style, für Löschen delete_layer.
     """
     try:
         resolved = _layer(layer, project)
@@ -352,7 +504,10 @@ def update_layer(
 
 
 @server.tool()
-def delete_layer(layer: str, project: str | None = None) -> WriteResult:
+def delete_layer(
+    layer: Annotated[str, Field(description=_LAYER_HELP)],
+    project: Annotated[str | None, Field(description=_PROJECT_FOR_LAYER_HELP)] = None,
+) -> WriteResult:
     """
     Verschiebt einen Layer in den Papierkorb des Projekts. Die Daten bleiben
     erhalten: restore_layer holt ihn zurück, bis jemand purge_layer aufruft
@@ -380,13 +535,17 @@ def delete_layer(layer: str, project: str | None = None) -> WriteResult:
 
 
 @server.tool()
-def restore_layer(layer_id: str) -> WriteResult:
+def restore_layer(
+    layer_id: Annotated[
+        str,
+        Field(
+            description="Die Id, die delete_layer zurückgegeben hat -- ein Layer im "
+            "Papierkorb ist über seinen Namen nicht mehr auflösbar."
+        ),
+    ],
+) -> WriteResult:
     """
     Holt einen Layer aus dem Papierkorb zurück, mit allen seinen Objekten.
-
-    Braucht die Id, nicht den Namen -- ein Layer im Papierkorb ist über sein
-    Projekt nicht mehr auflösbar. delete_layer nennt diese Id in seiner
-    eigenen Rückmeldung.
     """
     try:
         layer_id = _require_layer_id(layer_id)
@@ -399,16 +558,22 @@ def restore_layer(layer_id: str) -> WriteResult:
 
 
 @server.tool()
-def purge_layer(layer_id: str) -> WriteResult:
+def purge_layer(
+    layer_id: Annotated[
+        str,
+        Field(
+            description="Die Id, die delete_layer zurückgegeben hat -- ein Layer im "
+            "Papierkorb ist über seinen Namen nicht mehr auflösbar."
+        ),
+    ],
+) -> WriteResult:
     """
     Löscht einen Layer aus dem Papierkorb endgültig -- Geometrie und
     Attribute sind danach weg, auch aus dem Änderungsprotokoll. Der einzige
     wirklich unwiederbringliche Schritt in diesem Werkzeugsatz.
 
     Nur für einen Layer, der bereits per delete_layer im Papierkorb liegt.
-    Prüfen Sie im Zweifel erst, was dort liegt, bevor Sie dies aufrufen --
-    dieser Server bietet dafür bislang kein eigenes Werkzeug, siehe den
-    Bericht der schreibenden Stufe.
+    Prüfen Sie im Zweifel erst, was dort liegt, bevor Sie dies aufrufen.
     """
     try:
         layer_id = _require_layer_id(layer_id)
@@ -429,15 +594,23 @@ def purge_layer(layer_id: str) -> WriteResult:
 
 
 @server.tool()
-def create_field(layer: str, name: str, type: str, project: str | None = None) -> WriteResult:  # noqa: A002
+def create_field(
+    layer: Annotated[str, Field(description=_LAYER_HELP)],
+    name: Annotated[str, Field(description="Anzeigename des neuen Felds.")],
+    type: Annotated[  # noqa: A002
+        str,
+        Field(
+            description="Einer von TEXT, INTEGER, BIGINT, DOUBLE, NUMERIC, BOOLEAN, "
+            "DATE, TIME, TIMESTAMP. Ein unbekanntes Token meldet der Server mit den "
+            "gültigen Namen."
+        ),
+    ],
+    project: Annotated[str | None, Field(description=_PROJECT_FOR_LAYER_HELP)] = None,
+) -> WriteResult:
     """
     Fügt einem Layer ein Attributfeld hinzu -- eine neue Spalte in seiner
     Tabelle. Rückgängig machen lässt sich das mit delete_field, solange noch
     niemand Werte hineingeschrieben hat, die dabei verloren gingen.
-
-    :param type: einer von TEXT, INTEGER, BIGINT, DOUBLE, NUMERIC, BOOLEAN,
-        DATE, TIME, TIMESTAMP. Ein unbekanntes Token meldet der Server mit
-        den gültigen Namen.
     """
     try:
         resolved = _layer(layer, project)
@@ -450,15 +623,22 @@ def create_field(layer: str, name: str, type: str, project: str | None = None) -
 
 
 @server.tool()
-def delete_field(layer: str, field: str, project: str | None = None) -> WriteResult:
+def delete_field(
+    layer: Annotated[str, Field(description=_LAYER_HELP)],
+    field: Annotated[
+        str,
+        Field(
+            description="Name, Spaltenname oder Id des Felds. Ein Name, der zu "
+            "mehreren Feldern eines Layers passt, wird abgelehnt statt geraten -- "
+            "nennen Sie dann die Feld-Id."
+        ),
+    ],
+    project: Annotated[str | None, Field(description=_PROJECT_FOR_LAYER_HELP)] = None,
+) -> WriteResult:
     """
     Löscht ein Attributfeld -- die Spalte und ihr Inhalt sind danach weg.
     Nur über das Änderungsprotokoll des Servers wiederherstellbar, nicht
     über dieses Werkzeug oder diese Bibliothek.
-
-    :param field: Name, Spaltenname oder Id des Felds. Ein Name, der zu
-        mehreren Feldern eines Layers passt, wird abgelehnt statt geraten --
-        nennen Sie dann die Feld-Id.
     """
     try:
         resolved = _layer(layer, project)
@@ -473,27 +653,30 @@ def delete_field(layer: str, field: str, project: str | None = None) -> WriteRes
 
 
 @server.tool()
-def set_style(layer: str, style: hgis.Style | None, project: str | None = None) -> WriteResult:
+def set_style(
+    layer: Annotated[str, Field(description=_LAYER_HELP)],
+    style: Annotated[
+        hgis.Style | None,
+        Field(
+            description="Aufgebaut wie hgis.Style: renderer, wahlweise labels/opacity/"
+            "min_zoom/max_zoom. Vier Renderer-Typen in renderer.type: \"single\" (ein "
+            "Symbol für alle Objekte, braucht nur symbol), \"categorized\" (ein Symbol "
+            "je Attributwert, braucht field und categories), \"graduated\" (ein Symbol "
+            'je Wertebereich, braucht field und classes), "heatmap" (Dichte statt '
+            "einzelner Symbole, braucht field, radius und ramp). Muss angegeben werden, "
+            "darf aber ausdrücklich null sein -- das setzt den Layer auf die monochrome "
+            'Standarddarstellung zurück. Heatmap-Beispiel: {"renderer": {"type": '
+            '"heatmap", "field": "lautstaerke", "ramp": "inferno"}}.'
+        ),
+    ],
+    project: Annotated[str | None, Field(description=_PROJECT_FOR_LAYER_HELP)] = None,
+) -> WriteResult:
     """
     Ersetzt den Stil eines Layers vollständig -- es gibt keine
     Teil-Aktualisierung. Der vorherige Stil ist danach weg, aber nicht
     unwiederbringlich: ein erneuter Aufruf mit dem alten Stand stellt ihn
-    wieder her. Lesen Sie dafür vorher den Stil des Layers, statt ihn zu
+    wieder her. Lesen Sie dafür vorher get_style, statt den alten Stand zu
     raten.
-
-    ``style`` muss angegeben werden, darf aber ausdrücklich ``null`` sein --
-    das setzt den Layer auf die monochrome Standarddarstellung zurück.
-
-    Vier Renderer-Typen, in ``style.renderer.type``: "single" (ein Symbol für
-    alle Objekte), "categorized" (ein Symbol je Attributwert), "graduated"
-    (ein Symbol je Wertebereich), "heatmap" (Dichte statt einzelner Symbole).
-    Welche der übrigen Renderer-Felder gebraucht werden, hängt von diesem
-    Typ ab -- "single" braucht nur symbol, "heatmap" braucht field, radius
-    und ramp, und so weiter; siehe die Felder von Renderer im Eingabe-Schema
-    dieses Werkzeugs.
-
-    Eine Heatmap zum Beispiel:
-        {"renderer": {"type": "heatmap", "field": "lautstaerke", "ramp": "inferno"}}
     """
     try:
         resolved = _layer(layer, project)

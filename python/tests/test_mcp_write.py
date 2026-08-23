@@ -45,6 +45,9 @@ HOEHE_FIELD_ID = "019fecb8-6f22-725a-ad67-57e4211fb2fc"
 
 NEW_LAYER_ID = "019ff9aa-1111-7222-8333-444455556666"
 NEW_FIELD_ID = "019ff9aa-2222-7333-8444-555566667777"
+#: A layer with no objects, hence no extent -- for set_view's "cannot fly to
+#: an empty layer" path.
+EMPTY_LAYER_ID = "019ff9aa-3333-7444-8555-666677778888"
 
 
 def _json_response(status: int, body: Any) -> Response:
@@ -75,6 +78,22 @@ def _write_stub(request: Recorded, body: Any) -> Response:
             return ok("view-state.json")
         if path == f"/api/layers/{LAYER_ID}":
             return ok("layer.json")
+        if path == f"/api/layers/{EMPTY_LAYER_ID}":
+            return _json_response(
+                200,
+                {
+                    "id": EMPTY_LAYER_ID,
+                    "name": "Leerer Layer",
+                    "kind": "VECTOR",
+                    "geometryType": "MULTIPOINT",
+                    "srid": 25833,
+                    "featureCount": 0,
+                    "visible": True,
+                    "extent": None,
+                    "style": None,
+                    "fields": [],
+                },
+            )
         if path.startswith(f"/api/layers/{LAYER_ID}/features/"):
             fid = path.rsplit("/", 1)[-1]
             return _json_response(
@@ -90,6 +109,27 @@ def _write_stub(request: Recorded, body: Any) -> Response:
 
     if method == "PUT" and path == f"/api/projects/{PROJECT_ID}/view-state":
         return Response(204, "")
+
+    if method == "PATCH" and path == f"/api/projects/{PROJECT_ID}":
+        return _json_response(
+            200,
+            {
+                "id": PROJECT_ID,
+                "name": "Leitungsnetz Nord",
+                "description": "Trinkwasser und Abwasser",
+                "srid": 25833,
+                "basemap": body.get("basemap", "osm"),
+                "basemapOpacity": body.get("basemapOpacity", 1.0),
+                "center": body.get("center", [10.0061, 53.5459]),
+                "zoom": body.get("zoom", 15.1),
+                "extent": None,
+                "layerCount": 4,
+                "featureCount": 3005,
+                "lastOpenedAt": "2026-08-15T17:21:44.890366Z",
+                "createdAt": "2026-08-10T15:11:53.100674Z",
+                "updatedAt": "2026-08-15T18:00:00Z",
+            },
+        )
 
     if method == "POST" and path == f"/api/projects/{PROJECT_ID}/layers":
         return _json_response(
@@ -345,20 +385,100 @@ def test_set_view_switches_the_active_layer_and_keeps_its_selection(mcp_client, 
     dass sich activeLayerId wirklich ändert, nicht nur, dass der Aufruf
     durchläuft. Die (leere) Auswahl von "Straßen" bleibt dabei erhalten.
 
-    Die summary muss den Vorbehalt aus dem Docstring wiederholen -- ein
-    Agent, der nur die Erfolgsmeldung in seinem Verlauf behält, sonst denkt,
-    der Kartenausschnitt sei mitgewandert.
+    Ohne center/zoom berechnet set_view beides aus dem Ausschnitt des
+    Layers -- die PATCH an die Projekt-Endpunkt-Route muss genau die Zahlen
+    tragen, die _view_for_extent aus layers.json' Straßen-extent berechnet
+    (nicht geraten, sondern hier direkt mit derselben Funktion vorgerechnet).
+    """
+    from hgis.mcp.write_tools import _view_for_extent, set_view
+
+    straszen_extent = (
+        9.980243980721065,
+        53.541128324182445,
+        9.996605347565506,
+        53.547999683229875,
+    )
+    expected_center, expected_zoom = _view_for_extent(straszen_extent)
+
+    result = set_view(PROJECT_ID, layer="Straßen")
+
+    assert result.summary.startswith("'Straßen' ist jetzt der aktive Layer in 'Leitungsnetz Nord'.")
+    assert "aus seinem Ausschnitt berechnet" in result.summary
+
+    put = next(r for r in transport.requests if r.method == "PUT")
+    put_body = _body_of(transport, put)
+    assert put_body["activeLayerId"] == OTHER_LAYER_ID
+    assert put_body["layers"][OTHER_LAYER_ID]["selection"] == []
+
+    patch = next(r for r in transport.requests if r.method == "PATCH" and "/projects/" in r.path)
+    patch_body = _body_of(transport, patch)
+    assert patch_body["center"] == pytest.approx(expected_center)
+    assert patch_body["zoom"] == pytest.approx(expected_zoom)
+
+
+def test_set_view_explicit_center_and_zoom_without_a_layer(mcp_client, transport) -> None:
+    """Reine Kamerabewegung -- kein Layer genannt, also keine PUT view-state."""
+    from hgis.mcp.write_tools import set_view
+
+    result = set_view(PROJECT_ID, center=[10.0, 53.5], zoom=16.5)
+
+    assert "aktive Layer" not in result.summary
+    assert "Kartenausschnitt gesetzt: Mitte 10.00000, 53.50000, Zoom 16.5" in result.summary
+    assert not any(r.method == "PUT" for r in transport.requests)
+    patch = next(r for r in transport.requests if r.method == "PATCH" and "/projects/" in r.path)
+    assert _body_of(transport, patch) == {"center": [10.0, 53.5], "zoom": 16.5}
+
+
+def test_set_view_explicit_values_override_the_computed_ones(mcp_client, transport) -> None:
+    """
+    layer UND center/zoom zusammen: der Layer wird trotzdem aktiv, aber die
+    Kamera folgt den gegebenen Zahlen, nicht dem Layer-Ausschnitt -- die
+    summary darf dann nicht "berechnet" behaupten.
     """
     from hgis.mcp.write_tools import set_view
 
-    result = set_view(PROJECT_ID, "Straßen")
+    result = set_view(PROJECT_ID, layer="Straßen", center=[1.0, 2.0], zoom=5.0)
 
-    assert result.summary.startswith("'Straßen' ist jetzt der aktive Layer in 'Leitungsnetz Nord'.")
-    assert "NICHT bewegt" in result.summary
-    put = next(r for r in transport.requests if r.method == "PUT")
-    body = _body_of(transport, put)
-    assert body["activeLayerId"] == OTHER_LAYER_ID
-    assert body["layers"][OTHER_LAYER_ID]["selection"] == []
+    assert "gesetzt" in result.summary
+    assert "berechnet" not in result.summary
+    patch = next(r for r in transport.requests if r.method == "PATCH" and "/projects/" in r.path)
+    assert _body_of(transport, patch) == {"center": [1.0, 2.0], "zoom": 5.0}
+
+
+def test_set_view_with_nothing_given_is_refused_before_any_request(mcp_client, transport) -> None:
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import set_view
+
+    with pytest.raises(ToolError, match="Mindestens eines von layer, center oder zoom"):
+        set_view(PROJECT_ID)
+
+    assert transport.requests == []
+
+
+def test_set_view_rejects_a_malformed_center(mcp_client, transport) -> None:
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import set_view
+
+    with pytest.raises(ToolError, match=r"\[lng, lat\]"):
+        set_view(PROJECT_ID, center=[1.0, 2.0, 3.0])
+
+    assert transport.requests == []
+
+
+def test_set_view_cannot_fly_to_an_empty_layer(mcp_client, transport) -> None:
+    """
+    Kein Ausschnitt, kein center/zoom angegeben -- und weil das VOR jedem
+    Schreiben geprüft wird, darf auch der aktive Layer noch nicht
+    gewechselt haben: ein halber Erfolg wäre irreführender als ein klarer
+    Fehler.
+    """
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import set_view
+
+    with pytest.raises(ToolError, match="hat keine Objekte"):
+        set_view(PROJECT_ID, layer=EMPTY_LAYER_ID)
+
+    assert not any(r.method in ("PUT", "PATCH") for r in transport.requests)
 
 
 # --- objects: what is stored --------------------------------------------
