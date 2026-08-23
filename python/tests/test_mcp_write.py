@@ -33,8 +33,15 @@ pytestmark = [needs_mcp, pytest.mark.mcp]
 OTHER_LAYER_ID = "019fecc1-4098-7601-bd23-039619b9a80f"
 #: "Flurstücke" -- activeLayerId in the stored view-state.json.
 ACTIVE_LAYER_ID = "019fecc1-48a2-76b7-8732-019e83d5532a"
-#: The "Straße" field of the stored layer.json, real id and all.
+#: The "Straße" field of the stored layer.json, real id and all -- index 0
+#: of its fields array, which is exactly why delete_field is not tested
+#: against it: a field-mixup bug (deleting fields()[0] instead of resolving
+#: by name) would still hit the right field by accident here.
 STRASSE_FIELD_ID = "019fecb8-6f22-70d0-b6d7-13a6d85542bf"
+#: "Höhe" -- index 1 of the same fields array, used by the delete_field test
+#: instead, so a field mixup actually shows up as the wrong id in the
+#: outgoing DELETE.
+HOEHE_FIELD_ID = "019fecb8-6f22-725a-ad67-57e4211fb2fc"
 
 NEW_LAYER_ID = "019ff9aa-1111-7222-8333-444455556666"
 NEW_FIELD_ID = "019ff9aa-2222-7333-8444-555566667777"
@@ -193,7 +200,9 @@ def _write_stub(request: Recorded, body: Any) -> Response:
             },
         )
 
-    if method == "DELETE" and path == f"/api/layers/{LAYER_ID}/fields/{STRASSE_FIELD_ID}":
+    if method == "DELETE" and path.startswith(f"/api/layers/{LAYER_ID}/fields/"):
+        # Jedes Feld dieses Layers darf geloescht werden -- welches, sagt
+        # der Pfad selbst, den der aufrufende Test danach prueft.
         return Response(204, "")
 
     raise AssertionError(f"Unerwartete Anfrage: {method} {request.url}")
@@ -242,6 +251,56 @@ def _body_of(transport: FakeTransport, request: Recorded) -> Any:
     return transport.bodies[transport.requests.index(request)]
 
 
+def _write_stub_confirming_less_than_asked(request: Recorded, body: Any) -> Response:
+    """
+    Like ``_write_stub``, except ``POST .../edits`` confirms one fewer update
+    and one fewer delete than the batch asked for -- a real server can do
+    this (a row matched a where-clause the client no longer sees, say), and
+    the tools must report what came back, not what was sent. Everything else
+    falls through to ``_write_stub`` unchanged.
+    """
+    if request.method == "POST" and request.path == f"/api/layers/{LAYER_ID}/edits":
+        updates = body.get("updates") or []
+        deletes = body.get("deletes") or []
+        return _json_response(
+            200,
+            {
+                "createdFids": {},
+                "updated": max(0, len(updates) - 1),
+                "deleted": max(0, len(deletes) - 1),
+                "dataVersion": 99,
+                "featureCount": 1000,
+            },
+        )
+    return _write_stub(request, body)
+
+
+@pytest.fixture
+def underreporting_transport() -> FakeTransport:
+    """``transport``'s stub, with ``_write_stub_confirming_less_than_asked``."""
+    box: list[FakeTransport] = []
+
+    def handler(request: Recorded) -> Response:
+        return _write_stub_confirming_less_than_asked(request, box[0].bodies[-1])
+
+    instance = FakeTransport(handler)
+    box.append(instance)
+    return instance
+
+
+@pytest.fixture
+def mcp_client_underreporting(underreporting_transport: FakeTransport):
+    """Like ``mcp_client``, wired to ``underreporting_transport`` instead."""
+    from hgis.mcp.server import use_client
+
+    instance = hgis.connect("http://stub", transport=underreporting_transport)
+    use_client(instance)
+    try:
+        yield instance
+    finally:
+        use_client(None)
+
+
 # --- what the person at the screen sees --------------------------------------
 
 
@@ -285,12 +344,17 @@ def test_set_view_switches_the_active_layer_and_keeps_its_selection(mcp_client, 
     "Straßen" ist in view-state.json nicht aktiv -- der Test beweist also,
     dass sich activeLayerId wirklich ändert, nicht nur, dass der Aufruf
     durchläuft. Die (leere) Auswahl von "Straßen" bleibt dabei erhalten.
+
+    Die summary muss den Vorbehalt aus dem Docstring wiederholen -- ein
+    Agent, der nur die Erfolgsmeldung in seinem Verlauf behält, sonst denkt,
+    der Kartenausschnitt sei mitgewandert.
     """
     from hgis.mcp.write_tools import set_view
 
     result = set_view(PROJECT_ID, "Straßen")
 
-    assert result.summary == "'Straßen' ist jetzt der aktive Layer in 'Leitungsnetz Nord'."
+    assert result.summary.startswith("'Straßen' ist jetzt der aktive Layer in 'Leitungsnetz Nord'.")
+    assert "NICHT bewegt" in result.summary
     put = next(r for r in transport.requests if r.method == "PUT")
     body = _body_of(transport, put)
     assert body["activeLayerId"] == OTHER_LAYER_ID
@@ -365,6 +429,71 @@ def test_delete_features_names_the_deleted_fids(mcp_client, transport) -> None:
     assert result.summary == "3 Objekt(e) in 'Gebäude Speicherstadt' gelöscht, fids 5-7."
     edit_request = next(r for r in transport.requests if r.path.endswith("/edits"))
     assert _body_of(transport, edit_request)["deletes"] == [5, 6, 7]
+
+
+def test_update_features_reports_what_the_server_actually_confirmed(
+    mcp_client_underreporting, underreporting_transport
+) -> None:
+    """
+    Der Server bestätigt hier absichtlich eines von zwei -- WriteResult.updated
+    muss die gemeldete Eins nennen, nicht die angeforderte Zwei. Eine
+    Rückmeldung, die stattdessen len(updates) zählt, würde einen Erfolg
+    behaupten, den der Server so nie zugesagt hat.
+    """
+    from hgis.mcp.write_tools import FeatureChange, update_features
+
+    result = update_features(
+        LAYER_ID,
+        [
+            FeatureChange(fid=1, properties={"strasse": "A"}),
+            FeatureChange(fid=2, properties={"strasse": "B"}),
+        ],
+    )
+
+    assert result.updated == 1
+    assert result.summary == "1 Objekt(e) in 'Gebäude Speicherstadt' geändert, fids 1-2."
+
+
+def test_delete_features_reports_what_the_server_actually_confirmed(
+    mcp_client_underreporting, underreporting_transport
+) -> None:
+    """Wie oben, nur für deleted -- derselbe Server bestätigt zwei von drei."""
+    from hgis.mcp.write_tools import delete_features
+
+    result = delete_features(LAYER_ID, [5, 6, 7])
+
+    assert result.deleted == 2
+    assert result.summary == "2 Objekt(e) in 'Gebäude Speicherstadt' gelöscht, fids 5-7."
+
+
+def test_insert_features_with_incomplete_created_fids_fails_loudly(
+    mcp_client_underreporting, underreporting_transport
+) -> None:
+    """
+    Anders als bei updated/deleted gibt es für inserted keinen entsprechenden
+    "der Server meldet weniger, als angefordert"-Fall, den man beobachten
+    könnte, ohne vorher abzustürzen: hgis.edits.apply_edits() sucht für
+    jeden gesendeten Platzhalter zwingend einen Eintrag in createdFids und
+    wirft einen nackten KeyError, sobald einer fehlt (edits.py:295, nicht
+    diese Datei) -- lange bevor insert_features seine WriteResult baut. Die
+    beiden Zahlen fids/features können im Erfolgsfall also nie auseinander-
+    laufen; "inserted=len(fids)" gegen "inserted=len(features)" zu prüfen,
+    ist hier kein Testlücken-, sondern ein Äquivalenzproblem. Was bleibt und
+    hier gilt, ist trotzdem sehenswert: das Werkzeug reicht diesen Absturz
+    unverändert weiter, statt ihn als lesbaren deutschen Satz zu tarnen --
+    tool_error() lässt einen KeyError bewusst durch (siehe dessen Docstring:
+    "ein Bug in diesem Server ist kein hGIS-Fehler").
+    """
+    from hgis.mcp.write_tools import insert_features
+
+    with pytest.raises(KeyError):
+        insert_features(
+            LAYER_ID,
+            [
+                hgis.NewFeature(geometry={"type": "Point", "coordinates": [0, 0]}),
+                hgis.NewFeature(geometry={"type": "Point", "coordinates": [1, 1]}),
+            ],
+        )
 
 
 # --- layers: what is stored --------------------------------------------
@@ -443,6 +572,31 @@ def test_purge_layer_is_the_only_final_step(mcp_client, transport) -> None:
     assert transport.requests[-1].path == f"/api/layers/{LAYER_ID}/purge"
 
 
+def test_restore_layer_rejects_a_name_with_its_own_message(mcp_client, transport) -> None:
+    """
+    Ein Name statt einer Id darf nicht bis zum RequestGuard durchreichen --
+    dessen Meldung spricht über erlaubte Schreibwege, nicht darüber, dass
+    hier ein Name statt einer Id ankam. Kein Request geht raus.
+    """
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import restore_layer
+
+    with pytest.raises(ToolError, match="ist keine Layer-Id"):
+        restore_layer("Gebäude Speicherstadt")
+
+    assert transport.requests == []
+
+
+def test_purge_layer_rejects_a_name_with_its_own_message(mcp_client, transport) -> None:
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import purge_layer
+
+    with pytest.raises(ToolError, match="ist keine Layer-Id"):
+        purge_layer("Gebäude Speicherstadt")
+
+    assert transport.requests == []
+
+
 # --- fields: what is stored --------------------------------------------
 
 
@@ -458,17 +612,20 @@ def test_create_field_reports_name_and_type(mcp_client, transport) -> None:
 
 def test_delete_field_resolves_by_source_name(mcp_client, transport) -> None:
     """
-    "Straße" ist mehrdeutig zwischen Quellname und Spaltenname nur bei der
-    Speicherstadt-Baumkataster-Fixture (siehe conftest-Modul-Docstring) --
-    hier nicht, also reicht der Name.
+    "Höhe" ist absichtlich NICHT das erste Feld von layer.json (das ist
+    "Straße", Index 0) -- ein Werkzeug, das aus Versehen fields()[0] statt
+    field(name) löscht, würde bei "Straße" zufällig das richtige Feld
+    treffen und bei "Höhe" nicht. Reine Namensauflösung reicht hier, weil
+    "Höhe" anders als "Stammumfang" in der Baumkataster-Fixture (siehe
+    conftest-Modul-Docstring) nicht mehrdeutig ist.
     """
     from hgis.mcp.write_tools import delete_field
 
-    result = delete_field(LAYER_ID, "Straße")
+    result = delete_field(LAYER_ID, "Höhe")
 
-    assert result.summary == "Feld 'Straße' aus 'Gebäude Speicherstadt' gelöscht."
+    assert result.summary == "Feld 'Höhe' aus 'Gebäude Speicherstadt' gelöscht."
     delete = next(r for r in transport.requests if r.method == "DELETE" and "/fields/" in r.path)
-    assert delete.path == f"/api/layers/{LAYER_ID}/fields/{STRASSE_FIELD_ID}"
+    assert delete.path == f"/api/layers/{LAYER_ID}/fields/{HOEHE_FIELD_ID}"
 
 
 # --- style: what is stored -----------------------------------------------

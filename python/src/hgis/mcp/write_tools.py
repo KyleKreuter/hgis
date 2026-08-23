@@ -63,6 +63,27 @@ def _layer(name_or_id: str, project: str | None) -> hgis.Layer:
     )
 
 
+def _require_layer_id(layer_id: str) -> str:
+    """
+    ``layer_id``, checked to actually look like one before it reaches the
+    guarded client methods below.
+
+    Without this, a name reaches :class:`hgis.client.RequestGuard` as part of
+    a URL it does not match, and the agent reads the guard's explanation of
+    which write paths exist -- true, but not about what it actually did
+    wrong. This says that instead.
+
+    :raises hgis.errors.InvalidArgumentError: ``layer_id`` is not id-shaped
+    """
+    if not _looks_like_id(layer_id):
+        raise InvalidArgumentError(
+            f"'{layer_id}' ist keine Layer-Id. Ein Layer im Papierkorb ist über "
+            "seinen Namen nicht mehr auflösbar -- nennen Sie die Id, die "
+            "delete_layer zurückgegeben hat."
+        )
+    return layer_id
+
+
 def _fid_summary(fids: list[int]) -> str:
     """
     fids for a summary sentence a person can check against their own intent.
@@ -135,7 +156,13 @@ def set_view(project: str, layer: str) -> WriteResult:
         target = proj.layer(layer)
         current = proj.selection(layer=target)
         proj.select(current.fids, layer=target)
-        return WriteResult(summary=f"'{target.name}' ist jetzt der aktive Layer in '{proj.name}'.")
+        return WriteResult(
+            summary=(
+                f"'{target.name}' ist jetzt der aktive Layer in '{proj.name}'. "
+                "Der Kartenausschnitt (Zentrum, Zoom) wurde NICHT bewegt -- dieses "
+                "Werkzeug kann das noch nicht, siehe seine Beschreibung."
+            )
+        )
     except Exception as error:
         raise tool_error(error, doing=f"Aktivieren des Layers '{layer}' in '{project}'") from error
 
@@ -362,6 +389,7 @@ def restore_layer(layer_id: str) -> WriteResult:
     eigenen Rückmeldung.
     """
     try:
+        layer_id = _require_layer_id(layer_id)
         data = client().restore_layer(layer_id)
         name = data.get("name") if isinstance(data, dict) else None
         label = f"Layer '{name}' (Id {layer_id})" if name else f"Layer {layer_id}"
@@ -383,6 +411,7 @@ def purge_layer(layer_id: str) -> WriteResult:
     Bericht der schreibenden Stufe.
     """
     try:
+        layer_id = _require_layer_id(layer_id)
         data = client().purge_layer(layer_id)
         name = data.get("name") if isinstance(data, dict) else None
         count = data.get("featureCount") if isinstance(data, dict) else None
