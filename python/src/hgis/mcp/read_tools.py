@@ -388,6 +388,13 @@ def query_features(
     truncated=true reicht limit nicht für alle Treffer -- where enger fassen
     oder limit erhöhen, statt die Antwort für vollständig zu halten.
 
+    limit und geometry begrenzen nur diese Antwort, noch nicht, was zwischen
+    hGIS und diesem Server fließt: intern wird stets eine volle Serverseite
+    (bis zu 1.000 Objekte, mit Geometrie) gelesen, erst danach auf limit
+    gekürzt und die Geometrie entfernt, wenn geometry=False. Bei einem
+    kleinen limit auf einem großen Layer ist die interne Anfrage also größer
+    als das, was Sie hier sehen.
+
     Rufen Sie describe_layer zuerst auf, um die echten Feldnamen zu sehen,
     sonst rät where.
     """

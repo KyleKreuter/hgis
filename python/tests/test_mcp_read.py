@@ -6,14 +6,16 @@ this suite uses, so a test here calls a tool exactly the way an agent would --
 by name, through the module -- and checks what came back against the fixture
 it came from.
 
-Two tests build their own tiny transport instead of using the shared one:
+Several tests build their own tiny transport instead of using the shared
+one, where ``stub_server`` cannot say what the test needs:
 :func:`test_get_selection_reads_an_existing_selection`, because
 ``view-state-with-selection.json`` is not wired into ``stub_server`` (writing
 a selection is a write, and this suite makes none -- see the fixture's own
-docstring in conftest.py), and
-:func:`test_resolve_layer_by_name_searches_every_project`, because a name
+docstring in conftest.py); the ``_find_layer_by_name`` tests, because a name
 search across several projects needs more than one project to exist, which
-``stub_server`` does not model.
+``stub_server`` does not model; and the two truncated-boundary tests on
+``three_rows_client``, because that boundary needs an exact, controlled
+match count that the stored fixtures do not happen to produce.
 """
 
 from __future__ import annotations
@@ -212,6 +214,71 @@ def test_query_features_resolves_layer_id_directly_without_a_project(
     assert transport.paths[0] == f"/api/layers/{LAYER_ID}"
 
 
+def test_query_features_order_by_sends_the_resolved_reference(
+    mcp_client, transport
+) -> None:
+    """
+    order_by="strasse" ist die Spalte von "Straße" -- gesendet werden muss
+    die von hgis.Layer.reference() gelieferte Schreibweise ("Straße"), nicht
+    der rohe Parameter. Ein Feld, bei dem beide gleich lauten, würde diesen
+    Unterschied nicht zeigen.
+    """
+    from hgis.mcp.read_tools import query_features
+
+    query_features(LAYER_ID, order_by="strasse", limit=1)
+
+    request = transport.requests[-1]
+    assert request.param("sort") == "Straße"
+
+
+@pytest.fixture
+def three_rows_client():
+    """
+    Ein Layer mit genau drei Objekten, unabhängig von stub_server -- für den
+    Grenzfall von truncated: bei limit=3 (alle drei passen) muss es False
+    sein, bei limit=2 (eins bleibt außen vor) True.
+    """
+    layer_id = "aaaaaaaa-0000-0000-0000-000000000001"
+    rows = [{"fid": fid, "rowVersion": "1", "properties": {}} for fid in (1, 2, 3)]
+
+    def handle(request):
+        if request.path == f"/api/layers/{layer_id}":
+            return Response(200, json.dumps({"id": layer_id, "name": "Grenzfall", "fields": []}))
+        if request.path == f"/api/layers/{layer_id}/features":
+            page = rows[:1] if request.param("size") == "1" else rows
+            return Response(200, json.dumps({"features": page, "totalCount": len(rows)}))
+        raise AssertionError(f"Unerwartete Anfrage: {request.method} {request.url}")
+
+    from hgis.mcp.server import use_client
+
+    stub_client = hgis.connect("http://stub", transport=FakeTransport(handle))
+    use_client(stub_client)
+    try:
+        yield layer_id
+    finally:
+        use_client(None)
+
+
+def test_query_features_truncated_is_false_when_the_limit_covers_every_match(
+    three_rows_client,
+) -> None:
+    from hgis.mcp.read_tools import query_features
+
+    result = query_features(three_rows_client, limit=3)
+    assert len(result.features) == 3
+    assert result.truncated is False
+
+
+def test_query_features_truncated_is_true_one_object_past_the_limit(
+    three_rows_client,
+) -> None:
+    from hgis.mcp.read_tools import query_features
+
+    result = query_features(three_rows_client, limit=2)
+    assert len(result.features) == 2
+    assert result.truncated is True
+
+
 # --- count_features ----------------------------------------------------
 
 
@@ -275,6 +342,21 @@ def test_field_values_ambiguous_name_names_both_candidates(mcp_client) -> None:
     text = str(excinfo.value)
     assert "Stammumfang Quelle" in text
     assert "Stammumfang" in text
+
+
+def test_field_values_sends_the_resolved_reference(mcp_client, transport) -> None:
+    """
+    field="strasse" ist die Spalte von "Straße" -- angefragt werden muss die
+    von hgis.Layer.reference() gelieferte Schreibweise ("Straße"), nicht der
+    rohe Parameter. Wie test_query_features_order_by_sends_the_resolved_reference,
+    für den Weg über field_values.
+    """
+    from hgis.mcp.read_tools import field_values
+
+    field_values(LAYER_ID, "strasse")
+
+    request = transport.requests[-1]
+    assert request.param("field") == "Straße"
 
 
 def test_field_values_unknown_name_names_the_available_fields(mcp_client) -> None:
@@ -396,6 +478,21 @@ def test_get_selection_without_an_active_layer_is_empty_not_an_error() -> None:
 # --- Namensauflösung, gemeinsam für alle Werkzeuge oben --------------------
 
 
+def _project_json(project_id: str, name: str) -> dict:
+    return {
+        "id": project_id, "name": name, "description": None, "srid": 4326,
+        "layerCount": 1, "featureCount": 0, "extent": None,
+    }
+
+
+def _layer_json(layer_id: str, name: str) -> dict:
+    return {
+        "id": layer_id, "name": name, "kind": "VECTOR", "geometryType": "MULTIPOINT",
+        "srid": 4326, "featureCount": 5, "visible": True, "zIndex": 0,
+        "minZoom": 0, "maxZoom": 22, "extent": None,
+    }
+
+
 def test_resolve_layer_by_name_searches_every_project() -> None:
     """
     Ohne project sucht die Namensauflösung in jedem Projekt -- eindeutig, wenn
@@ -409,23 +506,10 @@ def test_resolve_layer_by_name_searches_every_project() -> None:
     layer_a = "10000000-0000-0000-0000-000000000001"
 
     projects_page = {
-        "items": [
-            {
-                "id": project_a, "name": "Erstes", "description": None, "srid": 4326,
-                "layerCount": 1, "featureCount": 0, "extent": None,
-            },
-            {
-                "id": project_b, "name": "Zweites", "description": None, "srid": 4326,
-                "layerCount": 1, "featureCount": 0, "extent": None,
-            },
-        ],
+        "items": [_project_json(project_a, "Erstes"), _project_json(project_b, "Zweites")],
         "nextCursor": None,
     }
-    layers_a = [{
-        "id": layer_a, "name": "Bäume", "kind": "VECTOR", "geometryType": "MULTIPOINT",
-        "srid": 4326, "featureCount": 5, "visible": True, "zIndex": 0,
-        "minZoom": 0, "maxZoom": 22, "extent": None,
-    }]
+    layers_a = [_layer_json(layer_a, "Bäume")]
     layers_b: list = []
 
     def handle(request):
@@ -449,6 +533,36 @@ def test_resolve_layer_by_name_searches_every_project() -> None:
         use_client(None)
 
 
+def test_resolve_layer_by_name_is_case_insensitive() -> None:
+    """
+    "BÄUME" muss denselben Layer finden wie "Bäume" -- ohne casefold() faellt
+    der Vergleich auf exakte Gleichheit zurück und findet nichts.
+    """
+    from hgis.mcp.read_tools import _find_layer_by_name
+    from hgis.mcp.server import use_client
+
+    project_a = "00000000-0000-0000-0000-00000000000c"
+    layer_a = "40000000-0000-0000-0000-000000000004"
+
+    projects_page = {"items": [_project_json(project_a, "Nur eins")], "nextCursor": None}
+    layers_a = [_layer_json(layer_a, "Bäume")]
+
+    def handle(request):
+        if request.path == "/api/projects":
+            return Response(200, json.dumps(projects_page))
+        if request.path == f"/api/projects/{project_a}/layers":
+            return Response(200, json.dumps(layers_a))
+        raise AssertionError(f"Unerwartete Anfrage: {request.method} {request.url}")
+
+    stub_client = hgis.connect("http://stub", transport=FakeTransport(handle))
+    use_client(stub_client)
+    try:
+        found = _find_layer_by_name("BÄUME")
+        assert found.id == layer_a
+    finally:
+        use_client(None)
+
+
 def test_resolve_layer_by_name_reports_every_project_that_matches() -> None:
     from hgis.mcp.read_tools import _find_layer_by_name
     from hgis.mcp.server import use_client
@@ -459,33 +573,17 @@ def test_resolve_layer_by_name_reports_every_project_that_matches() -> None:
     layer_b = "20000000-0000-0000-0000-000000000002"
 
     projects_page = {
-        "items": [
-            {
-                "id": project_a, "name": "Erstes", "description": None, "srid": 4326,
-                "layerCount": 1, "featureCount": 0, "extent": None,
-            },
-            {
-                "id": project_b, "name": "Zweites", "description": None, "srid": 4326,
-                "layerCount": 1, "featureCount": 0, "extent": None,
-            },
-        ],
+        "items": [_project_json(project_a, "Erstes"), _project_json(project_b, "Zweites")],
         "nextCursor": None,
     }
-
-    def make_layer(layer_id: str) -> list:
-        return [{
-            "id": layer_id, "name": "Bäume", "kind": "VECTOR", "geometryType": "MULTIPOINT",
-            "srid": 4326, "featureCount": 5, "visible": True, "zIndex": 0,
-            "minZoom": 0, "maxZoom": 22, "extent": None,
-        }]
 
     def handle(request):
         if request.path == "/api/projects":
             return Response(200, json.dumps(projects_page))
         if request.path == f"/api/projects/{project_a}/layers":
-            return Response(200, json.dumps(make_layer(layer_a)))
+            return Response(200, json.dumps([_layer_json(layer_a, "Bäume")]))
         if request.path == f"/api/projects/{project_b}/layers":
-            return Response(200, json.dumps(make_layer(layer_b)))
+            return Response(200, json.dumps([_layer_json(layer_b, "Bäume")]))
         raise AssertionError(f"Unerwartete Anfrage: {request.method} {request.url}")
 
     stub_client = hgis.connect("http://stub", transport=FakeTransport(handle))
