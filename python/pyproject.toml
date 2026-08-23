@@ -23,7 +23,14 @@ http = ["httpx>=0.24"]
 dataframe = ["pandas>=1.5"]
 # Geometries as shapely objects instead of GeoJSON dicts.
 geometry = ["shapely>=2.0"]
-dev = ["httpx>=0.24", "pandas>=1.5", "shapely>=2.0", "pytest>=7.0"]
+# What `hgis-mcp` needs. The library itself never imports it -- see hgis.mcp.
+# Pinned to 2.x: `mcp.server.fastmcp` from 1.x was renamed to
+# `mcp.server.mcpserver`, so a 1.x install would fail at import, not at use.
+mcp = ["mcp>=2.0,<3", "httpx>=0.24"]
+dev = ["httpx>=0.24", "pandas>=1.5", "shapely>=2.0", "pytest>=7.0", "mcp>=2.0,<3"]
+
+[project.scripts]
+hgis-mcp = "hgis.mcp.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hgis"]
@@ -32,6 +39,7 @@ packages = ["src/hgis"]
 testpaths = ["tests"]
 markers = [
     "live: needs a running hGIS server; skipped when none answers",
+    "mcp: needs the mcp extra; skipped when it is not installed",
 ]
 
 # Written down rather than passed on the command line, so that `ruff check`

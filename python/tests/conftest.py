@@ -283,3 +283,39 @@ def project(client: hgis.Client, transport: FakeTransport) -> hgis.Project:
 def stored(name: str) -> Any:
     """A stored response as parsed JSON, for asserting against the source."""
     return json.loads(load(name))
+
+
+#: True when the ``mcp`` extra is installed. The library does not need it, so a
+#: plain ``pip install hgis`` leaves it out and the MCP tests skip.
+try:  # pragma: no cover - depends on how the environment was installed
+    import mcp  # noqa: F401
+
+    HAS_MCP = True
+except ImportError:  # pragma: no cover
+    HAS_MCP = False
+
+needs_mcp = pytest.mark.skipif(not HAS_MCP, reason="braucht das mcp-Extra")
+
+
+@pytest.fixture
+def mcp_client(client: hgis.Client):
+    """
+    The MCP server's tools, wired to the stored responses.
+
+    Every tool calls :func:`hgis.mcp.server.client`, so substituting that one
+    client is all it takes to run the whole tool surface without a backend --
+    the same seam the rest of this suite uses, one level up.
+
+    Put back afterwards, whether the test passed or not: a leaked stub client
+    would make the next test pass against the wrong server.
+    """
+    if not HAS_MCP:
+        pytest.skip("braucht das mcp-Extra")
+
+    from hgis.mcp.server import use_client
+
+    use_client(client)
+    try:
+        yield client
+    finally:
+        use_client(None)
