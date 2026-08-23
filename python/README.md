@@ -5,9 +5,10 @@ Objekte.
 
 Ein `RequestGuard` prüft jede Anfrage, bevor sie den Server erreicht. Lesen
 ist uneingeschränkt. Schreiben ist eine feste Liste: die Auswahl speichern,
-einen Layer anlegen/ändern/löschen/wiederherstellen/endgültig löschen, ein
-Feld anlegen/löschen und ein Stapel Objekt-Änderungen. Jede andere Anfrage
-lehnt die Bibliothek ab, bevor sie den Server erreicht -- siehe
+ein Projekt ändern, einen Layer
+anlegen/ändern/löschen/wiederherstellen/endgültig löschen, ein Feld
+anlegen/löschen und ein Stapel Objekt-Änderungen. Jede andere Anfrage lehnt
+die Bibliothek ab, bevor sie den Server erreicht -- siehe
 [„Was der Wächter durchlässt"](#was-der-wächter-durchlässt).
 
 ## Installation
@@ -103,6 +104,7 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 | `project.selection()` | `Selection`: was der Nutzer angeklickt hat |
 | `project.select(fids)` | setzt die Auswahl, macht den Layer aktiv |
 | `project.create_layer(name, geometrietyp, fields=...)` | legt einen leeren Layer an, gibt ihn zurück |
+| `project.update(name=..., center=..., zoom=..., ...)` | ändert Name, Beschreibung, Basiskarte, Mitte oder Zoom, gibt sich selbst zurück -- siehe [Ansicht setzen](#ansicht-setzen) |
 
 ### Layer
 
@@ -115,7 +117,8 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 | `layer.reference(feld)` | die eindeutige Schreibweise eines Felds |
 | `layer.count()` | Objektzahl |
 | `layer.feature(fid)` | ein Objekt mit allen Feldern |
-| `layer.values(feld)` | Werte mit Häufigkeit |
+| `layer.page(size, geometry=False)` | eine begrenzte Seite, mit Gesamtzahl -- siehe [Eine Seite lesen](#eine-seite-lesen) |
+| `layer.values(feld)` | Werte mit Häufigkeit, `.truncated` sagt, ob mehr existieren als zurückkamen |
 | `layer.update(name=..., visible=..., ...)` | ändert den Layer, gibt sich selbst zurück |
 | `layer.style` | der aktuelle Stil, `None` für die Standarddarstellung |
 | `layer.set_style(stil)` | ersetzt den Stil vollständig, siehe [Stil setzen](#stil-setzen) |
@@ -139,9 +142,32 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 | `.bbox(minLng, minLat, maxLng, maxLat)` | baut auf, immer EPSG:4326 |
 | `.order_by(feld, desc=True)` | baut auf |
 | `.count()` | führt aus, eine Anfrage |
+| `.page(size, geometry=False, cursor=None)` | führt aus, eine Anfrage, mit Gesamtzahl -- siehe unten |
 | `.fids()` | führt aus |
 | `.to_dataframe()` | führt aus, braucht `pandas` |
 | `for objekt in q` | führt aus, blättert selbst |
+
+### Eine Seite lesen
+
+`for objekt in q` und `.to_dataframe()` lesen die *ganze* Restriktion --
+richtig für ein Ergebnis, das ausgewertet wird, aber zu viel für einen
+Ausschnitt: beide fragen intern immer `size=1000` mit voller Geometrie ab,
+auch wenn nur fünfzig Zeilen gebraucht werden.
+
+`.page()` fragt genau das ab, was verlangt wird -- eine Anfrage, standardmäßig
+ohne Geometrie:
+
+```python
+seite = layer.where("baujahr > 1990").page(50)
+
+len(seite.features)     # 50 -- nicht 4128, und nicht 1000
+seite.total_count       # 4128 -- alle Treffer, nicht nur diese Seite
+seite.next_cursor       # weiterreichen, um die nächste Seite zu lesen
+```
+
+`total_count` reist nur auf der ersten Seite mit (`cursor=None`); danach ist
+er `None` -- der Server zählt nur einmal. Ohne ihn ließe sich "fünfzig von
+fünfzig" nicht von "fünfzig von viertausend" unterscheiden.
 
 ## Filterausdrücke
 
@@ -632,6 +658,28 @@ zu raten, welcher gemeint war. Ist schon ein Layer aktiv, reicht
 
 `select()` erhält alles andere. Die Auswahl der anderen Layer, jede Sortierung
 und jede gespeicherte Abfrage bleiben unverändert.
+
+## Ansicht setzen
+
+`project.view()` liest, wo die Karte steht; `project.update()` setzt es.
+
+```python
+project.update(center=(9.99, 53.55), zoom=16)      # der Nutzer sieht die neue Stelle
+project.update(name="Umbenannt", description="Neue Beschreibung")
+```
+
+Jedes Argument, das Sie weglassen, bleibt unverändert -- dieselbe Regel wie
+bei `layer.update()`. `srid` ist nicht dabei: die Speicher-CRS steht bei der
+Anlage fest.
+
+Kombinieren Sie `update()` mit `select()`, um ein Ergebnis zu zeigen, statt es
+nur zu beschreiben:
+
+```python
+treffer = layer.where("baujahr < 1900")
+project.update(center=(9.99, 53.55), zoom=16)
+project.select(treffer.fids(), layer=layer)
+```
 
 ## Zwei Böden für den Transport
 

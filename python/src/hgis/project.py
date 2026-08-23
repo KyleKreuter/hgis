@@ -134,6 +134,44 @@ class Project:
         )
         return Layer(self._client, data, project=self)
 
+    def update(
+        self,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        basemap: str | None = None,
+        basemap_opacity: float | None = None,
+        center: tuple[float, float] | None = None,
+        zoom: float | None = None,
+    ) -> "Project":
+        """
+        Change this project's own properties -- name, description, basemap
+        and where the map stands -- and return it.
+
+        Every argument left at None keeps its current value, the same rule
+        :meth:`hgis.layer.Layer.update` follows. ``center`` and ``zoom`` are
+        what moves the map for whoever has this project open on screen --
+        combine them with :meth:`select` to both point at and select what an
+        agent found, instead of only describing it:
+
+        >>> hits = layer.where("baujahr < 1900")
+        >>> project.update(center=(9.99, 53.55), zoom=16)
+        >>> project.select(hits.fids(), layer=layer)
+
+        :param center: (lng, lat) in EPSG:4326
+        :param zoom: 0 to 24, checked by the server
+        """
+        self._data = self._client.update_project(
+            self.id,
+            name=name,
+            description=description,
+            basemap=basemap,
+            basemap_opacity=basemap_opacity,
+            center=center,
+            zoom=zoom,
+        )
+        return self
+
     # --- what the user is looking at ---------------------------------------
 
     def view(self) -> "View":

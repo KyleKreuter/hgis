@@ -87,6 +87,7 @@ def test_there_is_no_generic_write_verb() -> None:
 
     for named in (
         "save_view_state",
+        "update_project",
         "create_layer",
         "update_layer",
         "delete_layer",
@@ -146,6 +147,7 @@ def test_the_view_state_write_still_works(transport) -> None:
 @pytest.mark.parametrize(
     ("method", "path"),
     [
+        ("PATCH", f"/api/projects/{PROJECT_ID}"),
         ("POST", f"/api/projects/{PROJECT_ID}/layers"),
         ("PATCH", f"/api/layers/{LAYER_ID}"),
         ("DELETE", f"/api/layers/{LAYER_ID}"),
@@ -258,6 +260,43 @@ def test_the_view_state_write_must_end_at_the_view_state(guarded, transport) -> 
     ):
         with pytest.raises(hgis.GuardError):
             guarded._send("PUT", path, json={})
+
+    assert transport.count == 0
+
+
+@pytest.mark.parametrize(
+    "project_id",
+    ["abc", "019fec3a", "019fec3a-ef0c-775c-a14f-7535e8a676eb-extra", "*"],
+)
+def test_the_project_update_needs_a_real_project_id(guarded, transport, project_id) -> None:
+    """The same UUID discipline the view-state write already needed, for this new path."""
+    with pytest.raises(hgis.GuardError):
+        guarded._send("PATCH", f"/api/projects/{project_id}", json={})
+
+    assert transport.count == 0
+
+
+def test_a_project_update_with_a_real_id_is_accepted(transport) -> None:
+    client = hgis.connect("http://stub", transport=transport)
+    client.update_project(PROJECT_ID, name="Neuer Name")
+    assert transport.count == 1
+
+
+def test_the_project_update_must_end_at_the_project_and_not_reach_its_view_state(
+    guarded, transport
+) -> None:
+    """
+    Not a prefix match, and not the wrong verb on an already-open path: a PATCH
+    must not reach ``view-state`` (PUT only) or a subtree below the project.
+    """
+    for path in (
+        f"/api/projects/{PROJECT_ID}/view-state",
+        f"/api/projects/{PROJECT_ID}/layers",
+        f"/api/projects/{PROJECT_ID}/layers/order",
+        f"/api/projects/{PROJECT_ID}/extra",
+    ):
+        with pytest.raises(hgis.GuardError):
+            guarded._send("PATCH", path, json={})
 
     assert transport.count == 0
 

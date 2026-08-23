@@ -57,9 +57,9 @@ from .errors import (
     UnknownNameError,
     UnsafeTransportError,
 )
-from .layer import Field, FieldSummary, Layer, LayerDescription, TrashEntry
+from .layer import Field, FieldSummary, Layer, LayerDescription, TrashEntry, ValueCounts
 from .project import Project, Selection, View
-from .query import Feature, Query
+from .query import Feature, Page, Query
 from .style import (
     RENDERER_CATEGORIZED,
     RENDERER_GRADUATED,
@@ -97,12 +97,14 @@ __all__ = [
     "Layer",
     "Query",
     "Feature",
+    "Page",
     "Field",
     "Selection",
     "View",
     "LayerDescription",
     "FieldSummary",
     "TrashEntry",
+    "ValueCounts",
     # the live channel, see Client.watch and Client.wait_for
     "Change",
     "Connected",

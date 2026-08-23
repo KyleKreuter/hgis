@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 import hgis
-from conftest import LAYER_ID, OTHER_LAYER_ID, FakeTransport, load, stub_server
+from conftest import LAYER_ID, OTHER_LAYER_ID, FakeTransport, load, stored, stub_server
 from hgis.transport import Response
 
 # --- fields ---------------------------------------------------------------
@@ -228,6 +228,36 @@ def test_values_reads_a_distribution(layer) -> None:
     values = layer.values("Straße", limit=5)
     assert ("Bäckerweg", 250) in values
     assert (None, 2) in values  # null is a value like any other here
+
+
+def test_values_still_behaves_like_a_plain_list(layer) -> None:
+    """
+    ValueCounts is a list subclass precisely so nothing that already treats
+    values() as list[tuple[value, count]] has to change.
+    """
+    values = layer.values("Straße", limit=5)
+    assert isinstance(values, list)
+    raw = stored("values-strasse.json")["values"]
+    assert values == [(entry["value"], entry["count"]) for entry in raw]
+    assert len(values) == 5
+    first, *_ = values
+    assert isinstance(first, tuple)
+
+
+def test_values_carries_whether_the_list_was_cut(layer, transport) -> None:
+    """
+    The gap this closes: the server already says whether more distinct values
+    exist than were returned, and values() used to throw that answer away --
+    forcing a caller who needed it to reach for layer._client.get(...) instead.
+    """
+    values = layer.values("Straße", limit=5)
+    assert values.truncated is True
+
+    transport.handler = lambda request: Response(
+        200, '{"field":"strasse","values":[{"value":"A","count":3}],"truncated":false}'
+    )
+    complete = layer.values("Straße", limit=20)
+    assert complete.truncated is False
 
 
 # --- selection ------------------------------------------------------------

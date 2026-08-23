@@ -155,11 +155,14 @@ _EVENTS_PATH = "/api/events"
 #:
 #: Reading is unrestricted -- a GET cannot destroy anything, and leaving it open
 #: keeps the API explorable. Writing is this list: the saved view state
-#: (:meth:`hgis.project.Project.select`); a layer's lifecycle -- create, change,
-#: delete (to the trash), restore, purge (out of the trash, for good); a batch
-#: of object edits; and a field's own create and delete. Every other method or
-#: path is refused before it reaches the network -- split, merge and layer
-#: reordering among them, which this stage does not open.
+#: (:meth:`hgis.project.Project.select`); a project's own properties -- name,
+#: description, basemap and where the map stands
+#: (:meth:`hgis.project.Project.update`); a layer's lifecycle -- create,
+#: change, delete (to the trash), restore, purge (out of the trash, for good);
+#: a batch of object edits; and a field's own create and delete. Every other
+#: method or path is refused before it reaches the network -- deleting a
+#: project, split, merge and layer reordering among them, which this stage
+#: does not open.
 #:
 #: Deliberately still a list of (method, path pattern) rather than a generic
 #: ``request(method, path, body)`` on :class:`Client`: the pattern only ever
@@ -171,6 +174,7 @@ _EVENTS_PATH = "/api/events"
 _ALLOWED: tuple[tuple[str, str], ...] = (
     ("GET", r".*"),
     ("PUT", rf"/api/projects/{_UUID}/view-state"),
+    ("PATCH", rf"/api/projects/{_UUID}"),
     ("POST", rf"/api/projects/{_UUID}/layers"),
     ("PATCH", rf"/api/layers/{_UUID}"),
     ("DELETE", rf"/api/layers/{_UUID}"),
@@ -195,8 +199,9 @@ def _check_allowed(method: str, url: str) -> None:
             return
     raise GuardError(
         f"{method.upper()} {path} ist nicht vorgesehen. Erlaubt sind lesende "
-        "Anfragen, project.select() und die Schreibwege dieser Stufe: ein Layer "
-        "anlegen, ändern, löschen, wiederherstellen oder endgültig löschen "
+        "Anfragen, project.select() und die Schreibwege dieser Stufe: ein Projekt "
+        "ändern (project.update()), ein Layer anlegen, ändern, löschen, "
+        "wiederherstellen oder endgültig löschen "
         "(project.create_layer(), layer.update()/.delete()/.restore()/.purge()), "
         "ein Stapel Objekt-Änderungen (layer.edit(), layer.insert(), "
         "layer.update_feature(), layer.delete_features()) sowie ein Feld anlegen "
@@ -573,6 +578,44 @@ class Client:
         """
         self._send("PUT", f"/api/projects/{project_id}/view-state", json=state)
 
+    def update_project(
+        self,
+        project_id: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        basemap: str | None = None,
+        basemap_opacity: float | None = None,
+        center: Iterable[float] | None = None,
+        zoom: float | None = None,
+    ) -> Any:
+        """
+        Change a project's own properties -- name, description, basemap and
+        where the map stands. See :meth:`hgis.project.Project.update`, which
+        is how to call this.
+
+        Every argument left at None is left as it stood -- ``srid`` is not
+        among them; it is fixed at creation and this endpoint has no way to
+        change it.
+
+        :param center: (lng, lat) in EPSG:4326
+        :param zoom: 0 to 24, checked by the server
+        """
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        if basemap is not None:
+            body["basemap"] = basemap
+        if basemap_opacity is not None:
+            body["basemapOpacity"] = basemap_opacity
+        if center is not None:
+            body["center"] = list(center)
+        if zoom is not None:
+            body["zoom"] = zoom
+        return self._send("PATCH", f"/api/projects/{project_id}", json=body)
+
     # --- layers --------------------------------------------------------
 
     def create_layer(
@@ -657,11 +700,12 @@ class Client:
         destroys the data.
 
         :return: whatever the server answered with, unchanged -- as of this
-            writing that is nothing (204), so this is None; a caller wanting
-            to know how many objects moved to the trash currently has to ask
-            :meth:`hgis.project.Project.trash` (unwritten this stage, but
-            ``client.get(f"/api/projects/{{project_id}}/trash")`` works) or
-            wait for this endpoint to start answering with a body
+            writing that is a trash-entry body (200): how many objects moved
+            to the trash, when, by whom. See :meth:`hgis.layer.Layer.delete`,
+            which turns it into a :class:`hgis.layer.TrashEntry`. Still
+            handled defensively for an answer with no body (204) too, should
+            this endpoint ever go back to one -- see that method's own
+            docstring
         """
         return self._send("DELETE", f"/api/layers/{layer_id}")
 
@@ -682,8 +726,9 @@ class Client:
         :meth:`delete_layer` -- the name says so on purpose.
 
         :return: whatever the server answered with, unchanged -- as of this
-            writing that is nothing (204). See :meth:`delete_layer`: the same
-            gap, and for the same reason -- there is nothing this library
+            writing that is a trash-entry body (200), the same shape
+            :meth:`delete_layer` answers with. Still handled defensively for
+            an answer with no body (204) too: there is nothing this library
             could honestly report instead without either guessing or asking
             the server again beforehand, and a "before" read cannot be
             trusted for an operation whose whole point is to destroy what it
