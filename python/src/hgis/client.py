@@ -293,6 +293,27 @@ class RequestGuard(Transport):
     involved at all then, so there is no promise about it left to break.
     That is intent, not the accident the two paragraphs above guard against.
 
+    **A third known gap, narrower than the two above:** :func:`_check_allowed`
+    parses ``url`` with :func:`urllib.parse.urlsplit`, which is not the exact
+    string that travels afterwards. ``urlsplit`` (hardened against
+    CVE-2021-23336) strips ``\\t``, ``\\n`` and ``\\r`` from the *whole* URL,
+    not only its edges, before splitting it -- so a path carrying one of
+    those is checked here with the character already gone, while
+    ``self.inner.request(...)`` two lines below still receives the original,
+    unstripped ``url``. Measured: a literal path of
+    ``/api/projects/{id}/layers\\norder`` -- ``\\n`` standing where the next
+    ``/`` would be -- is read by this check as ``/api/projects/{id}/layers``,
+    a permitted GET. Harmless today for a specific, checked reason rather
+    than none: :class:`hgis.transport.HttpxTransport` builds on
+    ``httpx.Client``, and ``httpx.URL(...)`` itself refuses a URL containing
+    such a character with ``InvalidURL`` before anything is sent -- verified
+    directly against httpx, not assumed. That refusal lives one floor below
+    this class, though, in a library this class does not control; a future
+    httpx version, or a :class:`~hgis.transport.Transport` substituted the
+    way the paragraph above describes, is not bound by it. Named here for the
+    same reason the two paragraphs above are: checked for the one way this
+    was found to matter, not proven closed.
+
     It stops mistakes, not intent: writing to hGIS from Python needs nothing
     more than ``import httpx``. What it removes is the accidental write that
     this library itself would otherwise make easy -- a wider one now than the

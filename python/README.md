@@ -118,7 +118,7 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 | `layer.count()` | Objektzahl |
 | `layer.feature(fid)` | ein Objekt mit allen Feldern |
 | `layer.page(size, geometry=False)` | eine begrenzte Seite, mit Gesamtzahl -- siehe [Eine Seite lesen](#eine-seite-lesen) |
-| `layer.values(feld)` | Werte mit Häufigkeit, `.truncated` sagt, ob mehr existieren als zurückkamen |
+| `layer.values(feld)` | Werte mit Häufigkeit, `.truncated` sagt, ob mehr existieren als zurückkamen (vor dem Slicen lesen -- danach ist es eine gewöhnliche `list`) |
 | `layer.update(name=..., visible=..., ...)` | ändert den Layer, gibt sich selbst zurück |
 | `layer.style` | der aktuelle Stil, `None` für die Standarddarstellung |
 | `layer.set_style(stil)` | ersetzt den Stil vollständig, siehe [Stil setzen](#stil-setzen) |

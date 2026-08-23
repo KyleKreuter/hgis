@@ -99,6 +99,12 @@ class ValueCounts(list):
     what used to send a caller straight to ``layer._client.get(...)`` -- a
     private attribute -- to ask the server directly. Ask this instead.
 
+    :attr:`truncated` belongs to *this* instance, not to the values -- the
+    standard behaviour of every ``list`` subclass, and this is no exception.
+    Slicing (``values[:5]``), ``sorted(values)``, ``list(values)`` and
+    ``values + [...]`` all build a plain ``list`` that no longer carries it.
+    Read :attr:`truncated` before doing any of that, not after.
+
     :param truncated: more distinct values exist in this field than were
         returned. See :meth:`Layer.values`'s ``limit``
     """
@@ -640,7 +646,9 @@ class Layer:
         Null appears as a value of its own. The list is cut at ``limit`` --
         read :attr:`ValueCounts.truncated` to know whether it was, rather
         than guessing from ``len(...) == limit``, which a field with exactly
-        ``limit`` distinct values would trigger falsely.
+        ``limit`` distinct values would trigger falsely. Read it before
+        slicing or sorting the result -- see :class:`ValueCounts`, ``truncated``
+        does not survive an operation that builds a new list.
 
         :return: a plain list of ``(value, count)`` pairs that also carries
             :attr:`ValueCounts.truncated`
