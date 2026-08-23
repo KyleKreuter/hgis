@@ -20,7 +20,6 @@ every candidate, the way :meth:`hgis.project.Project.layer` and
 
 from __future__ import annotations
 
-import itertools
 import re
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
@@ -382,18 +381,12 @@ def query_features(
     Objekte eines Layers, gefiltert, sortiert und auf limit begrenzt.
 
     Der Server filtert, nicht dieses Werkzeug: where, bbox und search
-    schränken ein, bevor etwas den Server verlässt -- holen Sie nie einen
-    ganzen Layer, um ihn hier zu sieben. truncated sagt, ob es mehr Treffer
-    gibt als geliefert wurden; match_count nennt deren echte Gesamtzahl. Bei
-    truncated=true reicht limit nicht für alle Treffer -- where enger fassen
-    oder limit erhöhen, statt die Antwort für vollständig zu halten.
-
-    limit und geometry begrenzen nur diese Antwort, noch nicht, was zwischen
-    hGIS und diesem Server fließt: intern wird stets eine volle Serverseite
-    (bis zu 1.000 Objekte, mit Geometrie) gelesen, erst danach auf limit
-    gekürzt und die Geometrie entfernt, wenn geometry=False. Bei einem
-    kleinen limit auf einem großen Layer ist die interne Anfrage also größer
-    als das, was Sie hier sehen.
+    schränken ein, und limit und geometry bestimmen, was der Server
+    überhaupt sendet -- nichts davon holt hier mehr, als am Ende
+    zurückkommt. truncated sagt, ob es mehr Treffer gibt als geliefert
+    wurden; match_count nennt deren echte Gesamtzahl. Bei truncated=true
+    reicht limit nicht für alle Treffer -- where enger fassen oder limit
+    erhöhen, statt die Antwort für vollständig zu halten.
 
     Rufen Sie describe_layer zuerst auf, um die echten Feldnamen zu sehen,
     sonst rät where.
@@ -408,15 +401,13 @@ def query_features(
             query = query.order_by(layer_obj.reference(resolved_field), desc=desc)
 
         clamped = max(1, min(limit, PAGE_SIZE))
-        match_count = query.count()
-        rows = list(itertools.islice(query, clamped))
+        page = query.page(clamped, geometry=geometry)
+        # total_count fehlt nur auf einer Folgeseite -- diese Seite beginnt
+        # immer bei cursor=None, trägt es also immer.
+        match_count = page.total_count if page.total_count is not None else 0
         features = [
-            FeatureRow(
-                fid=row.fid,
-                properties=row.properties,
-                geometry=row.geometry if geometry else None,
-            )
-            for row in rows
+            FeatureRow(fid=row.fid, properties=row.properties, geometry=row.geometry)
+            for row in page.features
         ]
         return QueryResult(
             layer_id=layer_obj.id,
@@ -512,22 +503,16 @@ def field_values(
         layer_obj = _resolve_layer(layer, project)
         resolved_field = layer_obj.field(field)
         reference = layer_obj.reference(resolved_field)
-        # Layer.values() nimmt genau diese Antwort entgegen, wirft dabei aber
-        # das eine Feld weg, das hier zählt: answer["truncated"]. Deshalb der
-        # direkte Aufruf statt der öffentlichen Methode -- siehe den Bericht
-        # an das Team.
-        answer = layer_obj._client.get(
-            f"/api/layers/{layer_obj.id}/values", field=reference, limit=max(1, limit)
-        )
-        values = [
-            ValueCount(value=entry.get("value"), count=entry.get("count"))
-            for entry in answer.get("values") or []
-        ]
+        counts = layer_obj.values(reference, limit=max(1, limit))
+        # truncated gehört der ValueCounts-Instanz, nicht ihren Einträgen --
+        # vor jeder Listenoperation lesen, siehe hgis.layer.ValueCounts.
+        truncated = counts.truncated
+        values = [ValueCount(value=value, count=count) for value, count in counts]
         return FieldValues(
             field_id=resolved_field.id,
             field_name=resolved_field.name,
             values=values,
-            truncated=bool(answer.get("truncated")),
+            truncated=truncated,
         )
     except Exception as error:
         raise tool_error(error, doing=f"Lesen der Werte von {field!r}") from error
