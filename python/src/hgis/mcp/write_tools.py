@@ -35,7 +35,7 @@ from pydantic import Field
 
 import hgis
 from hgis.client import _looks_like_id
-from hgis.errors import InvalidArgumentError
+from hgis.errors import InvalidArgumentError, UnknownNameError
 from hgis.mcp.server import client, server  # noqa: F401
 from hgis.mcp.shapes import WriteResult, tool_error  # noqa: F401
 
@@ -166,6 +166,22 @@ def _view_change_note(center: list[float] | None, zoom: float | None, computed: 
     return f"Zoom {how}: {zoom:.1f}"  # zoom is not None here, since one of the two must be
 
 
+def _visibility_note(target: hgis.Layer) -> str | None:
+    """
+    A clause naming that a layer is hidden, or None when it is visible.
+
+    select_features and set_view exist to show something on screen -- a
+    success message that does not mention a hidden layer would be true about
+    the write and false about the effect a person actually sees.
+    """
+    if target.visible:
+        return None
+    return (
+        f"'{target.name}' ist derzeit ausgeblendet -- am Bildschirm zeigt sich "
+        "nichts davon, bis update_layer(visible=true) das ändert"
+    )
+
+
 # --- what the person at the screen sees --------------------------------------
 
 
@@ -195,16 +211,42 @@ def select_features(
     beschreiben -- zum Beispiel die Treffer einer vorherigen Filterabfrage.
     Kombinieren Sie es mit set_view, um den Ausschnitt gleich mit dorthin zu
     bewegen.
+
+    Prüft, wie viele der angegebenen fids es im Layer tatsächlich gibt, und
+    sagt es in der summary -- eine veraltete oder erfundene fid ist erlaubt,
+    zeigt am Bildschirm aber ins Leere, und das soll nicht unbemerkt bleiben.
     """
     try:
         proj = _project(project)
-        target = proj.layer(layer) if layer is not None else None
-        proj.select(fids, layer=target)
-        if target is not None:
-            summary = f"{len(fids)} Objekt(e) in '{target.name}' ausgewählt."
+        if layer is not None:
+            target = proj.layer(layer)
         else:
-            summary = f"{len(fids)} Objekt(e) im aktiven Layer ausgewählt."
-        return WriteResult(summary=summary)
+            target = proj.selection().layer
+            if target is None:
+                raise UnknownNameError(
+                    "Kein Layer angegeben und keiner aktiv. Nennen Sie layer."
+                )
+
+        matched = 0
+        if fids:
+            fid_list = ", ".join(str(fid) for fid in fids)
+            matched = target.where(f"fid IN ({fid_list})").count()
+
+        proj.select(fids, layer=target)
+
+        if matched == len(fids):
+            parts = [f"{len(fids)} Objekt(e) in '{target.name}' ausgewählt"]
+        else:
+            missing = len(fids) - matched
+            parts = [
+                f"{matched} von {len(fids)} angegebenen fids gibt es in "
+                f"'{target.name}'; diese sind jetzt ausgewählt, {missing} davon "
+                "gibt es dort nicht und zeigen am Bildschirm ins Leere"
+            ]
+        note = _visibility_note(target)
+        if note:
+            parts.append(note)
+        return WriteResult(summary=". ".join(parts) + ".")
     except Exception as error:
         raise tool_error(error, doing=f"Auswählen in Projekt '{project}'") from error
 
@@ -273,6 +315,9 @@ def set_view(
             current = proj.selection(layer=target)
             proj.select(current.fids, layer=target)
             parts.append(f"'{target.name}' ist jetzt der aktive Layer in '{proj.name}'")
+            note = _visibility_note(target)
+            if note:
+                parts.append(note)
 
             if center is None and zoom is None:
                 center, zoom = _view_for_extent(target.extent)

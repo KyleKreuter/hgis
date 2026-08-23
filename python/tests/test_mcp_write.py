@@ -18,12 +18,13 @@ layer.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import pytest
 
 import hgis
-from conftest import LAYER_ID, PROJECT_ID, FakeTransport, Recorded, needs_mcp, ok
+from conftest import LAYER_ID, PROJECT_ID, FakeTransport, Recorded, load, needs_mcp, ok
 from hgis.transport import Response
 
 pytestmark = [needs_mcp, pytest.mark.mcp]
@@ -54,7 +55,12 @@ def _json_response(status: int, body: Any) -> Response:
     return Response(status, json.dumps(body))
 
 
-def _write_stub(request: Recorded, body: Any) -> Response:
+#: Marks that no PATCH has overridden the layer's stored style yet -- distinct
+#: from ``None``, which is itself a valid style (the default rendering).
+_STYLE_NOT_OVERRIDDEN = object()
+
+
+def _write_stub(request: Recorded, body: Any, style_state: list[Any] | None = None) -> Response:
     """
     Answers every path a write tool reads or writes.
 
@@ -64,6 +70,14 @@ def _write_stub(request: Recorded, body: Any) -> Response:
     have canonicalised, so a test reading the result back (``set_style``'s
     renderer type, say) is checking something a server actually said, not a
     value this file merely repeated.
+
+    ``style_state`` is the one piece of state a real server would keep and
+    this stub otherwise would not: a one-element box holding whatever the
+    last ``PATCH .../layers/{LAYER_ID}`` sent as ``style``, so a later GET of
+    the same layer reads back what was actually written -- the only way to
+    test a set_style -> get_style round trip honestly. ``None`` (no box
+    given) behaves as before: every GET answers with the stored fixture,
+    unaffected by any earlier write in the same test.
     """
     path, method = request.path, request.method
 
@@ -77,6 +91,10 @@ def _write_stub(request: Recorded, body: Any) -> Response:
         if path == f"/api/projects/{PROJECT_ID}/view-state":
             return ok("view-state.json")
         if path == f"/api/layers/{LAYER_ID}":
+            if style_state is not None and style_state[0] is not _STYLE_NOT_OVERRIDDEN:
+                data = json.loads(load("layer.json"))
+                data["style"] = style_state[0]
+                return _json_response(200, data)
             return ok("layer.json")
         if path == f"/api/layers/{EMPTY_LAYER_ID}":
             return _json_response(
@@ -94,6 +112,14 @@ def _write_stub(request: Recorded, body: Any) -> Response:
                     "fields": [],
                 },
             )
+        if path in (f"/api/layers/{OTHER_LAYER_ID}", f"/api/layers/{ACTIVE_LAYER_ID}"):
+            # "Straßen" bzw. "Flurstücke" -- nur ihre Summary aus layers.json,
+            # da select_features/set_view keine fields() dieser Layer brauchen.
+            wanted_id = path.rsplit("/", 1)[-1]
+            summary = next(
+                item for item in json.loads(load("layers.json")) if item["id"] == wanted_id
+            )
+            return _json_response(200, summary)
         if path.startswith(f"/api/layers/{LAYER_ID}/features/"):
             fid = path.rsplit("/", 1)[-1]
             return _json_response(
@@ -105,6 +131,17 @@ def _write_stub(request: Recorded, body: Any) -> Response:
                     "geometry": {"type": "Point", "coordinates": [10.0, 53.5]},
                 },
             )
+        if path.startswith("/api/layers/") and path.endswith("/features"):
+            # select_features prueft mit fid IN (...), wie viele der
+            # angegebenen fids es wirklich gibt -- fids 1..1003 gelten hier
+            # als vorhanden, unabhaengig vom Layer, das reicht fuer die Tests.
+            filter_text = request.param("filter") or ""
+            match = re.search(r"fid IN \(([^)]*)\)", filter_text)
+            if not match:
+                raise AssertionError(f"Unerwartete Filter-Anfrage: {filter_text!r}")
+            requested = [int(x.strip()) for x in match.group(1).split(",") if x.strip()]
+            existing = [fid for fid in requested if 1 <= fid <= 1003]
+            return _json_response(200, {"totalCount": len(existing), "features": []})
         raise AssertionError(f"Unerwartete Anfrage: {method} {request.url}")
 
     if method == "PUT" and path == f"/api/projects/{PROJECT_ID}/view-state":
@@ -148,6 +185,8 @@ def _write_stub(request: Recorded, body: Any) -> Response:
         )
 
     if method == "PATCH" and path == f"/api/layers/{LAYER_ID}":
+        if "style" in body and style_state is not None:
+            style_state[0] = body["style"]
         return _json_response(
             200,
             {
@@ -259,11 +298,15 @@ def transport() -> FakeTransport:
     handler runs, though, so the closure below reads it from there. The box
     exists only so the handler can refer to the transport it will belong to
     before that object exists yet.
+
+    Also carries a fresh, empty ``style_state`` box, one per test -- see
+    ``_write_stub`` for what it is for.
     """
     box: list[FakeTransport] = []
+    style_state: list[Any] = [_STYLE_NOT_OVERRIDDEN]
 
     def handler(request: Recorded) -> Response:
-        return _write_stub(request, box[0].bodies[-1])
+        return _write_stub(request, box[0].bodies[-1], style_state)
 
     instance = FakeTransport(handler)
     box.append(instance)
@@ -344,12 +387,23 @@ def mcp_client_underreporting(underreporting_transport: FakeTransport):
 # --- what the person at the screen sees --------------------------------------
 
 
+#: layer.json/layers.json: "Gebäude Speicherstadt" ist als visible=false
+#: abgelegt -- das ist im echten Datensatz so und genau der Fall, für den
+#: die Sichtbarkeits-Anmerkung existiert (siehe _visibility_note).
+_HIDDEN_LAYER_NOTE = (
+    "'Gebäude Speicherstadt' ist derzeit ausgeblendet -- am Bildschirm zeigt "
+    "sich nichts davon, bis update_layer(visible=true) das ändert."
+)
+
+
 def test_select_features_by_layer_name(mcp_client, transport) -> None:
     from hgis.mcp.write_tools import select_features
 
     result = select_features("Leitungsnetz Nord", [10, 11, 12], layer="Gebäude Speicherstadt")
 
-    assert result.summary == "3 Objekt(e) in 'Gebäude Speicherstadt' ausgewählt."
+    assert result.summary == (
+        f"3 Objekt(e) in 'Gebäude Speicherstadt' ausgewählt. {_HIDDEN_LAYER_NOTE}"
+    )
     put = next(r for r in transport.requests if r.method == "PUT")
     body = _body_of(transport, put)
     assert body["activeLayerId"] == LAYER_ID
@@ -357,12 +411,21 @@ def test_select_features_by_layer_name(mcp_client, transport) -> None:
 
 
 def test_select_features_without_layer_uses_the_active_one(mcp_client, transport) -> None:
-    """Kein Layer angegeben -- die Auswahl landet dort, wo der Nutzer gerade ist."""
+    """
+    Kein Layer angegeben -- die Auswahl landet dort, wo der Nutzer gerade
+    ist ("Flurstücke"). select_features muss den Layer dafür auflösen (um
+    die fids zu prüfen) und nennt ihn deshalb jetzt beim Namen statt nur
+    "aktiver Layer" zu sagen -- genauer als vorher, nicht ungenauer.
+    """
     from hgis.mcp.write_tools import select_features
 
     result = select_features(PROJECT_ID, [7])
 
-    assert result.summary == "1 Objekt(e) im aktiven Layer ausgewählt."
+    assert result.summary == (
+        "1 Objekt(e) in 'Flurstücke' ausgewählt. 'Flurstücke' ist derzeit "
+        "ausgeblendet -- am Bildschirm zeigt sich nichts davon, bis "
+        "update_layer(visible=true) das ändert."
+    )
     put = next(r for r in transport.requests if r.method == "PUT")
     body = _body_of(transport, put)
     assert body["activeLayerId"] == ACTIVE_LAYER_ID
@@ -374,9 +437,41 @@ def test_select_features_empty_list_clears_the_selection(mcp_client, transport) 
 
     result = select_features(PROJECT_ID, [], layer=LAYER_ID)
 
-    assert result.summary == "0 Objekt(e) in 'Gebäude Speicherstadt' ausgewählt."
+    assert result.summary == (
+        f"0 Objekt(e) in 'Gebäude Speicherstadt' ausgewählt. {_HIDDEN_LAYER_NOTE}"
+    )
     put = next(r for r in transport.requests if r.method == "PUT")
     assert _body_of(transport, put)["layers"][LAYER_ID]["selection"] == []
+
+
+def test_select_features_reports_fids_that_do_not_exist(mcp_client, transport) -> None:
+    """
+    fid 9999 gibt es in keinem Layer dieser Fixture (>1003) -- die summary
+    muss das nennen, statt unverändert Erfolg zu melden. Die Auswahl wird
+    trotzdem gesetzt (das war so gewollt, nur eben nicht ganz erfüllbar).
+    """
+    from hgis.mcp.write_tools import select_features
+
+    result = select_features(PROJECT_ID, [1, 2, 9999], layer=LAYER_ID)
+
+    assert result.summary == (
+        "2 von 3 angegebenen fids gibt es in 'Gebäude Speicherstadt'; diese "
+        "sind jetzt ausgewählt, 1 davon gibt es dort nicht und zeigen am "
+        f"Bildschirm ins Leere. {_HIDDEN_LAYER_NOTE}"
+    )
+    put = next(r for r in transport.requests if r.method == "PUT")
+    # Trotz der fehlenden fid wird genau das gesetzt, was verlangt wurde --
+    # das Werkzeug korrigiert die Eingabe nicht heimlich.
+    assert _body_of(transport, put)["layers"][LAYER_ID]["selection"] == [1, 2, 9999]
+
+
+def test_select_features_on_a_visible_layer_has_no_note(mcp_client, transport) -> None:
+    """"Straßen" ist visible=true -- keine Anmerkung, keine Überraschung."""
+    from hgis.mcp.write_tools import select_features
+
+    result = select_features(PROJECT_ID, [1], layer="Straßen")
+
+    assert result.summary == "1 Objekt(e) in 'Straßen' ausgewählt."
 
 
 def test_set_view_switches_the_active_layer_and_keeps_its_selection(mcp_client, transport) -> None:
@@ -479,6 +574,24 @@ def test_set_view_cannot_fly_to_an_empty_layer(mcp_client, transport) -> None:
         set_view(PROJECT_ID, layer=EMPTY_LAYER_ID)
 
     assert not any(r.method in ("PUT", "PATCH") for r in transport.requests)
+
+
+def test_set_view_notes_an_invisible_layer(mcp_client, transport) -> None:
+    """
+    "Gebäude Speicherstadt" ist in der Fixture visible=false -- set_view
+    wechselt trotzdem zu ihm und berechnet den Ausschnitt, meldet aber auch,
+    dass am Bildschirm nichts davon zu sehen ist.
+    """
+    from hgis.mcp.write_tools import set_view
+
+    result = set_view(PROJECT_ID, layer=LAYER_ID)
+
+    assert "'Gebäude Speicherstadt' ist jetzt der aktive Layer" in result.summary
+    assert "aus seinem Ausschnitt berechnet" in result.summary
+    assert (
+        "'Gebäude Speicherstadt' ist derzeit ausgeblendet -- am Bildschirm "
+        "zeigt sich nichts davon, bis update_layer(visible=true) das ändert"
+    ) in result.summary
 
 
 # --- objects: what is stored --------------------------------------------
@@ -793,6 +906,64 @@ def test_set_style_dict_shaped_like_style_also_works(mcp_client, transport) -> N
     assert "Renderer 'single'" in result.summary
     patch = next(r for r in transport.requests if r.method == "PATCH")
     assert _body_of(transport, patch)["style"]["renderer"]["type"] == "single"
+
+
+def test_style_round_trip_through_get_style_and_set_style_loses_nothing(
+    mcp_client, transport
+) -> None:
+    """
+    Genau der Ablauf, den set_styles Docstring empfiehlt: get_style lesen,
+    das Ergebnis unverändert an set_style zurückgeben, erneut lesen,
+    vergleichen. Geht bewusst über server.call_tool() statt über einen
+    direkten Python-Aufruf -- ein direkter Aufruf hätte den eigentlichen
+    Fehler nie ausgelöst: to_style_json() reicht ein rohes dict unverändert
+    durch, ohne es gegen hgis.Style zu validieren. Nur der Weg über Pydantic
+    (echtes MCP-Protokoll) baut die Struktur wirklich aus dem JSON auf und
+    hätte camelCase-Schlüssel aus einem rohen get_style-dict still auf None
+    fallen lassen, wenn set_style snake_case erwartet.
+    """
+    import asyncio
+
+    from hgis.mcp import read_tools, write_tools  # noqa: F401 -- registriert beide Seiten
+    from hgis.mcp.server import server
+
+    full_style = {
+        "renderer": {
+            "type": "single",
+            "symbol": {
+                "kind": "marker",
+                "shape": "circle",
+                "size": 8.0,
+                "fill_color": "#3a86ff",
+                "stroke_color": "#111111",
+                "stroke_width": 2.0,
+            },
+        },
+        "opacity": 0.85,
+    }
+
+    async def round_trip() -> tuple[Any, Any]:
+        first_set = await server.call_tool("set_style", {"layer": LAYER_ID, "style": full_style})
+        assert not first_set.is_error, first_set
+
+        first_read = await server.call_tool("get_style", {"layer": LAYER_ID})
+        assert not first_read.is_error, first_read
+        first_style = first_read.structured_content["style"]
+
+        second_set = await server.call_tool("set_style", {"layer": LAYER_ID, "style": first_style})
+        assert not second_set.is_error, second_set
+
+        second_read = await server.call_tool("get_style", {"layer": LAYER_ID})
+        assert not second_read.is_error, second_read
+        return first_style, second_read.structured_content["style"]
+
+    first_style, second_style = asyncio.run(round_trip())
+
+    assert second_style == first_style
+    symbol = second_style["renderer"]["symbol"]
+    assert symbol["fill_color"] == "#3a86ff"
+    assert symbol["stroke_color"] == "#111111"
+    assert symbol["stroke_width"] == 2.0
 
 
 # --- resolving a layer or project by name -----------------------------------
