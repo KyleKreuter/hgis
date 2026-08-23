@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Iterator, Sequence
 
 from .edits import EditResult, FeatureUpdate, NewFeature, _reject_scalar_iterable
 from .edits import apply_edits as _apply_edits
-from .errors import ApiError
+from .errors import ApiError, InvalidArgumentError
 from .query import PAGE_SIZE, Feature, Page, Query, _column_to_name, _to_feature
 from .style import Style, to_style_json
 
@@ -122,6 +122,30 @@ def _to_trash_entry(data: dict[str, Any]) -> TrashEntry:
         feature_count=data.get("featureCount", 0),
         deleted_by=data.get("deletedBy"),
     )
+
+
+@dataclass(frozen=True)
+class Classification:
+    """
+    Where a numeric field's class boundaries fall, as :meth:`Layer.classify`
+    found them.
+
+    ``breaks`` runs low to high and usually holds one more entry than there
+    are classes -- both edges plus every boundary between. ``minimum`` and
+    ``maximum`` are the field's actual range, which is what the outermost
+    breaks equal; they are named separately because a style may place its
+    boundaries elsewhere, and then the difference is the point.
+
+    :param null_count: rows with no value here -- they fall into no class at
+        all, which is easy to miss when the breaks look complete
+    """
+
+    field: str
+    method: str
+    breaks: list[float]
+    minimum: float | None = None
+    maximum: float | None = None
+    null_count: int | None = None
 
 
 class Layer:
@@ -515,10 +539,70 @@ class Layer:
             # twenty-three. The reason is kept, not swallowed.
             return FieldSummary(**base, note=str(error))
 
+    def classify(
+        self, field: str, *, classes: int = 5, method: str = "quantile"
+    ) -> "Classification":
+        """
+        Where the class boundaries of a numeric field fall.
+
+        >>> layer.classify("Baujahr", classes=4)
+        Classification(field='baujahr', method='quantile',
+                       breaks=[1900.0, 1927.0, 1957.0, 1988.0, 2019.0], ...)
+
+        The counterpart to :meth:`values`, which answers the same question for
+        text fields. The server computes this; nothing is read into Python.
+
+        Worth knowing for a ``graduated`` style: setting one with ``method``
+        and ``class_count`` stores the instruction, not the result -- the map
+        computes the boundaries when it draws. This is how to see what they
+        actually are.
+
+        :param field: name, column or id -- resolved like every other field
+            reference here, see :meth:`reference`
+        :param classes: how many classes to divide into. The server allows 2
+            to 12 and says so when given anything else; not clamped here,
+            because quietly changing the number would answer a question nobody
+            asked.
+        :param method: how to place the boundaries -- ``quantile``,
+            ``equal_interval`` or ``jenks``, see :class:`hgis.style.Renderer`
+        :raises hgis.errors.InvalidArgumentError: the field holds text, not
+            numbers -- checked here, before a request goes out
+        :raises hgis.errors.ApiError: the server refused, naming what would
+            have been valid
+        """
+        item = self.field(field)
+        if not item.is_numeric:
+            raise InvalidArgumentError(
+                f"Feld {item.name!r} ist vom Typ {item.type}. Eine "
+                "Klasseneinteilung gibt es nur für Zahlenfelder; für Textfelder "
+                "beantwortet values() dieselbe Frage."
+            )
+        answer = self._client.get(
+            f"/api/layers/{self.id}/classify",
+            field=self.reference(item),
+            classes=classes,
+            method=method,
+        )
+        return Classification(
+            field=answer.get("field", item.name),
+            method=answer.get("method", method),
+            breaks=[float(value) for value in answer.get("breaks") or []],
+            minimum=answer.get("min"),
+            maximum=answer.get("max"),
+            null_count=answer.get("nullCount"),
+        )
+
     def _numeric_summary(
         self, item: Field, base: dict[str, Any], reference: str
     ) -> "FieldSummary":
-        """min, max and the empty count in one request, from /classify."""
+        """
+        min, max and the empty count in one request, from /classify.
+
+        Kept separate from :meth:`classify` even though both call the same
+        endpoint: this one already holds a resolved ``Field`` and its
+        reference, and going through ``classify`` would look them up a second
+        time -- once per field, on a layer that may have two dozen.
+        """
         breaks = self._client.get(
             f"/api/layers/{self.id}/classify", field=reference, classes=2
         )

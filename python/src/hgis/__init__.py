@@ -57,7 +57,15 @@ from .errors import (
     UnknownNameError,
     UnsafeTransportError,
 )
-from .layer import Field, FieldSummary, Layer, LayerDescription, TrashEntry, ValueCounts
+from .layer import (
+    Classification,
+    Field,
+    FieldSummary,
+    Layer,
+    LayerDescription,
+    TrashEntry,
+    ValueCounts,
+)
 from .project import Project, Selection, View
 from .query import Feature, Page, Query
 from .style import (
@@ -105,6 +113,7 @@ __all__ = [
     "FieldSummary",
     "TrashEntry",
     "ValueCounts",
+    "Classification",
     # the live channel, see Client.watch and Client.wait_for
     "Change",
     "Connected",

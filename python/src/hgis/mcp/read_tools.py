@@ -574,32 +574,19 @@ def field_classes(
     try:
         layer_obj = _resolve_layer(layer, project)
         resolved_field = layer_obj.field(field)
-        if not resolved_field.is_numeric:
-            raise ToolError(
-                f"Feld '{resolved_field.name}' ist vom Typ {resolved_field.type}. "
-                "Klasseneinteilung ist nur für Zahlenfelder möglich."
-            )
-        reference = layer_obj.reference(resolved_field)
-        # Kein oeffentlicher Weg zu /classify: Layer._numeric_summary() ruft
-        # den Endpunkt intern fuer describe() auf, aber mit fest verdrahteten
-        # method="quantile" und classes=2 -- keine oeffentliche Methode nimmt
-        # eigene Werte fuer beide entgegen. Direkter Client-Zugriff wie zuvor
-        # bei field_values/Layer.values(), bevor es ValueCounts gab -- siehe
-        # den Bericht an das Team.
-        answer = layer_obj._client.get(
-            f"/api/layers/{layer_obj.id}/classify",
-            field=reference,
-            method=method,
-            classes=classes,
-        )
+        # The numeric check lives in Layer.classify() and refuses before any
+        # request goes out; the id and name are read here because the answer
+        # carries the column name, and an agent that asked by id should get
+        # back what it asked with.
+        found = layer_obj.classify(field, classes=classes, method=method)
         return FieldClasses(
             field_id=resolved_field.id,
             field_name=resolved_field.name,
-            method=answer.get("method", method),
-            breaks=[float(value) for value in answer.get("breaks") or []],
-            minimum=answer.get("min"),
-            maximum=answer.get("max"),
-            null_count=answer.get("nullCount", 0),
+            method=found.method,
+            breaks=found.breaks,
+            minimum=found.minimum,
+            maximum=found.maximum,
+            null_count=found.null_count or 0,
         )
     except Exception as error:
         raise tool_error(error, doing=f"Klasseneinteilung von {field!r}") from error
