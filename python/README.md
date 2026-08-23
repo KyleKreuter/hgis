@@ -825,6 +825,146 @@ allgemeine Erlaubnisliste ließe jedes `GET` durch und prüfte damit nichts
 Eigenes --, und dass `watch()`/`wait_for()` tatsächlich neu verbinden, auch
 über einen echten, sauber schließenden Socket (`tests/test_channel.py`).
 
+## MCP-Server
+
+`python/src/hgis/mcp/` macht diese Bibliothek zu Werkzeugen, die ein Agent
+aufrufen kann -- über MCP, das Model Context Protocol. Der Server hält keine
+eigene Logik: jedes Werkzeug ruft `hgis` auf und gibt die Antwort weiter. Was
+einem Agenten dort unbequem vorkommt, liegt an der Bibliothek und gehört dort
+behoben, nicht im Werkzeug drumherum.
+
+### Einrichten
+
+```bash
+pip install "hgis[http,mcp]"
+```
+
+Für Claude Code liegt eine `.mcp.json` im Projektwurzelverzeichnis:
+
+```json
+{
+  "mcpServers": {
+    "hgis": {
+      "command": "uv",
+      "args": ["run", "--project", "python", "hgis-mcp"],
+      "env": { "HGIS_URL": "http://localhost:8080" }
+    }
+  }
+}
+```
+
+Gemessen: Genau dieser Start verbindet sich mit einem laufenden hGIS und
+meldet 22 Werkzeuge.
+
+Für einen anderen Host reicht der Befehl `hgis-mcp` allein -- gleichwertig
+`python -m hgis.mcp`. `HGIS_URL` bestimmt, wohin er sich verbindet; ohne sie
+gilt `http://localhost:8080`.
+
+Die Verbindung zu hGIS öffnet sich erst beim ersten Werkzeugaufruf, nicht
+beim Start des Servers -- ein Agent-Host startet seine MCP-Server oft, lange
+bevor hGIS überhaupt läuft. Ein Server, der deshalb den Start verweigerte,
+würde als kaputt gemeldet, für einen Grund, der nichts mit ihm zu tun hat.
+
+### Wann Werkzeug, wann Python
+
+Ein Werkzeugaufruf beantwortet eine kleine, häufige Frage in einem Schritt.
+Die eigentliche Arbeit -- einen Layer mit einer Tabelle verbinden, Geometrien
+durchgehen, irgendetwas berechnen -- ist ein Skript, und diese Bibliothek
+steht ihm direkt zur Verfügung. Wer diese Trennung nicht macht, schreibt für
+jede Frage ein Skript oder versucht, mit Werkzeugen zu rechnen.
+
+Am Layer "Gebäude Speicherstadt" (1003 Objekte, Felder Straße/Höhe/Baujahr)
+sieht der Unterschied so aus. Ein Werkzeugaufruf, ein Schritt, gemessen:
+
+```
+count_features(layer="Gebäude Speicherstadt", project="Leitungsnetz Nord",
+                where="baujahr < 1950")
+→ 440
+```
+
+Die eigentliche Arbeit -- eine Frage, die kein einzelnes Werkzeug beantwortet
+--, als Skript, mit echten Zahlen aus demselben Layer:
+
+```python
+df = layer.where("baujahr IS NOT NULL").to_dataframe(geometry=False)
+df["jahrzehnt"] = (df["Baujahr"] // 10 * 10).astype(int)
+print(df.groupby("jahrzehnt")["Höhe"].mean().round(1))
+```
+
+```
+jahrzehnt
+1900     8.0
+1910     8.4
+1920     8.8
+1930     9.2
+1940     9.6
+1950    10.0
+1960     8.0
+1970     8.4
+1980     8.8
+1990     9.2
+2000     9.6
+2010    10.0
+Name: Höhe, dtype: float64
+```
+
+### Die Werkzeuge
+
+Neun lesende, dieselbe Oberfläche wie oben in dieser Datei, nur als
+Werkzeugaufruf statt als Methode:
+
+| Aufruf | Antwort |
+|---|---|
+| `list_projects()` | alle Projekte, mit Layer- und Objektzahl |
+| `describe_project(project)` | ein Projekt mit seiner Layer-Liste |
+| `describe_layer(layer, stats=, sample=, ...)` | Felder, Wertebereiche, Beispielzeilen -- als Struktur und als Fließtext, siehe [`describe()`](#describe) |
+| `query_features(layer, where=, bbox=, search=, order_by=, limit=, geometry=, ...)` | gefilterte, sortierte, begrenzte Objekte; `truncated` und `match_count` wie bei [`.page()`](#eine-seite-lesen) |
+| `count_features(layer, where=, bbox=, search=, ...)` | nur die Anzahl, kein Datenrumpf |
+| `field_values(layer, field, limit=, ...)` | Werte mit Häufigkeit, `truncated` |
+| `get_style(layer, ...)` | der aktuelle Stil als JSON, `None` für die Standarddarstellung |
+| `get_view(project)` | Mitte, Zoom, Ausschnitt, aktiver Layer |
+| `get_selection(project, layer=)` | was gerade ausgewählt ist |
+
+Dreizehn schreibende. Auswahl und Ansicht kosten nichts, wenn ein Aufruf
+danebengeht -- der nächste setzt beides wieder zurecht. Objekte, Layer,
+Felder und Stil sind unterschiedlich weit rückgängig zu machen, dieselbe
+Unterscheidung wie in [„Was unwiederbringlich ist"](#was-unwiederbringlich-ist)
+oben:
+
+| Aufruf | Wirkung | Rückgängig? |
+|---|---|---|
+| `select_features(project, fids, layer=)` | setzt die Auswahl | ja, jederzeit |
+| `set_view(project, layer=, center=, zoom=)` | bewegt die Karte, wechselt den aktiven Layer | ja, jederzeit |
+| `insert_features(layer, features, ...)` | legt Objekte an | ja, aber nur durch `delete_features` mit den zurückgegebenen fids |
+| `update_features(layer, updates, ...)` | ändert Geometrie/Attribute | **nein**, nur über das Änderungsprotokoll |
+| `delete_features(layer, fids, ...)` | löscht Objekte | **nein**, nur über das Änderungsprotokoll |
+| `create_layer(project, name, geometry_type, fields=)` | legt einen leeren Layer an | ja, mit `delete_layer` |
+| `update_layer(layer, name=, visible=, ...)` | ändert Name/Sichtbarkeit | ja, jederzeit |
+| `delete_layer(layer, ...)` | Layer in den Papierkorb | ja, mit `restore_layer` -- bis `purge_layer` |
+| `restore_layer(layer_id)` | Layer aus dem Papierkorb zurück | -- |
+| `purge_layer(layer_id)` | Layer und Daten endgültig löschen | **nein** |
+| `create_field(layer, name, type, ...)` | neues Attributfeld | ja, mit `delete_field`, solange leer |
+| `delete_field(layer, field, ...)` | löscht ein Feld samt Inhalt | **nein**, nur über das Änderungsprotokoll |
+| `set_style(layer, style, ...)` | ersetzt den Stil vollständig | ja, mit dem vorher über `get_style` gelesenen Stand |
+
+`layer_id` bei `restore_layer`/`purge_layer` ist ausdrücklich die Id, nicht
+Name-oder-Id wie sonst: Ein Layer im Papierkorb ist über seinen Namen nicht
+mehr auffindbar, und `delete_layer` nennt die Id in seiner eigenen Antwort.
+
+### Die volle Oberfläche, ohne Schalter
+
+Alle 22 Werkzeuge stehen von Anfang an bereit, ohne Erlaubnisschalter, der
+die schreibenden abschalten könnte. Das ist eine ausdrückliche Entscheidung
+des Nutzers, nachdem ihm das Risiko vorgelegt wurde: `purge_layer` löscht
+endgültig, `delete_features` ist über diese Bibliothek nicht rückgängig zu
+machen, und beides ist für jeden Agenten mit Verbindung zum Server erreichbar.
+
+Die Folge: **Der Docstring jedes Werkzeugs ist die einzige Warnung, die es
+gibt.** Jedes zerstörende Werkzeug nennt im ersten Satz seiner Beschreibung,
+was es zerstört -- das ist keine Höflichkeit, sondern der einzige Schutz, den
+dieser Server bietet. Gemessen: alle 68 Parameter der 22 Werkzeuge tragen
+eine eigene Beschreibung, nicht nur der Werkzeugname selbst.
+
 ## Tests
 
 ```bash
@@ -857,7 +997,11 @@ python -m pytest -m "not live"                        # ohne
   löschen.
 - Kein Teilen, Zusammenführen oder Neuordnen von Layern über diese
   Bibliothek.
-- Kein Löschen eines ganzen Projekts.
+- Kein Löschen eines ganzen Projekts. Beim Bau des MCP-Servers bestätigt:
+  `POST /api/projects` steht nicht in `RequestGuard._ALLOWED`, also kann auch
+  kein Agent über eines seiner Werkzeuge ein Projekt anlegen oder löschen --
+  beide Prüfagenten der MCP-Stufe mussten zu `curl` greifen, um sich
+  überhaupt eine eigene Fläche zum Arbeiten zu schaffen. Offen als Aufgabe 17.
 - Kein Lesen des Papierkorbs oder des Änderungsprotokolls über eine eigene
   Methode -- `client.get(".../trash")` und `client.get(".../changes")`
   funktionieren bereits, denn Lesen ist uneingeschränkt; eine eigene,
@@ -872,7 +1016,10 @@ python -m pytest -m "not live"                        # ohne
   laufenden Lesevorgang. Mit einer kurzen `timeout` reagiert es zeitnah;
   beim Vorgabewert kann es genauso lange brauchen wie die Frist oben.
 - `PyodideTransport.events()` läuft nicht -- nur unter CPython.
-- Kein MCP-Server.
+- Ein per `set_view` (oder `project.update()`) gesetzter Kartenausschnitt
+  erreicht einen bereits offenen Browser-Tab nicht von selbst -- der
+  Serverstand stimmt sofort, der Tab zieht erst bei einem Neuladen nach.
+  Gehört zu Aufgabe 9.
 - Kein Editor im Browser.
 - `to_dataframe()` überträgt GeoJSON. Arrow und GeoParquet sind eine Frage der
   Geschwindigkeit. Sie kommen später.
