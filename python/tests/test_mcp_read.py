@@ -155,6 +155,25 @@ def test_query_features_reports_the_true_total_when_truncated(mcp_client) -> Non
     assert all(row.geometry is None for row in result.features)
 
 
+def test_query_features_asks_the_server_for_exactly_limit_and_geometry(
+    mcp_client, transport
+) -> None:
+    """
+    Vor Query.page() ging trotz limit=50, geometry=False immer size=1000 und
+    geometry=true hinaus -- Query.__iter__ kennt kein size, kein geometry=False.
+    Mit page() muss der tatsächliche Request das anfragen, was limit und
+    geometry hier verlangen, nicht mehr.
+    """
+    from hgis.mcp.read_tools import query_features
+
+    query_features(LAYER_ID, limit=50, geometry=False)
+
+    request = transport.requests[-1]
+    assert request.path == f"/api/layers/{LAYER_ID}/features"
+    assert request.param("size") == "50"
+    assert request.param("geometry") == "false"
+
+
 def test_query_features_limit_is_respected(mcp_client) -> None:
     from hgis.mcp.read_tools import query_features
 
@@ -166,7 +185,11 @@ def test_query_features_limit_is_respected(mcp_client) -> None:
 def test_query_features_with_geometry_includes_it(mcp_client) -> None:
     from hgis.mcp.read_tools import query_features
 
-    result = query_features(LAYER_ID, limit=1, geometry=True)
+    # limit=2, nicht 1: stub_server behandelt size=1 als den count()-Sonderfall
+    # (features-size1.json, ohne Geometrie) unabhaengig vom geometry-Parameter --
+    # eine Kombination, die es vor Query.page() nie gab. size=2 trifft den
+    # normalen Zweig, der geometry tatsaechlich beachtet.
+    result = query_features(LAYER_ID, limit=2, geometry=True)
     assert result.features[0].geometry is not None
     assert result.features[0].geometry["type"] == "MultiPolygon"
 
@@ -187,7 +210,8 @@ def test_query_features_passes_filter_bbox_sort_and_search_through(
         limit=10,
     )
 
-    # Der Request, der die Zeilen holt -- nach dem count()-Request davor.
+    # Query.page() holt Zeilen und Gesamtzahl in einem Request -- der letzte
+    # ist der einzige, der die Layer-Auflösung davor mitzählt.
     request = transport.requests[-1]
     assert request.param("filter") == '"Baujahr" > 1990'
     assert request.param("search") == "Speicher"
@@ -245,7 +269,11 @@ def three_rows_client():
         if request.path == f"/api/layers/{layer_id}":
             return Response(200, json.dumps({"id": layer_id, "name": "Grenzfall", "fields": []}))
         if request.path == f"/api/layers/{layer_id}/features":
-            page = rows[:1] if request.param("size") == "1" else rows
+            # Wie der echte Server: liefert höchstens size Zeilen, nicht mehr --
+            # Query.page() verlässt sich genau darauf, um truncated korrekt zu
+            # berechnen, statt selbst in Python zu kürzen.
+            size = int(request.param("size") or len(rows))
+            page = rows[:size]
             return Response(200, json.dumps({"features": page, "totalCount": len(rows)}))
         raise AssertionError(f"Unerwartete Anfrage: {request.method} {request.url}")
 
