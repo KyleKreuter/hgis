@@ -75,6 +75,40 @@ class Feature:
         return f"<hgis.Feature fid={self.fid} {shown}{more}>"
 
 
+@dataclass(frozen=True)
+class Page:
+    """
+    One page of a :class:`Query`, exactly as large as :meth:`Query.page` asked
+    for and no larger.
+
+    :param features: at most the requested ``size`` of them, geometry included
+        only when it was asked for
+    :param total_count: how many objects the whole restriction matches, not
+        just this page -- present only when this page started at the
+        beginning (``cursor`` was None on the request that produced it), since
+        that is the only request the server counts on. None on every later
+        page: without it, a caller who saw 50 of a page and stopped there has
+        no way to tell 50 of 50 from 50 of 4000
+    :param next_cursor: pass back as ``cursor`` to read the next page. None
+        when this was the last one
+    """
+
+    features: list[Feature]
+    total_count: int | None
+    next_cursor: str | None
+
+    def __iter__(self) -> Iterator[Feature]:
+        return iter(self.features)
+
+    def __len__(self) -> int:
+        return len(self.features)
+
+    def __repr__(self) -> str:
+        total = "unbekannt" if self.total_count is None else str(self.total_count)
+        more = ", weitere folgen" if self.next_cursor else ""
+        return f"<hgis.Page {len(self.features)} von {total} Treffern{more}>"
+
+
 class Query:
     """
     A restriction on one layer, not yet run.
@@ -202,6 +236,48 @@ class Query:
         total = page.get("totalCount")
         # totalCount only travels on a first page, and this always is one.
         return int(total) if total is not None else len(page.get("features", []))
+
+    def page(self, size: int, *, geometry: bool = False, cursor: str | None = None) -> Page:
+        """
+        Exactly one page, sized and shaped by the caller. Exactly one request.
+
+        Where iterating always asks for :data:`PAGE_SIZE` rows with every
+        geometry, this asks for exactly ``size`` and, by default, none of the
+        geometries -- the server filters either way, so a caller who wants
+        fifty rows to look at should not be handed a thousand geometries only
+        to throw them away in Python. That is what iterating and breaking
+        out early still does; reach for this instead when a bounded read is
+        the actual goal, not a shortcut through the whole restriction.
+
+        >>> first = layer.where("baujahr > 1990").page(50)
+        >>> first.total_count       # every match, not just this page
+        4128
+        >>> len(first.features)     # 50 -- not 4128, and not 1000
+        50
+
+        :param size: rows for this page, 1 to :data:`PAGE_SIZE`. Above the
+            ceiling the server refuses with a 400, the same rule
+            :data:`PAGE_SIZE`'s own docstring explains for iterating
+        :param geometry: include each object's geometry. Off by default --
+            the opposite of iterating -- because a bounded read is usually
+            for a count, a sample or a table, none of which needs a shape
+        :param cursor: :attr:`Page.next_cursor` from an earlier call, to
+            continue past it. There is no numeric offset to jump to an
+            arbitrary position -- the server's own cursor is the only handle
+            it hands out, and it is opaque on purpose. None reads from the
+            beginning, and is the only request that carries
+            :attr:`Page.total_count`
+        """
+        raw = self._client.get(
+            self._features_path, **self._params(), size=size, geometry=geometry, cursor=cursor
+        )
+        names = _column_to_name(self._layer.fields())
+        total = raw.get("totalCount")
+        return Page(
+            features=[_to_feature(row, names) for row in raw.get("features", [])],
+            total_count=int(total) if total is not None else None,
+            next_cursor=raw.get("nextCursor"),
+        )
 
     def fids(self) -> list[int]:
         """

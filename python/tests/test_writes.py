@@ -63,6 +63,57 @@ def _layer(client: hgis.Client, **overrides) -> hgis.Layer:
     return hgis.Layer(client, data)
 
 
+# --- projects ------------------------------------------------------------
+
+
+def test_project_update_sends_only_the_given_fields() -> None:
+    """
+    The gap this closes: without update(), an agent that found where to move
+    the map (project.update's whole point) had no way to send it -- the
+    guard refused PATCH /api/projects/{id} outright. See test_guard.py for
+    that half; this is about what the request looks like once it is let
+    through.
+    """
+
+    def handle(request: object) -> Response:
+        return Response(
+            200,
+            f'{{"id":"{PROJECT_ID}","name":"Neu","description":null,"srid":25832,'
+            '"basemap":"osm","basemapOpacity":1.0,"center":[9.99,53.55],"zoom":16.0,'
+            '"extent":null,"layerCount":1,"featureCount":1003,'
+            '"lastOpenedAt":null,"createdAt":"2026-01-01T00:00:00Z",'
+            '"updatedAt":"2026-01-01T00:00:00Z"}',
+        )
+
+    client, transport = _client(handle)
+    project = _project(client)
+
+    result = project.update(name="Neu", center=(9.99, 53.55), zoom=16)
+
+    assert transport.requests[-1].method == "PATCH"
+    assert transport.requests[-1].path == f"/api/projects/{PROJECT_ID}"
+    assert transport.bodies[-1] == {"name": "Neu", "center": [9.99, 53.55], "zoom": 16}
+    assert result is project, "update() gibt sich selbst zurück, zum Verketten."
+    assert project.name == "Neu"
+
+
+def test_project_update_with_nothing_sends_an_empty_body() -> None:
+    def handle(request: object) -> Response:
+        return Response(
+            200,
+            f'{{"id":"{PROJECT_ID}","name":"P","description":null,"srid":25832,'
+            '"basemap":"osm","basemapOpacity":1.0,"center":null,"zoom":null,'
+            '"extent":null,"layerCount":1,"featureCount":1003,'
+            '"lastOpenedAt":null,"createdAt":"2026-01-01T00:00:00Z",'
+            '"updatedAt":"2026-01-01T00:00:00Z"}',
+        )
+
+    client, transport = _client(handle)
+    _project(client).update()
+
+    assert transport.bodies[-1] == {}
+
+
 # --- layers ------------------------------------------------------------
 
 
@@ -143,12 +194,11 @@ def test_layer_update_with_nothing_sends_an_empty_body() -> None:
     assert transport.bodies[-1] == {}
 
 
-def test_layer_delete_moves_it_to_the_trash() -> None:
+def test_layer_delete_reports_none_if_the_answer_ever_has_no_body() -> None:
     """
-    Today's backend, faithfully: 204 with no body. There is nothing to build
-    a TrashEntry from, and delete() must not pretend otherwise -- see
-    test_layer_delete_reports_the_trash_entry_when_the_server_provides_one
-    for the moment that changes.
+    Not today's backend (see the test below, which is) -- a defensive case:
+    204 with no body. There is nothing to build a TrashEntry from then, and
+    delete() must not pretend otherwise.
     """
 
     def handle(request: object) -> Response:
@@ -166,9 +216,9 @@ def test_layer_delete_moves_it_to_the_trash() -> None:
 
 def test_layer_delete_reports_the_trash_entry_when_the_server_provides_one() -> None:
     """
-    Not yet how the real backend answers (see the test above), but the shape
-    it would use if it did -- LayerDtos.TrashEntry. Once it does, this is
-    what delete() reports instead of None, with no further change here.
+    Today's backend: LayerController.delete answers 200 with a
+    LayerDtos.TrashEntry body -- how many objects moved to the trash, when,
+    by whom. This is what delete() reports.
     """
 
     def handle(request: object) -> Response:
@@ -217,7 +267,7 @@ def test_layer_restore_re_reads_it() -> None:
 
 
 def test_layer_purge_calls_the_right_endpoint_and_does_not_reread() -> None:
-    """Today's backend: 204, no body -- see delete()'s equivalent pair of tests."""
+    """A defensive case, not today's backend -- see delete()'s equivalent pair of tests."""
 
     def handle(request: object) -> Response:
         return Response(204, "")

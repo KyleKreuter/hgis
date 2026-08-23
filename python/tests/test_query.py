@@ -144,6 +144,67 @@ def test_restrictions_travel_on_every_page(layer, transport) -> None:
         assert request.param("sort") == "Baujahr"
 
 
+# --- page: a bounded read, unlike iterating --------------------------------
+
+
+def test_page_asks_for_exactly_what_was_requested(layer, transport) -> None:
+    """
+    The gap this closes, measured: fifty rows with no geometry used to mean
+    one request for a thousand rows *with* geometry, all but fifty of it
+    thrown away in Python. This is the same request, sized and shaped by the
+    caller instead.
+    """
+    layer.where('"Höhe" > 10').page(50)
+
+    assert transport.count == 1
+    request = transport.requests[0]
+    assert request.path == f"/api/layers/{LAYER_ID}/features"
+    assert request.param("size") == "50"
+    assert request.param("geometry") == "false"
+    assert request.param("filter") == '"Höhe" > 10'
+
+
+def test_page_reports_the_total_alongside_the_rows(layer) -> None:
+    """
+    The total is what makes a page trustworthy: without it, fifty rows of a
+    thousand and fifty rows of fifty look the same.
+    """
+    result = layer.page(50)
+
+    assert len(result.features) == 50
+    assert len(result) == 50
+    assert result.total_count == stored("features-page1.json")["totalCount"]
+
+
+def test_page_has_no_geometry_by_default_but_can_be_asked_for(layer, transport) -> None:
+    """The opposite default from iterating -- a bounded read is usually not for a shape."""
+    without = layer.page(10)
+    assert transport.requests[-1].param("geometry") == "false"
+    assert without.features[0].geometry is None
+
+    with_geometry = layer.page(10, geometry=True)
+    assert transport.requests[-1].param("geometry") == "true"
+    assert with_geometry.features[0].geometry is not None
+
+
+def test_page_has_no_total_count_on_a_later_page(layer) -> None:
+    """totalCount only travels on a first page; a cursor asks for a later one."""
+    first = layer.page(1000)
+    assert first.next_cursor is not None
+
+    second = layer.page(3, cursor=first.next_cursor)
+    assert second.total_count is None
+    assert len(second.features) == 3
+
+
+def test_page_is_reachable_straight_from_the_layer(layer, transport) -> None:
+    """Layer.page() is Query(self).page() -- the same shortcut count() and fids() are."""
+    result = layer.page(5)
+
+    assert transport.count == 1
+    assert len(result.features) == 5
+
+
 # --- fids -----------------------------------------------------------------
 
 

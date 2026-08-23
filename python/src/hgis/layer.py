@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Iterator, Sequence
 from .edits import EditResult, FeatureUpdate, NewFeature, _reject_scalar_iterable
 from .edits import apply_edits as _apply_edits
 from .errors import ApiError
-from .query import PAGE_SIZE, Feature, Query, _column_to_name, _to_feature
+from .query import PAGE_SIZE, Feature, Page, Query, _column_to_name, _to_feature
 from .style import Style, to_style_json
 
 if TYPE_CHECKING:
@@ -84,6 +84,34 @@ class TrashEntry:
     deleted_at: str | None
     feature_count: int
     deleted_by: str | None
+
+
+class ValueCounts(list):
+    """
+    What :meth:`Layer.values` answers: ``(value, count)`` pairs, most
+    frequent first -- and, unlike a plain list, whether the field has more
+    distinct values than were counted.
+
+    A ``list`` subclass on purpose, not a new shape: every existing
+    ``for value, count in layer.values(...)`` and every comparison against a
+    plain list of pairs keeps working unchanged, because this *is* that list.
+    :attr:`truncated` is the one thing a plain list could not carry, which is
+    what used to send a caller straight to ``layer._client.get(...)`` -- a
+    private attribute -- to ask the server directly. Ask this instead.
+
+    :attr:`truncated` belongs to *this* instance, not to the values -- the
+    standard behaviour of every ``list`` subclass, and this is no exception.
+    Slicing (``values[:5]``), ``sorted(values)``, ``list(values)`` and
+    ``values + [...]`` all build a plain ``list`` that no longer carries it.
+    Read :attr:`truncated` before doing any of that, not after.
+
+    :param truncated: more distinct values exist in this field than were
+        returned. See :meth:`Layer.values`'s ``limit``
+    """
+
+    def __init__(self, pairs: Sequence[tuple[Any, int]], *, truncated: bool) -> None:
+        super().__init__(pairs)
+        self.truncated = truncated
 
 
 def _to_trash_entry(data: dict[str, Any]) -> TrashEntry:
@@ -512,18 +540,14 @@ class Layer:
         make the cut is a second request needed -- the alternative would be
         reporting a number that is merely likely.
         """
-        answer = self._client.get(
-            f"/api/layers/{self.id}/values", field=reference, limit=max(1, top)
-        )
-        values = answer.get("values") or []
-        truncated = bool(answer.get("truncated"))
+        values = self.values(reference, limit=max(1, top))
 
         null_count = None
-        for entry in values:
-            if entry.get("value") is None:
-                null_count = entry.get("count")
+        for value, count in values:
+            if value is None:
+                null_count = count
                 break
-        if null_count is None and not truncated:
+        if null_count is None and not values.truncated:
             null_count = 0
         if null_count is None:
             null_count = self.where(f'"{reference}" IS NULL').count()
@@ -531,12 +555,8 @@ class Layer:
         return FieldSummary(
             **base,
             null_count=null_count,
-            top_values=[
-                (entry.get("value"), entry.get("count"))
-                for entry in values
-                if entry.get("value") is not None
-            ][:top],
-            truncated=truncated,
+            top_values=[(value, count) for value, count in values if value is not None][:top],
+            truncated=values.truncated,
         )
 
     # --- queries -----------------------------------------------------------
@@ -598,6 +618,10 @@ class Layer:
         """Every object id in this layer, ascending."""
         return Query(self).fids()
 
+    def page(self, size: int, *, geometry: bool = False, cursor: str | None = None) -> Page:
+        """One bounded page of this layer, with the total match count. See :meth:`Query.page`."""
+        return Query(self).page(size, geometry=geometry, cursor=cursor)
+
     def to_dataframe(self, *, geometry: bool = True) -> Any:
         """Every object as a ``pandas.DataFrame``. See :meth:`Query.to_dataframe`."""
         return Query(self).to_dataframe(geometry=geometry)
@@ -615,17 +639,25 @@ class Layer:
         row = self._client.get(f"/api/layers/{self.id}/features/{fid}")
         return _to_feature(row, _column_to_name(self.fields()))
 
-    def values(self, field: str, *, limit: int = 20) -> list[tuple[Any, int]]:
+    def values(self, field: str, *, limit: int = 20) -> ValueCounts:
         """
         The values of one field with their counts, most frequent first.
 
-        Null appears as a value of its own. The list is cut at ``limit``; ask
-        :meth:`describe` if you want to know whether it was.
+        Null appears as a value of its own. The list is cut at ``limit`` --
+        read :attr:`ValueCounts.truncated` to know whether it was, rather
+        than guessing from ``len(...) == limit``, which a field with exactly
+        ``limit`` distinct values would trigger falsely. Read it before
+        slicing or sorting the result -- see :class:`ValueCounts`, ``truncated``
+        does not survive an operation that builds a new list.
+
+        :return: a plain list of ``(value, count)`` pairs that also carries
+            :attr:`ValueCounts.truncated`
         """
         answer = self._client.get(
             f"/api/layers/{self.id}/values", field=field, limit=limit
         )
-        return [(entry.get("value"), entry.get("count")) for entry in answer.get("values") or []]
+        pairs = [(entry.get("value"), entry.get("count")) for entry in answer.get("values") or []]
+        return ValueCounts(pairs, truncated=bool(answer.get("truncated")))
 
     # --- objects: writing ----------------------------------------------
     #
@@ -745,8 +777,14 @@ class FieldSummary:
     One field as :meth:`Layer.describe` found it.
 
     :param id: the field's identifier, the one reference that never collides
-    :param ambiguous: this field's name also fits another field of the layer.
-        Then only the id, or the column name, names it alone
+    :param ambiguous: this field's own *name* -- not its column -- collides
+        with the name or column of another field in the layer. Checked one
+        way only, so a collision marks just the field reached through its
+        name: in the tree register "stammumfang" reaches both "Stammumfang"
+        (by name) and "Stammumfang Quelle" (by column), but only
+        "Stammumfang" is marked here, since "stammumfang quelle" itself is
+        not a colliding spelling. Then only the id, or the column name, names
+        the marked field alone
     :param null_count: objects with no value here, or None when not gathered
     :param minimum: smallest value, numeric fields only
     :param maximum: largest value, numeric fields only
