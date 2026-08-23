@@ -519,6 +519,93 @@ def field_values(
 
 
 @dataclass(frozen=True)
+class FieldClasses:
+    """Die Klassengrenzen eines Zahlenfelds, wie field_classes sie fand."""
+
+    field_id: str
+    field_name: str
+    method: str
+    #: Aufsteigend, meist classes + 1 Werte -- jede Untergrenze plus das
+    #: Maximum. Weniger, wenn das Feld weniger unterschiedliche Werte hat, als
+    #: classes verlangt: eine wiederholte Grenze würde eine leere Klasse
+    #: beschreiben, und die liefert der Server nicht.
+    breaks: list[float]
+    #: None nur, wenn das Feld gar keinen Wert hat.
+    minimum: float | None
+    maximum: float | None
+    null_count: int
+
+
+@server.tool()
+def field_classes(
+    layer: Annotated[str, Field(description="Name oder Id des Layers.")],
+    field: Annotated[
+        str,
+        Field(description="Name, Spaltenname oder Id eines Zahlenfeldes."),
+    ],
+    classes: Annotated[
+        int, Field(description="Wie viele Klassen berechnet werden.", ge=2, le=12)
+    ] = 5,
+    method: Annotated[
+        str,
+        Field(
+            description='"quantile" (gleich viele Objekte je Klasse), "equalInterval" '
+            '(gleich breite Klassen) oder "naturalBreaks" (Grenzen an den größten Lücken '
+            "der Werte). Ein unbekannter Name meldet der Server mit den gültigen."
+        ),
+    ] = "quantile",
+    project: Annotated[
+        str | None, Field(description="Name oder Id des Projekts.")
+    ] = None,
+) -> FieldClasses:
+    """
+    Die Klassengrenzen eines Zahlenfelds, nach der gewählten Methode berechnet
+    -- wie sich seine Werte auf so viele Klassen verteilen.
+
+    Das Gegenstück zu field_values für Zahlenfelder: field_values zeigt, welche
+    Werte vorkommen und wie oft, field_classes zeigt, wie sie sich verteilen.
+    Rufen Sie es vor set_style mit renderer.type="graduated" auf und geben Sie
+    die gefundenen breaks als renderer.classes weiter -- sonst raten Sie die
+    Grenzen, die der Stil am Ende zeigt, statt sie zu kennen.
+
+    Nur für Zahlenfelder. Ein Textfeld meldet, dass Klasseneinteilung für
+    seinen Typ nicht möglich ist.
+    """
+    try:
+        layer_obj = _resolve_layer(layer, project)
+        resolved_field = layer_obj.field(field)
+        if not resolved_field.is_numeric:
+            raise ToolError(
+                f"Feld '{resolved_field.name}' ist vom Typ {resolved_field.type}. "
+                "Klasseneinteilung ist nur für Zahlenfelder möglich."
+            )
+        reference = layer_obj.reference(resolved_field)
+        # Kein oeffentlicher Weg zu /classify: Layer._numeric_summary() ruft
+        # den Endpunkt intern fuer describe() auf, aber mit fest verdrahteten
+        # method="quantile" und classes=2 -- keine oeffentliche Methode nimmt
+        # eigene Werte fuer beide entgegen. Direkter Client-Zugriff wie zuvor
+        # bei field_values/Layer.values(), bevor es ValueCounts gab -- siehe
+        # den Bericht an das Team.
+        answer = layer_obj._client.get(
+            f"/api/layers/{layer_obj.id}/classify",
+            field=reference,
+            method=method,
+            classes=classes,
+        )
+        return FieldClasses(
+            field_id=resolved_field.id,
+            field_name=resolved_field.name,
+            method=answer.get("method", method),
+            breaks=[float(value) for value in answer.get("breaks") or []],
+            minimum=answer.get("min"),
+            maximum=answer.get("max"),
+            null_count=answer.get("nullCount", 0),
+        )
+    except Exception as error:
+        raise tool_error(error, doing=f"Klasseneinteilung von {field!r}") from error
+
+
+@dataclass(frozen=True)
 class StyleInfo:
     """Der Stil eines Layers, wie get_style ihn fand."""
 
