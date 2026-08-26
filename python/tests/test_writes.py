@@ -114,6 +114,86 @@ def test_project_update_with_nothing_sends_an_empty_body() -> None:
     assert transport.bodies[-1] == {}
 
 
+def test_create_project_sends_only_the_given_fields_and_returns_a_project() -> None:
+    """
+    The gap this closes: without this, an agent had nowhere of its own to
+    work -- the guard refused POST /api/projects outright. See test_guard.py
+    for that half; this is about the request and the object it builds.
+    """
+
+    def handle(request: object) -> Response:
+        return Response(
+            201,
+            f'{{"id":"{PROJECT_ID}","name":"agent-scratch","description":null,'
+            '"srid":25832,"basemap":"osm","basemapOpacity":1.0,"center":null,'
+            '"zoom":null,"extent":null,"layerCount":0,"featureCount":0,'
+            '"lastOpenedAt":null,"createdAt":"2026-01-01T00:00:00Z",'
+            '"updatedAt":"2026-01-01T00:00:00Z"}',
+        )
+
+    client, transport = _client(handle)
+
+    project = client.create_project("agent-scratch")
+
+    assert transport.requests[-1].method == "POST"
+    assert transport.requests[-1].path == "/api/projects"
+    assert transport.bodies[-1] == {"name": "agent-scratch"}
+    assert isinstance(project, hgis.Project)
+    assert project.id == PROJECT_ID
+    assert project.name == "agent-scratch"
+
+
+def test_create_project_with_every_argument_sends_all_of_them() -> None:
+    def handle(request: object) -> Response:
+        return Response(
+            201,
+            f'{{"id":"{PROJECT_ID}","name":"agent-scratch","description":"Testlauf",'
+            '"srid":25833,"basemap":"satellite","basemapOpacity":1.0,"center":null,'
+            '"zoom":null,"extent":null,"layerCount":0,"featureCount":0,'
+            '"lastOpenedAt":null,"createdAt":"2026-01-01T00:00:00Z",'
+            '"updatedAt":"2026-01-01T00:00:00Z"}',
+        )
+
+    client, transport = _client(handle)
+
+    client.create_project(
+        "agent-scratch", description="Testlauf", srid=25833, basemap="satellite"
+    )
+
+    assert transport.bodies[-1] == {
+        "name": "agent-scratch",
+        "description": "Testlauf",
+        "srid": 25833,
+        "basemap": "satellite",
+    }
+
+
+def test_delete_project_sends_a_delete_to_the_project_itself() -> None:
+    def handle(request: object) -> Response:
+        return Response(204, "")
+
+    client, transport = _client(handle)
+
+    result = client.delete_project(PROJECT_ID)
+
+    assert result is None
+    assert transport.requests[-1].method == "DELETE"
+    assert transport.requests[-1].path == f"/api/projects/{PROJECT_ID}"
+
+
+def test_deletion_impact_reads_layer_and_feature_count() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, '{"layerCount":2,"featureCount":150}')
+
+    client, transport = _client(handle)
+
+    impact = client.deletion_impact(PROJECT_ID)
+
+    assert transport.requests[-1].method == "GET"
+    assert transport.requests[-1].path == f"/api/projects/{PROJECT_ID}/deletion-impact"
+    assert impact == {"layerCount": 2, "featureCount": 150}
+
+
 # --- layers ------------------------------------------------------------
 
 

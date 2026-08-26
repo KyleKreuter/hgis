@@ -339,6 +339,96 @@ def set_view(
         raise tool_error(error, doing=f"Bewegen der Ansicht in '{project}'") from error
 
 
+# --- projects: what is stored --------------------------------------------
+
+
+@server.tool()
+def create_project(
+    name: Annotated[str, Field(description="Name des neuen Projekts.")],
+    description: Annotated[
+        str | None,
+        Field(description="Kurzbeschreibung. Weggelassen bleibt sie leer."),
+    ] = None,
+    srid: Annotated[
+        int | None,
+        Field(
+            description="Speicher-CRS als EPSG-Code, z. B. 25832. Weggelassen gilt "
+            "der Server-Standard (EPSG:25832). Nach dem Anlegen nicht mehr änderbar."
+        ),
+    ] = None,
+    basemap: Annotated[
+        str | None,
+        Field(description="Basiskarte. Weggelassen gilt der Server-Standard."),
+    ] = None,
+) -> WriteResult:
+    """
+    Legt ein neues, leeres Projekt an -- eine eigene Arbeitsfläche, statt in
+    ein Projekt zu schreiben, das einem Menschen gehört. Rückgängig zu
+    machen mit delete_project, das dafür den Projektnamen wörtlich verlangt.
+    """
+    try:
+        created = client().create_project(
+            name, description=description, srid=srid, basemap=basemap
+        )
+        return WriteResult(
+            summary=(
+                f"Projekt '{created.name}' angelegt (Id {created.id}), "
+                f"SRID {created.srid}."
+            )
+        )
+    except Exception as error:
+        raise tool_error(error, doing=f"Anlegen des Projekts '{name}'") from error
+
+
+@server.tool()
+def delete_project(
+    project: Annotated[str, Field(description="Name oder Id des zu löschenden Projekts.")],
+    confirm_name: Annotated[
+        str,
+        Field(
+            description="Der Projektname, wörtlich und vollständig, als zweite, "
+            "unabhängige Angabe. Weicht er ab -- auch nur in Groß-/Kleinschreibung "
+            "oder Leerzeichen --, wird nichts gelöscht."
+        ),
+    ],
+) -> WriteResult:
+    """
+    Löscht ein ganzes Projekt endgültig, mit jedem seiner Layer und jedem
+    Objekt darin -- der einzige Weg in diesem gesamten Werkzeugsatz, der
+    sich nicht rückgängig machen lässt. Der Papierkorb hinter delete_layer/
+    restore_layer deckt einzelne Layer, kein ganzes Projekt.
+
+    Verlangt deshalb den Projektnamen ein zweites Mal, wörtlich, als
+    confirm_name -- unabhängig davon, ob project bereits der Name oder eine
+    Id ist. Stimmt confirm_name nicht mit dem tatsächlichen Namen überein,
+    wird nichts gelöscht; die Ablehnung nennt den Namen, der gepasst hätte.
+    """
+    try:
+        resolved = _project(project)
+        if confirm_name != resolved.name:
+            raise InvalidArgumentError(
+                f"confirm_name '{confirm_name}' stimmt nicht mit dem Namen des "
+                f"Projekts '{resolved.name}' überein. Nichts wurde gelöscht. "
+                f"Zum Löschen confirm_name='{resolved.name}' übergeben."
+            )
+        name, project_id = resolved.name, resolved.id
+        impact = client().deletion_impact(project_id)
+        layer_count = impact.get("layerCount") if isinstance(impact, dict) else None
+        feature_count = impact.get("featureCount") if isinstance(impact, dict) else None
+        client().delete_project(project_id)
+        counts = (
+            f" ({layer_count} Layer, {feature_count} Objekt(e) mit ihm)"
+            if layer_count is not None and feature_count is not None
+            else ""
+        )
+        return WriteResult(
+            summary=f"Projekt '{name}' (Id {project_id}) endgültig gelöscht{counts}.",
+            deleted=feature_count or 0,
+        )
+    except Exception as error:
+        raise tool_error(error, doing=f"Löschen des Projekts '{project}'") from error
+
+
 # --- objects: what is stored --------------------------------------------
 
 
