@@ -10,6 +10,12 @@ Das Projekt richtet sich an Anwenderinnen und Anwender, die räumliche Daten ohn
 klassische Desktop-GIS-Installation untersuchen und bearbeiten möchten. hGIS wird
 fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 
+**hGIS ist für KI-Agenten gebaut, nicht nur für Menschen.** Dieselbe Arbeit, die Sie mit
+der Maus erledigen, erledigt ein Agent über 30 Werkzeuge: Daten importieren, filtern,
+darstellen, verändern -- und Ihnen das Ergebnis auf Ihrem eigenen Bildschirm zeigen. Was
+er dabei sieht, ist Ihr Projekt; was er bewegt, bewegt sich in Ihrem offenen Browser-Tab.
+Wie das funktioniert, steht unter [hGIS für Agenten](#hgis-für-agenten).
+
 ## Funktionen
 
 - Projekte anlegen, duplizieren, öffnen und verwalten
@@ -41,6 +47,11 @@ fortlaufend gepflegt und entlang praktischer GIS-Anforderungen weiterentwickelt.
 - Sachdaten direkt in der Attributtabelle bearbeiten, mit der Tastatur und je Feldtyp
   passender Eingabe
 - Einstellungen und Arbeitsstand bleiben erhalten und kommen beim nächsten Öffnen zurück
+- Ein KI-Agent bedient dieselbe Anwendung über 30 Werkzeuge, von Ihrem Rechner oder von
+  einer Sitzung aus, die Sie ihm geben
+- Was ein Agent an Auswahl oder Kartenausschnitt setzt, erscheint sofort in Ihrem offenen
+  Browser-Tab, ohne Neuladen
+- Eine Python-Bibliothek mit derselben Oberfläche, für alles, was rechnet
 
 ### Was das Programm sich merkt
 
@@ -385,7 +396,8 @@ Kartenfensters) und die Auflösung (96, 150 oder 300 dpi). A4 quer bei 300 dpi e
 
 Auf dem Bild stehen der Titel, ein Maßstabsbalken, die Quellenangabe der Hintergrundkarte
 und die Angaben der sichtbaren Geoportal-Layer. Der Nordpfeil erscheint nur, wenn die
-Karte gedreht oder geneigt ist. Eine Legende fehlt noch.
+Karte gedreht oder geneigt ist. Eine Legende kommt dazu, sobald ein sichtbarer Layer sie
+braucht: einheitlich, kategorisiert, abgestuft oder als Heatmap.
 
 Das Programm zeichnet das Bild auf einer zweiten, verborgenen Karte in der Größe der
 Seite. Die sichtbare Karte bleibt unberührt und verliert keine Leistung. Der Maßstab des
@@ -394,6 +406,102 @@ Balken gilt für das Bild.
 
 Sehr große Formate lehnt das Programm ab und nennt die größte Bildgröße, die Ihre
 Grafikkarte verarbeitet. Ein stillschweigend kleineres Bild gibt es nicht.
+
+## hGIS für Agenten
+
+hGIS hat zwei Oberflächen für dieselbe Sache. Die eine ist die Karte im Browser. Die
+andere ist ein Satz Werkzeuge, den ein KI-Agent aufruft -- über MCP, das Model Context
+Protocol. Beide arbeiten an denselben Daten, gleichzeitig.
+
+### Was ein Agent kann
+
+Alles, was eine Aufgabe von Anfang bis Ende braucht. Er legt sich ein eigenes Projekt an,
+importiert eine Datei oder einen Datensatz aus dem Geoportal Hamburg, wartet auf den
+Import, sieht sich die Felder an, rechnet Klassengrenzen aus, setzt die Darstellung --
+und richtet zum Schluss Ihre Karte auf das Ergebnis aus.
+
+**Der letzte Schritt ist der wichtige.** `select_features` und `set_view` verändern, was
+Sie am Bildschirm sehen. Ein Agent beschreibt sein Ergebnis nicht, er zeigt es: Ihr
+offener Tab zieht nach, sanft und ohne Neuladen. Bewegen Sie die Karte gerade selbst,
+wartet er, bis Sie losgelassen haben.
+
+Umgekehrt gilt dasselbe: `get_view` und `get_selection` sagen ihm, worauf Sie schauen und
+was Sie ausgewählt haben. Sie können also „mach das für die markierten Objekte" sagen,
+ohne die Objekte aufzuzählen.
+
+Von den 30 Werkzeugen lesen elf, neunzehn schreiben. Die vollständige Liste mit allen
+Argumenten steht in [`python/README.md`](python/README.md), Kapitel „MCP-Server".
+
+### Einrichten
+
+```bash
+cd python
+pip install -e ".[http,mcp]"
+```
+
+Für Claude Code liegt eine `.mcp.json` im Projektwurzelverzeichnis; sie startet den
+Server über `uv` und braucht keinen weiteren Schritt. Jeder andere Host ruft `hgis-mcp`
+auf, gleichwertig `python -m hgis.mcp`.
+
+`HGIS_URL` bestimmt, wohin sich der Server verbindet; ohne sie gilt
+`http://localhost:8080`. Die Verbindung öffnet sich beim ersten Werkzeugaufruf, nicht beim
+Start -- ein Host startet seine MCP-Server oft, lange bevor hGIS läuft, und ein Server,
+der deshalb den Start verweigert, wird als kaputt gemeldet.
+
+### Warum das mehr ist als eine API mit Werkzeugen davor
+
+Vier Entscheidungen unterscheiden hGIS von einer REST-Schnittstelle, an die jemand MCP
+angeklebt hat:
+
+**Der Server filtert, nicht der Agent.** `query_features` nimmt einen Filterausdruck und
+gibt die Treffer zurück. Ein Agent, der alle Objekte holt und in seinem eigenen Kontext
+siebt, verbrennt ihn für nichts. `describe_layer` liefert Felder, Wertebereiche und
+Beispielzeilen in einem Aufruf -- damit niemand Feldnamen raten muss.
+
+**Fehler nennen das Gültige.** Ein unbekannter Feldname liefert alle vorhandenen. Ein
+abgelehnter Geometrietyp nennt die vier gültigen und bei `POINT` den Multi-Partner dazu.
+Ein Mensch schlägt im Quelltext nach, wenn eine Meldung schweigt. Ein Agent hat diesen
+Blick nicht, also muss die Meldung ihn ersetzen.
+
+**Zerstörendes ist zerstörend benannt.** Es gibt keinen Erlaubnisschalter, der die
+schreibenden Werkzeuge abschaltet -- eine bewusste Entscheidung. Dafür nennt jedes
+zerstörende Werkzeug im ersten Satz seiner Beschreibung, was es zerstört, und ein Projekt
+löscht nur, wer seinen Namen wörtlich mitschickt. Der Papierkorb und das
+Änderungsprotokoll fangen den Rest.
+
+**Werkzeuge für Fragen, Python für Arbeit.** Ein Werkzeugaufruf beantwortet eine kleine
+Frage. Alles, was rechnet -- einen Layer gegen eine Tabelle verbinden, Geometrien
+durchgehen --, ist Python, und dieselbe Oberfläche liegt als Bibliothek bereit:
+
+```python
+import hgis
+
+project = hgis.connect().project("Leitungsnetz Nord")
+layer = project.layer("Gebäude Speicherstadt")
+print(layer.where("Baujahr < 1930").count())        # 270 von 1003
+```
+
+Der Filter läuft auf dem Server. In Python kommt die Zahl an, nicht der Layer.
+
+### Woran gemessen wird
+
+Ein Agent ohne Vorwissen bekommt eine Datei mit 28 Bäumen und einen Satz: „Lade sie nach
+hGIS, style sie nach `hoehe_m`, und zeig mir das Ergebnis." Er darf keine Dokumentation
+lesen, keinen Quelltext ansehen, kein `curl` benutzen und nicht nachfragen.
+
+Am 26.08.2026 ging er elf Aufrufe weit -- **ohne einen Rateversuch, ohne Wiederholung und
+ohne eine einzige Fehlermeldung**. Am Ende stand die Karte auf den Daten, danach war sein
+Projekt wieder weg. Die Probe wird nach jeder größeren Änderung wiederholt; ihr Werkzeug
+liegt als `python/tools/mcp_call.py` im Projekt.
+
+### Was ein Agent heute noch nicht kann
+
+Ehrlichkeit gehört dazu, weil ein Agent es sonst versucht: Layer neu ordnen, ein Feld
+umbenennen, Objekte teilen oder zusammenführen, ein Projekt duplizieren, einen WMS-Layer
+anlegen. Und er kann kein Kartenbild erzeugen -- den Knopf dafür gibt es nur im Browser.
+Er richtet Ihre Karte aus, drücken müssen Sie.
+
+Jeder dieser Wege ist im Server vorhanden und nur für die Werkzeuge noch nicht geöffnet.
 
 ## Fachliches Konzept
 
