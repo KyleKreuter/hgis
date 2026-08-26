@@ -23,10 +23,17 @@ export const PROJECT_VIEW_STATE_EVENT = 'project-view-state'
 /**
  * The SSE `event:` name the backend sends for a project's *data* -- the layer catalog,
  * and any layer's data/style/clip/render version (`map/layerSpecs.ts#buildTileUrl`).
- * Placeholder pending alignment with the backend package (`.teams/CONTRACT.md`, "Der
- * Name des Ereignisses"): this is the one line to change once that settles.
  */
 export const PROJECT_CATALOG_EVENT = 'project-catalog'
+
+/**
+ * The SSE `event:` name the backend sends for a project's own map viewport -- its
+ * `center` and `zoom`, the two fields `GET /api/projects/{id}` carries directly. Neither
+ * the working state above (a client's own local address into the project, never a
+ * column of the project itself) nor the data-state one (the layer catalog: list, style,
+ * data) covers this, hence a name of its own (TASKS.md Aufgabe 9).
+ */
+export const PROJECT_VIEWPORT_EVENT = 'project-viewport'
 
 /** Header naming this client on a write, so its own change comes back recognisable. */
 export const CLIENT_HEADER = 'X-Hgis-Client'
@@ -102,6 +109,44 @@ export function parseProjectDataState(data: string): ProjectDataStateEvent | nul
 }
 
 /**
+ * The shape of an event that names only a project and who wrote it -- no version, since
+ * there is nothing to catch up on incrementally: the receiver simply rereads the project.
+ * `ProjectViewportEvent` below is the only kind that needs this; `VersionEvent` above
+ * still covers the other two.
+ */
+interface ProjectEvent {
+  projectId: string
+  /** The `CLIENT_ID` of whoever wrote it, or null when they named none. */
+  origin: string | null
+}
+
+function parseProjectEvent(data: string): ProjectEvent | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(data)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const candidate = parsed as Record<string, unknown>
+  if (typeof candidate.projectId !== 'string') return null
+  const origin = candidate.origin
+  if (origin !== null && origin !== undefined && typeof origin !== 'string') return null
+  return { projectId: candidate.projectId, origin: origin ?? null }
+}
+
+/**
+ * This project's own map viewport -- center and zoom -- changed. Read it from
+ * `GET /api/projects/{projectId}`, which carries both directly; `map/RemoteViewport.tsx`
+ * is what this triggers.
+ */
+export type ProjectViewportEvent = ProjectEvent
+
+export function parseProjectViewport(data: string): ProjectViewportEvent | null {
+  return parseProjectEvent(data)
+}
+
+/**
  * Whether an event asks this client to read the state back.
  *
  * The one case where it does not is an event this client's own write produced: it already
@@ -144,6 +189,22 @@ export function shouldReadBack(
  */
 export function isForThisProject(event: ProjectDataStateEvent, projectId: string): boolean {
   return event.projectId === projectId
+}
+
+/**
+ * Whether a viewport event is worth reacting to -- scoped to this project, and filtered
+ * by origin, exactly like {@link shouldReadBack} and for the same reason: unlike a
+ * data-state refetch, `map/RemoteViewport.tsx`'s `easeTo` feeds straight back into this
+ * client's own `ViewportPersistence` save. Left unfiltered, this client would answer its
+ * own change with a refetch and a re-save of the very value it just wrote -- the same
+ * write/read loop `shouldReadBack` exists to break for the working-state event.
+ */
+export function shouldFollowRemoteViewport(
+  event: ProjectViewportEvent,
+  { projectId, clientId }: { projectId: string; clientId: string },
+): boolean {
+  if (event.projectId !== projectId) return false
+  return event.origin !== clientId
 }
 
 /** First wait after the browser gives up on its own, before doubling. */
@@ -195,6 +256,13 @@ export interface LiveChannelHandlers {
    * project) is what decides what it means.
    */
   onProjectDataState?: (event: ProjectDataStateEvent) => void
+  /**
+   * This project's own map viewport -- center and zoom -- changed. Parsed the same way
+   * as the two events above and handed over whole; `state/useLiveViewState.ts` (wired
+   * in through its own options, the same connection this shares with everything else)
+   * is what decides what it means.
+   */
+  onProjectViewport?: (event: ProjectViewportEvent) => void
 }
 
 /**
@@ -249,6 +317,11 @@ export function connectLiveChannel(handlers: LiveChannelHandlers): () => void {
     next.addEventListener(PROJECT_CATALOG_EVENT, (event) => {
       const parsed = parseProjectDataState((event as MessageEvent<string>).data)
       if (parsed) handlers.onProjectDataState?.(parsed)
+    })
+
+    next.addEventListener(PROJECT_VIEWPORT_EVENT, (event) => {
+      const parsed = parseProjectViewport((event as MessageEvent<string>).data)
+      if (parsed) handlers.onProjectViewport?.(parsed)
     })
 
     next.addEventListener('error', () => {

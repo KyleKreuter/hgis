@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { CLIENT_ID, connectLiveChannel, isForThisProject, shouldReadBack } from '@/api/events'
+import {
+  CLIENT_ID,
+  connectLiveChannel,
+  isForThisProject,
+  shouldFollowRemoteViewport,
+  shouldReadBack,
+} from '@/api/events'
 import { viewStateQuery } from '@/api/projects'
 import { applyRemoteSelection, useSelection } from '@/state/selection'
 import { activeLayerJumpTarget, layerStateOf } from './viewState'
@@ -52,6 +58,22 @@ export interface LiveViewStateOptions {
    * learns the job finished. See `isForThisProject`'s own comment in `api/events.ts`.
    */
   onProjectDataState?: () => void
+  /**
+   * Someone else changed this project's own map viewport -- `center`/`zoom` via `PATCH
+   * /api/projects/{id}` (`set_view` over MCP, or another tab dragging its map) -- and
+   * this client is not the one who wrote it. Called with nothing but the fact that it
+   * happened, the same shape {@link LiveViewStateOptions.onProjectDataState} uses: what
+   * to read and how to move the map are not this hook's business. See
+   * `map/RemoteViewport.tsx` for what actually reacts to it.
+   *
+   * Filtered by project and by origin, unlike `onProjectDataState`: `RemoteViewport`'s
+   * `easeTo` feeds back into this client's own `ViewportPersistence` save, so an
+   * unfiltered echo would have this client answer its own change with a refetch and a
+   * re-save of the value it just wrote -- the same loop `shouldReadBack` breaks for the
+   * working-state event below (`shouldFollowRemoteViewport` is that same rule, named for
+   * this event).
+   */
+  onProjectViewportChanged?: () => void
 }
 
 /**
@@ -118,6 +140,11 @@ export function useLiveViewState(
           // client makes at most one request per (burst of events + reconnect), not per
           // burst alone.
           optionsRef.current.onProjectDataState?.()
+          // Same reasoning as the data-state refetch just above: nothing later repeats
+          // "the viewport changed" once the gap that would have carried it has passed,
+          // so this too is unconditional rather than waiting for an event the reconnect
+          // itself may have missed.
+          optionsRef.current.onProjectViewportChanged?.()
         }
       },
       onProjectViewState: (event) => {
@@ -130,6 +157,10 @@ export function useLiveViewState(
       onProjectDataState: (event) => {
         if (!isForThisProject(event, projectId)) return
         optionsRef.current.onProjectDataState?.()
+      },
+      onProjectViewport: (event) => {
+        if (!shouldFollowRemoteViewport(event, { projectId, clientId: CLIENT_ID })) return
+        optionsRef.current.onProjectViewportChanged?.()
       },
     })
 

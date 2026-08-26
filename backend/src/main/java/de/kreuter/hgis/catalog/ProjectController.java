@@ -63,10 +63,18 @@ public class ProjectController {
 		return open ? service.open(id) : service.get(id);
 	}
 
+	/**
+	 * @param origin who is writing, as an opaque per-client name -- same header, same
+	 *     purpose as {@link #updateViewState}'s: it travels on to {@code
+	 *     ProjectViewportChanged} so this client can recognise its own echo of a viewport
+	 *     it just set, but only reaches that event at all when {@code center} or {@code
+	 *     zoom} actually moved (see {@link ProjectService#update}).
+	 */
 	@PatchMapping("/{id}")
 	public ProjectDtos.Detail update(@PathVariable UUID id,
-			@Valid @RequestBody ProjectDtos.UpdateRequest request) {
-		return service.update(id, request);
+			@Valid @RequestBody ProjectDtos.UpdateRequest request,
+			@RequestHeader(name = ClientId.HEADER, required = false) String origin) {
+		return service.update(id, request, ClientId.require(origin));
 	}
 
 	@PostMapping("/{id}/duplicate")

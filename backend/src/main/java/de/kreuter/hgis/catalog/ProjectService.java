@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.locationtech.jts.geom.Coordinate;
@@ -41,6 +42,11 @@ import tools.jackson.databind.ObjectMapper;
  * parallel. {@code duplicate}'s own target-project announcement is the one exception, and
  * it is made by {@link ProjectDuplicateTransactions#complete}, which knows when the copy is
  * actually finished -- not by this class, which only starts the job.
+ *
+ * <p>{@link #update} does publish an event of its own, though, for exactly two of its
+ * fields: see {@link ProjectViewportChanged} for why {@code center} and {@code zoom} earn
+ * the exception that {@code name}, {@code description}, {@code basemap} and {@code
+ * basemapOpacity} deliberately do not get.
  */
 @Service
 public class ProjectService {
@@ -57,6 +63,15 @@ public class ProjectService {
 	/** Bounds for {@code limit} on the project browser; see CONTRACT.md phase 22. */
 	private static final int MIN_PAGE_SIZE = 1;
 	private static final int MAX_PAGE_SIZE = 100;
+
+	/**
+	 * Guards {@link #update}'s viewport comparison against float noise -- a value that
+	 * round-tripped through JSON and back through JTS must not read as a change just
+	 * because the last bit or two differs from what was stored. Nowhere near a screen
+	 * pixel at any zoom a human could reach, and far below a degree of longitude/latitude
+	 * that matters, so nothing genuine is ever hidden behind it.
+	 */
+	private static final double VIEWPORT_EPSILON = 1e-9;
 
 	private final ProjectRepository repository;
 	private final ProjectDeletionService deletionService;
@@ -155,8 +170,14 @@ public class ProjectService {
 		return withCounts(require(id));
 	}
 
+	/**
+	 * @param origin who is writing, from {@code X-Hgis-Client}, or null. Only carried
+	 *     through to {@link ProjectViewportChanged} -- and only when {@code center} or
+	 *     {@code zoom} actually moved, see below -- so the writer can tell its own echo
+	 *     apart from someone else's change; nothing here reads it.
+	 */
 	@Transactional
-	public ProjectDtos.Detail update(UUID id, ProjectDtos.UpdateRequest request) {
+	public ProjectDtos.Detail update(UUID id, ProjectDtos.UpdateRequest request, String origin) {
 		Project project = require(id);
 
 		if (request.name() != null) {
@@ -175,6 +196,13 @@ public class ProjectService {
 		if (request.basemapOpacity() != null) {
 			project.setBasemapOpacity(request.basemapOpacity());
 		}
+
+		// Captured before either field is touched, so the comparison below is always
+		// against what the project stood at a moment ago, not against a value this same
+		// request has already overwritten.
+		Point previousCenter = project.getCenter();
+		Double previousZoom = project.getZoom();
+
 		if (request.center() != null) {
 			project.setCenter(toPoint(request.center()));
 		}
@@ -182,7 +210,15 @@ public class ProjectService {
 			project.setZoom(request.zoom());
 		}
 
-		return withCounts(project);
+		ProjectDtos.Detail detail = withCounts(project);
+
+		// Fired for center/zoom alone, and only when one of them actually moved -- see
+		// ProjectViewportChanged for why a plain rename must not reach this at all.
+		if (!sameCoordinate(previousCenter, project.getCenter()) || !sameZoom(previousZoom, project.getZoom())) {
+			events.publishEvent(new ProjectViewportChanged(id, origin));
+		}
+
+		return detail;
 	}
 
 	@Transactional(readOnly = true)
@@ -276,6 +312,26 @@ public class ProjectService {
 	}
 
 	// --- helpers ---------------------------------------------------------------
+
+	/**
+	 * @return whether two centres are the same, within {@link #VIEWPORT_EPSILON} -- null
+	 *     is its own case, since {@code Point} has no coordinates to compare
+	 */
+	private static boolean sameCoordinate(Point previous, Point next) {
+		if (previous == null || next == null) {
+			return previous == next;
+		}
+		return Math.abs(previous.getX() - next.getX()) <= VIEWPORT_EPSILON
+				&& Math.abs(previous.getY() - next.getY()) <= VIEWPORT_EPSILON;
+	}
+
+	/** @return whether two zoom levels are the same, within {@link #VIEWPORT_EPSILON} */
+	private static boolean sameZoom(Double previous, Double next) {
+		if (previous == null || next == null) {
+			return Objects.equals(previous, next);
+		}
+		return Math.abs(previous - next) <= VIEWPORT_EPSILON;
+	}
 
 	private Project require(UUID id) {
 		return repository.findById(id)

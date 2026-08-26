@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MutationObserver, QueryClient } from '@tanstack/react-query'
+import { stubFetch } from '@/test/render'
+import { CLIENT_HEADER, CLIENT_ID } from './events'
 import {
   applyProjectPatch,
   projectKeys,
@@ -194,5 +196,27 @@ describe('projectUpdateOptions', () => {
     expect(rolledBack?.basemap).toBe('opentopo')
 
     await runLater
+  })
+})
+
+/**
+ * `projectUpdateOptions`' own `mutationFn`, not overridden here the way the tests above
+ * override it -- what is under test is exactly the one line that changed: does the real
+ * PATCH now name this client, the same way `useSaveViewState`'s PUT always has. Without
+ * this header `RemoteViewport` (`map/RemoteViewport.tsx`) could never tell this client's
+ * own viewport write apart from someone else's when the event comes back.
+ */
+describe('projectUpdateOptions -- der echte PATCH', () => {
+  it('nennt sich über X-Hgis-Client, wie useSaveViewState es tut', async () => {
+    const client = createClient()
+    client.setQueryData(projectKeys.detail(ID), project())
+    const { requests } = stubFetch([{ match: `/api/projects/${ID}`, body: project({ zoom: 9 }) }])
+
+    const mutation = new MutationObserver<ProjectDetail, Error, UpdateProjectInput, ProjectPatchContext>(
+      client, projectUpdateOptions(client, ID))
+    await mutation.mutate({ zoom: 9 })
+
+    const patch = requests.find((r) => r.url.includes(`/api/projects/${ID}`))
+    expect(patch?.init?.headers).toMatchObject({ [CLIENT_HEADER]: CLIENT_ID })
   })
 })

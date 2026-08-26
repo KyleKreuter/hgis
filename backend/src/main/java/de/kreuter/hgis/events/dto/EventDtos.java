@@ -35,6 +35,9 @@ public final class EventDtos {
 		/** {@link ProjectCatalog}. */
 		public static final String PROJECT_CATALOG = "project-catalog";
 
+		/** {@link ProjectViewport}. */
+		public static final String PROJECT_VIEWPORT = "project-viewport";
+
 		private EventNames() {
 		}
 	}
@@ -66,5 +69,23 @@ public final class EventDtos {
 	 * @param origin  same rule as {@link ProjectViewState#origin}.
 	 */
 	public record ProjectCatalog(UUID projectId, long version, String origin) {
+	}
+
+	/**
+	 * This project's own map viewport -- center and zoom -- changed. Read it from
+	 * {@code GET /api/projects/{projectId}}, which carries {@code center} and {@code
+	 * zoom} directly.
+	 *
+	 * <p>No version, unlike {@link ProjectViewState} and {@link ProjectCatalog}: both of
+	 * those exist because several writes can land between two things a receiver reads,
+	 * and the version is what lets it tell "already seen this one" from "there is a newer
+	 * one still to fetch". The write path behind this event ({@code
+	 * ProjectService#update}) fires at most once per request and never more than once
+	 * within a single database transaction, so there is nothing here for a receiver to
+	 * deduplicate against in the first place.
+	 *
+	 * @param origin same rule as {@link ProjectViewState#origin}.
+	 */
+	public record ProjectViewport(UUID projectId, String origin) {
 	}
 }
