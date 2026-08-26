@@ -20,7 +20,7 @@ Phasenberichte. Diese Datei ersetzt ihn nicht.
 |---|---|---|
 | Backend (Spring Boot 4.1, Java) | **1134** | `cd backend && ./mvnw test` |
 | Frontend (React 19, TypeScript) | **1277** | `cd frontend && npx vitest run` |
-| Python-Bibliothek und MCP-Server | **452** | `cd python && .venv/bin/python -m pytest -q` |
+| Python-Bibliothek und MCP-Server | **482** | `cd python && .venv/bin/python -m pytest -q` |
 
 Alle drei laufen lokal und in der CI grün. Die Zahlen sind am 26.08. gemessen, nicht
 geschätzt.
@@ -42,8 +42,8 @@ Das Backend braucht rund 20 Sekunden bis zur ersten Antwort. Prüfen mit
 
 ### Der MCP-Server
 
-Seit dem 25.08. gibt `python/src/hgis/mcp/` hGIS als **26 Werkzeuge** an einen Agenten
-(elf lesende, fünfzehn schreibende, 80 Parameter). `.mcp.json` im Projektwurzel-
+Seit dem 25.08. gibt `python/src/hgis/mcp/` hGIS als **30 Werkzeuge** an einen Agenten
+(elf lesende, neunzehn schreibende, 101 Parameter). `.mcp.json` im Projektwurzel-
 verzeichnis bindet ihn in Claude Code ein. Ein Werkzeugaufruf beantwortet eine kleine
 Frage; für alles, was rechnet, gibt es die Bibliothek `hgis`. Näheres in
 `python/README.md`, Kapitel „MCP-Server".
@@ -130,8 +130,9 @@ das:
 6. **Er kommt aus jedem Fehler heraus.** Jede Meldung nennt das Gültige, nicht nur das
    Abgelehnte.
 
-Von den sechs stehen fünf: 3 seit Phase 33, und 1, 4 und 6 seit dem 26.08. (Aufgaben 17,
-9 und 18). 5 steht für GeoJSON. **Gebrochen ist nur noch 2**, der Import.
+**Alle sechs stehen seit dem 26.08.** 3 seit Phase 33; 1, 2, 4 und 6 durch die Aufgaben
+17, 20, 9 und 18. Zusage 5 trägt für GeoJSON und für Zahlen; ein Export als Werkzeug
+fehlt noch (Aufgabe 24).
 
 ### Die Abnahmeprobe
 
@@ -140,20 +141,34 @@ Ein Agent bekommt die MCP-Werkzeuge und einen Satz, sonst nichts:
 > Lade `<Datei>` nach hGIS, style sie nach `<Feld>`, und zeig mir das Ergebnis.
 
 Bestanden ist die Probe, wenn er ohne `curl`, ohne Quelltext und ohne Rückfrage
-durchkommt und am Ende die Karte des Nutzers auf dem Ergebnis steht. **Heute scheitert er noch
-an einer Stelle:** am Import (Aufgabe 20). Die eigene Fläche und der Bildschirm des
-Menschen stehen seit dem 26.08.
+durchkommt und am Ende die Karte des Nutzers auf dem Ergebnis steht.
+
+**Am 26.08. bestanden**, mit 28 Bäumen als Datei und `hoehe_m` als Feld. Ein Agent ohne
+Vorwissen, ohne Doku und ohne Quelltext ging elf Aufrufe weit: `create_project`,
+`inspect_import`, `import_file`, `field_classes`, `set_style`, `get_style`, `set_view`,
+`query_features`, `get_view`, `delete_project`. **Kein einziger Rateversuch, keine
+Wiederholung, keine Fehlermeldung.** Drei Stellen trugen ihn ohne Nachfrage:
+
+- `inspect_import` nannte `hoehe_m` als `double precision` mit Beispielwerten, bevor
+  etwas geschrieben war. Kein Raten des Feldnamens.
+- `field_classes` sagt in seiner eigenen Beschreibung, dass man es vor `set_style` ruft
+  und die `breaks` als `classes` weitergibt. Eine Anleitung, keine Vermutung.
+- `set_view` mit nur `layer` rechnete den Ausschnitt selbst. Genau die Kurzform, die
+  „zeig mir das Ergebnis" braucht.
+
+Der einzige Befund der Probe lag im Prüfclient, nicht in hGIS: Er griff auf die
+Antwortfelder im Drahtformat zu (`inputSchema`, `isError`, `structuredContent`) statt
+snake_case — der Fallstrick, den Abschnitt 3 seit dem 25.08. führt. Der reparierte Client
+liegt jetzt als `python/tools/mcp_call.py` im Projekt, damit die nächste Probe ihn nicht
+neu baut.
 
 ### Wie weit es heute trägt, in Zahlen
 
-Die Schranke `RequestGuard._ALLOWED` (`python/src/hgis/client.py`) lässt seit Aufgabe 17
-**zwölf von 24 schreibenden Endpunkten** des Backends durch. Die zwölf geschlossenen:
+Die Schranke `RequestGuard._ALLOWED` (`python/src/hgis/client.py`) lässt nach Stufe A
+**fünfzehn von 24 schreibenden Endpunkten** des Backends durch. Die neun geschlossenen:
 
 | Weg | Was dem Agenten fehlt | Aufgabe |
 |---|---|---|
-| `POST /api/projects/{id}/imports` | Daten aus einer Datei | 20 |
-| `POST .../imports/inspect` | vorher wissen, was ankommt | 20 |
-| `POST .../geoportal-imports` | Daten aus dem Geoportal Hamburg | 20 |
 | `PATCH /api/layers/{id}/fields/{fid}` | ein Feld umbenennen | 21 |
 | `PUT /api/projects/{id}/layers/order` | Layer neu ordnen | 21 |
 | `POST .../features/{fid}/split` | ein Objekt teilen | 21 |
@@ -170,75 +185,57 @@ Die letzten zwei bleiben zu. Sie sind Wartung des Servers, nicht Arbeit an Daten
 
 ## 5. Offene Aufgaben
 
-Drei Stufen. **Stufe A ist Prio 1** und wird als Ganzes fertig, bevor Stufe B beginnt.
+Drei Stufen. **Stufe A ist seit dem 26.08. fertig** — hGIS ist agent native, gemessen an
+der Abnahmeprobe. Stufe B schliesst die Lücke zur Oberfläche, Stufe C hält das Ergebnis.
 Innerhalb einer Stufe steht die Reihenfolge des Nutzens.
 
-### Wie das parallel läuft
+## 5.1 Stufe A — abgeschlossen am 26.08.
 
-Ein Team ist noch übrig. `wt-fehler` und `wt-ausschnitt` sind am 26.08. fertig geworden
-und aufgelöst:
+Alle vier Aufgaben sind erledigt: 18, 17, 9 und 20 (Abschnitt 7). Die Abnahmeprobe ist
+bestanden, ihr Protokoll steht oben in Abschnitt 4.
 
-| Team | Aufgaben | Berührt |
-|---|---|---|
-| `wt-flaeche` | 20 | `python/src/hgis/client.py`, `mcp/write_tools.py` |
-
-Aufgabe 17 lief vor 20 im selben Worktree: beide ändern `client.py` und `write_tools.py`.
-
----
-
-## 5.1 Stufe A — der letzte Bruch
-
-Drei der vier Aufgaben dieser Stufe sind am 26.08. erledigt: 18, 17 und 9
-(Abschnitt 7). Offen ist der Import.
-
-### 20 — Ein Agent kann keine Daten hereinholen
-
-**Mittelgroß, und die größte einzelne Lücke.** Neu am 26.08.
-
-Ein GIS-Agent, der Daten nicht importieren kann, bringt keine Aufgabe von der Quelle bis
-zur Karte. Drei Endpunkte stehen im Backend und sind für die Bibliothek zu:
-
-- `POST /api/projects/{id}/imports/inspect` (`ingest/ImportController.java:65`) — sagt,
-  was ein Import erzeugen würde, ohne etwas zu erzeugen. Multipart-Datei **oder** die
-  `uploadId` einer vorigen Prüfung, dazu wahlfrei `srid` und `charset`.
-- `POST /api/projects/{id}/imports` (`ingest/ImportController.java:82`) — dieselben
-  Argumente, plus `name`. Antwortet mit einem **Job**, das Schreiben läuft asynchron.
-- `POST /api/projects/{id}/geoportal-imports`
-  (`geoportal/GeoportalImportController.java:51`) — JSON statt Multipart:
-  `datasetId`, `bbox`, wahlfrei `fields` und `name`. Ebenfalls ein Job.
-
-**Der Job ist der eigentliche Bau.** Die Bibliothek kennt heute kein Job-Modell (`grep -n
-job python/src/hgis/*.py` findet nur Kommentare). Ein Agent, der importiert und sofort
-`describe_layer` ruft, sieht einen halb gefüllten Layer oder gar keinen. Es braucht:
-
-- `Job`-Objekt mit Zustand, Fortschritt und Fehlermeldung; `GET /api/jobs/{id}` ist
-  lesend und damit schon durch die Schranke (`jobs/JobController.java:20`).
-- `job.wait()` mit Frist — auf dem Live-Kanal, nicht als Abfrageschleife. Der Kanal trägt
-  das schon: Ein Hintergrundauftrag schreibt mit `origin=None`, und `client.wait_for()`
-  hat dafür bereits das Beispiel im README (Kapitel „Der Ereigniskanal").
-- Ein MCP-Werkzeug wartet **selbst**, statt dem Agenten eine Abfrageschleife zuzumuten:
-  ein Aufruf, eine Antwort, und die Antwort ist der fertige Layer. Erst bei Überschreiten
-  der Frist gibt es die Job-Id zum Nachfassen zurück.
-
-**Vor dem Bauen zu klären:** Wie kommt die Datei zum Werkzeug? Ein MCP-Agent hat einen
-Dateipfad, keinen Multipart-Rumpf. Vorschlag: Das Werkzeug nimmt einen Pfad, die
-Bibliothek liest die Datei und baut den Upload. Das bindet den MCP-Server an dasselbe
-Dateisystem wie den Agenten — für den Fall „Agent auf dem Rechner des Nutzers" richtig,
-für einen entfernten Server nicht. Der zweite Fall ist heute keiner.
-
-**Reihenfolge im Paket:** erst `inspect`, dann `imports`, dann Geoportal. Nach `inspect`
-allein kann ein Agent schon sagen, was ankäme — und `inspect` ist folgenlos, also der
-billige Weg, den Multipart-Aufbau zu belegen.
-
-**Betroffen:** `python/src/hgis/client.py`, ein neues `python/src/hgis/jobs.py`,
-`python/src/hgis/project.py` (`import_file()`, `import_geoportal()`),
-`python/src/hgis/mcp/write_tools.py`, `python/README.md` (neues Kapitel, ausführbar).
+**Ein Befund aus Aufgabe 20 ist offen** und steht als Aufgabe 26 in Abschnitt 5.2.
 
 ---
 
 ## 5.2 Stufe B — Parität mit der Oberfläche
 
 Beginnt, wenn Stufe A ganz fertig ist. Danach kann ein Agent alles, was ein Mensch kann.
+
+### 26 — Der Import sagt nicht, was an der Datei kaputt ist
+
+**Klein, und der letzte bekannte Bruch der Zusage „Fehler nennen das Gültige".** Befund
+aus Aufgabe 20, gemessen am 26.08.
+
+Eine unlesbare Datei wird abgelehnt mit:
+
+```
+Der Import kann die Datei nicht lesen: Der Import kann das GeoJSON nicht
+lesen: /var/.../kaputt.geojson
+```
+
+Die Meldung nennt die Datei, aber nicht, **was** an ihr ungültig ist und was zu tun wäre.
+Ein Mensch öffnet die Datei und sieht nach. Ein Agent, der eine Datei aus einer fremden
+Quelle importiert, hat diesen Blick nicht — und er hat die Datei womöglich nicht einmal
+selbst geschrieben.
+
+Zum Vergleich, was im selben System schon geht: Seit Aufgabe 18 nennt ein abgelehnter
+Geometrietyp alle gültigen. Ein unbekannter Feldname nennt alle vorhandenen.
+
+**Wo es sitzt:** Backend, `ingest/` — `InspectionService` und die `SourceReader` je
+Format. Die doppelte Verschachtelung der Meldung („kann die Datei nicht lesen: kann das
+GeoJSON nicht lesen") deutet darauf hin, dass zwei Schichten dieselbe Auskunft geben und
+keine die eigentliche.
+
+**Zu klären:** Was die Bibliothek (GeoTools, Jackson) an Ursache überhaupt hergibt —
+Zeile und Spalte eines JSON-Fehlers sind üblich, ein fehlendes `type`-Feld ebenso. Was
+davon durchgereicht werden kann, gehört in die Meldung.
+
+**Nicht vergessen:** Die Probe ist eine kaputte Datei, nicht der Testfall aus
+`python/tests/data/kaputt.geojson` allein. Mindestens drei Arten prüfen: ungültiges JSON,
+gültiges JSON ohne GeoJSON-Struktur, GeoJSON mit unbekanntem CRS.
+
+---
 
 ### 21 — Sechs Schreibwege, die nur die Oberfläche hat
 
@@ -309,7 +306,10 @@ raten, nachschlagen oder zu `curl` greifen musste.
 **Jede solche Stelle ist ein Befund**, auch wenn nichts kaputt war. Die acht Befunde aus
 Phase 33 waren zur Hälfte von dieser Art.
 
-Die Abnahmeprobe aus Abschnitt 4 ist der erste Durchlauf davon.
+**Der erste Durchlauf ist am 26.08. gelaufen** und steht in Abschnitt 4. Sein Werkzeug
+liegt als `python/tools/mcp_call.py` im Projekt: ein Werkzeugaufruf über das Protokoll,
+von der Kommandozeile aus. Wer die Probe wiederholt, braucht ihn nicht neu zu bauen —
+und geht denselben Weg, den ein Fehler nimmt.
 
 ---
 
@@ -497,6 +497,7 @@ Server, sie bearbeiten keine Daten. Ein Agent, der sie braucht, hat ein anderes 
 | 18 | **Fehlermeldungen nennen die gültigen Werte**, plus ein Test über jeden `valueOf`-Aufruf im Backend | 26.08. |
 | 17 | **Ein Agent legt Projekte an und löscht sie** — `create_project`, `delete_project` mit wörtlicher Namensbestätigung, `deletion_impact()` | 26.08. |
 | 9 | **Der Kartenausschnitt erreicht den offenen Tab** — neues Ereignis `project-viewport`, `RemoteViewport` zieht sanft nach | 26.08. |
+| 20 | **Ein Agent holt Daten herein** — `inspect_import`, `import_file`, `import_geoportal`, `job_wait`, dazu `hgis.Job` auf dem Ereigniskanal | 26.08. |
 
 ### Was Aufgabe 5 gelehrt hat
 
