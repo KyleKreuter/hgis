@@ -429,6 +429,222 @@ def delete_project(
         raise tool_error(error, doing=f"Löschen des Projekts '{project}'") from error
 
 
+# --- importing: what is stored --------------------------------------------
+
+
+@dataclass(frozen=True)
+class ImportResult:
+    """
+    Was ein Import-Werkzeug erreicht hat -- unter Umständen noch nicht
+    fertig, wenn die Frist vor dem Job verstrichen ist.
+
+    status ist PENDING, RUNNING, SUCCEEDED oder FAILED. Bei SUCCEEDED sind
+    layer_id/layer_name/feature_count gesetzt: der fertige Layer, ohne
+    eigenen describe_layer-Aufruf. Bei FAILED nennt message den Grund. Bei
+    PENDING/RUNNING ist job_id der Anknüpfpunkt für job_wait.
+    """
+
+    summary: str
+    job_id: str
+    status: str
+    layer_id: str | None = None
+    layer_name: str | None = None
+    feature_count: int | None = None
+    message: str | None = None
+
+
+def _import_result(job: hgis.Job) -> ImportResult:
+    """Turn a waited-on :class:`hgis.Job` into the shape an import tool answers with."""
+    if job.succeeded:
+        layer = client().layer(job.output_layer_id) if job.output_layer_id else None
+        note = f" -- {job.message}" if job.message else ""
+        summary = (
+            f"Import abgeschlossen: Layer '{layer.name}' (Id {layer.id}), "
+            f"{layer.feature_count} Objekt(e){note}."
+            if layer is not None
+            else f"Import abgeschlossen{note}."
+        )
+        return ImportResult(
+            summary=summary,
+            job_id=job.id,
+            status=job.status,
+            layer_id=layer.id if layer is not None else None,
+            layer_name=layer.name if layer is not None else None,
+            feature_count=layer.feature_count if layer is not None else None,
+            message=job.message,
+        )
+    if job.failed:
+        return ImportResult(
+            summary=f"Import fehlgeschlagen: {job.message}",
+            job_id=job.id,
+            status=job.status,
+            message=job.message,
+        )
+    return ImportResult(
+        summary=(
+            f"Import läuft nach Ablauf der Frist noch (Job {job.id}, Status "
+            f"{job.status}). Nachfassen mit job_wait(job_id='{job.id}', project=...)."
+        ),
+        job_id=job.id,
+        status=job.status,
+    )
+
+
+_FILE_PATH_HELP = (
+    "Pfad zu einer Datei auf dem Dateisystem des MCP-Servers -- bei einem lokal "
+    "laufenden Server derselbe Rechner, auf dem auch der Agent läuft. Genau eins "
+    "von file_path/upload_id."
+)
+_UPLOAD_ID_HELP = (
+    "uploadId aus einer vorigen inspect_import- oder import_file-Antwort, um "
+    "dieselbe Datei erneut zu verwenden, ohne sie neu zu senden. Genau eins von "
+    "file_path/upload_id."
+)
+_SRID_HELP = "Quell-CRS überschreiben, wenn die Datei keins oder das falsche trägt."
+_CHARSET_HELP = (
+    "Zeichenkodierung überschreiben, wenn crs_confidence oder die Beispielwerte "
+    "falsch aussehen -- typisch bei einem Shapefile ohne .cpg."
+)
+_IMPORT_TIMEOUT_HELP = (
+    "Sekunden, die auf den fertigen Layer gewartet wird, bevor stattdessen die "
+    "Job-Id zum Nachfassen mit job_wait zurückkommt."
+)
+
+
+@server.tool()
+def inspect_import(
+    project: Annotated[str, Field(description="Name oder Id des Projekts.")],
+    file_path: Annotated[str | None, Field(description=_FILE_PATH_HELP)] = None,
+    upload_id: Annotated[str | None, Field(description=_UPLOAD_ID_HELP)] = None,
+    srid: Annotated[int | None, Field(description=_SRID_HELP)] = None,
+    charset: Annotated[str | None, Field(description=_CHARSET_HELP)] = None,
+) -> hgis.Inspection:
+    """
+    Sagt, was ein Import erzeugen würde -- Geometrietyp, Objektzahl, Felder
+    mit Beispielwerten, Ausschnitt --, ohne etwas anzulegen. Folgenlos,
+    beliebig oft wiederholbar, auch mit anderem srid/charset über die
+    zurückgegebene upload_id.
+
+    Rufen Sie das vor import_file auf, um Feldnamen und Geometrietyp zu
+    kennen, bevor ein Layer entsteht, statt sie zu raten.
+    """
+    try:
+        proj = _project(project)
+        return proj.inspect_import(file_path, upload_id=upload_id, srid=srid, charset=charset)
+    except Exception as error:
+        raise tool_error(error, doing=f"Prüfen des Imports in '{project}'") from error
+
+
+@server.tool()
+def import_file(
+    project: Annotated[str, Field(description="Name oder Id des Projekts.")],
+    file_path: Annotated[str | None, Field(description=_FILE_PATH_HELP)] = None,
+    upload_id: Annotated[str | None, Field(description=_UPLOAD_ID_HELP)] = None,
+    name: Annotated[
+        str | None,
+        Field(description="Name des neuen Layers. Weggelassen: der Dateiname ohne Endung."),
+    ] = None,
+    srid: Annotated[int | None, Field(description=_SRID_HELP)] = None,
+    charset: Annotated[str | None, Field(description=_CHARSET_HELP)] = None,
+    timeout: Annotated[float, Field(description=_IMPORT_TIMEOUT_HELP, ge=1)] = 120.0,
+) -> ImportResult:
+    """
+    Importiert eine Datei (oder eine mit inspect_import geprüfte Upload) in
+    einen neuen Layer und wartet, bis er fertig ist -- ein Aufruf, eine
+    Antwort mit dem fertigen Layer, statt einer Abfrageschleife.
+
+    Eine kaputte Datei oder ein unplausibles CRS kommt sofort als Ablehnung
+    zurück, nicht als spät fehlschlagender Job. Läuft die Frist ab, bevor
+    der Job fertig ist, kommt stattdessen seine Id zurück -- job_wait fasst
+    damit nach.
+
+    Rückgängig zu machen wie jeder neue Layer: delete_layer mit der
+    zurückgegebenen layer_id.
+    """
+    try:
+        proj = _project(project)
+        job = proj.import_file(
+            file_path, upload_id=upload_id, name=name, srid=srid, charset=charset
+        )
+        job.wait(timeout=timeout)
+        return _import_result(job)
+    except Exception as error:
+        raise tool_error(error, doing=f"Importieren nach '{project}'") from error
+
+
+@server.tool()
+def import_geoportal(
+    project: Annotated[str, Field(description="Name oder Id des Projekts.")],
+    dataset_id: Annotated[
+        str,
+        Field(
+            description="Id des Datensatzes im Geoportal-Katalog Hamburg, z. B. "
+            "'verkehr_strassen/verkehrsnetz'. Kein eigenes Werkzeug dafür in dieser "
+            "Stufe -- der Katalog steht unter GET /api/geoportal/datasets."
+        ),
+    ],
+    bbox: Annotated[
+        list[float] | None,
+        Field(
+            description="minLng, minLat, maxLng, maxLat in EPSG:4326. Weggelassen: "
+            "der ganze Datensatz."
+        ),
+    ] = None,
+    fields: Annotated[
+        list[str] | None,
+        Field(description="Technische Feldnamen, die mitkommen sollen. Weggelassen: alle."),
+    ] = None,
+    name: Annotated[
+        str | None,
+        Field(description="Name des neuen Layers. Weggelassen: der Titel des Datensatzes."),
+    ] = None,
+    timeout: Annotated[float, Field(description=_IMPORT_TIMEOUT_HELP, ge=1)] = 120.0,
+) -> ImportResult:
+    """
+    Importiert einen Datensatz aus dem Geoportal Hamburg in einen neuen
+    Layer und wartet, bis er fertig ist -- dasselbe Ergebnis wie import_file,
+    aus einem Netzabruf statt einer Datei.
+    """
+    try:
+        proj = _project(project)
+        job = proj.import_geoportal(dataset_id, bbox=bbox, fields=fields, name=name)
+        job.wait(timeout=timeout)
+        return _import_result(job)
+    except Exception as error:
+        raise tool_error(error, doing=f"Geoportal-Import nach '{project}'") from error
+
+
+@server.tool()
+def job_wait(
+    job_id: Annotated[
+        str,
+        Field(description="Die Id, die import_file oder import_geoportal zurückgegeben hat."),
+    ],
+    project: Annotated[
+        str,
+        Field(
+            description="Name oder Id genau des Projekts, das an import_file/"
+            "import_geoportal ging, als dieser Job entstand -- der Job selbst "
+            "nennt es nicht, und ohne das richtige Projekt wartet dies auf das "
+            "falsche."
+        ),
+    ],
+    timeout: Annotated[float, Field(description=_IMPORT_TIMEOUT_HELP, ge=1)] = 120.0,
+) -> ImportResult:
+    """
+    Wartet weiter auf einen Job, dessen Frist bei import_file oder
+    import_geoportal verstrichen ist, bevor er fertig war.
+    """
+    try:
+        proj = _project(project)
+        data = client().get(f"/api/jobs/{job_id}")
+        job = hgis.Job(client(), data, project_id=proj.id)
+        job.wait(timeout=timeout)
+        return _import_result(job)
+    except Exception as error:
+        raise tool_error(error, doing=f"Warten auf Job {job_id}") from error
+
+
 # --- objects: what is stored --------------------------------------------
 
 

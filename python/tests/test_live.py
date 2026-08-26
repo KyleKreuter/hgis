@@ -58,6 +58,7 @@ class _ReadOnlyFloor(Transport):
         method: str,
         url: str,
         json: object = None,
+        file: object = None,
         timeout: float = DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
     ) -> Response:
@@ -67,7 +68,9 @@ class _ReadOnlyFloor(Transport):
                 "Testreihe läuft gegen einen echten Server und muss lesend "
                 "bleiben -- siehe _ReadOnlyFloor im Modul-Docstring."
             )
-        return self.inner.request(method, url, json=json, timeout=timeout, headers=headers)
+        return self.inner.request(
+            method, url, json=json, file=file, timeout=timeout, headers=headers
+        )
 
     def events(self, url: str, *, headers=None, timeout=None):
         # A stream is always a GET (see hgis.client.Client.events), so there
@@ -99,7 +102,7 @@ def test_the_read_only_floor_refuses_a_write() -> None:
 
 def test_the_read_only_floor_lets_reads_through() -> None:
     class _Answering(Transport):
-        def request(self, method, url, json=None, timeout=DEFAULT_TIMEOUT, headers=None):
+        def request(self, method, url, json=None, file=None, timeout=DEFAULT_TIMEOUT, headers=None):
             return Response(200, "{}")
 
         def events(self, *args: object, **kwargs: object):

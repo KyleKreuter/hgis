@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [9.99, 53.55]},
+      "properties": {"gattung": "Tilia", "pflanzjahr": 1932}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [9.98, 53.54]},
+      "properties": {"gattung": "Acer", "pflanzjahr": 2007}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [9.97, 53.53]},
+      "properties": {"gattung": "Quercus", "pflanzjahr": 1958}
+    }
+  ]
+}

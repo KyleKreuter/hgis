@@ -95,6 +95,9 @@ def test_there_is_no_generic_write_verb() -> None:
         "update_project",
         "deletion_impact",
         "delete_project",
+        "inspect_import",
+        "start_import",
+        "start_geoportal_import",
         "create_layer",
         "update_layer",
         "delete_layer",
@@ -160,6 +163,9 @@ def test_the_view_state_write_still_works(transport) -> None:
         ("DELETE", f"/api/projects/{PROJECT_ID}"),
         ("PATCH", f"/api/projects/{PROJECT_ID}"),
         ("POST", f"/api/projects/{PROJECT_ID}/layers"),
+        ("POST", f"/api/projects/{PROJECT_ID}/imports/inspect"),
+        ("POST", f"/api/projects/{PROJECT_ID}/imports"),
+        ("POST", f"/api/projects/{PROJECT_ID}/geoportal-imports"),
         ("PATCH", f"/api/layers/{LAYER_ID}"),
         ("DELETE", f"/api/layers/{LAYER_ID}"),
         ("POST", f"/api/layers/{LAYER_ID}/restore"),
@@ -377,6 +383,37 @@ def test_the_layer_write_paths_need_a_real_layer_id(guarded, transport, layer_id
     ):
         with pytest.raises(hgis.GuardError):
             guarded._send(method, path, json={})
+
+    assert transport.count == 0
+
+
+@pytest.mark.parametrize(
+    "project_id",
+    ["abc", "019fec3a", "019fec3a-ef0c-775c-a14f-7535e8a676eb-extra", "*"],
+)
+def test_the_import_paths_need_a_real_project_id(guarded, transport, project_id) -> None:
+    """The same UUID discipline every other project write path needs, for imports too."""
+    for method, path in (
+        ("POST", f"/api/projects/{project_id}/imports/inspect"),
+        ("POST", f"/api/projects/{project_id}/imports"),
+        ("POST", f"/api/projects/{project_id}/geoportal-imports"),
+    ):
+        with pytest.raises(hgis.GuardError):
+            guarded._send(method, path, json={})
+
+    assert transport.count == 0
+
+
+def test_the_import_paths_must_end_where_they_say(guarded, transport) -> None:
+    """Not a prefix match: none of the three reaches a sibling or a subtree of another."""
+    for path in (
+        f"/api/projects/{PROJECT_ID}/imports/inspect/extra",
+        f"/api/projects/{PROJECT_ID}/imports/extra",
+        f"/api/projects/{PROJECT_ID}/geoportal-imports/extra",
+        f"/api/projects/{PROJECT_ID}/import",  # singular: not the same word
+    ):
+        with pytest.raises(hgis.GuardError):
+            guarded._send("POST", path, json={})
 
     assert transport.count == 0
 

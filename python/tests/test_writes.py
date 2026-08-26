@@ -12,6 +12,8 @@ shaped for the read-only "Gebäude Speicherstadt" scenario.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 import hgis
@@ -19,6 +21,10 @@ from conftest import LAYER_ID, PROJECT_ID, FakeTransport
 from hgis.transport import Response
 
 OTHER_UUID = "019fecc1-48a2-76b7-8732-019e83d5532a"
+
+#: A real, small GeoJSON file -- the README's import chapter uses the same
+#: one, so both it and this file measure against exactly the same bytes.
+BAEUME_GEOJSON = Path(__file__).parent / "data" / "baeume.geojson"
 
 
 def _client(handler, **kwargs) -> tuple[hgis.Client, FakeTransport]:
@@ -192,6 +198,137 @@ def test_deletion_impact_reads_layer_and_feature_count() -> None:
     assert transport.requests[-1].method == "GET"
     assert transport.requests[-1].path == f"/api/projects/{PROJECT_ID}/deletion-impact"
     assert impact == {"layerCount": 2, "featureCount": 150}
+
+
+# --- importing -----------------------------------------------------------
+
+_INSPECTION_BODY = (
+    '{"uploadId":"019ff9aa-5555-7666-8777-888899990000","filename":"baeume.geojson",'
+    '"geometryType":"MULTIPOINT","featureCount":null,"charset":null,"srid":4326,'
+    '"crsConfidence":"HIGH","extentWgs84":[9.97,53.53,9.99,53.55],'
+    '"fields":[{"name":"gattung","dataType":"text","sampleValues":["Tilia","Acer"]}]}'
+)
+
+
+def test_inspect_import_sends_the_file_and_the_query_params() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, _INSPECTION_BODY)
+
+    client, transport = _client(handle)
+
+    client.inspect_import(PROJECT_ID, file_path=str(BAEUME_GEOJSON), srid=25832, charset="UTF-8")
+
+    assert transport.requests[-1].method == "POST"
+    assert transport.requests[-1].path == f"/api/projects/{PROJECT_ID}/imports/inspect"
+    assert transport.requests[-1].params == {"srid": ["25832"], "charset": ["UTF-8"]}
+    filename, content = transport.files[-1]
+    assert filename == "baeume.geojson"
+    assert content == BAEUME_GEOJSON.read_bytes()
+    # No body of its own -- everything but the file travels in the query
+    # string, the same shape a GET's filters use.
+    assert transport.bodies[-1] is None
+
+
+def test_inspect_import_with_an_upload_id_sends_no_file() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, _INSPECTION_BODY)
+
+    client, transport = _client(handle)
+
+    client.inspect_import(PROJECT_ID, upload_id="019ff9aa-5555-7666-8777-888899990000")
+
+    assert transport.requests[-1].params == {
+        "uploadId": ["019ff9aa-5555-7666-8777-888899990000"]
+    }
+    assert transport.files[-1] is None
+
+
+def test_inspect_import_reads_every_field_of_the_response() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, _INSPECTION_BODY)
+
+    client, transport = _client(handle)
+
+    inspection = client.inspect_import(PROJECT_ID, file_path=str(BAEUME_GEOJSON))
+
+    assert inspection == {
+        "uploadId": "019ff9aa-5555-7666-8777-888899990000",
+        "filename": "baeume.geojson",
+        "geometryType": "MULTIPOINT",
+        "featureCount": None,
+        "charset": None,
+        "srid": 4326,
+        "crsConfidence": "HIGH",
+        "extentWgs84": [9.97, 53.53, 9.99, 53.55],
+        "fields": [{"name": "gattung", "dataType": "text", "sampleValues": ["Tilia", "Acer"]}],
+    }
+
+
+def test_a_file_that_cannot_be_read_is_refused_before_any_request() -> None:
+    """
+    The gap this closes: without this check, ``open()`` would still raise --
+    but as a bare :class:`OSError`, not a message that reads like the rest
+    of this library. See :func:`hgis.client._read_file`.
+    """
+    client, transport = _client(lambda request: Response(200, "{}"))
+
+    with pytest.raises(hgis.InvalidArgumentError, match="nicht lesbar"):
+        client.inspect_import(PROJECT_ID, file_path="/keine/solche/datei.geojson")
+
+    assert transport.count == 0
+
+
+def test_start_import_sends_the_file_name_and_srid() -> None:
+    def handle(request: object) -> Response:
+        return Response(
+            202,
+            '{"id":"019ff9aa-6666-7777-8888-999900001111","type":"IMPORT",'
+            '"status":"PENDING","filename":"baeume.geojson","processedCount":0,'
+            '"totalCount":null,"skippedCount":0,"outputLayerId":null,'
+            '"outputProjectId":null,"message":null,"startedAt":null,'
+            '"finishedAt":null,"createdAt":"2026-01-01T00:00:00Z"}',
+        )
+
+    client, transport = _client(handle)
+
+    job_data = client.start_import(
+        PROJECT_ID, file_path=str(BAEUME_GEOJSON), name="Bäume", srid=25832
+    )
+
+    assert transport.requests[-1].method == "POST"
+    assert transport.requests[-1].path == f"/api/projects/{PROJECT_ID}/imports"
+    assert transport.requests[-1].params == {"name": ["Bäume"], "srid": ["25832"]}
+    assert transport.files[-1][0] == "baeume.geojson"
+    assert job_data["status"] == "PENDING"
+
+
+def test_start_geoportal_import_sends_a_json_body_and_no_file() -> None:
+    def handle(request: object) -> Response:
+        return Response(
+            202,
+            '{"id":"019ff9aa-7777-8888-9999-000011112222","type":"IMPORT",'
+            '"status":"PENDING","filename":"ÜSG Blattschnitte","processedCount":0,'
+            '"totalCount":null,"skippedCount":0,"outputLayerId":null,'
+            '"outputProjectId":null,"message":null,"startedAt":null,'
+            '"finishedAt":null,"createdAt":"2026-01-01T00:00:00Z"}',
+        )
+
+    client, transport = _client(handle)
+
+    client.start_geoportal_import(
+        PROJECT_ID, "uesg/uesg_blattschnitte",
+        bbox=(9.9, 53.5, 10.1, 53.6), fields=["name"], name="ÜSG-Test",
+    )
+
+    assert transport.requests[-1].method == "POST"
+    assert transport.requests[-1].path == f"/api/projects/{PROJECT_ID}/geoportal-imports"
+    assert transport.bodies[-1] == {
+        "datasetId": "uesg/uesg_blattschnitte",
+        "bbox": [9.9, 53.5, 10.1, 53.6],
+        "fields": ["name"],
+        "name": "ÜSG-Test",
+    }
+    assert transport.files[-1] is None
 
 
 # --- layers ------------------------------------------------------------
