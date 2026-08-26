@@ -160,3 +160,24 @@ def test_connect_sends_nothing() -> None:
 
 def test_the_default_address_is_the_local_one() -> None:
     assert hgis.DEFAULT_BASE_URL == "http://localhost:8080"
+
+
+def test_project_trash_lists_trashed_layers(project) -> None:
+    trash = project.trash()
+    assert len(trash) == 1
+    entry = trash[0]
+    assert entry.id == "019fed01-0000-7000-8000-000000000001"
+    assert entry.name == "Alte Gebäude"
+    assert entry.feature_count == 42
+    assert entry.deleted_by == "tester"
+    assert entry.deleted_at == "2026-08-23T14:30:00Z"
+
+
+def test_unknown_layer_mentions_trashed_layer_when_present(project) -> None:
+    with pytest.raises(hgis.UnknownNameError) as error:
+        project.layer("Alte Gebäude")
+
+    message = str(error.value)
+    assert "Unbekannter Layer: Alte Gebäude" in message
+    assert "Papierkorb" in message
+    assert "019fed01-0000-7000-8000-000000000001" in message

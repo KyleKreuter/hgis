@@ -101,6 +101,7 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 | `project.layers()` | `list[Layer]` |
 | `project.layer(name_oder_kennung)` | `Layer` |
 | `project.view()` | `View`: Mitte, Zoom, Ausschnitt, aktiver Layer |
+| `project.trash()` | `list[TrashEntry]`: gelöschte Layer im Papierkorb |
 | `project.selection()` | `Selection`: was der Nutzer angeklickt hat |
 | `project.select(fids)` | setzt die Auswahl, macht den Layer aktiv |
 | `project.create_layer(name, geometrietyp, fields=...)` | legt einen leeren Layer an, gibt ihn zurück |
@@ -854,7 +855,7 @@ Für Claude Code liegt eine `.mcp.json` im Projektwurzelverzeichnis:
 ```
 
 Gemessen: Genau dieser Start verbindet sich mit einem laufenden hGIS und
-meldet 23 Werkzeuge.
+meldet 24 Werkzeuge.
 
 Für einen anderen Host reicht der Befehl `hgis-mcp` allein -- gleichwertig
 `python -m hgis.mcp`. `HGIS_URL` bestimmt, wohin er sich verbindet; ohne sie
@@ -910,13 +911,14 @@ Name: Höhe, dtype: float64
 
 ### Die Werkzeuge
 
-Zehn lesende, dieselbe Oberfläche wie oben in dieser Datei, nur als
+Elf lesende, dieselbe Oberfläche wie oben in dieser Datei, nur als
 Werkzeugaufruf statt als Methode:
 
 | Aufruf | Antwort |
 |---|---|
 | `list_projects()` | alle Projekte, mit Layer- und Objektzahl |
 | `describe_project(project)` | ein Projekt mit seiner Layer-Liste |
+| `list_trash(project)` | gelöschte Layer im Papierkorb eines Projekts, mit Id für `restore_layer`/`purge_layer` |
 | `describe_layer(layer, stats=, sample=, ...)` | Felder, Wertebereiche, Beispielzeilen -- als Struktur und als Fließtext, siehe [`describe()`](#describe) |
 | `query_features(layer, where=, bbox=, search=, order_by=, limit=, geometry=, ...)` | gefilterte, sortierte, begrenzte Objekte; `truncated` und `match_count` wie bei [`.page()`](#eine-seite-lesen) |
 | `count_features(layer, where=, bbox=, search=, ...)` | nur die Anzahl, kein Datenrumpf |
@@ -966,7 +968,7 @@ mehr auffindbar, und `delete_layer` nennt die Id in seiner eigenen Antwort.
 
 ### Die volle Oberfläche, ohne Schalter
 
-Alle 23 Werkzeuge stehen von Anfang an bereit, ohne Erlaubnisschalter, der
+Alle 24 Werkzeuge stehen von Anfang an bereit, ohne Erlaubnisschalter, der
 die schreibenden abschalten könnte. Das ist eine ausdrückliche Entscheidung
 des Nutzers, nachdem ihm das Risiko vorgelegt wurde: `purge_layer` löscht
 endgültig, `delete_features` ist über diese Bibliothek nicht rückgängig zu
@@ -975,7 +977,7 @@ machen, und beides ist für jeden Agenten mit Verbindung zum Server erreichbar.
 Die Folge: **Der Docstring jedes Werkzeugs ist die einzige Warnung, die es
 gibt.** Jedes zerstörende Werkzeug nennt im ersten Satz seiner Beschreibung,
 was es zerstört -- das ist keine Höflichkeit, sondern der einzige Schutz, den
-dieser Server bietet. Gemessen: alle 73 Parameter der 23 Werkzeuge tragen
+dieser Server bietet. Gemessen: alle 74 Parameter der 24 Werkzeuge tragen
 eine eigene Beschreibung, nicht nur der Werkzeugname selbst.
 
 ## Tests

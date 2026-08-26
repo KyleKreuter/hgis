@@ -416,14 +416,39 @@ class ProjectListPagingTest {
 		assertThat(extent.get(3).asDouble()).isCloseTo(53.8, within(0.0001));
 	}
 
+	@Test
+	@DisplayName("trashed layers do not contribute to layerCount, featureCount or extent in project list")
+	void trashedLayersAreExcludedFromPagingAggregation() throws Exception {
+		String marker = marker();
+		UUID projectId = createProject(marker + "-mit-trash", null);
+
+		createLayerWithExtentAndFeatures(projectId, 10.0, 53.0, 10.1, 53.1, 10, null);
+		createLayerWithExtentAndFeatures(projectId, 11.0, 54.0, 11.1, 54.1, 50, Instant.now());
+
+		JsonNode project = list(marker, null, null).get("items").get(0);
+		assertThat(project.get("layerCount").asInt()).isEqualTo(1);
+		assertThat(project.get("featureCount").asInt()).isEqualTo(10);
+
+		JsonNode extent = project.get("extent");
+		assertThat(extent.get(0).asDouble()).isCloseTo(10.0, within(0.0001));
+		assertThat(extent.get(1).asDouble()).isCloseTo(53.0, within(0.0001));
+		assertThat(extent.get(2).asDouble()).isCloseTo(10.1, within(0.0001));
+		assertThat(extent.get(3).asDouble()).isCloseTo(53.1, within(0.0001));
+	}
+
 	/** A layer row with nothing but an extent -- enough for the aggregation under test. */
 	private void createLayerWithExtent(UUID projectId, double minLng, double minLat,
 			double maxLng, double maxLat) {
+		createLayerWithExtentAndFeatures(projectId, minLng, minLat, maxLng, maxLat, 0, null);
+	}
+
+	private void createLayerWithExtentAndFeatures(UUID projectId, double minLng, double minLat,
+			double maxLng, double maxLat, long featureCount, Instant deletedAt) {
 		UUID layerId = UUID.randomUUID();
 		jdbc.sql("""
-				INSERT INTO gis_meta.layer (id, project_id, name, table_name, geometry_type, srid, extent)
+				INSERT INTO gis_meta.layer (id, project_id, name, table_name, geometry_type, srid, extent, feature_count, deleted_at)
 				VALUES (:id, :projectId, :name, :tableName, 'MULTIPOLYGON', 25832,
-				        ST_MakeEnvelope(:minLng, :minLat, :maxLng, :maxLat, 4326))
+				        ST_MakeEnvelope(:minLng, :minLat, :maxLng, :maxLat, 4326), :featureCount, :deletedAt)
 				""")
 				.param("id", layerId)
 				.param("projectId", projectId)
@@ -433,6 +458,8 @@ class ProjectListPagingTest {
 				.param("minLat", minLat)
 				.param("maxLng", maxLng)
 				.param("maxLat", maxLat)
+				.param("featureCount", featureCount)
+				.param("deletedAt", deletedAt == null ? null : Timestamp.from(deletedAt))
 				.update();
 	}
 

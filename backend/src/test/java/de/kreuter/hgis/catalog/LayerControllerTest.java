@@ -203,6 +203,31 @@ class LayerControllerTest {
 	}
 
 	@Test
+	@DisplayName("a trashed layer does not count towards the project's layerCount and featureCount")
+	void trashedLayerIsNotCountedInProjectDetail() throws Exception {
+		mockMvc.perform(get("/api/projects/{projectId}", project.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.layerCount").value(1))
+				.andExpect(jsonPath("$.featureCount").value(1));
+
+		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))
+				.andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/projects/{projectId}", project.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.layerCount").value(0))
+				.andExpect(jsonPath("$.featureCount").value(0));
+
+		mockMvc.perform(post("/api/layers/{layerId}/restore", layer.getId()))
+				.andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/projects/{projectId}", project.getId()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.layerCount").value(1))
+				.andExpect(jsonPath("$.featureCount").value(1));
+	}
+
+	@Test
 	@DisplayName("deleting an already-trashed layer is a conflict, not a silent no-op")
 	void deletingAnAlreadyTrashedLayerConflicts() throws Exception {
 		mockMvc.perform(delete("/api/layers/{layerId}", layer.getId()))

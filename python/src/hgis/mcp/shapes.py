@@ -113,6 +113,17 @@ class LayerSummary:
 
 
 @dataclass(frozen=True)
+class TrashItemSummary:
+    """Ein gelöschter Layer im Papierkorb eines Projekts."""
+
+    id: str
+    name: str
+    feature_count: int
+    deleted_at: str | None = None
+    deleted_by: str | None = None
+
+
+@dataclass(frozen=True)
 class FeatureRow:
     """
     One object of a layer.

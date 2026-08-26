@@ -36,6 +36,7 @@ from hgis.mcp.shapes import (
     ProjectSummary,
     QueryResult,
     ToolError,
+    TrashItemSummary,
     ValueCount,
     extent_list,
     tool_error,
@@ -215,6 +216,32 @@ def describe_project(
         )
     except Exception as error:
         raise tool_error(error, doing=f"Beschreiben des Projekts {project!r}") from error
+
+
+@server.tool()
+def list_trash(
+    project: Annotated[str, Field(description="Name oder Id des Projekts.")],
+) -> list[TrashItemSummary]:
+    """
+    Alle gelöschten Layer im Papierkorb eines Projekts, mit Layer-Id und Objektzahl.
+
+    Zeigt, was mit delete_layer gelöscht wurde und mit restore_layer wiederhergestellt
+    oder mit purge_layer endgültig gelöscht werden kann.
+    """
+    try:
+        found = _resolve_project(project)
+        return [
+            TrashItemSummary(
+                id=entry.id,
+                name=entry.name,
+                feature_count=entry.feature_count,
+                deleted_at=entry.deleted_at,
+                deleted_by=entry.deleted_by,
+            )
+            for entry in found.trash()
+        ]
+    except Exception as error:
+        raise tool_error(error, doing=f"Lesen des Papierkorbs für Projekt {project!r}") from error
 
 
 @dataclass(frozen=True)

@@ -694,3 +694,23 @@ def test_resolve_layer_by_name_reports_every_project_that_matches() -> None:
         assert layer_b in text
     finally:
         use_client(None)
+
+
+def test_list_trash_returns_trashed_layers(mcp_client) -> None:
+    from hgis.mcp.read_tools import list_trash
+
+    result = list_trash(PROJECT_ID)
+    assert len(result) == 1
+    assert result[0].id == "019fed01-0000-7000-8000-000000000001"
+    assert result[0].name == "Alte Gebäude"
+    assert result[0].feature_count == 42
+    assert result[0].deleted_at == "2026-08-23T14:30:00Z"
+    assert result[0].deleted_by == "tester"
+
+
+def test_list_trash_resolves_project_by_name(mcp_client) -> None:
+    from hgis.mcp.read_tools import list_trash
+
+    result = list_trash("Leitungsnetz Nord")
+    assert len(result) == 1
+    assert result[0].name == "Alte Gebäude"

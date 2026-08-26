@@ -52,7 +52,7 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
 			       page.basemap                          AS basemap,
 			       COUNT(l.id)                           AS layerCount,
 			       COALESCE(SUM(l.feature_count), 0)     AS featureCount
-			FROM page LEFT JOIN gis_meta.layer l ON l.project_id = page.id
+			FROM page LEFT JOIN gis_meta.layer l ON l.project_id = page.id AND l.deleted_at IS NULL
 			GROUP BY page.id, page.name, page.description, page.srid, page.last_opened_at,
 			         page.created_at, page.center, page.zoom, page.extent, page.basemap
 			ORDER BY COALESCE(page.last_opened_at, TIMESTAMPTZ '-infinity') DESC,
@@ -95,7 +95,7 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
 			SELECT COUNT(l.id)                       AS layerCount,
 			       COALESCE(SUM(l.feature_count), 0) AS featureCount
 			FROM gis_meta.layer l
-			WHERE l.project_id = :projectId
+			WHERE l.project_id = :projectId AND l.deleted_at IS NULL
 			""", nativeQuery = true)
 	ProjectCountsRow countsFor(@Param("projectId") UUID projectId);
 

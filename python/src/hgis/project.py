@@ -9,7 +9,7 @@ from .errors import UnknownNameError
 
 if TYPE_CHECKING:
     from .client import Client
-    from .layer import Layer
+    from .layer import Layer, TrashEntry
 
 
 class Project:
@@ -100,9 +100,34 @@ class Project:
                 f"Verwenden Sie eine Kennung: {ids}."
             )
         available = ", ".join(item.name for item in layers) if layers else "keine"
+        trashed = [
+            entry for entry in self.trash() if entry.name.casefold() == name_or_id.casefold()
+        ]
+        if trashed:
+            if len(trashed) == 1:
+                t = trashed[0]
+                trash_note = f" Ein Layer dieses Namens liegt im Papierkorb (Id {t.id})."
+            else:
+                ids = ", ".join(t.id for t in trashed)
+                trash_note = f" Mehrere Layer dieses Namens liegen im Papierkorb: {ids}."
+            raise UnknownNameError(
+                f"Unbekannter Layer: {name_or_id}. Verfügbar: {available}.{trash_note}"
+            )
         raise UnknownNameError(
             f"Unbekannter Layer: {name_or_id}. Verfügbar: {available}."
         )
+
+    def trash(self) -> list["TrashEntry"]:
+        """
+        Every layer currently sitting in this project's trash, most recently deleted first.
+
+        >>> for entry in project.trash():
+        ...     print(entry.name, entry.id, entry.feature_count, entry.deleted_at)
+        """
+        from .layer import _to_trash_entry
+
+        items = self._client.get(f"/api/projects/{self.id}/trash")
+        return [_to_trash_entry(item) for item in items]
 
     def create_layer(
         self,

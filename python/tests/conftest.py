@@ -135,6 +135,10 @@ def stub_server(request: Recorded) -> Response:
         return Response(200, '{"version":1,"activeLayerId":null,"layers":{}}')
     if path == f"/api/projects/{PROJECT_ID}/layers":
         return ok("layers.json")
+    if path == f"/api/projects/{PROJECT_ID}/trash":
+        return ok("trash.json")
+    if path.startswith("/api/projects/") and path.endswith("/trash"):
+        return Response(200, "[]")
 
     if path == f"/api/layers/{LAYER_ID}":
         return ok("layer.json")
