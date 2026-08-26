@@ -12,6 +12,7 @@
  */
 
 import { Map as MapLibreMap } from 'maplibre-gl'
+import type { LayerSummary } from '@/api/layers'
 import type { AttributionPart } from '../basemap'
 import { drawFurniture } from './drawFurniture'
 import { buildFurniture } from './furniture'
@@ -39,6 +40,10 @@ export interface MapImageOptions {
   attribution: readonly AttributionPart[]
   /** From `readMaxRenderbufferSize`; caps MapLibre's own `maxCanvasSize`. */
   maxRenderbufferSize: number | null
+  /** Visible layers to include in the legend. */
+  layers?: readonly LayerSummary[]
+  /** Whether to draw the legend on the image. */
+  includeLegend?: boolean
 }
 
 export interface MapImageResult {
@@ -239,6 +244,8 @@ export async function renderMapImage(options: MapImageOptions): Promise<MapImage
         pitch,
         cssWidth: size.cssWidth,
         attribution: options.attribution,
+        layers: options.layers,
+        includeLegend: options.includeLegend,
       }),
       size,
     )

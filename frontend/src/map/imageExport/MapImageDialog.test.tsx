@@ -97,4 +97,12 @@ describe('MapImageDialog', () => {
 
     expect(screen.getByRole('button', { name: 'Bild erzeugen' })).toBeEnabled()
   })
+
+  test('bietet eine standardmäßig aktivierte Checkbox für die Legende', () => {
+    renderDialog()
+
+    const checkbox = screen.getByRole('checkbox', { name: 'Legende anzeigen' })
+    expect(checkbox).toBeInTheDocument()
+    expect(checkbox).toBeChecked()
+  })
 })

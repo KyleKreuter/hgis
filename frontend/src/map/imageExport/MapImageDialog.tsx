@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -19,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { triggerDownload } from '@/api/export'
+import type { LayerSummary } from '@/api/layers'
 import { useMap } from '../MapContext'
 import type { AttributionPart } from '../basemap'
 import { imageFilename } from './filename'
@@ -41,6 +43,8 @@ interface MapImageDialogProps {
   projectName: string
   /** Basemap notice plus the visible Geoportal layers', from `MapCanvas` via the context. */
   attribution: readonly AttributionPart[]
+  /** Layers to potentially include in the legend. */
+  layers?: readonly LayerSummary[]
 }
 
 /**
@@ -56,11 +60,13 @@ export function MapImageDialog({
   onOpenChange,
   projectName,
   attribution,
+  layers,
 }: MapImageDialogProps) {
   const { mapRef } = useMap()
   const [title, setTitle] = useState(projectName)
   const [pageChoiceId, setPageChoiceId] = useState(DEFAULT_PAGE_CHOICE_ID)
   const [dpi, setDpi] = useState(DEFAULT_DPI)
+  const [includeLegend, setIncludeLegend] = useState(true)
   const [isRendering, setIsRendering] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Read once per opening rather than on every render: the probe creates a WebGL context,
@@ -87,6 +93,7 @@ export function MapImageDialog({
     setTitle(projectName)
     setPageChoiceId(DEFAULT_PAGE_CHOICE_ID)
     setDpi(DEFAULT_DPI)
+    setIncludeLegend(true)
     setError(null)
   }
 
@@ -110,6 +117,8 @@ export function MapImageDialog({
         size,
         attribution,
         maxRenderbufferSize,
+        layers,
+        includeLegend,
       })
       triggerDownload(blob, imageFilename(title))
       if (warnings.length > 0) {
@@ -211,6 +220,17 @@ export function MapImageDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="map-image-legend"
+                checked={includeLegend}
+                onCheckedChange={(checked) => setIncludeLegend(checked === true)}
+              />
+              <Label htmlFor="map-image-legend" className="text-sm font-normal cursor-pointer">
+                Legende anzeigen
+              </Label>
             </div>
 
             <p className="text-xs text-muted-foreground">

@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { ImageDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import type { LayerSummary } from '@/api/layers'
 import { useMap } from '../MapContext'
 import { MapImageDialog } from './MapImageDialog'
 
 interface MapImageControlProps {
   /** Prefills the image title. */
   projectName: string
+  /** Layers to include in the export legend. */
+  layers?: readonly LayerSummary[]
 }
 
 /**
@@ -18,7 +21,7 @@ interface MapImageControlProps {
  * dialog also needs the live map instance, and `useMap()` only answers inside
  * `<MapCanvas>`.
  */
-export function MapImageControl({ projectName }: MapImageControlProps) {
+export function MapImageControl({ projectName, layers }: MapImageControlProps) {
   const { attribution } = useMap()
   const [open, setOpen] = useState(false)
 
@@ -39,6 +42,7 @@ export function MapImageControl({ projectName }: MapImageControlProps) {
         onOpenChange={setOpen}
         projectName={projectName}
         attribution={attribution}
+        layers={layers}
       />
     </>
   )

@@ -97,7 +97,7 @@ export function ProjectMap({
           the row -- it acts on the same thing the basemap picker does, the view on
           screen. */}
       <div className="absolute top-2 right-11 z-10 flex items-center gap-2">
-        <MapImageControl projectName={project.name} />
+        <MapImageControl projectName={project.name} layers={layers ?? []} />
         <BasemapControl projectId={project.id} project={project} activeLayer={activeLayer} />
       </div>
       {children}
