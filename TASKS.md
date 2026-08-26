@@ -18,11 +18,11 @@ Phasenberichte. Diese Datei ersetzt ihn nicht.
 
 | Teil | Tests | Wie prüfen |
 |---|---|---|
-| Backend (Spring Boot 4.1, Java) | **1126** | `cd backend && ./mvnw test` |
-| Frontend (React 19, TypeScript) | **1252** | `cd frontend && npx vitest run` |
-| Python-Bibliothek und MCP-Server | **434** | `cd python && .venv/bin/python -m pytest -q` |
+| Backend (Spring Boot 4.1, Java) | **1134** | `cd backend && ./mvnw test` |
+| Frontend (React 19, TypeScript) | **1277** | `cd frontend && npx vitest run` |
+| Python-Bibliothek und MCP-Server | **452** | `cd python && .venv/bin/python -m pytest -q` |
 
-Alle drei laufen lokal und in der CI grün. Die Zahlen sind am 25.08. gemessen, nicht
+Alle drei laufen lokal und in der CI grün. Die Zahlen sind am 26.08. gemessen, nicht
 geschätzt.
 
 **Aus der Stufenliste in `PLAN.md` ist nur noch Schritt 6 offen** (Editor mit Pyodide,
@@ -42,8 +42,8 @@ Das Backend braucht rund 20 Sekunden bis zur ersten Antwort. Prüfen mit
 
 ### Der MCP-Server
 
-Seit dem 25.08. gibt `python/src/hgis/mcp/` hGIS als **24 Werkzeuge** an einen Agenten
-(elf lesende, dreizehn schreibende, 74 Parameter). `.mcp.json` im Projektwurzel-
+Seit dem 25.08. gibt `python/src/hgis/mcp/` hGIS als **26 Werkzeuge** an einen Agenten
+(elf lesende, fünfzehn schreibende, 80 Parameter). `.mcp.json` im Projektwurzel-
 verzeichnis bindet ihn in Claude Code ein. Ein Werkzeugaufruf beantwortet eine kleine
 Frage; für alles, was rechnet, gibt es die Bibliothek `hgis`. Näheres in
 `python/README.md`, Kapitel „MCP-Server".
@@ -130,8 +130,8 @@ das:
 6. **Er kommt aus jedem Fehler heraus.** Jede Meldung nennt das Gültige, nicht nur das
    Abgelehnte.
 
-Zusage 3 steht, 6 seit dem 26.08. (Aufgabe 18) und 1 seit dem 26.08. (Aufgabe 17).
-2 und 4 sind gebrochen. 5 steht für GeoJSON.
+Von den sechs stehen fünf: 3 seit Phase 33, und 1, 4 und 6 seit dem 26.08. (Aufgaben 17,
+9 und 18). 5 steht für GeoJSON. **Gebrochen ist nur noch 2**, der Import.
 
 ### Die Abnahmeprobe
 
@@ -140,9 +140,9 @@ Ein Agent bekommt die MCP-Werkzeuge und einen Satz, sonst nichts:
 > Lade `<Datei>` nach hGIS, style sie nach `<Feld>`, und zeig mir das Ergebnis.
 
 Bestanden ist die Probe, wenn er ohne `curl`, ohne Quelltext und ohne Rückfrage
-durchkommt und am Ende die Karte des Nutzers auf dem Ergebnis steht. **Heute scheitert er
-zweimal:** am Import (Aufgabe 20) und daran, dass der offene Tab den gesetzten Ausschnitt
-nicht nachzieht (Aufgabe 9). Die eigene Fläche steht seit dem 26.08.
+durchkommt und am Ende die Karte des Nutzers auf dem Ergebnis steht. **Heute scheitert er noch
+an einer Stelle:** am Import (Aufgabe 20). Die eigene Fläche und der Bildschirm des
+Menschen stehen seit dem 26.08.
 
 ### Wie weit es heute trägt, in Zahlen
 
@@ -175,20 +175,21 @@ Innerhalb einer Stufe steht die Reihenfolge des Nutzens.
 
 ### Wie das parallel läuft
 
-Zwei Teams, zwei Worktrees, keine gemeinsame Datei. `wt-fehler` ist am 26.08. fertig geworden und aufgelöst:
+Ein Team ist noch übrig. `wt-fehler` und `wt-ausschnitt` sind am 26.08. fertig geworden
+und aufgelöst:
 
 | Team | Aufgaben | Berührt |
 |---|---|---|
 | `wt-flaeche` | 20 | `python/src/hgis/client.py`, `mcp/write_tools.py` |
-| `wt-ausschnitt` | 9 | `backend/.../catalog/ProjectService.java`, `frontend/src/state/`, `frontend/src/map/` |
 
 Aufgabe 17 lief vor 20 im selben Worktree: beide ändern `client.py` und `write_tools.py`.
 
 ---
 
-## 5.1 Stufe A — zwei Brüche
+## 5.1 Stufe A — der letzte Bruch
 
-Zwei der vier Aufgaben dieser Stufe sind am 26.08. erledigt: 18 und 17 (Abschnitt 7).
+Drei der vier Aufgaben dieser Stufe sind am 26.08. erledigt: 18, 17 und 9
+(Abschnitt 7). Offen ist der Import.
 
 ### 20 — Ein Agent kann keine Daten hereinholen
 
@@ -232,55 +233,6 @@ billige Weg, den Multipart-Aufbau zu belegen.
 **Betroffen:** `python/src/hgis/client.py`, ein neues `python/src/hgis/jobs.py`,
 `python/src/hgis/project.py` (`import_file()`, `import_geoportal()`),
 `python/src/hgis/mcp/write_tools.py`, `python/README.md` (neues Kapitel, ausführbar).
-
----
-
-### 9 — Ein vom Agenten gesetzter Ausschnitt erreicht den offenen Tab nicht
-
-**Mittelgroß. Der Bruch, der am meisten kostet, weil er still ist.**
-
-Nachgemessen am 23.08.: Ein Agent setzt über `set_view` Zentrum und Zoom. Der Serverstand
-stimmt sofort, **aber ein bereits offener Tab zieht nicht nach** — erst ein Neuladen
-zeigt die neue Position. Der Agent meldet Erfolg, der Bildschirm bleibt stehen.
-
-Das bricht genau die Zusage, die der MCP-Server einem Agenten in seiner eigenen Anleitung
-gibt (`python/src/hgis/mcp/server.py:43`): „select_features und set_view verändern, was
-der Mensch am Bildschirm sieht."
-
-**Die Ursache steht fest.** `set_view` schreibt Zentrum und Zoom über
-`PATCH /api/projects/{id}` in die Projekteigenschaften. `ProjectService.update()`
-publiziert **kein** Ereignis; das einzige `events.publishEvent` der Klasse sitzt in
-`updateViewState()` (`ProjectService.java:275`). Der Live-Kanal erfährt also nichts, und
-das Frontend kann nicht nachziehen, was ihm niemand sagt.
-
-**Die Auswahl zieht bereits nach**, über `applyRemoteSelection` in
-`frontend/src/state/useLiveViewState.ts` — der Weg für den Ausschnitt ist derselbe und
-liegt fertig da.
-
-**Entschieden (Vorschlag vom 26.08., Widerspruch bis Baubeginn):** Der Ausschnitt zieht
-nach, **unabhängig vom Urheber**. Kein Sonderweg für Agenten, keine Auswertung von
-`origin` über das Überspringen des eigenen Echos hinaus.
-
-Der Grund, warum das hier anders ausfällt als beim aktiven Layer (Aufgabe 25): **Ein
-Ausschnitt ist verlustfrei umkehrbar.** Der Mensch schiebt die Karte zurück, und nichts
-ist verloren. Ein gewechselter aktiver Layer mitten in einer Bearbeitung ist es nicht.
-Deshalb gilt die Vorsicht aus Phase 29 für den Layer weiter und für den Ausschnitt nicht.
-
-**Zwei Bedingungen an die Umsetzung:**
-
-1. **Sanft, nicht springend.** `easeTo`, nicht `jumpTo` — sonst weiß der Mensch nicht, ob
-   die Karte gesprungen oder neu geladen ist.
-2. **Nicht mitten in der Geste.** Bewegt der Mensch gerade selbst die Karte, wartet die
-   Bewegung, bis er losgelassen hat.
-
-**Betroffen:** `backend/.../catalog/ProjectService.java` (Ereignis in `update()`, nach
-Commit, nach dem Muster von `updateViewState()`), `backend/.../events/` (Ereignisname —
-zu entscheiden, ob `project-catalog` reicht oder es einen eigenen braucht),
-`frontend/src/state/useLiveViewState.ts`, `frontend/src/map/ProjectMap.tsx`.
-
-**Prüfen:** Zwei Browser nebeneinander, in einem `set_view` über MCP, im anderen
-zusehen. Und ein Test, der belegt, dass `update()` ohne Änderung an Zentrum oder Zoom
-**kein** Ereignis auslöst — sonst weckt jede Namensänderung jeden offenen Tab.
 
 ---
 
@@ -544,6 +496,7 @@ Server, sie bearbeiten keine Daten. Ein Agent, der sie braucht, hat ein anderes 
 | 4 | Legende im Kartenbild-Export (Single, Categorized, Graduated, Heatmap) | 25.08. |
 | 18 | **Fehlermeldungen nennen die gültigen Werte**, plus ein Test über jeden `valueOf`-Aufruf im Backend | 26.08. |
 | 17 | **Ein Agent legt Projekte an und löscht sie** — `create_project`, `delete_project` mit wörtlicher Namensbestätigung, `deletion_impact()` | 26.08. |
+| 9 | **Der Kartenausschnitt erreicht den offenen Tab** — neues Ereignis `project-viewport`, `RemoteViewport` zieht sanft nach | 26.08. |
 
 ### Was Aufgabe 5 gelehrt hat
 

@@ -1058,9 +1058,10 @@ python -m pytest -m "not live"                        # ohne
   beim Vorgabewert kann es genauso lange brauchen wie die Frist oben.
 - `PyodideTransport.events()` läuft nicht -- nur unter CPython.
 - Ein per `set_view` (oder `project.update()`) gesetzter Kartenausschnitt
-  erreicht einen bereits offenen Browser-Tab nicht von selbst -- der
-  Serverstand stimmt sofort, der Tab zieht erst bei einem Neuladen nach.
-  Gehört zu Aufgabe 9.
+  erreicht seit dem 26.08. jeden offenen Browser-Tab von selbst: Der Tab
+  zieht sanft nach, ohne Neuladen. Der **aktive Layer** tut das nicht -- ein
+  Wechsel erreicht den fremden Tab, zieht dessen Ansicht aber nicht mit
+  (Aufgabe 25).
 - Kein Editor im Browser.
 - `to_dataframe()` überträgt GeoJSON. Arrow und GeoParquet sind eine Frage der
   Geschwindigkeit. Sie kommen später.
