@@ -1,9 +1,13 @@
 # Aufgaben in hGIS
 
-Stand: 25.08.2026, Commit `77dd640`. Diese Datei ist für jemanden geschrieben, der neu
+Stand: 26.08.2026, Commit `ae17982`. Diese Datei ist für jemanden geschrieben, der neu
 dazukommt und eine der offenen Aufgaben übernimmt. Sie enthält den Zustand des Projekts,
 die Regeln der Zusammenarbeit und zu jeder Aufgabe genug Kontext, um ohne Rückfragen zu
 beginnen.
+
+**Das Ziel seit dem 26.08.: hGIS agent native.** Abschnitt 4 sagt, was das heißt und
+woran es gemessen wird. Stufe A in Abschnitt 5 ist Prio 1; alles andere wartet, bis sie
+fertig ist.
 
 `PLAN.md` im selben Verzeichnis trägt die lange Fassung — Architektur, Begründungen,
 Phasenberichte. Diese Datei ersetzt ihn nicht.
@@ -14,11 +18,11 @@ Phasenberichte. Diese Datei ersetzt ihn nicht.
 
 | Teil | Tests | Wie prüfen |
 |---|---|---|
-| Backend (Spring Boot 4.1, Java) | **1124** | `cd backend && ./mvnw test` |
-| Frontend (React 19, TypeScript) | **1245** | `cd frontend && npx vitest run` |
-| Python-Bibliothek und MCP-Server | **430** | `cd python && .venv/bin/python -m pytest -q` |
+| Backend (Spring Boot 4.1, Java) | **1126** | `cd backend && ./mvnw test` |
+| Frontend (React 19, TypeScript) | **1252** | `cd frontend && npx vitest run` |
+| Python-Bibliothek und MCP-Server | **434** | `cd python && .venv/bin/python -m pytest -q` |
 
-Alle drei laufen lokal und in der CI grün. Die Zahlen sind am 23.08. gemessen, nicht
+Alle drei laufen lokal und in der CI grün. Die Zahlen sind am 25.08. gemessen, nicht
 geschätzt.
 
 **Aus der Stufenliste in `PLAN.md` ist nur noch Schritt 6 offen** (Editor mit Pyodide,
@@ -38,8 +42,8 @@ Das Backend braucht rund 20 Sekunden bis zur ersten Antwort. Prüfen mit
 
 ### Der MCP-Server
 
-Seit dem 23.08. gibt `python/src/hgis/mcp/` hGIS als **23 Werkzeuge** an einen Agenten
-(zehn lesende, dreizehn schreibende, 73 Parameter). `.mcp.json` im Projektwurzel-
+Seit dem 25.08. gibt `python/src/hgis/mcp/` hGIS als **24 Werkzeuge** an einen Agenten
+(elf lesende, dreizehn schreibende, 74 Parameter). `.mcp.json` im Projektwurzel-
 verzeichnis bindet ihn in Claude Code ein. Ein Werkzeugaufruf beantwortet eine kleine
 Frage; für alles, was rechnet, gibt es die Bibliothek `hgis`. Näheres in
 `python/README.md`, Kapitel „MCP-Server".
@@ -105,51 +109,93 @@ wirklich. Drei Stellen sind als Illustration gekennzeichnet
 
 ---
 
-## 4. Offene Aufgaben
+## 4. Das Ziel: hGIS agent native
 
-Reihenfolge nach meiner Einschätzung des Nutzens, nicht nach Nummer.
+**Seit dem 26.08. ist das die erste Priorität.** Alles in Abschnitt 5, Stufe A, dient ihr;
+alles andere wartet.
+
+### Was agent native heißt
+
+Ein Agent erledigt eine GIS-Aufgabe von Anfang bis Ende: ohne Menschen am Bildschirm,
+ohne `curl` neben den Werkzeugen, ohne einen Blick in den Quelltext. Sechs Zusagen tragen
+das:
+
+1. **Er hat eine eigene Fläche.** Er legt ein Projekt an und räumt es hinterher weg,
+   statt in die Daten des Nutzers zu schreiben.
+2. **Er holt Daten herein.** Datei-Import und Geoportal-Import, und er sieht, wann der
+   Auftrag fertig ist.
+3. **Er rechnet und schreibt.** Steht seit Phase 33.
+4. **Er zeigt das Ergebnis** — auf dem Bildschirm des Menschen, sofort, ohne Neuladen.
+5. **Er belegt das Ergebnis** — als Export, als Zahl, als Ausschnitt.
+6. **Er kommt aus jedem Fehler heraus.** Jede Meldung nennt das Gültige, nicht nur das
+   Abgelehnte.
+
+Zusage 3 steht. 1, 2 und 4 sind gebrochen, 6 an drei Stellen. 5 steht für GeoJSON.
+
+### Die Abnahmeprobe
+
+Ein Agent bekommt die MCP-Werkzeuge und einen Satz, sonst nichts:
+
+> Lade `<Datei>` nach hGIS, style sie nach `<Feld>`, und zeig mir das Ergebnis.
+
+Bestanden ist die Probe, wenn er ohne `curl`, ohne Quelltext und ohne Rückfrage
+durchkommt und am Ende die Karte des Nutzers auf dem Ergebnis steht. **Heute scheitert er
+dreimal:** an der eigenen Fläche (Aufgabe 17), am Import (Aufgabe 20) und daran, dass der
+offene Tab den gesetzten Ausschnitt nicht nachzieht (Aufgabe 9).
+
+### Wie weit es heute trägt, in Zahlen
+
+Die Schranke `RequestGuard._ALLOWED` (`python/src/hgis/client.py:174-186`) lässt **zehn
+von 24 schreibenden Endpunkten** des Backends durch. Die vierzehn geschlossenen:
+
+| Weg | Was dem Agenten fehlt | Aufgabe |
+|---|---|---|
+| `POST /api/projects` | eine eigene Arbeitsfläche | 17 |
+| `DELETE /api/projects/{id}` | sie wieder wegräumen | 17 |
+| `POST /api/projects/{id}/imports` | Daten aus einer Datei | 20 |
+| `POST .../imports/inspect` | vorher wissen, was ankommt | 20 |
+| `POST .../geoportal-imports` | Daten aus dem Geoportal Hamburg | 20 |
+| `PATCH /api/layers/{id}/fields/{fid}` | ein Feld umbenennen | 21 |
+| `PUT /api/projects/{id}/layers/order` | Layer neu ordnen | 21 |
+| `POST .../features/{fid}/split` | ein Objekt teilen | 21 |
+| `POST .../features/merge` | Objekte zusammenführen | 21 |
+| `POST /api/projects/{id}/duplicate` | ein Projekt duplizieren | 21 |
+| `POST /api/projects/{id}/map-layers` | einen WMS-Layer anlegen | 21 |
+| `POST .../export.geojson` | Export mit Filter im Rumpf | 24 |
+| `POST /api/places/refresh` | Ortsverzeichnis auffrischen | — |
+| `POST /api/geoportal/catalog/refresh` | Katalog auffrischen | — |
+
+Die letzten zwei bleiben zu. Sie sind Wartung des Servers, nicht Arbeit an Daten.
 
 ---
 
-### 19 — Der Papierkorb ist nicht einsehbar, und er verfälscht die Objektzahl
+## 5. Offene Aufgaben
 
-**Klein, und es steckt ein echter Fehler in den Daten des Nutzers.**
+Drei Stufen. **Stufe A ist Prio 1** und wird als Ganzes fertig, bevor Stufe B beginnt.
+Innerhalb einer Stufe steht die Reihenfolge des Nutzens.
 
-Gefunden am 23.08. beim Agentenlauf, zweifach belegt.
+### Wie das parallel läuft
 
-**Erstens: Man kann nicht sehen, was im Papierkorb liegt.** `delete_layer`,
-`restore_layer` und `purge_layer` brauchen alle die Layer-Id. Wer sie nicht selbst
-notiert hat, kommt nicht mehr an sie heran — es gibt keinen Weg, den Papierkorb eines
-Projekts aufzulisten. Für einen Menschen mit Oberfläche mag das reichen; für einen
-Agenten, dessen Kontext zwischengespeichert wird, ist eine Id, die nirgends mehr steht,
-verloren. `describe_layer` auf einen gelöschten Layer sagt „Verfügbar: keine", ohne den
-Papierkorb zu erwähnen.
+Drei Teams, drei Worktrees, keine gemeinsame Datei:
 
-**Zweitens: `feature_count` eines Projekts zählt gelöschte Layer mit.** Belegt in einem
-Wegwerf-Projekt (Layer mit zwei Objekten gelöscht → `layers: []`, aber `feature_count`
-blieb bei 2; erst `purge_layer` setzte ihn zurück). **Dasselbe steckt in echten Daten:**
-Das Projekt `Flurstücke` meldet `layer_count: 2` und `feature_count: 625`, zeigt aber nur
-**einen** Layer mit 99 Objekten.
+| Team | Aufgaben | Berührt |
+|---|---|---|
+| `wt-fehler` | 18 | `backend/.../catalog/*Service.java` |
+| `wt-flaeche` | 17, dann 20 | `python/src/hgis/client.py`, `mcp/write_tools.py` |
+| `wt-ausschnitt` | 9 | `backend/.../catalog/ProjectService.java`, `frontend/src/state/`, `frontend/src/map/` |
 
-Ein Zähler, der etwas mitzählt, das man nicht sehen kann, ist die Sorte Zahl, die richtig
-aussieht und falsch ist. Wer die 625 liest und die 99 zählt, sucht den Fehler bei sich.
-
-**Vor dem Bauen zu entscheiden:**
-1. Soll `feature_count` den Papierkorb mitzählen? Falls ja, muss die Zahl benannt sein
-   („625, davon 526 im Papierkorb"). Falls nein, ist es ein Fehler im Backend-Zähler.
-2. Wo gehört das Auflisten hin — Backend-Endpunkt, Bibliotheksmethode, MCP-Werkzeug?
-   Wahrscheinlich alle drei, in dieser Reihenfolge.
-3. Zeigt die Oberfläche den Papierkorb heute an? Falls ja, ist der Weg schon da und nur
-   nicht bis zur Bibliothek durchgereicht.
-
-**Betroffen:** `backend/.../catalog/` (Zähler, Auflist-Endpunkt), `python/src/hgis/`
-(`TrashEntry` existiert bereits), `python/src/hgis/mcp/read_tools.py`.
+17 und 20 laufen **nicht** parallel: beide ändern `client.py` und `write_tools.py`.
+Team `wt-ausschnitt` fasst `ProjectService.java` an, Team `wt-fehler` `LayerService.java`
+und `LayerFieldService.java` — verschiedene Dateien im selben Paket, das trägt.
 
 ---
+
+## 5.1 Stufe A — die drei Brüche und die eine gebrochene Zusage
 
 ### 18 — Drei Fehlermeldungen nennen das Ungültige, aber nicht das Gültige
 
-**Klein, und es bricht eine Kernzusage des Projekts.**
+**Klein, und sie bricht eine Kernzusage. Zuerst, weil sie jeden Agenten in jeder anderen
+Aufgabe Rateversuche kostet.**
 
 „Fehler nennen das Gültige" ist eine der sechs Zusagen aus `PLAN.md` 28.8 — eine, auf die
 zwei getrennt entstandene Entwürfe unabhängig gekommen sind. An drei Stellen ist sie
@@ -173,10 +219,258 @@ unbekannter **Feldname** in einer Filterabfrage liefert alle vorhandenen Feldnam
 mehrdeutiger Projektname nennt alle Kandidaten mit Id.
 
 **Umsetzung:** In allen drei `catch`-Blöcken die `values()` des Enums an die Meldung
-hängen. **Zusätzlich zu entscheiden:** Ob `POINT` als Eingabe akzeptiert und auf
-`MULTIPOINT` abgebildet werden sollte — das gehört in den Vertrag, bevor jemand baut.
+hängen.
+
+**Entschieden (Vorschlag vom 26.08., Widerspruch bis Baubeginn):** `POINT` wird **nicht**
+stillschweigend auf `MULTIPOINT` abgebildet. Die Spalte ist eine Multi-Geometrie; eine
+stille Abbildung verbirgt das und rächt sich beim ersten Objekt mit zwei Teilen.
+Stattdessen nennt die Meldung bei `POINT`, `LINESTRING` und `POLYGON` ausdrücklich den
+Multi-Partner: `Unbekannter Geometrietyp: POINT. Gültig sind MULTIPOINT,
+MULTILINESTRING, MULTIPOLYGON, GEOMETRY -- für Punkte nehmen Sie MULTIPOINT.`
+
+**Dazu, damit es nicht wiederkommt:** Ein Test, der über alle `valueOf`-Aufrufe im
+Backend geht und für jeden belegt, dass seine Ausnahme die gültigen Werte trägt. Ohne den
+steht die vierte Stelle in drei Monaten wieder da.
 
 ---
+
+### 17 — Ein Agent kann keine Projekte anlegen
+
+**Klein, und Voraussetzung für jede weitere Agentenarbeit.**
+
+`POST /api/projects` steht nicht in `RequestGuard._ALLOWED` (`python/src/hgis/client.py`),
+und `Client` hat keine Methode dafür. Die Bibliothek kann Layer anlegen, ändern, löschen,
+wiederherstellen und endgültig löschen — aber kein Projekt.
+
+**Warum das mehr ist als eine fehlende Methode:** Ein Agent, der etwas ausprobieren soll,
+hat heute keinen Ort dafür. Er muss entweder in ein bestehendes Projekt des Nutzers
+schreiben — genau das, was man ihm verbietet — oder er kann nicht arbeiten. Beide
+Prüfagenten der letzten Runde mussten zu `curl` greifen, um sich eine Arbeitsfläche zu
+schaffen, und dasselbe zum Aufräumen.
+
+**Entschieden (Vorschlag vom 26.08., Widerspruch bis Baubeginn):**
+
+1. `POST /api/projects` und `DELETE /api/projects/{id}` kommen **beide** in die Schranke.
+   Nur anlegen wäre schlimmer als nichts: Der Agent hinterließe Wegwerf-Projekte in der
+   Liste des Nutzers, und aufräumen müsste wieder der Mensch.
+2. **Kein Papierkorb für Projekte als Vorbedingung.** Er ist eine eigene Stufe und
+   verzögert alles andere. Stattdessen trägt das Löschen zwei Sicherungen, die es heute
+   schon gibt: `GET /api/projects/{id}/deletion-impact` (`ProjectController.java:81`)
+   nennt Layer- und Objektzahl, und das MCP-Werkzeug `delete_project` verlangt den
+   **Projektnamen wörtlich** als zweites Argument. Wer sich vertippt, löscht nichts. Die
+   Ablehnung nennt den Namen, der gepasst hätte — dieselbe Zusage wie überall.
+3. Die Werkzeugbeschreibung von `delete_project` sagt in ihrem ersten Satz, dass dies der
+   einzige Weg im ganzen System ist, der **nicht** umkehrbar ist. Der Papierkorb aus
+   Phase 30 deckt Layer, nicht Projekte.
+
+**Betroffen:** `python/src/hgis/client.py` (`_ALLOWED`, `create_project()`,
+`delete_project()`, `deletion_impact()`), `python/src/hgis/mcp/write_tools.py` (zwei
+Werkzeuge), `python/tests/test_guard.py` (Pfadprüfung nach dem vorhandenen Muster — dort
+steht auch, wie die vier geschlossenen Angriffswege geprüft werden).
+
+**Prüfen:** Ein Lauf, der ein Projekt anlegt, darin arbeitet und es wieder löscht, ohne
+`curl`. Dazu eine Mutationsprobe an der Namensbestätigung: Wird die Prüfung ausgebaut,
+muss ein Test rot werden.
+
+---
+
+### 20 — Ein Agent kann keine Daten hereinholen
+
+**Mittelgroß, und die größte einzelne Lücke.** Neu am 26.08.
+
+Ein GIS-Agent, der Daten nicht importieren kann, bringt keine Aufgabe von der Quelle bis
+zur Karte. Drei Endpunkte stehen im Backend und sind für die Bibliothek zu:
+
+- `POST /api/projects/{id}/imports/inspect` (`ingest/ImportController.java:65`) — sagt,
+  was ein Import erzeugen würde, ohne etwas zu erzeugen. Multipart-Datei **oder** die
+  `uploadId` einer vorigen Prüfung, dazu wahlfrei `srid` und `charset`.
+- `POST /api/projects/{id}/imports` (`ingest/ImportController.java:82`) — dieselben
+  Argumente, plus `name`. Antwortet mit einem **Job**, das Schreiben läuft asynchron.
+- `POST /api/projects/{id}/geoportal-imports`
+  (`geoportal/GeoportalImportController.java:51`) — JSON statt Multipart:
+  `datasetId`, `bbox`, wahlfrei `fields` und `name`. Ebenfalls ein Job.
+
+**Der Job ist der eigentliche Bau.** Die Bibliothek kennt heute kein Job-Modell (`grep -n
+job python/src/hgis/*.py` findet nur Kommentare). Ein Agent, der importiert und sofort
+`describe_layer` ruft, sieht einen halb gefüllten Layer oder gar keinen. Es braucht:
+
+- `Job`-Objekt mit Zustand, Fortschritt und Fehlermeldung; `GET /api/jobs/{id}` ist
+  lesend und damit schon durch die Schranke (`jobs/JobController.java:20`).
+- `job.wait()` mit Frist — auf dem Live-Kanal, nicht als Abfrageschleife. Der Kanal trägt
+  das schon: Ein Hintergrundauftrag schreibt mit `origin=None`, und `client.wait_for()`
+  hat dafür bereits das Beispiel im README (Kapitel „Der Ereigniskanal").
+- Ein MCP-Werkzeug wartet **selbst**, statt dem Agenten eine Abfrageschleife zuzumuten:
+  ein Aufruf, eine Antwort, und die Antwort ist der fertige Layer. Erst bei Überschreiten
+  der Frist gibt es die Job-Id zum Nachfassen zurück.
+
+**Vor dem Bauen zu klären:** Wie kommt die Datei zum Werkzeug? Ein MCP-Agent hat einen
+Dateipfad, keinen Multipart-Rumpf. Vorschlag: Das Werkzeug nimmt einen Pfad, die
+Bibliothek liest die Datei und baut den Upload. Das bindet den MCP-Server an dasselbe
+Dateisystem wie den Agenten — für den Fall „Agent auf dem Rechner des Nutzers" richtig,
+für einen entfernten Server nicht. Der zweite Fall ist heute keiner.
+
+**Reihenfolge im Paket:** erst `inspect`, dann `imports`, dann Geoportal. Nach `inspect`
+allein kann ein Agent schon sagen, was ankäme — und `inspect` ist folgenlos, also der
+billige Weg, den Multipart-Aufbau zu belegen.
+
+**Betroffen:** `python/src/hgis/client.py`, ein neues `python/src/hgis/jobs.py`,
+`python/src/hgis/project.py` (`import_file()`, `import_geoportal()`),
+`python/src/hgis/mcp/write_tools.py`, `python/README.md` (neues Kapitel, ausführbar).
+
+---
+
+### 9 — Ein vom Agenten gesetzter Ausschnitt erreicht den offenen Tab nicht
+
+**Mittelgroß. Der Bruch, der am meisten kostet, weil er still ist.**
+
+Nachgemessen am 23.08.: Ein Agent setzt über `set_view` Zentrum und Zoom. Der Serverstand
+stimmt sofort, **aber ein bereits offener Tab zieht nicht nach** — erst ein Neuladen
+zeigt die neue Position. Der Agent meldet Erfolg, der Bildschirm bleibt stehen.
+
+Das bricht genau die Zusage, die der MCP-Server einem Agenten in seiner eigenen Anleitung
+gibt (`python/src/hgis/mcp/server.py:43`): „select_features und set_view verändern, was
+der Mensch am Bildschirm sieht."
+
+**Die Ursache steht fest.** `set_view` schreibt Zentrum und Zoom über
+`PATCH /api/projects/{id}` in die Projekteigenschaften. `ProjectService.update()`
+publiziert **kein** Ereignis; das einzige `events.publishEvent` der Klasse sitzt in
+`updateViewState()` (`ProjectService.java:275`). Der Live-Kanal erfährt also nichts, und
+das Frontend kann nicht nachziehen, was ihm niemand sagt.
+
+**Die Auswahl zieht bereits nach**, über `applyRemoteSelection` in
+`frontend/src/state/useLiveViewState.ts` — der Weg für den Ausschnitt ist derselbe und
+liegt fertig da.
+
+**Entschieden (Vorschlag vom 26.08., Widerspruch bis Baubeginn):** Der Ausschnitt zieht
+nach, **unabhängig vom Urheber**. Kein Sonderweg für Agenten, keine Auswertung von
+`origin` über das Überspringen des eigenen Echos hinaus.
+
+Der Grund, warum das hier anders ausfällt als beim aktiven Layer (Aufgabe 25): **Ein
+Ausschnitt ist verlustfrei umkehrbar.** Der Mensch schiebt die Karte zurück, und nichts
+ist verloren. Ein gewechselter aktiver Layer mitten in einer Bearbeitung ist es nicht.
+Deshalb gilt die Vorsicht aus Phase 29 für den Layer weiter und für den Ausschnitt nicht.
+
+**Zwei Bedingungen an die Umsetzung:**
+
+1. **Sanft, nicht springend.** `easeTo`, nicht `jumpTo` — sonst weiß der Mensch nicht, ob
+   die Karte gesprungen oder neu geladen ist.
+2. **Nicht mitten in der Geste.** Bewegt der Mensch gerade selbst die Karte, wartet die
+   Bewegung, bis er losgelassen hat.
+
+**Betroffen:** `backend/.../catalog/ProjectService.java` (Ereignis in `update()`, nach
+Commit, nach dem Muster von `updateViewState()`), `backend/.../events/` (Ereignisname —
+zu entscheiden, ob `project-catalog` reicht oder es einen eigenen braucht),
+`frontend/src/state/useLiveViewState.ts`, `frontend/src/map/ProjectMap.tsx`.
+
+**Prüfen:** Zwei Browser nebeneinander, in einem `set_view` über MCP, im anderen
+zusehen. Und ein Test, der belegt, dass `update()` ohne Änderung an Zentrum oder Zoom
+**kein** Ereignis auslöst — sonst weckt jede Namensänderung jeden offenen Tab.
+
+---
+
+## 5.2 Stufe B — Parität mit der Oberfläche
+
+Beginnt, wenn Stufe A ganz fertig ist. Danach kann ein Agent alles, was ein Mensch kann.
+
+### 21 — Sechs Schreibwege, die nur die Oberfläche hat
+
+**Mittelgroß, gut teilbar.** Neu am 26.08.
+
+Feld umbenennen (`PATCH /api/layers/{id}/fields/{fid}`), Layer neu ordnen
+(`PUT /api/projects/{id}/layers/order`), Objekt teilen und Objekte zusammenführen
+(`POST .../features/{fid}/split`, `POST .../features/merge`), Projekt duplizieren
+(`POST /api/projects/{id}/duplicate`), WMS-Layer anlegen
+(`POST /api/projects/{id}/map-layers`).
+
+Jeder dieser Wege steht im Backend und ist geprüft. Es fehlt jeweils nur der Eintrag in
+`_ALLOWED`, eine Methode auf `Client` oder `Layer`, und ein Werkzeug.
+
+**Die Regel aus dem Kommentar über `_ALLOWED` gilt weiter:** Jeder Eintrag hat genau eine
+benannte Methode, die seinen Rumpf baut. Kein allgemeines `request(method, path, body)` —
+sonst prüft die Schranke nur noch, *wohin* eine Anfrage geht, und nie mehr, was drin
+steht.
+
+**Duplizieren ist der nützlichste der sechs:** Es gibt einem Agenten eine Arbeitsfläche
+mit echten Daten darin, ohne die Originale anzufassen. Antwortet mit einem Job, hängt
+also an Aufgabe 20.
+
+### 22 — Die Paritätsliste als Test
+
+**Klein, und sie hält das Ergebnis von Stufe A und B.** Neu am 26.08.
+
+Heute ist „was kann die Oberfläche, was der Agent nicht kann" eine Handzählung — diese
+Datei enthält sie zweimal, und beide Male ist sie beim nächsten Endpunkt veraltet.
+
+**Umsetzung:** Ein Test, der alle `@PostMapping`/`@PutMapping`/`@PatchMapping`/
+`@DeleteMapping` im Backend einsammelt und gegen `_ALLOWED` hält. Jeder Weg, der nicht in
+der Schranke steht, braucht einen Eintrag in einer Liste bewusst geschlossener Wege — mit
+Begründung. Ein neuer Endpunkt ohne Entscheidung macht den Test rot.
+
+Das ist dieselbe Bauart wie der Test für die Vorgabesymbole vom 20.08.: zwei Orte, die
+auseinanderlaufen können, durch einen Test zusammengehalten.
+
+### 24 — Export als Werkzeug
+
+**Klein.** Neu am 26.08.
+
+`GET /api/layers/{id}/export.geojson` ist lesend und damit schon erreichbar
+(`client.get(...)`), aber es gibt weder Methode noch Werkzeug. Ein Agent, der sein
+Ergebnis abliefern soll, kann es heute nur beschreiben.
+
+Die POST-Variante (`export/ExportController.java:72`) nimmt den Filter im Rumpf und
+gehört mit in die Schranke — sonst ist ein Export auf eine Auswahl nicht möglich.
+GeoPackage kommt mit Aufgabe 7 dazu, nicht hier.
+
+---
+
+## 5.3 Stufe C — dass es agent native bleibt
+
+### 23 — Ein Agent benutzt hGIS eine Stunde lang
+
+**Klein im Aufwand, hoch im Ertrag. Nach jeder Stufe zu wiederholen.** Neu am 26.08.
+
+Die Lehre aus Aufgabe 5, wörtlich: Vier Prüfagenten mit Mutationsproben fanden keinen
+einzigen Sachfehler. Ein Agent, der die Werkzeuge eine Stunde lang *benutzte*, fand
+stillen Datenverlust und eine Zahl, die seit Wochen falsch in echten Daten stand.
+
+**Der Auftrag:** Ein Agent bekommt die MCP-Werkzeuge, ein Wegwerf-Projekt (nach Aufgabe
+17 legt er es selbst an) und eine echte Aufgabe — nicht „prüfe die Werkzeuge", sondern
+„beantworte diese Frage mit diesen Daten". Er führt Protokoll über jede Stelle, an der er
+raten, nachschlagen oder zu `curl` greifen musste.
+
+**Jede solche Stelle ist ein Befund**, auch wenn nichts kaputt war. Die acht Befunde aus
+Phase 33 waren zur Hälfte von dieser Art.
+
+Die Abnahmeprobe aus Abschnitt 4 ist der erste Durchlauf davon.
+
+---
+
+## 5.4 Der Rest, nach Stufe C
+
+### 25 — Entscheidung: Ersatzwahl beim aktiven Layer
+
+**Wartet auf eine Entscheidung, nicht auf Arbeit.** War bis zum 26.08. der zweite Teil
+von Aufgabe 9; der Ausschnitt ist dort herausgelöst, weil er Prio 1 ist und diese Frage
+nicht.
+
+Der Live-Kanal zieht den aktiven Layer nicht mit: Ändert ein anderer Client den
+Arbeitsstand, wechselt die eigene Ansicht den aktiven Layer nicht. Empfehlung aus Phase
+29: so lassen, aber einen Hinweis mit Sprungmöglichkeit zeigen. Der Grund gegen
+automatisches Mitziehen ist, dass die Ansicht dem Menschen sonst unter den Händen
+wegspringt — mitten in einer Bearbeitung ist das ein Datenverlustrisiko.
+
+**Eine Bedingung muss vor der Umsetzung feststehen.** Heute wählt nichts automatisch
+einen Ersatz, wenn der aktive Layer verschwindet. Das ist Absicht: `jumpToLayer` ruft
+ausdrücklich **nicht** `selectLayer` auf — „Writing it back would answer someone else's
+change with a change of our own."
+
+Wer eine Ersatzwahl einbaut, öffnet eine Rückkopplung: `viewState.writeActiveLayer()`
+löst ein `project-view-state`-Ereignis aus, das alle offenen Browser erreicht. Die
+Sicherheit hängt dann an einer Eigenschaft: **Die Ersatzwahl muss eine reine,
+deterministische Funktion der geteilten Layerliste sein** — etwa „erster verbleibender
+nach `zIndex`". Dann kommen zwei Browser unabhängig zur selben Wahl und finden vor, was
+sie selbst geschrieben haben. Hängt die Wahl an etwas Client-Lokalem, laufen sie
+dauerhaft auseinander.
 
 ### 16 — Stil-Warnungen erreichen ihren Adressaten nicht
 
@@ -215,40 +509,9 @@ könnte also nicht nur sagen „veraltet", sondern auch, was stattdessen gälte.
 **Warum es zählt:** Eine Warnung, die nur der findet, der ohnehin nachsieht, ist teurer
 als keine — sie erzeugt den Eindruck, das Problem sei abgedeckt.
 
----
-
-### 17 — Ein Agent kann keine Projekte anlegen
-
-**Klein, aber Voraussetzung für jede weitere Agentenarbeit.**
-
-`POST /api/projects` steht nicht in `RequestGuard._ALLOWED` (`python/src/hgis/client.py`),
-und `Client` hat keine Methode dafür. Die Bibliothek kann Layer anlegen, ändern, löschen,
-wiederherstellen und endgültig löschen — aber kein Projekt.
-
-**Warum das mehr ist als eine fehlende Methode:** Ein Agent, der etwas ausprobieren soll,
-hat heute keinen Ort dafür. Er muss entweder in ein bestehendes Projekt des Nutzers
-schreiben — genau das, was man ihm verbietet — oder er kann nicht arbeiten. Beide
-Prüfagenten der letzten Runde mussten zu `curl` greifen, um sich eine Arbeitsfläche zu
-schaffen, und dasselbe zum Aufräumen.
-
-**Vor dem Bauen zu entscheiden:**
-1. Gehört `POST /api/projects` in die Schranke? Sie ist bewusst eng. Ein Projekt
-   anzulegen ist folgenloser als eines zu löschen — aber `DELETE /api/projects/{id}`
-   gehört zum Aufräumen dazu, und das ist folgenreich.
-2. Ein Projekt zu löschen ist heute durch nichts gedeckt: Der Papierkorb aus Phase 30
-   deckt Layer, nicht Projekte. Braucht es erst einen Papierkorb für Projekte?
-
-**Betroffen:** `python/src/hgis/client.py` (`_ALLOWED`, neue Methoden),
-`python/src/hgis/mcp/write_tools.py`, `python/tests/test_guard.py` (Pfadprüfung nach dem
-vorhandenen Muster — dort steht auch, wie die vier geschlossenen Angriffswege geprüft
-werden).
-
----
-
 ### 6 — Schritt 6: Editor mit Pyodide im Web Worker
 
-**Groß. Der letzte offene Schritt der Stufenliste; seine Vorbedingung ist seit dem 23.08.
-erfüllt.**
+**Groß. Der letzte offene Schritt der Stufenliste.**
 
 Ein Editor in der Anwendung, in dem sich Python gegen die eigenen Daten schreiben lässt —
 Pyodide in einem Web Worker, damit ein langer Lauf die Oberfläche nicht einfriert.
@@ -258,10 +521,11 @@ neuen Nutzen hinzu, er macht den vorhandenen für Menschen erreichbar." Der Edit
 also kein neuer Nutzen, sondern der Zugang für Menschen zu dem, was die Bibliothek dem
 Agenten schon gibt.
 
-Er kommt nach dem MCP-Server, weil dessen Lauf die Form der Bibliothek klärt, bevor sie
-in einer zweiten Umgebung festgeschrieben wird. **Das hat sich gelohnt:** Der MCP-Lauf
-hat acht Befunde an der Bibliothek zutage gefördert, alle inzwischen behoben. Wer den
-Editor baut, setzt auf eine Bibliothek, die einmal ernsthaft benutzt worden ist.
+**Warum er hinter Stufe A und B steht:** Er schreibt die Form der Bibliothek in einer
+zweiten Umgebung fest. Was Stufe A an ihr ändert — Projekte, Jobs, Import — soll darin
+schon stehen, sonst wird es zweimal gebaut. Derselbe Grund, aus dem er hinter dem
+MCP-Server stand, und der hat sich gelohnt: Der MCP-Lauf hat acht Befunde an der
+Bibliothek zutage gefördert, alle inzwischen behoben.
 
 **Zu klären:**
 - Wie kommt die Bibliothek in Pyodide an das Backend? `httpx` läuft dort nicht
@@ -274,83 +538,6 @@ Editor baut, setzt auf eine Bibliothek, die einmal ernsthaft benutzt worden ist.
 **Nützlich aus der letzten Runde:** `hgis.NewFeature` und `hgis.Style` lassen sich
 unverändert als Parametertypen wiederverwenden; Schema und Deserialisierung entstehen von
 selbst. Derselbe Weg dürfte im Editor tragen.
-
----
-
-### 4 — Legende im Kartenbild
-
-**Mittelgroß. Blockiert war sie durch Aufgabe 1; die ist erledigt.**
-
-Im README offen benannt: „Eine Legende fehlt noch."
-
-Auf dem Kartenbild stehen heute Titel, Maßstabsbalken, Quellenangabe der Hintergrundkarte
-und die Angaben der sichtbaren Geoportal-Layer. Der Nordpfeil erscheint nur bei gedrehter
-oder geneigter Karte. Was fehlt, ist die Zuordnung von Farbe zu Bedeutung — bei
-klassifizierter und abgestufter Darstellung ist das Bild ohne sie nicht auswertbar. Mit
-der Heatmap wird die Lücke größer: Ein Farbverlauf ohne Legende ist gar keine Aussage
-mehr.
-
-**Es gibt nichts zum Wiederverwenden.** Eine Suche nach Legenden-Komponenten außerhalb
-von `styling/` ist leer. Was der Nutzer heute als Legende liest, ist die Klassenliste im
-Eigenschaften-Panel, sichtbar nur für den einen aktiven Layer.
-
-**Der frühere Vorbehalt ist entfallen:** Die Legende sollte nicht zweimal gebaut werden,
-einmal im Browser und einmal serverseitig. Das serverseitige Kartenbild ist am 18.08.
-verworfen worden — sie wird also nur einmal gebaut.
-
-**Der Ort im Code:** alles unter `frontend/src/map/imageExport/`.
-- `furniture.ts` — **getestet**, entscheidet was gezeichnet wird.
-- `drawFurniture.ts` — **ungetestet**, 240 Zeilen Canvas-2D. Hier käme die Legende dazu.
-  Vorhandene Regeln: Schrift `Geist Variable`, Tinte `#171717`, Box
-  `rgba(255,255,255,0.86)`, Margin 12 CSS-px, alle Längen über `scaled(v) = v *
-  pixelRatio`.
-- Die Quellenangabe zeigt, wie mit Platzmangel umgegangen wird: Schrift schrumpft in
-  0,5-px-Schritten von 10 auf minimal 7 px, statt zu kürzen. Eine Legende braucht eine
-  eigene Antwort auf die Frage, was bei zwölf Klassen und wenig Platz passiert.
-
-**Berührt sich mit Aufgabe 16:** Eine Legende an der Karte wäre auch der Ort, an dem sich
-Stil-Warnungen zeigen ließen.
-
----
-
-### 9 — Entscheidung: aktiver Layer beim Live-Kanal
-
-**Wartet auf eine Entscheidung des Nutzers, nicht auf Arbeit.**
-
-Der Live-Kanal zieht den aktiven Layer nicht mit: Ändert ein anderer Client den
-Arbeitsstand, wechselt die eigene Ansicht den aktiven Layer nicht.
-
-Empfehlung aus Phase 29: so lassen, aber einen Hinweis mit Sprungmöglichkeit zeigen. Der
-Grund gegen automatisches Mitziehen ist, dass die Ansicht dem Menschen sonst unter den
-Händen wegspringt — mitten in einer Bearbeitung ist das ein Datenverlustrisiko.
-
-**Eine Bedingung muss vor der Umsetzung feststehen.** Heute wählt nichts automatisch
-einen Ersatz, wenn der aktive Layer verschwindet. Das ist Absicht: `jumpToLayer` ruft
-ausdrücklich **nicht** `selectLayer` auf — „Writing it back would answer someone else's
-change with a change of our own."
-
-Wer eine Ersatzwahl einbaut, öffnet eine Rückkopplung: `viewState.writeActiveLayer()`
-löst ein `project-view-state`-Ereignis aus, das alle offenen Browser erreicht. Die
-Sicherheit hängt dann an einer Eigenschaft: **Die Ersatzwahl muss eine reine,
-deterministische Funktion der geteilten Layerliste sein** — etwa „erster verbleibender
-nach `zIndex`". Dann kommen zwei Browser unabhängig zur selben Wahl und finden vor, was
-sie selbst geschrieben haben. Hängt die Wahl an etwas Client-Lokalem, laufen sie
-dauerhaft auseinander.
-
-**Nachtrag vom 23.08.: Der Kartenausschnitt gehört zur selben Frage.** Ein Agent kann
-über `set_view` Zentrum und Zoom setzen. Im Browser nachgesehen: Der Server-Stand war
-sofort korrekt, **aber ein bereits offener Tab zog nicht nach** — erst ein Neuladen
-zeigte die neue Position.
-
-Die Abwägung fällt hier möglicherweise anders aus. Beim aktiven Layer ist Nicht-Mitziehen
-ein Schutz. Beim Kartenausschnitt, den ein **Agent auf Bitte des Menschen** gesetzt hat,
-ist es ein Fehlschlag: Der Mensch hat „zeig mir das" gesagt, der Agent meldet Erfolg, und
-der Bildschirm bleibt stehen.
-
-Zu klären: ob ein vom Agenten gesetzter Ausschnitt anders behandelt wird als einer von
-einem zweiten Menschen. Der Live-Kanal kennt über `origin` bereits den Urheber.
-
----
 
 ### 7 — GeoPackage importieren und exportieren
 
@@ -369,8 +556,6 @@ Quell-CRS.
 **Beim Export mitzudenken:** Das Stil-Schema in `layer.style` ist bewusst kein
 MapLibre-Format, damit ein Export nach QGIS möglich bleibt. GeoPackage ist die Stelle, an
 der sich zeigt, ob diese Entscheidung getragen hat.
-
----
 
 ### 10 — Karte mit Git versionieren
 
@@ -403,7 +588,30 @@ wiederherstellen.
 
 ---
 
-## 5. Erledigte Aufgaben, als Kontext
+## 6. Was bewusst nicht gebaut wird
+
+**Kartenbilder serverseitig** (Schritt 5, gestrichen am 18.08.). Am 26.08. noch einmal
+geprüft, weil ein Grund der Streichung inzwischen hinfällig ist: „Serverseitig käme
+hinzu, dass ein Agent eins anfordern kann — aber diesen Agenten gibt es erst mit dem
+MCP-Server." Den Agenten gibt es jetzt.
+
+**Die Streichung bleibt trotzdem.** Die anderen Gründe stehen unverändert
+(`PLAN.md`, „Verworfen: Kartenbilder serverseitig"): ein Node-Dauerprozess neben der JVM,
+maplibre-native Issue #3169 (ein fehlgeschlagener Teil bricht den ganzen Render-Aufruf
+ab, der zweite Versuch hängt), oder ein zweiter Kartenrenderer in Java, den man dauerhaft
+mit dem ersten in Übereinstimmung hält.
+
+**Was stattdessen trägt:** Nach Aufgabe 9 zeigt der Agent sein Ergebnis auf dem
+Bildschirm des Menschen, und der Knopf für das Bild sitzt dort, wo er schon ist. Der
+Agent führt, der Mensch drückt. Das löst den Anwendungsfall zu den Kosten von Null.
+
+**Ortsverzeichnis und Geoportal-Katalog auffrischen** (`POST /api/places/refresh`,
+`POST /api/geoportal/catalog/refresh`) bleiben außerhalb der Schranke. Sie warten den
+Server, sie bearbeiten keine Daten. Ein Agent, der sie braucht, hat ein anderes Problem.
+
+---
+
+## 7. Erledigte Aufgaben, als Kontext
 
 | Nr. | Aufgabe | Wann |
 |---|---|---|
@@ -416,6 +624,8 @@ wiederherstellen.
 | 13 | Live-Kanal meldet auch Datenänderungen | Phase 32, 18.08. |
 | 14 | Klassengrenzen und Werteliste veralten still | 18.08. |
 | 15 | Beispieldaten im Python-README entscheiden | 20.08. |
+| 19 | Papierkorb einsehbar machen (`Project.trash()`, MCP `list_trash`) und Zähler korrigieren | 25.08. |
+| 4 | Legende im Kartenbild-Export (Single, Categorized, Graduated, Heatmap) | 25.08. |
 
 ### Was Aufgabe 5 gelehrt hat
 
