@@ -102,7 +102,7 @@ wirklich. Drei Stellen sind als Illustration gekennzeichnet
 | Maven-Textreports melden bei `@Nested` „Tests run: 0" | Zahl aus `target/surefire-reports/*.xml` lesen |
 | Mutationsproben in Python messen falsch, wenn alter Bytecode liegt | `find . -name __pycache__ -type d -exec rm -rf {} +` davor |
 | Eine Wegwerf-Datenbank ohne `docker/initdb` gemountet hat kein `gis_data`; Layer anlegen scheitert mit nichtssagendem Fehler | `docker-compose.yml` verwenden, nicht von Hand starten |
-| `create_layer` nimmt weder `Point` noch `POINT` | Gültig sind nur `MULTIPOINT`, `MULTILINESTRING`, `MULTIPOLYGON`, `GEOMETRY` (siehe Aufgabe 18) |
+| `create_layer` nimmt weder `Point` noch `POINT` | Gültig sind nur `MULTIPOINT`, `MULTILINESTRING`, `MULTIPOLYGON`, `GEOMETRY`. Seit dem 26.08. sagt die Meldung das selbst |
 | Antwort eines MCP-Werkzeugs steht in `structured_content` **direkt** bei einer einzelnen Struktur, unter `"result"` bei einer Liste | Nachsehen statt raten |
 | Beim MCP-Client heißen die Felder snake_case | `input_schema`, `output_schema`, `structured_content`, `is_error` |
 | Docker antwortete tagelang nicht, weil die virtuelle Platte voll war (nicht weil es hing) | `~/Library/Containers/com.docker.docker/Data/log/host/monitor.log` lesen, bevor man neu startet |
@@ -130,7 +130,8 @@ das:
 6. **Er kommt aus jedem Fehler heraus.** Jede Meldung nennt das Gültige, nicht nur das
    Abgelehnte.
 
-Zusage 3 steht. 1, 2 und 4 sind gebrochen, 6 an drei Stellen. 5 steht für GeoJSON.
+Zusage 3 steht, und 6 seit dem 26.08. (Aufgabe 18). 1, 2 und 4 sind gebrochen. 5 steht für
+GeoJSON.
 
 ### Die Abnahmeprobe
 
@@ -176,63 +177,20 @@ Innerhalb einer Stufe steht die Reihenfolge des Nutzens.
 
 ### Wie das parallel läuft
 
-Drei Teams, drei Worktrees, keine gemeinsame Datei:
+Zwei Teams, zwei Worktrees, keine gemeinsame Datei. `wt-fehler` ist am 26.08. fertig geworden und aufgelöst:
 
 | Team | Aufgaben | Berührt |
 |---|---|---|
-| `wt-fehler` | 18 | `backend/.../catalog/*Service.java` |
 | `wt-flaeche` | 17, dann 20 | `python/src/hgis/client.py`, `mcp/write_tools.py` |
 | `wt-ausschnitt` | 9 | `backend/.../catalog/ProjectService.java`, `frontend/src/state/`, `frontend/src/map/` |
 
 17 und 20 laufen **nicht** parallel: beide ändern `client.py` und `write_tools.py`.
-Team `wt-ausschnitt` fasst `ProjectService.java` an, Team `wt-fehler` `LayerService.java`
-und `LayerFieldService.java` — verschiedene Dateien im selben Paket, das trägt.
 
 ---
 
-## 5.1 Stufe A — die drei Brüche und die eine gebrochene Zusage
+## 5.1 Stufe A — die drei Brüche
 
-### 18 — Drei Fehlermeldungen nennen das Ungültige, aber nicht das Gültige
-
-**Klein, und sie bricht eine Kernzusage. Zuerst, weil sie jeden Agenten in jeder anderen
-Aufgabe Rateversuche kostet.**
-
-„Fehler nennen das Gültige" ist eine der sechs Zusagen aus `PLAN.md` 28.8 — eine, auf die
-zwei getrennt entstandene Entwürfe unabhängig gekommen sind. An drei Stellen ist sie
-gebrochen, alle im selben Muster: ein `enum.valueOf()`, dessen Ausnahme nur den
-abgelehnten Wert weiterreicht.
-
-| Datei | Zeile | Meldung |
-|---|---|---|
-| `catalog/LayerService.java` | 363 | `Unbekannter Geometrietyp: <raw>` |
-| `catalog/LayerService.java` | 406 | `Unbekannter Feldtyp: <raw>` |
-| `catalog/LayerFieldService.java` | 244 | `Unbekannter Feldtyp: <raw>` |
-
-**Warum das teuer ist:** Die gültigen Geometrietypen sind `MULTIPOINT`,
-`MULTILINESTRING`, `MULTIPOLYGON`, `GEOMETRY` — **kein `POINT`**. Beim Nachmessen habe
-ich zweimal hintereinander geraten (`Point`, dann `POINT`) und beide Male nur
-„Unbekannter Geometrietyp" bekommen. Erst ein Blick in `GeometryType.java` hat es
-geklärt. Ein Agent hat diesen Blick nicht.
-
-Zum Vergleich, wie es richtig geht und im selben System schon funktioniert: Ein
-unbekannter **Feldname** in einer Filterabfrage liefert alle vorhandenen Feldnamen, ein
-mehrdeutiger Projektname nennt alle Kandidaten mit Id.
-
-**Umsetzung:** In allen drei `catch`-Blöcken die `values()` des Enums an die Meldung
-hängen.
-
-**Entschieden (Vorschlag vom 26.08., Widerspruch bis Baubeginn):** `POINT` wird **nicht**
-stillschweigend auf `MULTIPOINT` abgebildet. Die Spalte ist eine Multi-Geometrie; eine
-stille Abbildung verbirgt das und rächt sich beim ersten Objekt mit zwei Teilen.
-Stattdessen nennt die Meldung bei `POINT`, `LINESTRING` und `POLYGON` ausdrücklich den
-Multi-Partner: `Unbekannter Geometrietyp: POINT. Gültig sind MULTIPOINT,
-MULTILINESTRING, MULTIPOLYGON, GEOMETRY -- für Punkte nehmen Sie MULTIPOINT.`
-
-**Dazu, damit es nicht wiederkommt:** Ein Test, der über alle `valueOf`-Aufrufe im
-Backend geht und für jeden belegt, dass seine Ausnahme die gültigen Werte trägt. Ohne den
-steht die vierte Stelle in drei Monaten wieder da.
-
----
+Die vierte Aufgabe dieser Stufe, 18, ist am 26.08. erledigt (Abschnitt 7).
 
 ### 17 — Ein Agent kann keine Projekte anlegen
 
@@ -626,6 +584,7 @@ Server, sie bearbeiten keine Daten. Ein Agent, der sie braucht, hat ein anderes 
 | 15 | Beispieldaten im Python-README entscheiden | 20.08. |
 | 19 | Papierkorb einsehbar machen (`Project.trash()`, MCP `list_trash`) und Zähler korrigieren | 25.08. |
 | 4 | Legende im Kartenbild-Export (Single, Categorized, Graduated, Heatmap) | 25.08. |
+| 18 | **Fehlermeldungen nennen die gültigen Werte**, plus ein Test über jeden `valueOf`-Aufruf im Backend | 26.08. |
 
 ### Was Aufgabe 5 gelehrt hat
 
