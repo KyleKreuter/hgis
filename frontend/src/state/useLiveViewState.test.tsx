@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { waitFor } from '@testing-library/react'
-import { CLIENT_ID, PROJECT_CATALOG_EVENT, PROJECT_VIEW_STATE_EVENT } from '@/api/events'
+import { CLIENT_ID, PROJECT_CATALOG_EVENT, PROJECT_VIEW_STATE_EVENT, PROJECT_VIEWPORT_EVENT } from '@/api/events'
 import { isRemoteSelection, useSelection } from '@/state/selection'
 import { JUMP_SETTLE_MS, useLiveViewState } from '@/state/useLiveViewState'
 import { FakeEventSource, installFakeEventSource } from '@/test/fakeEventSource'
@@ -28,6 +28,7 @@ describe('useLiveViewState', () => {
     ready = true,
     onActiveLayerMoved = () => {},
     onProjectDataState = () => {},
+    onProjectViewportChanged = () => {},
   } = {}) {
     useLiveViewState(PROJECT, layerId, {
       hasPendingWrite: () => pendingWrite,
@@ -35,6 +36,7 @@ describe('useLiveViewState', () => {
       ready,
       onActiveLayerMoved,
       onProjectDataState,
+      onProjectViewportChanged,
     })
     return null
   }
@@ -530,6 +532,78 @@ describe('useLiveViewState', () => {
 
       source.connect()
       expect(onProjectDataState).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  /**
+   * `onProjectViewportChanged` is a plain pass-through, the same shape as
+   * `onProjectDataState` above -- what to read and how to move the map are
+   * `map/RemoteViewport.tsx`'s job. What belongs here is only that this hook forwards it
+   * under the *working*-state rule (filtered by origin, TASKS.md Aufgabe 9), not the
+   * data-state one: `RemoteViewport`'s `easeTo` feeds back into this client's own
+   * `ViewportPersistence` save, so its own echo must not be answered a second time.
+   */
+  describe('Ausschnitt', () => {
+    function announceViewport(origin: string | null) {
+      const source = FakeEventSource.instances[FakeEventSource.instances.length - 1]
+      source.emit(PROJECT_VIEWPORT_EVENT, JSON.stringify({ projectId: PROJECT, origin }))
+    }
+
+    it('meldet ein fremdes Ausschnitts-Ereignis weiter', () => {
+      const onProjectViewportChanged = vi.fn()
+      stubFetch([{ match: 'view-state', body: documentWith([]) }])
+      renderWithQueryClient(<Probe onProjectViewportChanged={onProjectViewportChanged} />)
+
+      announceViewport('anderer-tab')
+
+      expect(onProjectViewportChanged).toHaveBeenCalledTimes(1)
+    })
+
+    it('meldet nicht das eigene Echo -- anders als beim Datenzustand', () => {
+      const onProjectViewportChanged = vi.fn()
+      stubFetch([{ match: 'view-state', body: documentWith([]) }])
+      renderWithQueryClient(<Probe onProjectViewportChanged={onProjectViewportChanged} />)
+
+      announceViewport(CLIENT_ID)
+
+      expect(onProjectViewportChanged).not.toHaveBeenCalled()
+    })
+
+    it('lässt ein Ausschnitts-Ereignis eines anderen Projekts liegen', () => {
+      const onProjectViewportChanged = vi.fn()
+      stubFetch([{ match: 'view-state', body: documentWith([]) }])
+      renderWithQueryClient(<Probe onProjectViewportChanged={onProjectViewportChanged} />)
+
+      const source = FakeEventSource.instances[0]
+      source.emit(PROJECT_VIEWPORT_EVENT, JSON.stringify({ projectId: 'ein-anderes-projekt', origin: 'anderer-tab' }))
+
+      expect(onProjectViewportChanged).not.toHaveBeenCalled()
+    })
+
+    it('meldet bei der ersten Verbindung nichts -- die Seite hat gerade geladen', () => {
+      const onProjectViewportChanged = vi.fn()
+      stubFetch([{ match: 'view-state', body: documentWith([]) }])
+      renderWithQueryClient(<Probe onProjectViewportChanged={onProjectViewportChanged} />)
+
+      FakeEventSource.instances[0].connect()
+
+      expect(onProjectViewportChanged).not.toHaveBeenCalled()
+    })
+
+    it('meldet bei jeder Wiederverbindung, weil in der Lücke nichts nachgeliefert wird', () => {
+      const onProjectViewportChanged = vi.fn()
+      stubFetch([{ match: 'view-state', body: documentWith([]) }])
+      renderWithQueryClient(<Probe onProjectViewportChanged={onProjectViewportChanged} />)
+
+      const source = FakeEventSource.instances[0]
+      source.connect()
+      expect(onProjectViewportChanged).not.toHaveBeenCalled()
+
+      source.connect()
+      expect(onProjectViewportChanged).toHaveBeenCalledTimes(1)
+
+      source.connect()
+      expect(onProjectViewportChanged).toHaveBeenCalledTimes(2)
     })
   })
 })

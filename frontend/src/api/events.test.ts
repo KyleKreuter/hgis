@@ -3,14 +3,18 @@ import {
   CLIENT_ID,
   PROJECT_CATALOG_EVENT,
   PROJECT_VIEW_STATE_EVENT,
+  PROJECT_VIEWPORT_EVENT,
   connectLiveChannel,
   isForThisProject,
   parseProjectDataState,
   parseProjectViewState,
+  parseProjectViewport,
   reconnectDelay,
+  shouldFollowRemoteViewport,
   shouldReadBack,
   type ProjectDataStateEvent,
   type ProjectViewStateEvent,
+  type ProjectViewportEvent,
 } from './events'
 import { FakeEventSource, installFakeEventSource } from '@/test/fakeEventSource'
 
@@ -117,6 +121,66 @@ describe('isForThisProject', () => {
   })
 })
 
+describe('parseProjectViewport', () => {
+  it('liest Projekt und Urheber -- keine Version, anders als die beiden anderen Ereignisse', () => {
+    expect(parseProjectViewport('{"projectId":"p-1","origin":"tab-a"}')).toEqual({
+      projectId: 'p-1',
+      origin: 'tab-a',
+    })
+  })
+
+  it('nimmt ein Ereignis ohne Urheber an', () => {
+    expect(parseProjectViewport('{"projectId":"p-1","origin":null}')?.origin).toBeNull()
+    expect(parseProjectViewport('{"projectId":"p-1"}')?.origin).toBeNull()
+  })
+
+  it.each([
+    ['kein JSON', 'nicht-json'],
+    ['kein Objekt', '"p-1"'],
+    ['null', 'null'],
+    ['ohne Projekt', '{"origin":"tab-a"}'],
+    ['Urheber als Zahl', '{"projectId":"p-1","origin":7}'],
+  ])('verwirft %s, statt zu werfen', (_case, data) => {
+    expect(parseProjectViewport(data)).toBeNull()
+  })
+})
+
+/**
+ * Anders als `isForThisProject`, genau wie `shouldReadBack`: `RemoteViewport`s `easeTo`
+ * fließt in `ViewportPersistence`s eigenes Speichern zurück, also muss das eigene Echo
+ * hier ausbleiben -- sonst beantwortet dieser Client seine eigene Änderung mit einem
+ * erneuten Speichern desselben Werts.
+ */
+describe('shouldFollowRemoteViewport', () => {
+  const event = (over: Partial<ProjectViewportEvent> = {}): ProjectViewportEvent => ({
+    projectId: 'p-1',
+    origin: null,
+    ...over,
+  })
+
+  it('folgt einer fremden Ausschnittsänderung', () => {
+    expect(shouldFollowRemoteViewport(event({ origin: 'tab-b' }), { projectId: 'p-1', clientId: 'tab-a' })).toBe(
+      true,
+    )
+  })
+
+  it('folgt nicht dem eigenen Echo', () => {
+    expect(shouldFollowRemoteViewport(event({ origin: 'tab-a' }), { projectId: 'p-1', clientId: 'tab-a' })).toBe(
+      false,
+    )
+  })
+
+  it('folgt nicht bei einem fremden Projekt', () => {
+    expect(shouldFollowRemoteViewport(event({ projectId: 'p-2' }), { projectId: 'p-1', clientId: 'tab-a' })).toBe(
+      false,
+    )
+  })
+
+  it('folgt, wenn niemand als Urheber genannt ist', () => {
+    expect(shouldFollowRemoteViewport(event({ origin: null }), { projectId: 'p-1', clientId: 'tab-a' })).toBe(true)
+  })
+})
+
 describe('reconnectDelay', () => {
   it('verdoppelt sich mit jedem Fehlversuch', () => {
     expect(reconnectDelay(0, 1)).toBe(2000)
@@ -193,6 +257,30 @@ describe('connectLiveChannel', () => {
     latest().emit(PROJECT_CATALOG_EVENT, '{"projectId":"p-1","version":1,"origin":null}')
 
     expect(onProjectDataState).toHaveBeenCalledTimes(1)
+    expect(onProjectViewState).not.toHaveBeenCalled()
+    close()
+  })
+
+  it('reicht ein Ausschnitts-Ereignis über einen eigenen Zuhörer weiter', () => {
+    const onProjectViewport = vi.fn()
+    const close = connectLiveChannel({ onProjectViewport })
+
+    latest().emit(PROJECT_VIEWPORT_EVENT, '{"projectId":"p-1","origin":null}')
+
+    expect(onProjectViewport).toHaveBeenCalledWith({ projectId: 'p-1', origin: null })
+    close()
+  })
+
+  it('unterscheidet den Ausschnitt von Arbeitsstand und Datenzustand', () => {
+    const onProjectViewState = vi.fn()
+    const onProjectDataState = vi.fn()
+    const onProjectViewport = vi.fn()
+    const close = connectLiveChannel({ onProjectViewState, onProjectDataState, onProjectViewport })
+
+    latest().emit(PROJECT_VIEWPORT_EVENT, '{"projectId":"p-1","origin":null}')
+
+    expect(onProjectViewport).toHaveBeenCalledTimes(1)
+    expect(onProjectDataState).not.toHaveBeenCalled()
     expect(onProjectViewState).not.toHaveBeenCalled()
     close()
   })

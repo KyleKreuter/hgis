@@ -2,6 +2,7 @@ package de.kreuter.hgis.events;
 
 import de.kreuter.hgis.catalog.CatalogChanged;
 import de.kreuter.hgis.catalog.ProjectViewStateChanged;
+import de.kreuter.hgis.catalog.ProjectViewportChanged;
 import de.kreuter.hgis.events.dto.EventDtos;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -65,6 +66,18 @@ class CatalogEventBridge {
 	void onProjectViewStateChanged(ProjectViewStateChanged changed) {
 		streams.publish(EventDtos.EventNames.PROJECT_VIEW_STATE,
 				new EventDtos.ProjectViewState(changed.projectId(), changed.version(), changed.origin()));
+	}
+
+	/**
+	 * No de-duplication here, unlike {@link #onCatalogChanged}: {@link
+	 * ProjectViewportChanged} is only ever published once per request, by {@code
+	 * ProjectService#update} itself, so there is no second write within the same
+	 * transaction this method could otherwise be asked to announce twice.
+	 */
+	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+	void onProjectViewportChanged(ProjectViewportChanged changed) {
+		streams.publish(EventDtos.EventNames.PROJECT_VIEWPORT,
+				new EventDtos.ProjectViewport(changed.projectId(), changed.origin()));
 	}
 
 	/**

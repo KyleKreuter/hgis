@@ -18,7 +18,7 @@ import {
 } from '@/state/unsavedChanges'
 import { AddMapImageDialog, GeoportalDialog } from '@/geoportal'
 import { CreateLayerDialog, ImportDialog, LayerProperties, LayerTree } from '@/layers'
-import { ProjectMap, type ZoomRequest } from '@/map'
+import { ProjectMap, type ViewportRequest, type ZoomRequest } from '@/map'
 import { SymbologyPanel } from '@/styling'
 import {
   AttributeTable,
@@ -90,6 +90,10 @@ function Workspace() {
   // A counter, not a timestamp: zooming to the same layer twice has to produce a new
   // request object, and a counter does that without depending on the clock.
   const [zoomTo, setZoomTo] = useState<ZoomRequest | null>(null)
+  // Same reasoning, same shape: a remote viewport change re-announces itself with a
+  // fresh `nonce` even if it happens to land back on a value this client has already
+  // seen (`RemoteViewport`'s own `ZoomRequest`-style request).
+  const [remoteViewport, setRemoteViewport] = useState<ViewportRequest | null>(null)
   const clearSelection = useSelection((state) => state.clear)
   const viewState = useViewStateWriter(projectId)
   const editing = useEditSession({ layerId: activeLayerId ?? null, projectId })
@@ -146,6 +150,24 @@ function Workspace() {
 
   function requestZoom(extent: [number, number, number, number]) {
     setZoomTo((previous) => ({ extent, nonce: (previous?.nonce ?? 0) + 1 }))
+  }
+
+  /**
+   * Someone else moved this project's own map viewport -- `set_view` over MCP, or
+   * another open tab. Rereads the project so the values driving `easeTo` are the ones
+   * that were actually written, not whatever this tab still has cached from before the
+   * event, then hands them to `RemoteViewport` as a fresh request.
+   *
+   * A project that has never been viewed carries no center/zoom at all (`ProjectDetail`
+   * marks both nullable) -- nothing to follow to, so this simply does nothing rather
+   * than easing to a made-up position.
+   */
+  async function handleRemoteViewportChanged() {
+    const detail = await queryClient.fetchQuery({ ...projectDetailQuery(projectId), staleTime: 0 })
+    if (!detail.center || detail.zoom == null) return
+    const center = detail.center
+    const zoom = detail.zoom
+    setRemoteViewport((previous) => ({ center, zoom, nonce: (previous?.nonce ?? 0) + 1 }))
   }
 
   function selectLayer(layerId: string | null) {
@@ -397,6 +419,7 @@ function Workspace() {
     ready: viewState.ready,
     onActiveLayerMoved: deferredJump.request,
     onProjectDataState: dataState.notify,
+    onProjectViewportChanged: handleRemoteViewportChanged,
   })
 
   return (
@@ -571,6 +594,7 @@ function Workspace() {
           <ProjectMap
             project={project}
             zoomTo={zoomTo}
+            remoteViewport={remoteViewport}
             activeLayer={activeLayer}
             // Identify would consume the same click the measuring and rectangle select
             // tools need.

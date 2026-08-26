@@ -11,6 +11,7 @@ import { MapLayerSync } from './MapLayerSync'
 import { MapViewportTracker } from './MapViewportTracker'
 import { placeExtent } from './placeExtent'
 import { PlaceMarker } from './PlaceMarker'
+import { RemoteViewport, type ViewportRequest } from './RemoteViewport'
 import { ViewportPersistence } from './ViewportPersistence'
 import { ZoomToExtent, type ZoomRequest } from './ZoomToExtent'
 import { IdentifyControl } from './IdentifyControl'
@@ -24,6 +25,12 @@ interface ProjectMapProps {
   project: ProjectDetail
   /** Set by the layer tree's "zoom to layer"; null while nothing was requested. */
   zoomTo?: ZoomRequest | null
+  /**
+   * Set when someone else changed this project's own viewport -- `set_view` over MCP,
+   * or another open tab -- and this client just reread the fresh value; null while
+   * nothing was requested. See `RemoteViewport` for how it is applied.
+   */
+  remoteViewport?: ViewportRequest | null
   /**
    * The active layer, or null while none is selected. Drives both Identify (restricted
    * to this one layer, so clicking through a stack stays predictable) and the basemap
@@ -46,6 +53,7 @@ interface ProjectMapProps {
 export function ProjectMap({
   project,
   zoomTo = null,
+  remoteViewport = null,
   activeLayer = null,
   identifyEnabled = true,
   children,
@@ -87,6 +95,7 @@ export function ProjectMap({
       <ViewportPersistence projectId={project.id} />
       <ZoomToExtent request={zoomTo} />
       <ZoomToExtent request={placeZoomTo} />
+      <RemoteViewport request={remoteViewport} />
       <SelectionHighlight projectId={project.id} />
       <PlaceMarker position={selectedPlace} />
       <PlaceSearchControl onSelect={handlePlaceSelect} onClear={() => setSelectedPlace(null)} />

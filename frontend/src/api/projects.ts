@@ -223,8 +223,14 @@ export function projectUpdateOptions(
      * write win -- on the server as well as in the cache.
      */
     scope: { id: `project-update-${id}` },
+    // Named the same way `useSaveViewState` names its write: `RemoteViewport`
+    // (`map/RemoteViewport.tsx`) has to skip this client's own echo of a viewport it
+    // just set through this same PATCH -- `center`/`zoom` are the two fields of this
+    // input that ever reach the live channel at all (`ProjectViewportChanged`'s own
+    // javadoc) -- or `ViewportPersistence`'s next save would be answered by a refetch
+    // of the value it only just wrote.
     mutationFn: (input: UpdateProjectInput) =>
-      api.patch<ProjectDetail>(`/api/projects/${id}`, input),
+      api.patch<ProjectDetail>(`/api/projects/${id}`, input, { [CLIENT_HEADER]: CLIENT_ID }),
     /**
      * Writes the change into the cached project before the request goes out, so a
      * setting that the map renders from -- the basemap above all -- takes effect on
