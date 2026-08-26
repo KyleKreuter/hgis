@@ -49,6 +49,9 @@ NEW_FIELD_ID = "019ff9aa-2222-7333-8444-555566667777"
 #: A layer with no objects, hence no extent -- for set_view's "cannot fly to
 #: an empty layer" path.
 EMPTY_LAYER_ID = "019ff9aa-3333-7444-8555-666677778888"
+#: A project that already exists -- for delete_project, which reads it before
+#: it may destroy it.
+NEW_PROJECT_ID = "019ff9aa-4444-7555-8666-777788889999"
 
 
 def _json_response(status: int, body: Any) -> Response:
@@ -90,6 +93,28 @@ def _write_stub(request: Recorded, body: Any, style_state: list[Any] | None = No
             return ok("layers.json")
         if path == f"/api/projects/{PROJECT_ID}/view-state":
             return ok("view-state.json")
+        if path == f"/api/projects/{NEW_PROJECT_ID}":
+            return _json_response(
+                200,
+                {
+                    "id": NEW_PROJECT_ID,
+                    "name": "Agent-Test",
+                    "description": None,
+                    "srid": 25832,
+                    "basemap": "osm",
+                    "basemapOpacity": 1.0,
+                    "center": None,
+                    "zoom": None,
+                    "extent": None,
+                    "layerCount": 1,
+                    "featureCount": 5,
+                    "lastOpenedAt": None,
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "updatedAt": "2026-01-01T00:00:00Z",
+                },
+            )
+        if path == f"/api/projects/{NEW_PROJECT_ID}/deletion-impact":
+            return _json_response(200, {"layerCount": 1, "featureCount": 5})
         if path == f"/api/layers/{LAYER_ID}":
             if style_state is not None and style_state[0] is not _STYLE_NOT_OVERRIDDEN:
                 data = json.loads(load("layer.json"))
@@ -145,6 +170,30 @@ def _write_stub(request: Recorded, body: Any, style_state: list[Any] | None = No
         raise AssertionError(f"Unerwartete Anfrage: {method} {request.url}")
 
     if method == "PUT" and path == f"/api/projects/{PROJECT_ID}/view-state":
+        return Response(204, "")
+
+    if method == "POST" and path == "/api/projects":
+        return _json_response(
+            201,
+            {
+                "id": NEW_PROJECT_ID,
+                "name": body["name"],
+                "description": body.get("description"),
+                "srid": body.get("srid", 25832),
+                "basemap": body.get("basemap", "osm"),
+                "basemapOpacity": 1.0,
+                "center": None,
+                "zoom": None,
+                "extent": None,
+                "layerCount": 0,
+                "featureCount": 0,
+                "lastOpenedAt": None,
+                "createdAt": "2026-01-01T00:00:00Z",
+                "updatedAt": "2026-01-01T00:00:00Z",
+            },
+        )
+
+    if method == "DELETE" and path == f"/api/projects/{NEW_PROJECT_ID}":
         return Response(204, "")
 
     if method == "PATCH" and path == f"/api/projects/{PROJECT_ID}":
@@ -591,6 +640,80 @@ def test_set_view_notes_an_invisible_layer(mcp_client, transport) -> None:
         "'Gebäude Speicherstadt' ist derzeit ausgeblendet -- am Bildschirm "
         "zeigt sich nichts davon, bis update_layer(visible=true) das ändert"
     ) in result.summary
+
+
+# --- projects: what is stored --------------------------------------------
+
+
+def test_create_project_reports_name_and_srid(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import create_project
+
+    result = create_project("Agent-Test")
+
+    assert result.summary == f"Projekt 'Agent-Test' angelegt (Id {NEW_PROJECT_ID}), SRID 25832."
+    post = next(r for r in transport.requests if r.path == "/api/projects")
+    assert _body_of(transport, post) == {"name": "Agent-Test"}
+
+
+def test_create_project_sends_only_the_given_fields(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import create_project
+
+    create_project("Agent-Test", description="Testlauf", srid=25833, basemap="satellite")
+
+    post = next(r for r in transport.requests if r.path == "/api/projects")
+    assert _body_of(transport, post) == {
+        "name": "Agent-Test",
+        "description": "Testlauf",
+        "srid": 25833,
+        "basemap": "satellite",
+    }
+
+
+def test_delete_project_reports_the_impact_and_deletes_it(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import delete_project
+
+    result = delete_project(NEW_PROJECT_ID, confirm_name="Agent-Test")
+
+    assert result.deleted == 5
+    assert result.summary == (
+        f"Projekt 'Agent-Test' (Id {NEW_PROJECT_ID}) endgültig gelöscht "
+        "(1 Layer, 5 Objekt(e) mit ihm)."
+    )
+    assert any(
+        r.method == "DELETE" and r.path == f"/api/projects/{NEW_PROJECT_ID}"
+        for r in transport.requests
+    )
+
+
+def test_delete_project_refuses_a_wrong_confirm_name_and_deletes_nothing(
+    mcp_client, transport
+) -> None:
+    """
+    Die wörtliche Namensbestätigung ist die einzige Sicherung, die dieses
+    Werkzeug selbst hat -- delete_project ist der einzige unwiederbringliche
+    Weg im gesamten Werkzeugsatz. Mutationsprobe (siehe Sitzungsbericht):
+    Wird der Vergleich in write_tools.delete_project ausgebaut, muss dieser
+    Test rot werden -- belegt, dass er tatsächlich etwas prüft, nicht nur,
+    dass irgendein Test existiert.
+    """
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import delete_project
+
+    with pytest.raises(ToolError, match="stimmt nicht mit dem Namen"):
+        delete_project(NEW_PROJECT_ID, confirm_name="Falscher Name")
+
+    assert not any(r.method == "DELETE" for r in transport.requests)
+
+
+def test_delete_project_confirm_name_is_exact_not_case_insensitive(mcp_client, transport) -> None:
+    """Ein Fast-Treffer ist kein Treffer -- sonst wäre die Bestätigung keine."""
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import delete_project
+
+    with pytest.raises(ToolError, match="stimmt nicht mit dem Namen"):
+        delete_project(NEW_PROJECT_ID, confirm_name="agent-test")
+
+    assert not any(r.method == "DELETE" for r in transport.requests)
 
 
 # --- objects: what is stored --------------------------------------------

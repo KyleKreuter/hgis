@@ -35,7 +35,6 @@ def guarded(transport: FakeTransport) -> hgis.Client:
 @pytest.mark.parametrize(
     ("method", "path"),
     [
-        ("DELETE", f"/api/projects/{PROJECT_ID}"),  # deleting a project: not opened
         ("PUT", f"/api/projects/{PROJECT_ID}/layers/order"),  # reordering: not opened
         ("POST", f"/api/layers/{LAYER_ID}/features/1/split"),  # split: not opened
         ("POST", f"/api/layers/{LAYER_ID}/features/merge"),  # merge: not opened
@@ -44,7 +43,12 @@ def guarded(transport: FakeTransport) -> hgis.Client:
     ],
 )
 def test_a_writing_request_outside_this_stage_is_refused(guarded, transport, method, path) -> None:
-    """Every one of these is a real endpoint on the backend, none opened by this stage."""
+    """
+    Every one of these is a real endpoint on the backend, none opened by this
+    stage. Deleting a project moved out of this list on 26.08. (Aufgabe 17,
+    ``_ALLOWED`` now names it) -- see the parametrized cases further down for
+    what still guards that path: a real project id, and nothing else.
+    """
     with pytest.raises(hgis.GuardError):
         guarded._send(method, path, json={})
     assert transport.count == 0, "Die Anfrage hat den Transport erreicht."
@@ -58,7 +62,7 @@ def test_the_guard_also_covers_the_transport_itself(guarded, transport) -> None:
     reaching for ``client._transport`` -- which is one attribute away.
     """
     with pytest.raises(hgis.GuardError):
-        guarded._transport.request("DELETE", f"http://stub/api/projects/{PROJECT_ID}")
+        guarded._transport.request("PUT", f"http://stub/api/projects/{PROJECT_ID}/layers/order")
 
     assert transport.count == 0
 
@@ -86,8 +90,11 @@ def test_there_is_no_generic_write_verb() -> None:
         assert not hasattr(hgis.Client, generic), f"Client.{generic} ist ein Schreibverb."
 
     for named in (
+        "create_project",
         "save_view_state",
         "update_project",
+        "deletion_impact",
+        "delete_project",
         "create_layer",
         "update_layer",
         "delete_layer",
@@ -103,18 +110,20 @@ def test_there_is_no_generic_write_verb() -> None:
 def test_the_refusal_names_the_request_and_what_is_allowed(guarded) -> None:
     """The rule everywhere in this API: an error names the way that works."""
     with pytest.raises(hgis.GuardError) as error:
-        guarded._send("DELETE", f"/api/projects/{PROJECT_ID}")
+        guarded._send("PUT", f"/api/projects/{PROJECT_ID}/layers/order")
 
     message = str(error.value)
-    assert f"DELETE /api/projects/{PROJECT_ID}" in message
+    assert f"PUT /api/projects/{PROJECT_ID}/layers/order" in message
     assert "project.select()" in message
     assert "layer.edit()" in message
+    assert "client.create_project()" in message
+    assert "client.delete_project()" in message
 
 
 def test_the_refusal_is_an_hgis_error(guarded) -> None:
     """So ``except hgis.HgisError`` catches it like everything else."""
     with pytest.raises(hgis.HgisError):
-        guarded._send("DELETE", f"/api/projects/{PROJECT_ID}")
+        guarded._send("PUT", f"/api/projects/{PROJECT_ID}/layers/order")
 
 
 # --- what must still get through --------------------------------------------
@@ -147,6 +156,8 @@ def test_the_view_state_write_still_works(transport) -> None:
 @pytest.mark.parametrize(
     ("method", "path"),
     [
+        ("POST", "/api/projects"),
+        ("DELETE", f"/api/projects/{PROJECT_ID}"),
         ("PATCH", f"/api/projects/{PROJECT_ID}"),
         ("POST", f"/api/projects/{PROJECT_ID}/layers"),
         ("PATCH", f"/api/layers/{LAYER_ID}"),
@@ -297,6 +308,55 @@ def test_the_project_update_must_end_at_the_project_and_not_reach_its_view_state
     ):
         with pytest.raises(hgis.GuardError):
             guarded._send("PATCH", path, json={})
+
+    assert transport.count == 0
+
+
+def test_project_creation_must_end_at_the_projects_collection(guarded, transport) -> None:
+    """
+    ``POST /api/projects`` names a literal path, not a prefix -- a trailing
+    slash or a subtree must not slip through as "close enough".
+    """
+    for path in ("/api/projects/", f"/api/projects/{PROJECT_ID}", "/api/projects/extra"):
+        with pytest.raises(hgis.GuardError):
+            guarded._send("POST", path, json={})
+
+    assert transport.count == 0
+
+
+def test_project_creation_with_a_real_body_is_accepted(transport) -> None:
+    client = hgis.connect("http://stub", transport=transport)
+    client._send("POST", "/api/projects", json={"name": "Agent-Test"})
+    assert transport.count == 1
+
+
+@pytest.mark.parametrize(
+    "project_id",
+    ["abc", "019fec3a", "019fec3a-ef0c-775c-a14f-7535e8a676eb-extra", "*"],
+)
+def test_the_project_delete_needs_a_real_project_id(guarded, transport, project_id) -> None:
+    """The same UUID discipline every other project write path needs, for this new one."""
+    with pytest.raises(hgis.GuardError):
+        guarded._send("DELETE", f"/api/projects/{project_id}")
+
+    assert transport.count == 0
+
+
+def test_a_project_delete_with_a_real_id_is_accepted(transport) -> None:
+    client = hgis.connect("http://stub", transport=transport)
+    client.delete_project(PROJECT_ID)
+    assert transport.count == 1
+
+
+def test_the_project_delete_must_end_at_the_project(guarded, transport) -> None:
+    """Not a prefix match: a DELETE must not reach a subtree below the project."""
+    for path in (
+        f"/api/projects/{PROJECT_ID}/view-state",
+        f"/api/projects/{PROJECT_ID}/layers",
+        f"/api/projects/{PROJECT_ID}/extra",
+    ):
+        with pytest.raises(hgis.GuardError):
+            guarded._send("DELETE", path)
 
     assert transport.count == 0
 

@@ -155,14 +155,23 @@ _EVENTS_PATH = "/api/events"
 #:
 #: Reading is unrestricted -- a GET cannot destroy anything, and leaving it open
 #: keeps the API explorable. Writing is this list: the saved view state
-#: (:meth:`hgis.project.Project.select`); a project's own properties -- name,
+#: (:meth:`hgis.project.Project.select`); a project's own lifecycle -- create
+#: (:meth:`Client.create_project`), change its own properties -- name,
 #: description, basemap and where the map stands
-#: (:meth:`hgis.project.Project.update`); a layer's lifecycle -- create,
-#: change, delete (to the trash), restore, purge (out of the trash, for good);
-#: a batch of object edits; and a field's own create and delete. Every other
-#: method or path is refused before it reaches the network -- deleting a
-#: project, split, merge and layer reordering among them, which this stage
-#: does not open.
+#: (:meth:`hgis.project.Project.update`) -- and delete, for good
+#: (:meth:`Client.delete_project`); a layer's lifecycle -- create, change,
+#: delete (to the trash), restore, purge (out of the trash, for good); a
+#: batch of object edits; and a field's own create and delete. Every other
+#: method or path is refused before it reaches the network -- split, merge
+#: and layer reordering among them, which this stage does not open.
+#:
+#: A deleted project has no trash behind it, the same as a purged layer --
+#: :meth:`Client.delete_project` is as final as :meth:`Client.purge_layer`
+#: the moment it returns. What stands in front of it is not in this list, on
+#: purpose: :meth:`hgis.mcp.write_tools.delete_project` requires the
+#: project's name a second time, given literally, before it ever calls this;
+#: a caller of the library itself carries that same responsibility, the
+#: guard only ever having checked *where* a request goes.
 #:
 #: Deliberately still a list of (method, path pattern) rather than a generic
 #: ``request(method, path, body)`` on :class:`Client`: the pattern only ever
@@ -174,7 +183,9 @@ _EVENTS_PATH = "/api/events"
 _ALLOWED: tuple[tuple[str, str], ...] = (
     ("GET", r".*"),
     ("PUT", rf"/api/projects/{_UUID}/view-state"),
+    ("POST", r"/api/projects"),
     ("PATCH", rf"/api/projects/{_UUID}"),
+    ("DELETE", rf"/api/projects/{_UUID}"),
     ("POST", rf"/api/projects/{_UUID}/layers"),
     ("PATCH", rf"/api/layers/{_UUID}"),
     ("DELETE", rf"/api/layers/{_UUID}"),
@@ -200,8 +211,9 @@ def _check_allowed(method: str, url: str) -> None:
     raise GuardError(
         f"{method.upper()} {path} ist nicht vorgesehen. Erlaubt sind lesende "
         "Anfragen, project.select() und die Schreibwege dieser Stufe: ein Projekt "
-        "ändern (project.update()), ein Layer anlegen, ändern, löschen, "
-        "wiederherstellen oder endgültig löschen "
+        "anlegen oder endgültig löschen (client.create_project(), "
+        "client.delete_project()), ein Projekt ändern (project.update()), ein "
+        "Layer anlegen, ändern, löschen, wiederherstellen oder endgültig löschen "
         "(project.create_layer(), layer.update()/.delete()/.restore()/.purge()), "
         "ein Stapel Objekt-Änderungen (layer.edit(), layer.insert(), "
         "layer.update_feature(), layer.delete_features()) sowie ein Feld anlegen "
@@ -582,6 +594,48 @@ class Client:
         """
         return self._send("GET", path, params=params)
 
+    def create_project(
+        self,
+        name: str,
+        *,
+        description: str | None = None,
+        srid: int | None = None,
+        basemap: str | None = None,
+    ) -> "Project":
+        """
+        Create a new, empty project -- an agent's own workspace, instead of
+        writing into a project a person already has open. The other half of
+        :meth:`delete_project`.
+
+        Unlike :meth:`create_layer`, this returns a :class:`hgis.project.Project`
+        directly rather than the raw body -- the same shape :meth:`project`
+        already hands back, since there is no parent object to wrap it
+        through the way :meth:`hgis.project.Project.create_layer` wraps this
+        method's layer counterpart.
+
+        >>> scratch = client.create_project("agent-scratch")
+        >>> layer = scratch.create_layer("Punkte", "MULTIPOINT")
+        ...
+        >>> client.delete_project(scratch.id)
+
+        :param srid: storage CRS, as an EPSG code, e.g. 25832. None falls
+            back to the server's default (EPSG:25832), validated there
+            against ``spatial_ref_sys`` rather than a fixed list. Fixed at
+            creation -- there is no way to change it afterwards, the same
+            gap :meth:`update_project` documents for its own ``srid``.
+        """
+        from .project import Project
+
+        body: dict[str, Any] = {"name": name}
+        if description is not None:
+            body["description"] = description
+        if srid is not None:
+            body["srid"] = srid
+        if basemap is not None:
+            body["basemap"] = basemap
+        data = self._send("POST", "/api/projects", json=body)
+        return Project(self, data)
+
     def save_view_state(self, project_id: str, state: dict[str, Any]) -> None:
         """
         Write a project's saved view state.
@@ -636,6 +690,35 @@ class Client:
         if zoom is not None:
             body["zoom"] = zoom
         return self._send("PATCH", f"/api/projects/{project_id}", json=body)
+
+    def deletion_impact(self, project_id: str) -> Any:
+        """
+        What deleting this project would destroy, without destroying
+        anything -- how many layers, how many objects across all of them.
+        See :meth:`delete_project`.
+
+        Reading is unrestricted, so this is not itself a checked write --
+        the same ``GET`` :meth:`get` could make directly. Named as its own
+        method because :meth:`hgis.mcp.write_tools.delete_project` calls it
+        for exactly one reason, the same reason the UI's own delete dialog
+        does: to say what was actually destroyed, not merely that something
+        was.
+        """
+        return self.get(f"/api/projects/{project_id}/deletion-impact")
+
+    def delete_project(self, project_id: str) -> None:
+        """
+        Permanently delete a project, with every layer and object in it.
+
+        Not reversible through this library, or through the server: unlike
+        :meth:`delete_layer`, there is no trash behind a project, so this is
+        as final as :meth:`purge_layer` the moment it returns. See
+        :meth:`deletion_impact` for what this would destroy before calling
+        it, and :meth:`hgis.mcp.write_tools.delete_project` for the one
+        safeguard this stage actually has: that tool refuses to call this at
+        all unless the project's name is given a second time, literally.
+        """
+        self._send("DELETE", f"/api/projects/{project_id}")
 
     # --- layers --------------------------------------------------------
 

@@ -4,8 +4,8 @@ Python-Bibliothek für hGIS. Sie lesen und schreiben damit Projekte, Layer und
 Objekte.
 
 Ein `RequestGuard` prüft jede Anfrage, bevor sie den Server erreicht. Lesen
-ist uneingeschränkt. Schreiben ist eine feste Liste: die Auswahl speichern,
-ein Projekt ändern, einen Layer
+ist uneingeschränkt. Schreiben ist eine feste Liste: ein Projekt
+anlegen/ändern/endgültig löschen, die Auswahl speichern, einen Layer
 anlegen/ändern/löschen/wiederherstellen/endgültig löschen, ein Feld
 anlegen/löschen und ein Stapel Objekt-Änderungen. Jede andere Anfrage lehnt
 die Bibliothek ab, bevor sie den Server erreicht -- siehe
@@ -26,9 +26,10 @@ pip install -e ".[dev]"               # alles, plus pytest
 
 Diese Zeilen legen ihre eigenen Testdaten an. Kein Vorwissen über ein
 bestimmtes Projekt nötig -- nur ein Projekt muss in Ihrer hGIS-Instanz schon
-existieren (jede Installation hat mindestens eines; die Bibliothek legt
-selbst keine Projekte an, nur Layer darin -- siehe
-[Grenzen dieser Stufe](#grenzen-dieser-stufe)).
+existieren (jede Installation hat mindestens eines). Wer stattdessen mit
+einer eigenen, leeren Arbeitsfläche anfangen will, ersetzt die zweite Zeile
+mit `project = client.create_project("agent-scratch")` -- siehe
+[Projekt anlegen, löschen](#projekt-anlegen-löschen).
 
 ```python
 import hgis
@@ -233,6 +234,29 @@ oder eine Sortierung schreiben. `describe()` tut das bereits von sich aus.
 Jeder Schreibvorgang wirkt sofort. Es gibt hier keine verzögerte Auswertung
 wie bei `Query` -- `layer.insert(...)` sendet, sobald Sie es aufrufen.
 
+### Projekt anlegen, löschen
+
+```python
+eigenes = client.create_project("agent-scratch")
+leer = eigenes.create_layer("Punkte", "MULTIPOINT", fields={"Name": "TEXT"})
+leer.insert({"type": "Point", "coordinates": [10.0, 53.5]}, {"name": "Test"})
+
+client.deletion_impact(eigenes.id)   # {'layerCount': 1, 'featureCount': 1} -- vor dem Löschen
+client.delete_project(eigenes.id)     # endgültig, kein Papierkorb dahinter
+```
+
+`create_project()` kennt drei wahlfreie Argumente -- `description`, `srid`
+(Speicher-CRS, EPSG-Code, fest ab der Anlage), `basemap` -- und gibt ein
+fertiges `Project` zurück, keinen rohen Rumpf: es gibt kein übergeordnetes
+Objekt, durch das `create_layer()` das sonst tut.
+
+`delete_project()` löscht das ganze Projekt mit jedem Layer und jedem
+Objekt darin, ohne Rückfrage und ohne Papierkorb -- der einzige wirklich
+unwiderrufliche Aufruf dieser Bibliothek. `deletion_impact()` sagt vorher,
+was das wäre, ohne etwas zu zerstören. Der MCP-Server verlangt für diesen
+Weg zusätzlich den Projektnamen wörtlich als zweite Angabe -- siehe
+[Die Werkzeuge](#die-werkzeuge).
+
 ### Layer anlegen, ändern, löschen
 
 ```python
@@ -433,8 +457,8 @@ Parameter ist es nicht von selbst.
 Transport erreicht -- egal ob sie über `client.get(...)` kommt oder direkt
 über `client._send(...)`. Erlaubt sind lesende Anfragen (jedes `GET`) sowie
 genau die Schreibvorgänge oben. Alles andere -- Layer neu ordnen, Objekte
-teilen oder zusammenführen, ein Projekt löschen -- lehnt die Bibliothek mit
-`hgis.GuardError` ab, bevor der Server sie sieht.
+teilen oder zusammenführen -- lehnt die Bibliothek mit `hgis.GuardError` ab,
+bevor der Server sie sieht.
 
 ```python
 >>> client._send("PUT", f"/api/projects/{pid}/layers/order", json={})
@@ -855,7 +879,7 @@ Für Claude Code liegt eine `.mcp.json` im Projektwurzelverzeichnis:
 ```
 
 Gemessen: Genau dieser Start verbindet sich mit einem laufenden hGIS und
-meldet 24 Werkzeuge.
+meldet 26 Werkzeuge.
 
 Für einen anderen Host reicht der Befehl `hgis-mcp` allein -- gleichwertig
 `python -m hgis.mcp`. `HGIS_URL` bestimmt, wohin er sich verbindet; ohne sie
@@ -940,16 +964,18 @@ field_classes(layer="Gebäude Speicherstadt", project="Leitungsnetz Nord",
 `breaks` hat `classes + 1` Einträge -- jede Untergrenze plus das Maximum --,
 außer das Feld hat weniger unterschiedliche Werte, als `classes` verlangt.
 
-Dreizehn schreibende. Auswahl und Ansicht kosten nichts, wenn ein Aufruf
-danebengeht -- der nächste setzt beides wieder zurecht. Objekte, Layer,
-Felder und Stil sind unterschiedlich weit rückgängig zu machen, dieselbe
-Unterscheidung wie in [„Was unwiederbringlich ist"](#was-unwiederbringlich-ist)
-oben:
+Fünfzehn schreibende. Auswahl und Ansicht kosten nichts, wenn ein Aufruf
+danebengeht -- der nächste setzt beides wieder zurecht. Projekte, Objekte,
+Layer, Felder und Stil sind unterschiedlich weit rückgängig zu machen,
+dieselbe Unterscheidung wie in
+[„Was unwiederbringlich ist"](#was-unwiederbringlich-ist) oben:
 
 | Aufruf | Wirkung | Rückgängig? |
 |---|---|---|
 | `select_features(project, fids, layer=)` | setzt die Auswahl | ja, jederzeit |
 | `set_view(project, layer=, center=, zoom=)` | bewegt die Karte, wechselt den aktiven Layer | ja, jederzeit |
+| `create_project(name, description=, srid=, basemap=)` | legt ein leeres Projekt an | ja, mit `delete_project` |
+| `delete_project(project, confirm_name)` | löscht ein ganzes Projekt endgültig | **nein**, und der einzige unwiderrufliche Aufruf dieses Werkzeugsatzes |
 | `insert_features(layer, features, ...)` | legt Objekte an | ja, aber nur durch `delete_features` mit den zurückgegebenen fids |
 | `update_features(layer, updates, ...)` | ändert Geometrie/Attribute | **nein**, nur über das Änderungsprotokoll |
 | `delete_features(layer, fids, ...)` | löscht Objekte | **nein**, nur über das Änderungsprotokoll |
@@ -966,18 +992,27 @@ oben:
 Name-oder-Id wie sonst: Ein Layer im Papierkorb ist über seinen Namen nicht
 mehr auffindbar, und `delete_layer` nennt die Id in seiner eigenen Antwort.
 
+`delete_project` verlangt zusätzlich `confirm_name`: den Projektnamen
+wörtlich, als zweite, unabhängige Angabe. Weicht er ab, wird nichts
+gelöscht -- die Ablehnung nennt den Namen, der gepasst hätte, denselben, den
+`describe_project`/`list_projects` sowieso schon zeigen. Kein Papierkorb
+dahinter, also meldet die Antwort, was tatsächlich zerstört wurde: Layer-
+und Objektzahl, dieselben Zahlen, die `deletion_impact()` in der Bibliothek
+vorher liefert, ohne etwas zu löschen.
+
 ### Die volle Oberfläche, ohne Schalter
 
-Alle 24 Werkzeuge stehen von Anfang an bereit, ohne Erlaubnisschalter, der
+Alle 26 Werkzeuge stehen von Anfang an bereit, ohne Erlaubnisschalter, der
 die schreibenden abschalten könnte. Das ist eine ausdrückliche Entscheidung
-des Nutzers, nachdem ihm das Risiko vorgelegt wurde: `purge_layer` löscht
-endgültig, `delete_features` ist über diese Bibliothek nicht rückgängig zu
-machen, und beides ist für jeden Agenten mit Verbindung zum Server erreichbar.
+des Nutzers, nachdem ihm das Risiko vorgelegt wurde: `purge_layer` und
+`delete_project` löschen endgültig, `delete_features` ist über diese
+Bibliothek nicht rückgängig zu machen, und alle drei sind für jeden Agenten
+mit Verbindung zum Server erreichbar.
 
 Die Folge: **Der Docstring jedes Werkzeugs ist die einzige Warnung, die es
 gibt.** Jedes zerstörende Werkzeug nennt im ersten Satz seiner Beschreibung,
 was es zerstört -- das ist keine Höflichkeit, sondern der einzige Schutz, den
-dieser Server bietet. Gemessen: alle 74 Parameter der 24 Werkzeuge tragen
+dieser Server bietet. Gemessen: alle 80 Parameter der 26 Werkzeuge tragen
 eine eigene Beschreibung, nicht nur der Werkzeugname selbst.
 
 ## Tests
@@ -1004,19 +1039,10 @@ python -m pytest -m "not live"                        # ohne
 
 ## Grenzen dieser Stufe
 
-- Kein Anlegen eines neuen Projekts über diese Bibliothek -- nur vorhandene
-  Projekte lesen und darin Layer anlegen. Deshalb öffnet
-  [Erste Schritte](#erste-schritte) ein vorhandenes Projekt, statt eines
-  anzulegen.
 - Kein Umbenennen eines Felds (`PATCH .../fields/{id}`) -- nur anlegen und
   löschen.
 - Kein Teilen, Zusammenführen oder Neuordnen von Layern über diese
   Bibliothek.
-- Kein Löschen eines ganzen Projekts. Beim Bau des MCP-Servers bestätigt:
-  `POST /api/projects` steht nicht in `RequestGuard._ALLOWED`, also kann auch
-  kein Agent über eines seiner Werkzeuge ein Projekt anlegen oder löschen --
-  beide Prüfagenten der MCP-Stufe mussten zu `curl` greifen, um sich
-  überhaupt eine eigene Fläche zum Arbeiten zu schaffen. Offen als Aufgabe 17.
 - Kein Lesen des Papierkorbs oder des Änderungsprotokolls über eine eigene
   Methode -- `client.get(".../trash")` und `client.get(".../changes")`
   funktionieren bereits, denn Lesen ist uneingeschränkt; eine eigene,
