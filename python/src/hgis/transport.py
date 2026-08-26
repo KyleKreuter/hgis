@@ -191,6 +191,7 @@ class Transport:
         method: str,
         url: str,
         json: Any = None,
+        file: tuple[str, bytes] | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
     ) -> Response:
@@ -199,7 +200,18 @@ class Transport:
 
         :param method: GET, PUT, POST ...
         :param url: absolute URL, query included
-        :param json: body to send as ``application/json``, or None
+        :param json: body to send as ``application/json``, or None. Mutually
+            exclusive with ``file`` -- an import sends only the bytes, every
+            other argument (``uploadId``, ``srid``, ``charset``, ``name``)
+            travels in ``url``'s own query string instead, the same way a
+            ``GET``'s filters do. That is what keeps this method's shape to
+            two bodies rather than three: nothing here ever needs both a
+            JSON body and a file in the same request.
+        :param file: ``(filename, content)`` to send as
+            ``multipart/form-data`` under the field name ``file`` -- the
+            shape the backend's import endpoints read with
+            ``@RequestParam MultipartFile file``. None for every request
+            that is not an upload.
         :param timeout: seconds to wait
         :param headers: extra request headers, or None
         :raises TransportError: when no answer arrives. A 4xx or 5xx *is* an
@@ -323,15 +335,21 @@ class HttpxTransport(Transport):
         method: str,
         url: str,
         json: Any = None,
+        file: tuple[str, bytes] | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
     ) -> Response:
         self._require_no_follow_redirects()
         import httpx
 
+        # httpx sends a multipart body once `files` is given and ignores
+        # `json` in that case -- never both here, see Transport.request's
+        # own docstring for why a caller never has reason to set both.
+        files = {"file": file} if file is not None else None
+
         try:
             response = self._client.request(
-                method, url, json=json, timeout=timeout, headers=headers
+                method, url, json=json, files=files, timeout=timeout, headers=headers
             )
         except httpx.TimeoutException as error:
             raise TransportTimeout(f"{url} antwortet nicht innerhalb der Frist: {error}") from error
@@ -395,6 +413,13 @@ class PyodideTransport(Transport):
     only reach its own origin unless the server allows otherwise, and this
     library talks to the server that served the page. Worth knowing before this
     floor is put to use.
+
+    **A file upload is refused outright,** unlike every other request this
+    floor makes. :meth:`hgis.project.Project.import_file` reads a path off
+    the local filesystem with plain ``open()`` -- a concept a browser tab has
+    no equivalent for, sandboxed away from the filesystem the way it is. A
+    browser-side import would need to start from a picked ``File`` object
+    instead, which is a different call, not a missing branch in this one.
     """
 
     def request(
@@ -402,9 +427,16 @@ class PyodideTransport(Transport):
         method: str,
         url: str,
         json: Any = None,
+        file: tuple[str, bytes] | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
     ) -> Response:
+        if file is not None:
+            raise TransportError(
+                "Datei-Upload läuft in dieser Stufe nur unter CPython. "
+                "PyodideTransport hat noch keine Anbindung dafür -- siehe "
+                "die Klassen-Dokumentation."
+            )
         try:
             from js import XMLHttpRequest  # type: ignore[import-not-found]
         except ImportError as error:

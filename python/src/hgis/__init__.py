@@ -57,6 +57,7 @@ from .errors import (
     UnknownNameError,
     UnsafeTransportError,
 )
+from .jobs import Job
 from .layer import (
     Classification,
     Field,
@@ -66,7 +67,7 @@ from .layer import (
     TrashEntry,
     ValueCounts,
 )
-from .project import Project, Selection, View
+from .project import Inspection, InspectionField, Project, Selection, View
 from .query import Feature, Page, Query
 from .style import (
     RENDERER_CATEGORIZED,
@@ -114,6 +115,10 @@ __all__ = [
     "TrashEntry",
     "ValueCounts",
     "Classification",
+    # importing, see Project.inspect_import/.import_file/.import_geoportal
+    "Job",
+    "Inspection",
+    "InspectionField",
     # the live channel, see Client.watch and Client.wait_for
     "Change",
     "Connected",

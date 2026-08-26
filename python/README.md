@@ -7,8 +7,9 @@ Ein `RequestGuard` prüft jede Anfrage, bevor sie den Server erreicht. Lesen
 ist uneingeschränkt. Schreiben ist eine feste Liste: ein Projekt
 anlegen/ändern/endgültig löschen, die Auswahl speichern, einen Layer
 anlegen/ändern/löschen/wiederherstellen/endgültig löschen, ein Feld
-anlegen/löschen und ein Stapel Objekt-Änderungen. Jede andere Anfrage lehnt
-die Bibliothek ab, bevor sie den Server erreicht -- siehe
+anlegen/löschen, ein Stapel Objekt-Änderungen sowie Daten aus einer Datei
+oder dem Geoportal Hamburg importieren. Jede andere Anfrage lehnt die
+Bibliothek ab, bevor sie den Server erreicht -- siehe
 [„Was der Wächter durchlässt"](#was-der-wächter-durchlässt).
 
 ## Installation
@@ -107,6 +108,9 @@ Jeder Baustein gibt eine neue Abfrage zurück. `eng = weit.where(...)` lässt
 | `project.select(fids)` | setzt die Auswahl, macht den Layer aktiv |
 | `project.create_layer(name, geometrietyp, fields=...)` | legt einen leeren Layer an, gibt ihn zurück |
 | `project.update(name=..., center=..., zoom=..., ...)` | ändert Name, Beschreibung, Basiskarte, Mitte oder Zoom, gibt sich selbst zurück -- siehe [Ansicht setzen](#ansicht-setzen) |
+| `project.inspect_import(datei_oder_upload_id, ...)` | `Inspection`: was ein Import erzeugen würde -- folgenlos, siehe [Importieren](#importieren) |
+| `project.import_file(datei_oder_upload_id, ...)` | importiert eine Datei in einen neuen Layer, gibt einen `Job` zurück |
+| `project.import_geoportal(dataset_id, ...)` | importiert einen Geoportal-Hamburg-Datensatz, gibt einen `Job` zurück |
 
 ### Layer
 
@@ -494,6 +498,124 @@ Im Browser gilt das nicht. `XMLHttpRequest` folgt Umleitungen selbst und
 lässt sich davon nicht abbringen. Dort schützt die Herkunftsregel des
 Browsers -- wie beim Ereigniskanal, siehe unten.
 
+## Importieren
+
+Drei Endpunkte holen Daten von außen herein. Prüfen läuft synchron; der
+eigentliche Import schreibt asynchron:
+
+| Aufruf | Wirkung |
+|---|---|
+| `project.inspect_import(datei_oder_upload_id)` | zeigt, was ein Import erzeugen würde -- folgenlos |
+| `project.import_file(datei_oder_upload_id, name=...)` | importiert Shapefile, GeoJSON oder CSV in einen neuen Layer -- gibt sofort einen `Job` zurück |
+| `project.import_geoportal(dataset_id, bbox=..., fields=...)` | importiert einen Datensatz aus dem Geoportal Hamburg -- derselbe `Job` |
+
+```python
+eigenes = client.create_project("agent-import-test")
+
+vorschau = eigenes.inspect_import("tests/data/baeume.geojson")
+print(vorschau.geometry_type, vorschau.feature_count, [f.name for f in vorschau.fields])
+
+job = eigenes.import_file(upload_id=vorschau.upload_id, name="Bäume")
+job.wait(timeout=60)
+
+assert job.succeeded, job.message
+layer = client.layer(job.output_layer_id)
+print(layer.describe())
+
+client.delete_project(eigenes.id)
+```
+
+Ausgeführt gegen den Beispieldatensatz `tests/data/baeume.geojson` (drei
+Bäume):
+
+```
+MULTIPOINT None ['gattung', 'pflanzjahr']
+Layer 'Bäume'
+  Geometrie: MULTIPOINT   CRS: EPSG:25832   Objekte: 3
+  Ausschnitt (EPSG:4326): 9.97000, 53.52984, 9.99000, 53.55016
+
+  Felder (2):
+    gattung (text)  leer 0.0%  häufig: 'Acer' (1), 'Quercus' (1), 'Tilia' (1)
+    pflanzjahr (bigint)  leer 0.0%  von 1932 bis 2007
+
+  Beispielzeilen (3):
+    fid 1: gattung='Tilia', pflanzjahr=1932
+    fid 2: gattung='Acer', pflanzjahr=2007
+    fid 3: gattung='Quercus', pflanzjahr=1958
+```
+
+`vorschau.feature_count` ist `None`: GeoJSON kennt seine Gesamtzahl nicht im
+Voraus (anders als GeoPackage oder Shapefile). `inspect_import()` gibt keine
+Antwort ohne Objektzahl-Feld -- sie fehlt dort, wo das Format sie nicht hat,
+statt eine geratene zu erfinden.
+
+**`upload_id` spart das zweite Senden.** `inspect_import()` prüft eine Datei,
+ohne sie anzulegen, und trägt in seiner Antwort die `upload_id`, unter der
+der Server sie vorhält. Ein zweites `inspect_import(upload_id=..., srid=...)`
+prüft dieselbe Datei mit einer Korrektur erneut, ohne sie noch einmal zu
+lesen -- und `import_file(upload_id=...)` oben nutzt denselben Weg, um genau
+die geprüfte Datei zu importieren.
+
+### Auf den Job warten
+
+`import_file()`/`import_geoportal()` geben sofort einen `Job` zurück, in
+`PENDING` -- die Schreibarbeit läuft danach auf dem Server weiter.
+`job.wait(timeout=...)` blockiert auf dem Ereigniskanal, nicht in einer
+Abfrageschleife: derselbe Mechanismus wie im Kapitel
+[Der Ereigniskanal](#der-ereigniskanal), dessen eigenes Beispiel genau diesen
+Fall zeigt. Läuft die Frist ab, bevor der Job fertig ist, bleibt
+`job.status` `PENDING` oder `RUNNING` -- `job.id` ist der Anknüpfpunkt für
+ein erneutes `job.wait()`.
+
+| Eigenschaft | Bedeutung |
+|---|---|
+| `job.status` | `PENDING`, `RUNNING`, `SUCCEEDED` oder `FAILED` |
+| `job.done` | `status` ist `SUCCEEDED` oder `FAILED` |
+| `job.succeeded` / `job.failed` | eine der beiden Endzustände |
+| `job.output_layer_id` | gesetzt, sobald die Layer-Zeile existiert -- schon während `RUNNING`, ein Layer, der noch befüllt wird |
+| `job.processed_count` / `job.total_count` | Fortschritt; `total_count` `None`, wenn das Format ihn nicht kennt |
+| `job.message` | der Fehlergrund bei `FAILED`, sonst meist `None` |
+| `job.refresh()` | liest den Job einmal neu, ohne zu warten |
+
+### Aus dem Geoportal Hamburg
+
+```python
+job = eigenes.import_geoportal("uesg/uesg_blattschnitte", bbox=(9.9, 53.5, 10.1, 53.6))
+job.wait(timeout=90)
+```
+
+Ausgeführt: ein Layer mit 12 Objekten, aus dem echten Datensatz der
+Überschwemmungsgebiete Hamburgs. `dataset_id` kommt aus dem Katalog --
+`client.get("/api/geoportal/datasets")`, denn Lesen ist ohnehin
+uneingeschränkt und diese Stufe hat kein eigenes Werkzeug für den Katalog
+selbst.
+
+### Wo `file_path` gelesen wird
+
+`import_file()`/`inspect_import()` lesen die Datei mit einem einfachen
+`open()` -- vom Dateisystem des Prozesses, der die Bibliothek ausführt. Für
+ein Skript, das ein Agent selbst startet, ist das der eigene Rechner. Für den
+MCP-Server ist es das Dateisystem des *Server*-Prozesses -- richtig, solange
+Server und Agent denselben Rechner teilen (der einzige Fall, den es heute
+gibt), falsch für einen entfernten Server. Diese Stufe baut keinen zweiten
+Weg dafür.
+
+### Was schiefgeht
+
+Eine kaputte Datei oder ein unplausibles CRS scheitert sofort an
+`import_file()` selbst, mit `hgis.ApiError` -- nicht als Job, der erst
+Sekunden später fehlschlägt:
+
+```
+>>> eigenes.import_file("tests/data/kaputt.geojson")
+hgis.errors.ApiError: Der Import kann die Datei nicht lesen: Der Import kann
+das GeoJSON nicht lesen: ...
+```
+
+Der hochgeladene Datenstrom bleibt dabei erhalten: Ein zweiter Versuch mit
+korrigierter Kodierung braucht keinen erneuten Upload, über dieselbe
+`upload_id` wie oben.
+
 ## Fehler nennen das Gültige
 
 Die Bibliothek reicht die Meldung des Servers unverändert durch.
@@ -879,7 +1001,7 @@ Für Claude Code liegt eine `.mcp.json` im Projektwurzelverzeichnis:
 ```
 
 Gemessen: Genau dieser Start verbindet sich mit einem laufenden hGIS und
-meldet 26 Werkzeuge.
+meldet 30 Werkzeuge.
 
 Für einen anderen Host reicht der Befehl `hgis-mcp` allein -- gleichwertig
 `python -m hgis.mcp`. `HGIS_URL` bestimmt, wohin er sich verbindet; ohne sie
@@ -964,7 +1086,7 @@ field_classes(layer="Gebäude Speicherstadt", project="Leitungsnetz Nord",
 `breaks` hat `classes + 1` Einträge -- jede Untergrenze plus das Maximum --,
 außer das Feld hat weniger unterschiedliche Werte, als `classes` verlangt.
 
-Fünfzehn schreibende. Auswahl und Ansicht kosten nichts, wenn ein Aufruf
+Neunzehn schreibende. Auswahl und Ansicht kosten nichts, wenn ein Aufruf
 danebengeht -- der nächste setzt beides wieder zurecht. Projekte, Objekte,
 Layer, Felder und Stil sind unterschiedlich weit rückgängig zu machen,
 dieselbe Unterscheidung wie in
@@ -976,6 +1098,10 @@ dieselbe Unterscheidung wie in
 | `set_view(project, layer=, center=, zoom=)` | bewegt die Karte, wechselt den aktiven Layer | ja, jederzeit |
 | `create_project(name, description=, srid=, basemap=)` | legt ein leeres Projekt an | ja, mit `delete_project` |
 | `delete_project(project, confirm_name)` | löscht ein ganzes Projekt endgültig | **nein**, und der einzige unwiderrufliche Aufruf dieses Werkzeugsatzes |
+| `inspect_import(project, file_path=, upload_id=, ...)` | zeigt, was ein Import erzeugen würde | -- (folgenlos, legt nichts an) |
+| `import_file(project, file_path=, upload_id=, ..., timeout=)` | importiert eine Datei, wartet auf den fertigen Layer | ja, mit `delete_layer` |
+| `import_geoportal(project, dataset_id, ..., timeout=)` | importiert einen Geoportal-Hamburg-Datensatz, wartet auf den fertigen Layer | ja, mit `delete_layer` |
+| `job_wait(job_id, project, timeout=)` | fasst nach, wenn eine der beiden Fristen zuvor ablief | -- |
 | `insert_features(layer, features, ...)` | legt Objekte an | ja, aber nur durch `delete_features` mit den zurückgegebenen fids |
 | `update_features(layer, updates, ...)` | ändert Geometrie/Attribute | **nein**, nur über das Änderungsprotokoll |
 | `delete_features(layer, fids, ...)` | löscht Objekte | **nein**, nur über das Änderungsprotokoll |
@@ -1002,7 +1128,7 @@ vorher liefert, ohne etwas zu löschen.
 
 ### Die volle Oberfläche, ohne Schalter
 
-Alle 26 Werkzeuge stehen von Anfang an bereit, ohne Erlaubnisschalter, der
+Alle 30 Werkzeuge stehen von Anfang an bereit, ohne Erlaubnisschalter, der
 die schreibenden abschalten könnte. Das ist eine ausdrückliche Entscheidung
 des Nutzers, nachdem ihm das Risiko vorgelegt wurde: `purge_layer` und
 `delete_project` löschen endgültig, `delete_features` ist über diese
@@ -1012,7 +1138,7 @@ mit Verbindung zum Server erreichbar.
 Die Folge: **Der Docstring jedes Werkzeugs ist die einzige Warnung, die es
 gibt.** Jedes zerstörende Werkzeug nennt im ersten Satz seiner Beschreibung,
 was es zerstört -- das ist keine Höflichkeit, sondern der einzige Schutz, den
-dieser Server bietet. Gemessen: alle 80 Parameter der 26 Werkzeuge tragen
+dieser Server bietet. Gemessen: alle 101 Parameter der 30 Werkzeuge tragen
 eine eigene Beschreibung, nicht nur der Werkzeugname selbst.
 
 ## Tests
@@ -1051,12 +1177,18 @@ python -m pytest -m "not live"                        # ohne
   Sekunden) scharf. Darüber -- auch beim Vorgabewert `timeout=None` -- kann
   sie um bis zu eine `stream-timeout`-Länge überschritten werden: ein
   Heartbeat setzt den Lese-Timeout zurück, bevor er greifen kann, und ist
-  selbst kein Ereignis, an dem sich die Frist neu prüfen ließe.
+  selbst kein Ereignis, an dem sich die Frist neu prüfen ließe. `job.wait()`
+  ruft `wait_for()` auf und erbt diese Grenze unverändert.
 - `stop` auf `watch()`/`wait_for()` wird nur zwischen zwei Verbindungen und
   während eines Wiederverbindungs-Wartens geprüft, nie mitten in einem
   laufenden Lesevorgang. Mit einer kurzen `timeout` reagiert es zeitnah;
   beim Vorgabewert kann es genauso lange brauchen wie die Frist oben.
-- `PyodideTransport.events()` läuft nicht -- nur unter CPython.
+  `job.wait()` hat kein eigenes `stop` -- ein laufender Aufruf ist von außen
+  nicht abzubrechen, nur mit seiner eigenen `timeout` zu begrenzen.
+- `PyodideTransport.events()` läuft nicht -- nur unter CPython. Ein
+  Datei-Upload (`inspect_import()`/`import_file()` mit `file_path`) läuft
+  aus demselben Grund nur unter CPython: der Weg dahin ist ein Pfad auf
+  einem lokalen Dateisystem, das ein Browser-Tab nicht hat.
 - Ein per `set_view` (oder `project.update()`) gesetzter Kartenausschnitt
   erreicht seit dem 26.08. jeden offenen Browser-Tab von selbst: Der Tab
   zieht sanft nach, ohne Neuladen. Der **aktive Layer** tut das nicht -- ein

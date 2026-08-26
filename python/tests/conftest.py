@@ -88,18 +88,25 @@ class FakeTransport(Transport):
     handler: Callable[[Recorded], Response]
     requests: list[Recorded] = field(default_factory=list)
     bodies: list[Any] = field(default_factory=list)
+    #: ``(filename, content)`` sent with each request, or None -- see
+    #: ``Transport.request``'s own ``file`` parameter. Kept in lockstep with
+    #: ``bodies`` (one entry per request) so a test can read
+    #: ``transport.files[-1]`` the same way it reads ``transport.bodies[-1]``.
+    files: list[tuple[str, bytes] | None] = field(default_factory=list)
 
     def request(
         self,
         method: str,
         url: str,
         json: Any = None,
+        file: tuple[str, bytes] | None = None,
         timeout: float = 30.0,
         headers: dict[str, str] | None = None,
     ) -> Response:
         recorded = Recorded(method, url, dict(headers or {}))
         self.requests.append(recorded)
         self.bodies.append(json)
+        self.files.append(file)
         return self.handler(recorded)
 
     @property

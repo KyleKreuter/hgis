@@ -390,7 +390,7 @@ class _Scripted(Transport):
         self.seen: list[tuple[str, str, object]] = []
         self.headers_seen: list[dict[str, str] | None] = []
 
-    def request(self, method, url, json=None, timeout=30.0, headers=None) -> Response:
+    def request(self, method, url, json=None, file=None, timeout=30.0, headers=None) -> Response:
         self.seen.append((method, url, json))
         self.headers_seen.append(headers)
         return self.responses.pop(0) if self.responses else Response(204, "")

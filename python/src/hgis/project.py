@@ -9,6 +9,7 @@ from .errors import UnknownNameError
 
 if TYPE_CHECKING:
     from .client import Client
+    from .jobs import Job
     from .layer import Layer, TrashEntry
 
 
@@ -197,6 +198,130 @@ class Project:
         )
         return self
 
+    # --- importing ---------------------------------------------------------
+
+    def inspect_import(
+        self,
+        file_path: str | None = None,
+        *,
+        upload_id: str | None = None,
+        srid: int | None = None,
+        charset: str | None = None,
+    ) -> "Inspection":
+        """
+        Report what an import would produce -- geometry type, object count,
+        fields with sample values, extent -- without producing anything.
+        Folgenlos, so this is safe to repeat with a corrected ``srid`` or
+        ``charset`` on the same upload.
+
+        >>> preview = project.inspect_import("bäume.geojson")
+        >>> preview.feature_count, preview.geometry_type
+        (312, 'MULTIPOINT')
+        >>> project.import_file(upload_id=preview.upload_id, name="Bäume")
+
+        :param file_path: a path on the local filesystem of whoever runs
+            this process; see :meth:`import_file` for what that means when
+            this process is an MCP server
+        :param upload_id: re-inspect a file already sent by an earlier call
+            -- ``preview.upload_id`` above -- instead of sending it again.
+            Exactly one of ``file_path``/``upload_id``; the server names the
+            mistake if this sends neither or both
+        :param srid: source CRS to assume, when the file carries none or the
+            wrong one
+        :param charset: character encoding to assume, when the file's own
+            (or the format's default) reads field values or geometry wrong
+        """
+        data = self._client.inspect_import(
+            self.id, file_path=file_path, upload_id=upload_id, srid=srid, charset=charset
+        )
+        return _to_inspection(data)
+
+    def import_file(
+        self,
+        file_path: str | None = None,
+        *,
+        upload_id: str | None = None,
+        name: str | None = None,
+        srid: int | None = None,
+        charset: str | None = None,
+    ) -> "Job":
+        """
+        Start importing a file, or a previously inspected upload, into a
+        new layer -- Shapefile, GeoJSON or CSV, the same formats the upload
+        dialog in the UI reads.
+
+        Returns immediately, with the job still ``PENDING`` -- the write
+        itself keeps running on the server. Call :meth:`hgis.jobs.Job.wait`
+        to block until it finishes, or a :func:`hgis.channel.watch` for
+        several imports at once.
+
+        >>> job = project.import_file("bäume.geojson", name="Bäume")
+        >>> job.wait(timeout=120)
+        >>> job.succeeded, job.output_layer_id
+        (True, '019ff9aa-...')
+
+        **``file_path`` is read from the local filesystem of whoever runs
+        this process, with a plain ``open()``.** For a script an agent runs
+        itself, that is the agent's own machine, and this is exactly what
+        it looks like. For the MCP server (``hgis.mcp.write_tools.import_file``),
+        it is the filesystem the *server* process sees -- right today only
+        because that server and the agent it serves are assumed to share
+        one machine (see the README's MCP chapter); a server running
+        somewhere else would need a different way to receive the bytes,
+        which this stage does not build.
+
+        :param upload_id: skip re-sending a file already sent to
+            :meth:`inspect_import` or an earlier :meth:`import_file` --
+            exactly one of ``file_path``/``upload_id``
+        :param name: the new layer's name. None uses the file's own name,
+            without its extension
+        :param srid: see :meth:`inspect_import`
+        :param charset: see :meth:`inspect_import`
+        """
+        from .jobs import Job
+
+        data = self._client.start_import(
+            self.id, file_path=file_path, upload_id=upload_id,
+            name=name, srid=srid, charset=charset,
+        )
+        return Job(self._client, data, project_id=self.id)
+
+    def import_geoportal(
+        self,
+        dataset_id: str,
+        *,
+        bbox: tuple[float, float, float, float] | None = None,
+        fields: Sequence[str] | None = None,
+        name: str | None = None,
+    ) -> "Job":
+        """
+        Start importing a dataset from the Geoportal Hamburg into a new
+        layer -- the network takes the place of an upload, everything past
+        that is the same job :meth:`import_file` starts.
+
+        >>> job = project.import_geoportal(
+        ...     "verkehr_strassen/verkehrsnetz",
+        ...     bbox=(9.9, 53.5, 10.1, 53.6),
+        ... )
+        >>> job.wait(timeout=120)
+
+        :param dataset_id: id from the Geoportal catalog. No dedicated
+            lookup exists on this stage yet; read
+            ``client.get("/api/geoportal/datasets")`` instead -- reading is
+            unrestricted
+        :param bbox: (minLng, minLat, maxLng, maxLat) in EPSG:4326. None
+            imports the whole dataset
+        :param fields: technical field names to keep. None keeps every
+            field; the dataset's id field travels along regardless
+        :param name: the new layer's name. None uses the dataset's own title
+        """
+        from .jobs import Job
+
+        data = self._client.start_geoportal_import(
+            self.id, dataset_id, bbox=bbox, fields=fields, name=name
+        )
+        return Job(self._client, data, project_id=self.id)
+
     # --- what the user is looking at ---------------------------------------
 
     def view(self) -> "View":
@@ -376,3 +501,74 @@ def _as_box(value: Any) -> tuple[float, float, float, float] | None:
     if not value or len(value) != 4:
         return None
     return (value[0], value[1], value[2], value[3])
+
+
+@dataclass(frozen=True)
+class InspectionField:
+    """One field an import would produce, as :meth:`Project.inspect_import` found it.
+
+    :param data_type: the PostgreSQL type this field would get on import
+    :param sample_values: first values in file order; a None entry is a null
+        value, not an empty one
+    """
+
+    name: str
+    data_type: str
+    sample_values: list[str | None]
+
+
+@dataclass(frozen=True)
+class Inspection:
+    """
+    What an import would produce, read with :meth:`Project.inspect_import`
+    without writing anything.
+
+    :param upload_id: send this back as ``upload_id`` to
+        :meth:`Project.inspect_import` to re-inspect the same upload with a
+        different ``srid`` or ``charset``, or to :meth:`Project.import_file`
+        to import it without sending the file a second time
+    :param filename: the name the file was uploaded under, not the name it
+        is stored under on the server
+    :param feature_count: None when the format does not know its total up
+        front
+    :param charset: None when the format leaves no room for a choice
+        (GeoPackage and GeoJSON are UTF-8 by definition)
+    :param extent: (minLng, minLat, maxLng, maxLat) in EPSG:4326, whatever
+        the source CRS is -- None when nothing could be located
+    """
+
+    upload_id: str
+    filename: str
+    geometry_type: str | None
+    feature_count: int | None
+    charset: str | None
+    srid: int
+    crs_confidence: str
+    extent: tuple[float, float, float, float] | None
+    fields: list[InspectionField]
+
+    def __repr__(self) -> str:
+        count = self.feature_count if self.feature_count is not None else "unbekannt"
+        return (
+            f"<hgis.Inspection {self.filename!r} {self.geometry_type} "
+            f"Objekte={count} Felder={len(self.fields)}>"
+        )
+
+
+def _to_inspection(data: dict[str, Any]) -> Inspection:
+    return Inspection(
+        upload_id=data["uploadId"],
+        filename=data["filename"],
+        geometry_type=data.get("geometryType"),
+        feature_count=data.get("featureCount"),
+        charset=data.get("charset"),
+        srid=data["srid"],
+        crs_confidence=data["crsConfidence"],
+        extent=_as_box(data.get("extentWgs84")),
+        fields=[
+            InspectionField(
+                name=item["name"], data_type=item["dataType"], sample_values=item["sampleValues"]
+            )
+            for item in data.get("fields") or []
+        ],
+    )

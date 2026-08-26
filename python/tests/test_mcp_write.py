@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -26,6 +27,10 @@ import pytest
 import hgis
 from conftest import LAYER_ID, PROJECT_ID, FakeTransport, Recorded, load, needs_mcp, ok
 from hgis.transport import Response
+
+#: Same file test_writes.py uses -- both measure against exactly the same bytes.
+BAEUME_GEOJSON = Path(__file__).parent / "data" / "baeume.geojson"
+KAPUTT_GEOJSON = Path(__file__).parent / "data" / "kaputt.geojson"
 
 pytestmark = [needs_mcp, pytest.mark.mcp]
 
@@ -52,10 +57,40 @@ EMPTY_LAYER_ID = "019ff9aa-3333-7444-8555-666677778888"
 #: A project that already exists -- for delete_project, which reads it before
 #: it may destroy it.
 NEW_PROJECT_ID = "019ff9aa-4444-7555-8666-777788889999"
+#: What an inspect_import/import_file test uploads and gets back.
+NEW_UPLOAD_ID = "019ff9aa-aaaa-7bbb-8ccc-dddd11112222"
+NEW_JOB_ID = "019ff9aa-bbbb-7ccc-8ddd-eeee22223333"
+IMPORT_LAYER_ID = "019ff9aa-cccc-7ddd-8eee-ffff33334444"
 
 
 def _json_response(status: int, body: Any) -> Response:
     return Response(status, json.dumps(body))
+
+
+def _succeeded_job(*, filename: str, feature_count: int) -> dict[str, Any]:
+    """
+    A ``JobDtos.Response`` that is already ``SUCCEEDED`` the moment it is
+    read -- the write tools' fast path (``Job.wait()`` returns on its very
+    first ``refresh()`` without ever touching the live channel), which is
+    all this file's stub needs: the channel itself is
+    ``hgis.jobs.Job.wait``'s own concern, proven with a dedicated scripted
+    transport in ``test_jobs.py``, not re-proven here.
+    """
+    return {
+        "id": NEW_JOB_ID,
+        "type": "IMPORT",
+        "status": "SUCCEEDED",
+        "filename": filename,
+        "processedCount": feature_count,
+        "totalCount": feature_count,
+        "skippedCount": 0,
+        "outputLayerId": IMPORT_LAYER_ID,
+        "outputProjectId": None,
+        "message": None,
+        "startedAt": "2026-01-01T00:00:01Z",
+        "finishedAt": "2026-01-01T00:00:02Z",
+        "createdAt": "2026-01-01T00:00:00Z",
+    }
 
 
 #: Marks that no PATCH has overridden the layer's stored style yet -- distinct
@@ -63,7 +98,12 @@ def _json_response(status: int, body: Any) -> Response:
 _STYLE_NOT_OVERRIDDEN = object()
 
 
-def _write_stub(request: Recorded, body: Any, style_state: list[Any] | None = None) -> Response:
+def _write_stub(
+    request: Recorded,
+    body: Any,
+    style_state: list[Any] | None = None,
+    file: tuple[str, bytes] | None = None,
+) -> Response:
     """
     Answers every path a write tool reads or writes.
 
@@ -81,6 +121,9 @@ def _write_stub(request: Recorded, body: Any, style_state: list[Any] | None = No
     test a set_style -> get_style round trip honestly. ``None`` (no box
     given) behaves as before: every GET answers with the stored fixture,
     unaffected by any earlier write in the same test.
+
+    ``file`` is the multipart upload an import sends, ``(filename, content)``
+    -- see ``Transport.request``'s own parameter of the same name.
     """
     path, method = request.path, request.method
 
@@ -167,6 +210,23 @@ def _write_stub(request: Recorded, body: Any, style_state: list[Any] | None = No
             requested = [int(x.strip()) for x in match.group(1).split(",") if x.strip()]
             existing = [fid for fid in requested if 1 <= fid <= 1003]
             return _json_response(200, {"totalCount": len(existing), "features": []})
+        if path == f"/api/jobs/{NEW_JOB_ID}":
+            return _json_response(200, _succeeded_job(filename="baeume.geojson", feature_count=3))
+        if path == f"/api/layers/{IMPORT_LAYER_ID}":
+            return _json_response(
+                200,
+                {
+                    "id": IMPORT_LAYER_ID,
+                    "name": "Bäume",
+                    "kind": "VECTOR",
+                    "geometryType": "MULTIPOINT",
+                    "srid": 25833,
+                    "featureCount": 3,
+                    "visible": True,
+                    "extent": None,
+                    "style": None,
+                },
+            )
         raise AssertionError(f"Unerwartete Anfrage: {method} {request.url}")
 
     if method == "PUT" and path == f"/api/projects/{PROJECT_ID}/view-state":
@@ -333,6 +393,46 @@ def _write_stub(request: Recorded, body: Any, style_state: list[Any] | None = No
         # der Pfad selbst, den der aufrufende Test danach prueft.
         return Response(204, "")
 
+    if method == "POST" and path == f"/api/projects/{PROJECT_ID}/imports/inspect":
+        filename = file[0] if file is not None else "baeume.geojson"
+        return _json_response(
+            200,
+            {
+                "uploadId": NEW_UPLOAD_ID,
+                "filename": filename,
+                "geometryType": "MULTIPOINT",
+                "featureCount": None,
+                "charset": None,
+                "srid": 4326,
+                "crsConfidence": "HIGH",
+                "extentWgs84": [9.97, 53.53, 9.99, 53.55],
+                "fields": [
+                    {"name": "gattung", "dataType": "text", "sampleValues": ["Tilia", "Acer"]}
+                ],
+            },
+        )
+
+    if method == "POST" and path == f"/api/projects/{PROJECT_ID}/imports":
+        # A real server rejects an unreadable file synchronously, before a
+        # job ever exists for it -- see ImportController's own class
+        # docstring. Answered here by filename, since that is what a test
+        # controls without needing real broken bytes.
+        if file is not None and file[0] == "kaputt.geojson":
+            return _json_response(
+                400,
+                {
+                    "detail": "Der Import kann die Datei nicht lesen: kaputt.geojson.",
+                    "status": 400,
+                    "title": "Ungültige Anfrage",
+                },
+            )
+        return _json_response(202, _succeeded_job(filename="baeume.geojson", feature_count=3))
+
+    if method == "POST" and path == f"/api/projects/{PROJECT_ID}/geoportal-imports":
+        return _json_response(
+            202, _succeeded_job(filename="ÜSG Blattschnitte", feature_count=12)
+        )
+
     raise AssertionError(f"Unerwartete Anfrage: {method} {request.url}")
 
 
@@ -355,7 +455,7 @@ def transport() -> FakeTransport:
     style_state: list[Any] = [_STYLE_NOT_OVERRIDDEN]
 
     def handler(request: Recorded) -> Response:
-        return _write_stub(request, box[0].bodies[-1], style_state)
+        return _write_stub(request, box[0].bodies[-1], style_state, box[0].files[-1])
 
     instance = FakeTransport(handler)
     box.append(instance)
@@ -714,6 +814,131 @@ def test_delete_project_confirm_name_is_exact_not_case_insensitive(mcp_client, t
         delete_project(NEW_PROJECT_ID, confirm_name="agent-test")
 
     assert not any(r.method == "DELETE" for r in transport.requests)
+
+
+# --- importing: what is stored --------------------------------------------
+
+
+def test_inspect_import_sends_the_file_and_reports_the_preview(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import inspect_import
+
+    result = inspect_import(PROJECT_ID, file_path=str(BAEUME_GEOJSON))
+
+    assert result.upload_id == NEW_UPLOAD_ID
+    assert result.geometry_type == "MULTIPOINT"
+    assert [f.name for f in result.fields] == ["gattung"]
+    post = next(r for r in transport.requests if r.path.endswith("/imports/inspect"))
+    assert transport.files[transport.requests.index(post)][0] == "baeume.geojson"
+
+
+def test_import_file_waits_and_reports_the_finished_layer(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import import_file
+
+    result = import_file(PROJECT_ID, file_path=str(BAEUME_GEOJSON), name="Bäume", timeout=5)
+
+    assert result.status == "SUCCEEDED"
+    assert result.job_id == NEW_JOB_ID
+    assert result.layer_id == IMPORT_LAYER_ID
+    assert result.layer_name == "Bäume"
+    assert result.feature_count == 3
+    assert "Bäume" in result.summary and "3 Objekt" in result.summary
+    post = next(r for r in transport.requests if r.path == f"/api/projects/{PROJECT_ID}/imports")
+    assert transport.files[transport.requests.index(post)][0] == "baeume.geojson"
+
+
+def test_import_file_with_an_upload_id_sends_no_file(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import import_file
+
+    import_file(PROJECT_ID, upload_id=NEW_UPLOAD_ID, timeout=5)
+
+    post = next(r for r in transport.requests if r.path == f"/api/projects/{PROJECT_ID}/imports")
+    assert transport.files[transport.requests.index(post)] is None
+    assert post.param("uploadId") == NEW_UPLOAD_ID
+
+
+def test_import_file_rejects_a_broken_file_before_any_job_exists(mcp_client, transport) -> None:
+    """
+    A synchronously rejected upload (see ImportController's own class
+    docstring) must reach the agent as a plain refusal, not as a job it
+    then has to notice failed. See test_jobs.py and the session's own live
+    run for the two halves this stub cannot cover: a real broken file, and
+    a job that actually fails asynchronously.
+    """
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import import_file
+
+    with pytest.raises(ToolError, match="kaputt.geojson"):
+        import_file(PROJECT_ID, file_path=str(KAPUTT_GEOJSON))
+
+    assert not any(r.path == f"/api/jobs/{NEW_JOB_ID}" for r in transport.requests)
+
+
+def test_import_geoportal_reports_the_finished_layer(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import import_geoportal
+
+    result = import_geoportal(
+        PROJECT_ID, "uesg/uesg_blattschnitte",
+        bbox=[9.9, 53.5, 10.1, 53.6], fields=["name"], timeout=5,
+    )
+
+    assert result.status == "SUCCEEDED"
+    # The report reads the layer itself (client().layer(...)), not the job's
+    # own processedCount -- see _import_result -- so this is the stubbed
+    # layer's featureCount, the same one the file-import test above reads.
+    assert result.feature_count == 3
+    post = next(
+        r for r in transport.requests if r.path == f"/api/projects/{PROJECT_ID}/geoportal-imports"
+    )
+    body = transport.bodies[transport.requests.index(post)]
+    assert body == {
+        "datasetId": "uesg/uesg_blattschnitte",
+        "bbox": [9.9, 53.5, 10.1, 53.6],
+        "fields": ["name"],
+    }
+
+
+def test_job_wait_reads_the_named_job_and_reports_it(mcp_client, transport) -> None:
+    """
+    The follow-up tool for when import_file's/import_geoportal's own
+    ``timeout`` already elapsed once -- here simulated by asking about a job
+    that is already done by the time this reads it, the same fast path
+    import_file's own test above uses.
+    """
+    from hgis.mcp.write_tools import job_wait
+
+    result = job_wait(job_id=NEW_JOB_ID, project=PROJECT_ID, timeout=5)
+
+    assert result.status == "SUCCEEDED"
+    assert result.layer_id == IMPORT_LAYER_ID
+
+
+def test_inspect_import_over_the_protocol_serialises_every_field(mcp_client, transport) -> None:
+    """
+    inspect_import returns hgis.Inspection directly, the same way get_style
+    returns hgis.Style -- geht deshalb wie deren eigener Rundlauf-Test über
+    server.call_tool(), um zu belegen, dass eine echte Dataclass sich
+    tatsächlich durch pydantic in structured_content aufbaut, mit allen
+    Feldern, nicht nur beim direkten Python-Aufruf.
+    """
+    import asyncio
+
+    from hgis.mcp import write_tools  # noqa: F401 -- registriert das Werkzeug
+    from hgis.mcp.server import server
+
+    async def call() -> Any:
+        return await server.call_tool(
+            "inspect_import", {"project": PROJECT_ID, "file_path": str(BAEUME_GEOJSON)}
+        )
+
+    result = asyncio.run(call())
+
+    assert not result.is_error, result
+    structured = result.structured_content
+    assert structured["upload_id"] == NEW_UPLOAD_ID
+    assert structured["geometry_type"] == "MULTIPOINT"
+    assert structured["srid"] == 4326
+    assert structured["fields"][0]["name"] == "gattung"
+    assert structured["fields"][0]["sample_values"] == ["Tilia", "Acer"]
 
 
 # --- objects: what is stored --------------------------------------------

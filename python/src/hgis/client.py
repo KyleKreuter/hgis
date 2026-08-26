@@ -16,6 +16,7 @@ from .errors import (
     ApiError,
     ConflictError,
     GuardError,
+    InvalidArgumentError,
     InvalidClientIdError,
     NotFoundError,
     TransportError,
@@ -161,7 +162,11 @@ _EVENTS_PATH = "/api/events"
 #: (:meth:`hgis.project.Project.update`) -- and delete, for good
 #: (:meth:`Client.delete_project`); a layer's lifecycle -- create, change,
 #: delete (to the trash), restore, purge (out of the trash, for good); a
-#: batch of object edits; and a field's own create and delete. Every other
+#: batch of object edits; a field's own create and delete; and pulling data
+#: in -- inspecting a file or upload before anything is written
+#: (:meth:`Client.inspect_import`), importing one into a new layer
+#: (:meth:`Client.start_import`), and the same from the Geoportal Hamburg
+#: instead of a file (:meth:`Client.start_geoportal_import`). Every other
 #: method or path is refused before it reaches the network -- split, merge
 #: and layer reordering among them, which this stage does not open.
 #:
@@ -187,6 +192,9 @@ _ALLOWED: tuple[tuple[str, str], ...] = (
     ("PATCH", rf"/api/projects/{_UUID}"),
     ("DELETE", rf"/api/projects/{_UUID}"),
     ("POST", rf"/api/projects/{_UUID}/layers"),
+    ("POST", rf"/api/projects/{_UUID}/imports/inspect"),
+    ("POST", rf"/api/projects/{_UUID}/imports"),
+    ("POST", rf"/api/projects/{_UUID}/geoportal-imports"),
     ("PATCH", rf"/api/layers/{_UUID}"),
     ("DELETE", rf"/api/layers/{_UUID}"),
     ("POST", rf"/api/layers/{_UUID}/restore"),
@@ -216,8 +224,10 @@ def _check_allowed(method: str, url: str) -> None:
         "Layer anlegen, ändern, löschen, wiederherstellen oder endgültig löschen "
         "(project.create_layer(), layer.update()/.delete()/.restore()/.purge()), "
         "ein Stapel Objekt-Änderungen (layer.edit(), layer.insert(), "
-        "layer.update_feature(), layer.delete_features()) sowie ein Feld anlegen "
-        "oder löschen (layer.create_field(), layer.delete_field())."
+        "layer.update_feature(), layer.delete_features()), ein Feld anlegen "
+        "oder löschen (layer.create_field(), layer.delete_field()) sowie Daten "
+        "hereinholen (project.inspect_import(), project.import_file(), "
+        "project.import_geoportal())."
     )
 
 
@@ -342,6 +352,7 @@ class RequestGuard(Transport):
         method: str,
         url: str,
         json: Any = None,
+        file: tuple[str, bytes] | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
     ) -> Response:
@@ -350,7 +361,7 @@ class RequestGuard(Transport):
         for _ in range(_MAX_REDIRECTS + 1):
             _check_allowed(method, url)
             response = self.inner.request(
-                method, url, json=json, timeout=timeout, headers=headers
+                method, url, json=json, file=file, timeout=timeout, headers=headers
             )
             if response.status not in _REDIRECT_STATUS:
                 return response
@@ -372,8 +383,11 @@ class RequestGuard(Transport):
                 # 301/302/303 turn this into a GET, so it is no longer a write.
                 # Both the body and the client name belonged to the write and
                 # do not travel on: the name says who is changing something,
-                # and after this hop nobody is.
+                # and after this hop nobody is. An upload's file is exactly
+                # as much a write payload as a JSON body -- dropped for the
+                # same reason.
                 json = None
+                file = None
                 headers = {
                     name: value
                     for name, value in (headers or {}).items()
@@ -440,6 +454,25 @@ def _origin(url: str) -> tuple[str, str]:
     """Scheme and host:port -- what a redirect may not change."""
     parts = urlsplit(url)
     return (parts.scheme.lower(), parts.netloc.lower())
+
+
+def _read_file(path: str) -> tuple[str, bytes]:
+    """
+    ``(filename, content)`` for :meth:`RequestGuard.request`'s ``file`` --
+    read once, from the local filesystem of whoever runs this process. See
+    :meth:`hgis.project.Project.import_file`'s own docstring for what that
+    means when this process is an MCP server rather than the agent itself.
+
+    :raises InvalidArgumentError: ``path`` cannot be opened -- wrapped
+        rather than left as the bare :class:`OSError` Python would raise, so
+        the message reads like every other one in this library instead of
+        naming a class an agent has never heard of.
+    """
+    try:
+        with open(path, "rb") as handle:
+            return os.path.basename(path), handle.read()
+    except OSError as error:
+        raise InvalidArgumentError(f"Datei nicht lesbar: {path!r} ({error}).") from error
 
 
 def connect(
@@ -863,6 +896,121 @@ class Client:
         """Delete one attribute field. See :meth:`hgis.layer.Layer.delete_field`."""
         self._send("DELETE", f"/api/layers/{layer_id}/fields/{field_id}")
 
+    # --- imports -------------------------------------------------------
+
+    def inspect_import(
+        self,
+        project_id: str,
+        *,
+        file_path: str | None = None,
+        upload_id: str | None = None,
+        srid: int | None = None,
+        charset: str | None = None,
+    ) -> Any:
+        """
+        Report what an import would produce, without producing anything.
+        See :meth:`hgis.project.Project.inspect_import`, which is how to
+        call this and wraps the answer in a
+        :class:`~hgis.project.Inspection`.
+
+        Exactly one of ``file_path``/``upload_id`` -- the server enforces
+        that and names the mistake if this sends neither or both.
+        ``upload_id`` re-inspects a file already sent by an earlier call,
+        with a different ``srid`` or ``charset`` say, without sending it a
+        second time; it comes from that earlier call's own ``uploadId``.
+        Folgenlos either way: nothing is written, so this is safe to repeat.
+
+        :param file_path: read once from the local filesystem of whoever
+            runs this process -- see :meth:`start_import` for what that
+            means when this process is an MCP server rather than the agent
+            itself
+        """
+        params: dict[str, Any] = {}
+        if upload_id is not None:
+            params["uploadId"] = upload_id
+        if srid is not None:
+            params["srid"] = srid
+        if charset is not None:
+            params["charset"] = charset
+        file = _read_file(file_path) if file_path is not None else None
+        return self._send(
+            "POST", f"/api/projects/{project_id}/imports/inspect", params=params, file=file
+        )
+
+    def start_import(
+        self,
+        project_id: str,
+        *,
+        file_path: str | None = None,
+        upload_id: str | None = None,
+        name: str | None = None,
+        srid: int | None = None,
+        charset: str | None = None,
+    ) -> Any:
+        """
+        Start importing a file, or a previously inspected upload, into a
+        new layer. See :meth:`hgis.project.Project.import_file`, which is
+        how to call this and wraps the answer in a :class:`hgis.jobs.Job`.
+
+        Answers as soon as the upload is known to be readable -- an
+        unreadable file or an implausible CRS comes back as an ordinary
+        :class:`~hgis.errors.ApiError` right here, not as a job that fails
+        moments later. The writing itself keeps running on the server after
+        this returns; see :class:`hgis.jobs.Job` for following it to
+        completion instead of polling by hand.
+
+        :param file_path: see :meth:`inspect_import`
+        :param name: the new layer's name. None uses the uploaded file's own
+            name, without its extension
+        """
+        params: dict[str, Any] = {}
+        if upload_id is not None:
+            params["uploadId"] = upload_id
+        if name is not None:
+            params["name"] = name
+        if srid is not None:
+            params["srid"] = srid
+        if charset is not None:
+            params["charset"] = charset
+        file = _read_file(file_path) if file_path is not None else None
+        return self._send(
+            "POST", f"/api/projects/{project_id}/imports", params=params, file=file
+        )
+
+    def start_geoportal_import(
+        self,
+        project_id: str,
+        dataset_id: str,
+        *,
+        bbox: Iterable[float] | None = None,
+        fields: Iterable[str] | None = None,
+        name: str | None = None,
+    ) -> Any:
+        """
+        Start importing a dataset from the Geoportal Hamburg into a new
+        layer -- the same job shape as :meth:`start_import`, from a network
+        fetch instead of an upload. See
+        :meth:`hgis.project.Project.import_geoportal`, which is how to call
+        this and wraps the answer in a :class:`hgis.jobs.Job`.
+
+        :param dataset_id: id from the Geoportal catalog, e.g.
+            ``client.get("/api/geoportal/datasets")`` -- reading is
+            unrestricted, and this stage has no dedicated method for that
+            lookup yet
+        :param bbox: (minLng, minLat, maxLng, maxLat) in EPSG:4326. None
+            imports the whole dataset
+        :param fields: technical field names to keep. None keeps every
+            field the dataset has; its id field travels along regardless
+        """
+        body: dict[str, Any] = {"datasetId": dataset_id}
+        if bbox is not None:
+            body["bbox"] = list(bbox)
+        if fields is not None:
+            body["fields"] = list(fields)
+        if name is not None:
+            body["name"] = name
+        return self._send("POST", f"/api/projects/{project_id}/geoportal-imports", json=body)
+
     # --- the live channel ----------------------------------------------
 
     def events(self, *, timeout: float | None = None) -> Iterator[Event]:
@@ -924,6 +1072,7 @@ class Client:
         path: str,
         params: dict[str, Any] | None = None,
         json: Any = None,
+        file: tuple[str, bytes] | None = None,
     ) -> Any:
         url = build_url(self.base_url, path, params)
         # The one place that decides which requests carry the client name.
@@ -931,7 +1080,7 @@ class Client:
         # recognise and nothing for the server to pass on.
         headers = None if method.upper() == "GET" else {CLIENT_HEADER: self.client_id}
         response = self._transport.request(
-            method, url, json=json, timeout=self._timeout, headers=headers
+            method, url, json=json, file=file, timeout=self._timeout, headers=headers
         )
         if response.status >= 400:
             raise _to_error(response, path)
