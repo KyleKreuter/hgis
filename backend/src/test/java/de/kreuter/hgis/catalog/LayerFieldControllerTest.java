@@ -213,7 +213,9 @@ class LayerFieldControllerTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{ \"name\": \"Baujahr\", \"type\": \"STRING\" }"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.errors.type").exists());
+				.andExpect(jsonPath("$.errors.type").value(
+						"Unbekannter Feldtyp: STRING. Gültig sind TEXT, INTEGER, BIGINT, DOUBLE, "
+								+ "NUMERIC, BOOLEAN, DATE, TIME, TIMESTAMP."));
 
 		assertThat(hasColumn("baujahr")).isFalse();
 	}

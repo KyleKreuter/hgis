@@ -241,7 +241,7 @@ public class LayerFieldService {
 			return FieldType.valueOf(raw);
 		}
 		catch (IllegalArgumentException e) {
-			throw new FieldValidationException("type", "Unbekannter Feldtyp: " + raw);
+			throw new FieldValidationException("type", FieldType.unknownTypeMessage(raw));
 		}
 	}
 

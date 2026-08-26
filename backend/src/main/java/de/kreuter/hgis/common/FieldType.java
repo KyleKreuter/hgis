@@ -1,5 +1,8 @@
 package de.kreuter.hgis.common;
 
+import java.util.Arrays;
+import java.util.stream.Collectors;
+
 /**
  * Attribute types a user may pick when creating a layer field by hand, as opposed to
  * {@link TypeMapper}, which infers a PostgreSQL type from a Java class during import.
@@ -34,5 +37,16 @@ public enum FieldType {
 	/** The PostgreSQL type written into the {@code CREATE TABLE} DDL for a column of this type. */
 	public String pgType() {
 		return pgType;
+	}
+
+	/**
+	 * The message for a token that is not one of {@link #values()} -- names every valid
+	 * one, the same {@code LayerFields.require} pattern an unknown field name already
+	 * follows (Aufgabe 18): a caller that got the token wrong can act on this reply
+	 * without a second guess.
+	 */
+	public static String unknownTypeMessage(String raw) {
+		return "Unbekannter Feldtyp: " + raw + ". Gültig sind "
+				+ Arrays.stream(values()).map(Enum::name).collect(Collectors.joining(", ")) + ".";
 	}
 }

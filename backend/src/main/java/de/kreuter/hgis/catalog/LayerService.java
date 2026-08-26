@@ -360,7 +360,7 @@ public class LayerService {
 			return GeometryType.valueOf(raw);
 		}
 		catch (IllegalArgumentException e) {
-			throw new FieldValidationException("geometryType", "Unbekannter Geometrietyp: " + raw);
+			throw new FieldValidationException("geometryType", GeometryType.unknownTypeMessage(raw));
 		}
 	}
 
@@ -403,7 +403,7 @@ public class LayerService {
 			return FieldType.valueOf(raw);
 		}
 		catch (IllegalArgumentException e) {
-			throw new FieldValidationException("fields", "Unbekannter Feldtyp: " + raw);
+			throw new FieldValidationException("fields", FieldType.unknownTypeMessage(raw));
 		}
 	}
 
