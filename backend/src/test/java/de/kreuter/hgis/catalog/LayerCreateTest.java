@@ -364,13 +364,20 @@ class LayerCreateTest {
 				.andExpect(jsonPath("$.errors.geometryType").exists());
 	}
 
+	/**
+	 * {@code POINT} rather than an arbitrary bad token: it is the single-geometry guess
+	 * almost everyone makes first, and Aufgabe 18 requires the rejection to name the multi
+	 * variant to use instead, not just that "POINT" was unknown.
+	 */
 	@Test
 	void rejectsAnUnknownGeometryTypeToken() throws Exception {
 		mockMvc.perform(post("/api/projects/{projectId}/layers", project.getId())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(createBody("Layer", "POINT", null)))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.errors.geometryType").exists());
+				.andExpect(jsonPath("$.errors.geometryType").value(
+						"Unbekannter Geometrietyp: POINT. Gültig sind MULTIPOINT, MULTILINESTRING, "
+								+ "MULTIPOLYGON, GEOMETRY -- für Punkte nehmen Sie MULTIPOINT."));
 	}
 
 	@Test
@@ -379,7 +386,9 @@ class LayerCreateTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(createBody("Layer", "MULTIPOINT", fieldsArray(field("Art", "STRING")))))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.errors.fields").exists());
+				.andExpect(jsonPath("$.errors.fields").value(
+						"Unbekannter Feldtyp: STRING. Gültig sind TEXT, INTEGER, BIGINT, DOUBLE, "
+								+ "NUMERIC, BOOLEAN, DATE, TIME, TIMESTAMP."));
 	}
 
 	@Test
