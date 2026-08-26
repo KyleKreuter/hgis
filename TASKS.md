@@ -130,8 +130,8 @@ das:
 6. **Er kommt aus jedem Fehler heraus.** Jede Meldung nennt das Gültige, nicht nur das
    Abgelehnte.
 
-Zusage 3 steht, und 6 seit dem 26.08. (Aufgabe 18). 1, 2 und 4 sind gebrochen. 5 steht für
-GeoJSON.
+Zusage 3 steht, 6 seit dem 26.08. (Aufgabe 18) und 1 seit dem 26.08. (Aufgabe 17).
+2 und 4 sind gebrochen. 5 steht für GeoJSON.
 
 ### Die Abnahmeprobe
 
@@ -141,18 +141,16 @@ Ein Agent bekommt die MCP-Werkzeuge und einen Satz, sonst nichts:
 
 Bestanden ist die Probe, wenn er ohne `curl`, ohne Quelltext und ohne Rückfrage
 durchkommt und am Ende die Karte des Nutzers auf dem Ergebnis steht. **Heute scheitert er
-dreimal:** an der eigenen Fläche (Aufgabe 17), am Import (Aufgabe 20) und daran, dass der
-offene Tab den gesetzten Ausschnitt nicht nachzieht (Aufgabe 9).
+zweimal:** am Import (Aufgabe 20) und daran, dass der offene Tab den gesetzten Ausschnitt
+nicht nachzieht (Aufgabe 9). Die eigene Fläche steht seit dem 26.08.
 
 ### Wie weit es heute trägt, in Zahlen
 
-Die Schranke `RequestGuard._ALLOWED` (`python/src/hgis/client.py:174-186`) lässt **zehn
-von 24 schreibenden Endpunkten** des Backends durch. Die vierzehn geschlossenen:
+Die Schranke `RequestGuard._ALLOWED` (`python/src/hgis/client.py`) lässt seit Aufgabe 17
+**zwölf von 24 schreibenden Endpunkten** des Backends durch. Die zwölf geschlossenen:
 
 | Weg | Was dem Agenten fehlt | Aufgabe |
 |---|---|---|
-| `POST /api/projects` | eine eigene Arbeitsfläche | 17 |
-| `DELETE /api/projects/{id}` | sie wieder wegräumen | 17 |
 | `POST /api/projects/{id}/imports` | Daten aus einer Datei | 20 |
 | `POST .../imports/inspect` | vorher wissen, was ankommt | 20 |
 | `POST .../geoportal-imports` | Daten aus dem Geoportal Hamburg | 20 |
@@ -181,56 +179,16 @@ Zwei Teams, zwei Worktrees, keine gemeinsame Datei. `wt-fehler` ist am 26.08. fe
 
 | Team | Aufgaben | Berührt |
 |---|---|---|
-| `wt-flaeche` | 17, dann 20 | `python/src/hgis/client.py`, `mcp/write_tools.py` |
+| `wt-flaeche` | 20 | `python/src/hgis/client.py`, `mcp/write_tools.py` |
 | `wt-ausschnitt` | 9 | `backend/.../catalog/ProjectService.java`, `frontend/src/state/`, `frontend/src/map/` |
 
-17 und 20 laufen **nicht** parallel: beide ändern `client.py` und `write_tools.py`.
+Aufgabe 17 lief vor 20 im selben Worktree: beide ändern `client.py` und `write_tools.py`.
 
 ---
 
-## 5.1 Stufe A — die drei Brüche
+## 5.1 Stufe A — zwei Brüche
 
-Die vierte Aufgabe dieser Stufe, 18, ist am 26.08. erledigt (Abschnitt 7).
-
-### 17 — Ein Agent kann keine Projekte anlegen
-
-**Klein, und Voraussetzung für jede weitere Agentenarbeit.**
-
-`POST /api/projects` steht nicht in `RequestGuard._ALLOWED` (`python/src/hgis/client.py`),
-und `Client` hat keine Methode dafür. Die Bibliothek kann Layer anlegen, ändern, löschen,
-wiederherstellen und endgültig löschen — aber kein Projekt.
-
-**Warum das mehr ist als eine fehlende Methode:** Ein Agent, der etwas ausprobieren soll,
-hat heute keinen Ort dafür. Er muss entweder in ein bestehendes Projekt des Nutzers
-schreiben — genau das, was man ihm verbietet — oder er kann nicht arbeiten. Beide
-Prüfagenten der letzten Runde mussten zu `curl` greifen, um sich eine Arbeitsfläche zu
-schaffen, und dasselbe zum Aufräumen.
-
-**Entschieden (Vorschlag vom 26.08., Widerspruch bis Baubeginn):**
-
-1. `POST /api/projects` und `DELETE /api/projects/{id}` kommen **beide** in die Schranke.
-   Nur anlegen wäre schlimmer als nichts: Der Agent hinterließe Wegwerf-Projekte in der
-   Liste des Nutzers, und aufräumen müsste wieder der Mensch.
-2. **Kein Papierkorb für Projekte als Vorbedingung.** Er ist eine eigene Stufe und
-   verzögert alles andere. Stattdessen trägt das Löschen zwei Sicherungen, die es heute
-   schon gibt: `GET /api/projects/{id}/deletion-impact` (`ProjectController.java:81`)
-   nennt Layer- und Objektzahl, und das MCP-Werkzeug `delete_project` verlangt den
-   **Projektnamen wörtlich** als zweites Argument. Wer sich vertippt, löscht nichts. Die
-   Ablehnung nennt den Namen, der gepasst hätte — dieselbe Zusage wie überall.
-3. Die Werkzeugbeschreibung von `delete_project` sagt in ihrem ersten Satz, dass dies der
-   einzige Weg im ganzen System ist, der **nicht** umkehrbar ist. Der Papierkorb aus
-   Phase 30 deckt Layer, nicht Projekte.
-
-**Betroffen:** `python/src/hgis/client.py` (`_ALLOWED`, `create_project()`,
-`delete_project()`, `deletion_impact()`), `python/src/hgis/mcp/write_tools.py` (zwei
-Werkzeuge), `python/tests/test_guard.py` (Pfadprüfung nach dem vorhandenen Muster — dort
-steht auch, wie die vier geschlossenen Angriffswege geprüft werden).
-
-**Prüfen:** Ein Lauf, der ein Projekt anlegt, darin arbeitet und es wieder löscht, ohne
-`curl`. Dazu eine Mutationsprobe an der Namensbestätigung: Wird die Prüfung ausgebaut,
-muss ein Test rot werden.
-
----
+Zwei der vier Aufgaben dieser Stufe sind am 26.08. erledigt: 18 und 17 (Abschnitt 7).
 
 ### 20 — Ein Agent kann keine Daten hereinholen
 
@@ -585,6 +543,7 @@ Server, sie bearbeiten keine Daten. Ein Agent, der sie braucht, hat ein anderes 
 | 19 | Papierkorb einsehbar machen (`Project.trash()`, MCP `list_trash`) und Zähler korrigieren | 25.08. |
 | 4 | Legende im Kartenbild-Export (Single, Categorized, Graduated, Heatmap) | 25.08. |
 | 18 | **Fehlermeldungen nennen die gültigen Werte**, plus ein Test über jeden `valueOf`-Aufruf im Backend | 26.08. |
+| 17 | **Ein Agent legt Projekte an und löscht sie** — `create_project`, `delete_project` mit wörtlicher Namensbestätigung, `deletion_impact()` | 26.08. |
 
 ### Was Aufgabe 5 gelehrt hat
 
