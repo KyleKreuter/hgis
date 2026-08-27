@@ -52,6 +52,8 @@ backend/uploads/
 # Arbeitsdokumente, lokal gepflegt
 PLAN.md
 CONTRACT.md
+TASKS.md
+docs/basemap-recherche.md
 
 # Python
 __pycache__/
