@@ -23,6 +23,18 @@ import java.util.stream.Collectors;
  * column; renaming any of them would silently break that project's map the next time it
  * opens, with nothing in the response to say why.
  *
+ * <p>Two candidates for a light/dark pair were checked and rejected, and this is the
+ * place that decision now lives -- it used to sit in {@code basemap.ts}, which no longer
+ * holds a list of its own. Stamen's tiles moved behind a Stadia Maps key in 2023. CARTO's
+ * Positron and Dark Matter still answer without a key, but no longer serve usable tiles:
+ * since a rate-limit change, every response carries a diagonal "API KEY REQUIRED"
+ * watermark across the whole tile (looked at, not just status-checked, on 27.08.) -- an
+ * outright product change, not the licence-tier restriction the old comment claimed.
+ * Because neither is dependable, {@code osm-light} and {@code osm-dark} are the very same
+ * OSM raster tiles seen through MapLibre's raster paint properties, carried in the
+ * {@code paint} field. They are display variants, not separate cartography, and the
+ * picker says so.
+ *
  * <p>Not a Spring bean: like the enum it replaces, the list is fixed at compile time and
  * genuinely does not vary at runtime, so a plain static holder is enough -- the same
  * choice {@link de.kreuter.hgis.common.GeometryType} and {@link

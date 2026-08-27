@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AddLayerObject, LayerSpecification, SourceSpecification } from 'maplibre-gl'
 import { applyBasemap, applyBasemapOpacity, type BasemapMapLike, type BasemapOpacityMapLike } from './applyBasemap'
 import { buildBasemapStyle, resolveBasemap } from './basemap'
+import { TEST_BASEMAP_CATALOG } from './testBasemapCatalog'
 
 const GLYPHS = 'http://localhost:5173/api/glyphs/{fontstack}/{range}.pbf'
 
@@ -53,7 +54,7 @@ function createFakeMap(initial: { sources?: Record<string, SourceSpecification>;
 
 /** A map showing OSM with one data layer on top, i.e. the normal state of a project. */
 function createLoadedMap() {
-  const style = buildBasemapStyle('osm')
+  const style = buildBasemapStyle(TEST_BASEMAP_CATALOG, 'osm')
   return createFakeMap({
     sources: {
       ...style.sources,
@@ -67,7 +68,7 @@ describe('applyBasemap', () => {
   it('replaces the basemap and leaves the data layers in place', () => {
     const { map, layers, sources } = createLoadedMap()
 
-    expect(applyBasemap(map, resolveBasemap('opentopo'))).toBe(true)
+    expect(applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'opentopo'))).toBe(true)
 
     expect(layers.map((layer) => layer.id)).toEqual(['basemap:opentopo', 'layer:gebaeude-fill'])
     expect(sources['layer:gebaeude']).toBeDefined()
@@ -78,7 +79,7 @@ describe('applyBasemap', () => {
   it('keeps the new basemap below every foreign layer', () => {
     const { map, layers } = createLoadedMap()
 
-    applyBasemap(map, resolveBasemap('osm-dark'))
+    applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'osm-dark'))
 
     expect(layers[0].id).toBe('basemap:osm-dark')
     expect(layers.at(-1)?.id).toBe('layer:gebaeude-fill')
@@ -87,7 +88,7 @@ describe('applyBasemap', () => {
   it('carries the variant paint properties onto the map', () => {
     const { map, layers } = createLoadedMap()
 
-    applyBasemap(map, resolveBasemap('osm-dark'))
+    applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'osm-dark'))
 
     expect(layers[0].paint).toMatchObject({ 'raster-brightness-max': 0.38 })
   })
@@ -95,7 +96,7 @@ describe('applyBasemap', () => {
   it('removes everything for "no basemap" without touching the data layers', () => {
     const { map, layers, sources } = createLoadedMap()
 
-    expect(applyBasemap(map, resolveBasemap('none'))).toBe(true)
+    expect(applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'none'))).toBe(true)
 
     expect(layers.map((layer) => layer.id)).toEqual(['layer:gebaeude-fill'])
     expect(Object.keys(sources)).toEqual(['layer:gebaeude'])
@@ -104,7 +105,7 @@ describe('applyBasemap', () => {
   it('does nothing when the requested basemap is already applied', () => {
     const { map } = createLoadedMap()
 
-    expect(applyBasemap(map, resolveBasemap('osm'))).toBe(false)
+    expect(applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'osm'))).toBe(false)
     expect(map.removeLayer).not.toHaveBeenCalled()
     expect(map.addLayer).not.toHaveBeenCalled()
     expect(map.removeSource).not.toHaveBeenCalled()
@@ -113,8 +114,8 @@ describe('applyBasemap', () => {
   it('never rewrites the style, so the self-hosted glyph URL survives a swap', () => {
     const { map } = createLoadedMap()
 
-    applyBasemap(map, resolveBasemap('none'))
-    applyBasemap(map, resolveBasemap('osm-light'))
+    applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'none'))
+    applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'osm-light'))
 
     expect(map.getStyle().glyphs).toBe(GLYPHS)
   })
@@ -122,8 +123,8 @@ describe('applyBasemap', () => {
   it('restores a basemap after "none" was applied', () => {
     const { map, layers } = createLoadedMap()
 
-    applyBasemap(map, resolveBasemap('none'))
-    expect(applyBasemap(map, resolveBasemap('osm-light'))).toBe(true)
+    applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'none'))
+    expect(applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'osm-light'))).toBe(true)
 
     expect(layers.map((layer) => layer.id)).toEqual(['basemap:osm-light', 'layer:gebaeude-fill'])
   })
@@ -131,7 +132,7 @@ describe('applyBasemap', () => {
   it('falls back to OSM for an unknown stored id', () => {
     const { map, layers } = createFakeMap()
 
-    applyBasemap(map, resolveBasemap('mapbox-satellite'))
+    applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'mapbox-satellite'))
 
     expect(layers.map((layer) => layer.id)).toEqual(['basemap:osm'])
   })
@@ -159,7 +160,7 @@ describe('applyBasemapOpacity', () => {
   it('keeps the variant paint properties, opacity only adds to them', () => {
     const { map, layers } = createLoadedMap()
 
-    applyBasemap(map, resolveBasemap('osm-dark'))
+    applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'osm-dark'))
     applyBasemapOpacity(map, 0.6)
 
     expect(layers[0].paint).toMatchObject({
@@ -171,7 +172,7 @@ describe('applyBasemapOpacity', () => {
   it('does nothing for "no basemap", which has no raster layer to carry an opacity', () => {
     const { map } = createLoadedMap()
 
-    applyBasemap(map, resolveBasemap('none'))
+    applyBasemap(map, resolveBasemap(TEST_BASEMAP_CATALOG, 'none'))
     applyBasemapOpacity(map, 0.4)
 
     expect(map.setPaintProperty).not.toHaveBeenCalled()

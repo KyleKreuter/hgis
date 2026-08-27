@@ -7,6 +7,7 @@ import { WorkspaceLayout } from '@/layout/WorkspaceLayout'
 import { Separator } from '@/components/ui/separator'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ApiError } from '@/api/client'
+import { ensureBasemapsLoaded } from '@/api/basemaps'
 import { ensureProjectLoaded, projectDetailQuery } from '@/api/projects'
 import { countChanges, useEditing } from '@/state/editing'
 import {
@@ -63,8 +64,14 @@ export const Route = createFileRoute('/projects/$projectId')({
     layer: typeof search.layer === 'string' ? search.layer : undefined,
   }),
   // Loading here (with open=true) means the workspace never mounts against empty data,
-  // and last_opened_at is refreshed exactly once per visit.
-  loader: ({ context, params }) => ensureProjectLoaded(context.queryClient, params.projectId),
+  // and last_opened_at is refreshed exactly once per visit. The basemap catalog runs
+  // alongside it: `MapCanvas` resolves the project's basemap against it before its very
+  // first render, so it must be in the cache before the workspace mounts too.
+  loader: ({ context, params }) =>
+    Promise.all([
+      ensureProjectLoaded(context.queryClient, params.projectId),
+      ensureBasemapsLoaded(context.queryClient),
+    ]),
   component: Workspace,
   errorComponent: ProjectLoadError,
 })
