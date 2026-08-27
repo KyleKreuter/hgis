@@ -398,10 +398,10 @@ public class LayerService {
 			throw new FieldValidationException("fields", "Feldtyp fehlt");
 		}
 		try {
-			return FieldType.valueOf(raw);
+			return FieldType.fromToken(raw);
 		}
 		catch (IllegalArgumentException e) {
-			throw new FieldValidationException("fields", FieldType.unknownTypeMessage(raw));
+			throw new FieldValidationException("fields", e.getMessage());
 		}
 	}
 

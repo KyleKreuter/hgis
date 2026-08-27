@@ -238,10 +238,10 @@ public class LayerFieldService {
 
 	private FieldType parseFieldType(String raw) {
 		try {
-			return FieldType.valueOf(raw);
+			return FieldType.fromToken(raw);
 		}
 		catch (IllegalArgumentException e) {
-			throw new FieldValidationException("type", FieldType.unknownTypeMessage(raw));
+			throw new FieldValidationException("type", e.getMessage());
 		}
 	}
 

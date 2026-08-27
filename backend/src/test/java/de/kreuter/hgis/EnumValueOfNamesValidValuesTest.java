@@ -45,6 +45,16 @@ import org.springframework.asm.Opcodes;
  * <p>Reads {@code org.springframework.asm} rather than adding a bytecode-analysis library
  * for one test -- {@code spring-core} already carries its own shaded copy of ASM and is on
  * every test classpath here regardless.
+ *
+ * <p>{@link de.kreuter.hgis.common.FieldType} no longer has a call site for this scan to
+ * find at all: Befund 2 (Validierung, 27.08.) replaced its two {@code Enum.valueOf(String)}
+ * sites with {@code FieldType.fromToken(raw)}, which resolves case-insensitively and
+ * against either the constant name or its {@code pgType} -- {@code describe_layer} reports
+ * an existing field's type the second way, and a caller passing that straight back into
+ * {@code create_layer} used to be rejected. {@code fromToken} still routes every rejection
+ * through {@code unknownTypeMessage}, which still calls {@code values()}; it is simply not
+ * shaped like the {@code valueOf} pattern this test looks for any more. See the sanity
+ * check below for what that changes about this test's own expectations.
  */
 class EnumValueOfNamesValidValuesTest {
 
@@ -82,12 +92,21 @@ class EnumValueOfNamesValidValuesTest {
 
 		// Sanity check on the scan itself: if this ever finds nothing, the scan broke
 		// (wrong directory, ASM signature mismatch, ...) and every assertion below would
-		// pass vacuously without having checked anything. At least the three named spots
-		// from Aufgabe 18 plus the two exempt internal reads must show up.
+		// pass vacuously without having checked anything. At least LayerService#parseGeometryType
+		// (Aufgabe 18) plus the two exempt internal reads must show up.
+		//
+		// This used to require 5: FieldType's two Aufgabe-18 call sites (LayerService and
+		// LayerFieldService, both parsing a field type) counted alongside GeometryType's
+		// three. Befund 2 (Validierung, 27.08.) moved both off Enum.valueOf(String) --
+		// FieldType.fromToken(raw) now resolves a token case-insensitively and against
+		// either the constant name or its pgType, which valueOf cannot do -- so this scan
+		// no longer sees them at all. That is not a regression this test should catch:
+		// fromToken still routes every rejection through FieldType.unknownTypeMessage,
+		// which still calls values(); it only stopped being reachable through valueOf.
 		assertThat(callSites.size())
 				.as("Scan for Enum.valueOf(String) call sites under target/classes found "
 						+ "nothing (or too little) -- the scan itself is likely broken: %s", callSites)
-				.isGreaterThanOrEqualTo(5);
+				.isGreaterThanOrEqualTo(3);
 
 		List<String> unguarded = new ArrayList<>();
 		for (CallSite site : callSites) {
