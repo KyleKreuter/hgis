@@ -36,8 +36,6 @@ def guarded(transport: FakeTransport) -> hgis.Client:
     ("method", "path"),
     [
         ("PUT", f"/api/projects/{PROJECT_ID}/layers/order"),  # reordering: not opened
-        ("POST", f"/api/layers/{LAYER_ID}/features/1/split"),  # split: not opened
-        ("POST", f"/api/layers/{LAYER_ID}/features/merge"),  # merge: not opened
         ("PATCH", f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}"),  # renaming a field: not opened
         ("DELETE", f"/api/layers/{LAYER_ID}/fields/x"),  # "x" is not a field id
     ],
@@ -106,6 +104,8 @@ def test_there_is_no_generic_write_verb() -> None:
         "apply_edits",
         "create_field",
         "delete_field",
+        "split_feature",
+        "merge_features",
     ):
         assert hasattr(hgis.Client, named)
 
@@ -173,6 +173,8 @@ def test_the_view_state_write_still_works(transport) -> None:
         ("POST", f"/api/layers/{LAYER_ID}/edits"),
         ("POST", f"/api/layers/{LAYER_ID}/fields"),
         ("DELETE", f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}"),
+        ("POST", f"/api/layers/{LAYER_ID}/features/1/split"),
+        ("POST", f"/api/layers/{LAYER_ID}/features/merge"),
     ],
 )
 def test_this_stages_write_paths_are_allowed(method, path) -> None:

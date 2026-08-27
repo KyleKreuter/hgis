@@ -66,6 +66,8 @@ from .layer import (
     Layer,
     LayerDescription,
     LayerSource,
+    MergeResult,
+    SplitResult,
     TrashEntry,
     ValueCounts,
 )
@@ -136,6 +138,9 @@ __all__ = [
     "NewFeature",
     "FeatureUpdate",
     "EditResult",
+    # splitting and merging, see Layer.split/.merge
+    "SplitResult",
+    "MergeResult",
     # style, see hgis.layer.Layer.style and .set_style
     "Style",
     "Renderer",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import TYPE_CHECKING, Any, Iterator, Sequence
+from typing import TYPE_CHECKING, Any, Iterator, Mapping, Sequence
 
 from .client import _UNSET, _Unset
 from .edits import EditResult, FeatureUpdate, NewFeature, _reject_scalar_iterable
@@ -85,6 +85,45 @@ class TrashEntry:
     deleted_at: str | None
     feature_count: int
     deleted_by: str | None
+
+
+@dataclass(frozen=True)
+class SplitResult:
+    """
+    What :meth:`Layer.split` did. Never a silent ``None`` -- the same rule
+    :class:`hgis.edits.EditResult` follows for :meth:`Layer.edit`.
+
+    :param fids: the original first -- it keeps its fid and the largest part
+        of the cut -- then one entry per further part, in ascending fid
+        order
+    :param data_version: the layer's new tile cache buster; rebuild the tile
+        URL from this to see the change on the map
+    :param feature_count: the layer's object count after the split
+    """
+
+    fids: list[int]
+    data_version: int
+    feature_count: int
+
+    @property
+    def new_fids(self) -> list[int]:
+        """The parts the split created, without the original's own fid."""
+        return self.fids[1:]
+
+
+@dataclass(frozen=True)
+class MergeResult:
+    """
+    What :meth:`Layer.merge` did.
+
+    :param fid: the lead's fid, unchanged -- anything holding it stays valid
+    :param data_version: the layer's new tile cache buster
+    :param feature_count: the layer's object count after the merge
+    """
+
+    fid: int
+    data_version: int
+    feature_count: int
 
 
 class ValueCounts(list):
@@ -996,6 +1035,120 @@ class Layer:
         """
         _reject_scalar_iterable("fids", fids)
         return self.edit(deletes=list(fids))
+
+    # --- objects: splitting and merging ---------------------------------
+    #
+    # Neither is part of the batch above: the result geometry is computed by
+    # PostGIS and does not exist until the server has produced it, so both
+    # write straight through, in their own request, rather than joining a
+    # transaction with anything else. See hgis.layer.SplitResult and
+    # hgis.layer.MergeResult -- like every write in this library, neither
+    # returns a silent None.
+
+    def split(
+        self,
+        fid: int,
+        line: Mapping[str, Any],
+        *,
+        row_version: str | None = None,
+    ) -> SplitResult:
+        """
+        Cut one saved object along ``line`` into two or more parts.
+
+        The original keeps its fid and the largest part of the cut; every
+        further part becomes a new object, carrying the original's
+        attributes unchanged -- splitting a shape does not decide what its
+        halves mean. A layer of points refuses this outright, and so does an
+        object whose line misses it entirely.
+
+        Not reversible through this library: unlike :meth:`edit`, there is
+        no batch to hold back, and no undo behind a write PostGIS has
+        already computed.
+
+        :param line: the cut, as GeoJSON ``LineString`` or ``MultiLineString``
+            in EPSG:4326 -- a Shapely geometry works unchanged, passed as
+            ``shapely.geometry.mapping(line)``
+        :param row_version: :attr:`hgis.query.Feature.row_version`, as it was
+            read. Omitted, no conflict check is made -- the same rule
+            :meth:`update_feature` follows.
+        :raises hgis.errors.ConflictError: ``row_version`` no longer matches
+            (409); ``error.current`` is the row as it stands now
+        :raises hgis.errors.ApiError: the layer holds points, ``line`` is not
+            a line, the cut does not actually split the object, or the
+            result would be invalid geometry (400); ``fid`` does not exist
+            (404)
+        """
+        answer = self._client.split_feature(self.id, fid, line, row_version=row_version)
+        self._data = dict(self._data)
+        self._data["dataVersion"] = answer["dataVersion"]
+        self._data["featureCount"] = answer["featureCount"]
+        return SplitResult(
+            fids=list(answer["fids"]),
+            data_version=answer["dataVersion"],
+            feature_count=answer["featureCount"],
+        )
+
+    def merge(
+        self,
+        fids: Sequence[int],
+        lead_fid: int,
+        *,
+        row_versions: Mapping[int, str] | None = None,
+    ) -> MergeResult:
+        """
+        Join several saved objects into one.
+
+        ``lead_fid`` decides which object survives -- it keeps its fid and
+        every attribute value. This is a choice, not an order: pick the
+        wrong one and the *other* objects' attributes are what disappears.
+        Every object in ``fids`` other than ``lead_fid`` is deleted, and only
+        the server's own change log keeps their geometry and attributes
+        afterwards, not this library.
+
+        Between 2 and 100 objects, duplicates ignored; ``lead_fid`` must be
+        one of ``fids``. All named objects must be the same kind of geometry
+        (points refuse this outright, same as :meth:`split`) -- two separate
+        polygons legitimately become one multi-part object, but a line and a
+        polygon do not merge into either.
+
+        :param row_versions: :attr:`hgis.query.Feature.row_version` per fid,
+            as it was read. A fid missing from the mapping skips its own
+            conflict check -- the same rule :meth:`update_feature` follows,
+            applied per object here.
+        :raises hgis.errors.InvalidArgumentError: ``fids`` is a ``str``,
+            ``bytes``, ``bytearray``, ``memoryview``, or anything else that
+            decomposes into its own characters the same way those do (see
+            :meth:`delete_features`); or ``lead_fid`` is not among ``fids``
+        :raises hgis.errors.ConflictError: a ``row_version`` no longer
+            matches (409)
+        :raises hgis.errors.ApiError: fewer than two distinct objects were
+            named, more than 100 were sent, the objects are not all the same
+            kind of geometry, or the union would be invalid (400); an object
+            does not exist (404)
+        """
+        _reject_scalar_iterable("fids", fids)
+        fid_list = [int(one) for one in fids]
+        if lead_fid not in fid_list:
+            raise InvalidArgumentError(
+                f"lead_fid={lead_fid} gehört nicht zu fids={fid_list}. Das "
+                "führende Objekt -- dasjenige, das seine fid und alle "
+                "Attributwerte behält -- muss eines der zusammenzuführenden "
+                "Objekte sein."
+            )
+        versions = (
+            {int(one): version for one, version in row_versions.items()}
+            if row_versions
+            else None
+        )
+        answer = self._client.merge_features(self.id, fid_list, lead_fid, row_versions=versions)
+        self._data = dict(self._data)
+        self._data["dataVersion"] = answer["dataVersion"]
+        self._data["featureCount"] = answer["featureCount"]
+        return MergeResult(
+            fid=answer["fid"],
+            data_version=answer["dataVersion"],
+            feature_count=answer["featureCount"],
+        )
 
 
 @dataclass(frozen=True)

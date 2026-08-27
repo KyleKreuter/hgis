@@ -1184,3 +1184,99 @@ def set_basemap(
         return WriteResult(summary=summary)
     except Exception as error:
         raise tool_error(error, doing=f"Setzen der Hintergrundkarte für '{project}'") from error
+
+
+# --- objects: splitting and merging what is stored -----------------------
+
+
+@server.tool()
+def split_feature(
+    layer: Annotated[str, Field(description=_LAYER_HELP)],
+    fid: Annotated[int, Field(description="Das zu teilende Objekt.")],
+    line: Annotated[
+        dict[str, Any],
+        Field(
+            description="Die Teilungslinie als GeoJSON LineString oder "
+            "MultiLineString, EPSG:4326."
+        ),
+    ],
+    project: Annotated[str | None, Field(description=_PROJECT_FOR_LAYER_HELP)] = None,
+) -> WriteResult:
+    """
+    Teilt ein vorhandenes Objekt entlang einer Linie in zwei oder mehr Teile.
+
+    Das Original behält seine fid und den größten Teil des Schnitts; jeder
+    weitere Teil wird ein neues Objekt mit denselben Attributwerten wie das
+    Original. Punkte lassen sich nicht teilen, und eine Linie, die das
+    Objekt gar nicht schneidet, wird abgelehnt statt stillschweigend nichts
+    zu tun.
+
+    Nicht rückgängig zu machen über dieses Werkzeug oder diese Bibliothek --
+    die Geometrie wird sofort geschrieben, nicht in einem widerruflichen
+    Stapel wie insert_features oder update_features.
+    """
+    try:
+        resolved = _layer(layer, project)
+        row_version = resolved.feature(fid).row_version
+        result = resolved.split(fid, line, row_version=row_version)
+        new_fids = result.new_fids
+        return WriteResult(
+            summary=(
+                f"Objekt {fid} in '{resolved.name}' geteilt: behält seine fid, "
+                f"{len(new_fids)} neue(s) Objekt(e) mit fid(s) {_fid_summary(new_fids)}."
+            ),
+            inserted=len(new_fids),
+            updated=1,
+            new_fids=new_fids,
+        )
+    except Exception as error:
+        raise tool_error(error, doing=f"Teilen von Objekt {fid} in '{layer}'") from error
+
+
+@server.tool()
+def merge_features(
+    layer: Annotated[str, Field(description=_LAYER_HELP)],
+    fids: Annotated[
+        list[int],
+        Field(
+            description="Die zusammenzuführenden Objekte, einzeln benannt -- 2 bis "
+            "100, Doppelte werden ignoriert."
+        ),
+    ],
+    lead_fid: Annotated[
+        int,
+        Field(
+            description="Das führende Objekt: behält seine fid und alle "
+            "Attributwerte. Muss in fids enthalten sein. Dies ist eine "
+            "Entscheidung, keine Reihenfolge -- jedes andere Objekt in fids "
+            "wird gelöscht, und mit ihm dessen Attribute, nicht die des "
+            "führenden Objekts. Falsch herum gewählt löscht Daten, die "
+            "eigentlich erhalten bleiben sollten."
+        ),
+    ],
+    project: Annotated[str | None, Field(description=_PROJECT_FOR_LAYER_HELP)] = None,
+) -> WriteResult:
+    """
+    Führt mehrere vorhandene Objekte zu einem zusammen.
+
+    lead_fid behält seine fid und alle Attributwerte; jedes andere Objekt in
+    fids wird gelöscht. Nicht rückgängig zu machen über dieses Werkzeug --
+    nur das Änderungsprotokoll des Servers kennt Geometrie und Attribute der
+    gelöschten Objekte danach noch. Alle benannten Objekte müssen dieselbe
+    Geometrieart haben; Punkte lassen sich nicht zusammenführen.
+    """
+    try:
+        resolved = _layer(layer, project)
+        row_versions = {fid: resolved.feature(fid).row_version for fid in fids}
+        result = resolved.merge(fids, lead_fid, row_versions=row_versions)
+        deleted = len(set(fids)) - 1
+        return WriteResult(
+            summary=(
+                f"{len(set(fids))} Objekt(e) in '{resolved.name}' zu Objekt "
+                f"{result.fid} zusammengeführt, {deleted} Objekt(e) gelöscht."
+            ),
+            updated=1,
+            deleted=deleted,
+        )
+    except Exception as error:
+        raise tool_error(error, doing=f"Zusammenführen in '{layer}'") from error

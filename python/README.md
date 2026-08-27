@@ -426,6 +426,70 @@ kann so nie zu "alles löschen" werden.
 und 3 löschen. Die Bibliothek lehnt eine Zeichenkette hier mit
 `hgis.InvalidArgumentError` ab, statt sie stillschweigend so zu lesen.
 
+### Objekte teilen und zusammenführen
+
+Anders als `insert()`, `update_feature()` und `delete_features()` oben sind
+`split()` und `merge()` keine Kurzform von `layer.edit(...)`: Der Server
+berechnet die neue Geometrie selbst, mit PostGIS, und schreibt sie sofort in
+einer eigenen Anfrage, nicht in einem widerruflichen Stapel. Beides braucht
+Flächen oder Linien -- ein Layer aus Punkten lehnt beide Aufrufe ab.
+
+```python
+eigenes = client.create_project("agent-scratch")
+flaechen = eigenes.create_layer("Parzellen", "MULTIPOLYGON", fields={"Name": "TEXT"})
+
+fid = flaechen.insert({
+    "type": "Polygon",
+    "coordinates": [[[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]]],
+})
+
+geteilt = flaechen.split(
+    fid, {"type": "LineString", "coordinates": [[5, -1], [5, 11]]},
+)
+geteilt.fids             # [1, 2] -- das Original zuerst, dann jeder neue Teil
+
+zusammen = flaechen.merge(geteilt.fids, lead_fid=fid)
+zusammen.fid              # 1 -- dieselbe fid wie vor dem Teilen
+```
+
+`split()` schneidet ein Objekt entlang einer Linie (GeoJSON `LineString`
+oder `MultiLineString`, EPSG:4326 -- eine Shapely-Geometrie geht unverändert
+hinein, als `shapely.geometry.mapping(linie)`). Das Original behält seine
+fid und den größeren Teil des Schnitts; jeder weitere Teil wird ein neues
+Objekt mit denselben Attributwerten wie das Original.
+
+**`lead_fid` entscheidet, welches Objekt einen `merge()` überlebt -- keine
+Reihenfolge.** Es behält seine fid *und alle seine Attributwerte*; jedes
+andere Objekt in `fids` wird gelöscht, und mit ihm dessen eigene Attribute:
+
+```python
+fid_a = flaechen.insert(
+    {"type": "Polygon", "coordinates": [[[20, 0], [20, 10], [30, 10], [30, 0], [20, 0]]]},
+    {"Name": "A"},
+)
+fid_b = flaechen.insert(
+    {"type": "Polygon", "coordinates": [[[40, 0], [40, 10], [50, 10], [50, 0], [40, 0]]]},
+    {"Name": "B"},
+)
+
+flaechen.merge([fid_a, fid_b], lead_fid=fid_a)
+flaechen.feature(fid_a).properties   # {'Name': 'A'} -- Bs Wert ist weg, nicht nur B selbst
+
+client.delete_project(eigenes.id)
+```
+
+Ein falsch gewähltes `lead_fid` löscht also nicht nur eine Geometrie,
+sondern Attributwerte, die eigentlich erhalten bleiben sollten.
+
+Beide kennen dieselbe Konfliktprüfung wie `update_feature()`: `row_version`
+weggelassen, entfällt die Prüfung; mitgegeben und nicht mehr aktuell, wirft
+die Bibliothek `hgis.ConflictError`. Bei `merge()` heißt der Parameter
+`row_versions` und ist ein dict, fid auf `row_version` -- eine fid, die
+darin fehlt, überspringt nur ihre eigene Prüfung.
+
+`split()` ist nicht rückgängig zu machen, `merge()` nur teilweise -- siehe
+unten.
+
 ### Was unwiederbringlich ist
 
 | Vorgang | Rückgängig zu machen? |
@@ -434,6 +498,8 @@ und 3 löschen. Die Bibliothek lehnt eine Zeichenkette hier mit
 | `layer.purge()` | **Nein.** Es gibt keinen Papierkorb hinter diesem Aufruf |
 | `layer.delete_field(...)` | **Nein**, nicht über diese Bibliothek |
 | `layer.delete_features(...)` / `layer.edit(deletes=...)` | **Nein**, nicht über diese Bibliothek |
+| `layer.split(...)` | **Nein.** Die neuen Teile sind normale Inserts, aber die Geometrie des Originals vor dem Schnitt steht in keinem Protokoll -- eine Aktualisierung hält keine alte Zeile fest |
+| `layer.merge(...)` | Teilweise -- die gelöschten Objekte stehen im Änderungsprotokoll wie unten; die Geometrie des führenden Objekts vor dem Zusammenführen aber nicht |
 
 Für gelöschte Felder und Objekte führt der Server ein Änderungsprotokoll
 (`GET /api/projects/{id}/changes`), das bei einer Objektlöschung die
