@@ -64,6 +64,7 @@ from .layer import (
     FieldSummary,
     Layer,
     LayerDescription,
+    LayerSource,
     TrashEntry,
     ValueCounts,
 )
@@ -115,6 +116,7 @@ __all__ = [
     "TrashEntry",
     "ValueCounts",
     "Classification",
+    "LayerSource",
     # importing, see Project.inspect_import/.import_file/.import_geoportal
     "Job",
     "Inspection",

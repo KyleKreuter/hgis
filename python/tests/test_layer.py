@@ -224,6 +224,108 @@ def test_the_extent_is_a_box(layer) -> None:
     assert extent[0] < extent[2] and extent[1] < extent[3]
 
 
+# --- z_index, zoom range, basemap override, clip mode, source --------------
+#
+# All five travel on every layer response but had no property to read them
+# with -- writable through update() (the first three) or through the
+# interface (the rest), but never readable back. See layer.json for what the
+# stored fixture actually carries.
+
+
+def test_position_and_zoom_range_are_read(layer) -> None:
+    assert layer.z_index == 0
+    assert layer.min_zoom == 0
+    assert layer.max_zoom == 22
+
+
+def test_basemap_override_clip_mode_and_source_are_none_when_the_layer_has_none(layer) -> None:
+    """layer.json carries all three as null -- the ordinary case."""
+    assert layer.basemap is None
+    assert layer.basemap_opacity is None
+    assert layer.clip_mode is None
+    assert layer.source is None
+
+
+def test_position_and_zoom_range_missing_from_the_answer_read_as_none(client) -> None:
+    """
+    Not a guessed 0 or 22: both are themselves valid positions, so a guess
+    would be indistinguishable from a real value. See the docstring of
+    Layer.z_index.
+    """
+    built = hgis.Layer(
+        client,
+        {
+            "id": "x",
+            "name": "Ohne",
+            "kind": "VECTOR",
+            "geometryType": "MULTIPOINT",
+            "srid": 25832,
+            "featureCount": 0,
+            "visible": True,
+        },
+    )
+    assert built.z_index is None
+    assert built.min_zoom is None
+    assert built.max_zoom is None
+
+
+def test_basemap_override_and_clip_mode_are_read_when_set(client) -> None:
+    built = hgis.Layer(
+        client,
+        {
+            "id": "x",
+            "name": "Maske",
+            "kind": "VECTOR",
+            "geometryType": "MULTIPOLYGON",
+            "srid": 25832,
+            "featureCount": 12,
+            "visible": True,
+            "basemap": "satellit",
+            "basemapOpacity": 0.6,
+            "clipMode": "insideClipped",
+        },
+    )
+    assert built.basemap == "satellit"
+    assert built.basemap_opacity == pytest.approx(0.6)
+    assert built.clip_mode == "insideClipped"
+
+
+def test_source_is_read_for_a_layer_imported_from_the_geoportal(client) -> None:
+    """
+    Includes the case ``attribution`` alone is null -- the Geoportal's own
+    service directory leaves it blank for some datasets that do carry a
+    licence and a metadata record. See LayerSource's docstring.
+    """
+    built = hgis.Layer(
+        client,
+        {
+            "id": "x",
+            "name": "Straßenbäume",
+            "kind": "VECTOR",
+            "geometryType": "MULTIPOINT",
+            "srid": 25832,
+            "featureCount": 500,
+            "visible": True,
+            "source": {
+                "attribution": None,
+                "licenseName": "Datenlizenz Deutschland – Namensnennung – Version 2.0",
+                "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+                "datasetUri": "https://metaver.de/trefferanzeige?docuuid=abc",
+                "metadataUrl": "https://metaver.de/trefferanzeige?docuuid=abc",
+                "datasetId": "de.hh.up:strassenbaumkataster",
+                "featureIdField": "objectid",
+                "fetchedAt": "2026-08-20T09:00:00Z",
+            },
+        },
+    )
+    source = built.source
+    assert source.attribution is None
+    assert source.license_name == "Datenlizenz Deutschland – Namensnennung – Version 2.0"
+    assert source.dataset_id == "de.hh.up:strassenbaumkataster"
+    assert source.feature_id_field == "objectid"
+    assert source.fetched_at == "2026-08-20T09:00:00Z"
+
+
 def test_values_reads_a_distribution(layer) -> None:
     values = layer.values("Straße", limit=5)
     assert ("Bäckerweg", 250) in values
@@ -365,6 +467,35 @@ def test_the_view_reports_where_the_map_stands(project) -> None:
     assert view.center[0] == pytest.approx(10.006136398575336)
     assert view.basemap == "osm"
     assert "Zoom=15.11" in repr(view)
+
+
+def test_the_project_basemap_is_read(project) -> None:
+    """project.json (a single-project read) carries both."""
+    assert project.basemap == "osm"
+    assert project.basemap_opacity == pytest.approx(1.0)
+
+
+def test_the_project_basemap_opacity_is_none_from_a_summary_alone(client) -> None:
+    """
+    Not carried on the list response, only basemap is (ProjectDtos.Summary
+    has no basemapOpacity). None here is honest -- this object was never
+    read in full, so opacity is genuinely unknown, not 1.0 by default.
+    """
+    from conftest import PROJECT_ID
+
+    built = hgis.Project(
+        client,
+        {
+            "id": PROJECT_ID,
+            "name": "P",
+            "srid": 25832,
+            "layerCount": 1,
+            "featureCount": 1003,
+            "basemap": "osm",
+        },
+    )
+    assert built.basemap == "osm"
+    assert built.basemap_opacity is None
 
 
 # --- ambiguous field names -------------------------------------------------
