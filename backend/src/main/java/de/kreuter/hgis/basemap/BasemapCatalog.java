@@ -251,41 +251,46 @@ public final class BasemapCatalog {
 			// laut Nutzungsbedingungen -- requiresAccount = true, sichtbar, nicht versteckt.
 			// Attribution ist copyrightText aus dem MapServer selbst (?f=json, checked 27.08.),
 			// nicht erfunden; "(c)" darin durch "©" ersetzt, sonst wörtlich.
+			//
+			// maxZoom ist gemessen, nicht aus ?f=json: der MapServer meldet für jeden dieser
+			// Dienste LODs bis 23, füllt sie aber nicht. Über der echten Grenze antwortet Esri
+			// mit 200 und einer festen Kachel "Map data not yet available". Gemessen am 27.08.
+			// an mehreren Orten, siehe BasemapCatalogTest#esriZoomLimitsMatchWhatTheServiceActuallySends.
 			new BasemapEntry("esri-imagery", "Esri World Imagery", "Satelliten- und Luftbild, weltweit",
 					GROUP_LUFT_UND_SATELLITENBILD,
 					"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
 					esriAttribution("Esri, Vantor, Earthstar Geographics, and the GIS User Community"),
-					0, 23, COVERAGE_WORLD, true, false, null),
+					0, 19, COVERAGE_WORLD, true, false, null),
 			new BasemapEntry("esri-topo", "Esri World Topo Map", "Topografische Weltkarte", GROUP_GELAENDE,
 					"https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
 					esriAttribution(
 							"Esri, HERE, Garmin, Intermap, increment P Corp., GEBCO, USGS, FAO, NPS, NRCAN, GeoBase, IGN, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), © OpenStreetMap contributors, and the GIS User Community"),
-					0, 23, COVERAGE_WORLD, true, false, null),
+					0, 19, COVERAGE_WORLD, true, false, null),
 			new BasemapEntry("esri-streets", "Esri World Street Map", "Straßenkarte, weltweit", GROUP_STANDARD,
 					"https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
 					esriAttribution(
 							"Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, © OpenStreetMap contributors, and the GIS User Community"),
-					0, 23, COVERAGE_WORLD, true, false, null),
+					0, 19, COVERAGE_WORLD, true, false, null),
 			new BasemapEntry("esri-gray-light", "Esri Light Gray Canvas", "Zurückhaltender heller Hintergrund für eigene Layer",
 					GROUP_STANDARD,
 					"https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
 					esriAttribution("Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS user community"),
-					0, 23, COVERAGE_WORLD, true, false, null),
+					0, 16, COVERAGE_WORLD, true, false, null),
 			new BasemapEntry("esri-gray-dark", "Esri Dark Gray Canvas", "Zurückhaltender dunkler Hintergrund für eigene Layer",
 					GROUP_STANDARD,
 					"https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
 					esriAttribution("Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS user community"),
-					0, 23, COVERAGE_WORLD, true, false, null),
+					0, 16, COVERAGE_WORLD, true, false, null),
 			new BasemapEntry("esri-ocean", "Esri Ocean Base", "Meeresboden-Topografie und Bathymetrie", GROUP_THEMATISCH,
 					"https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
 					esriAttribution("Esri, Garmin, GEBCO, NOAA NGDC, and other contributors"),
-					0, 16, COVERAGE_WORLD, true, false, null),
+					0, 10, COVERAGE_WORLD, true, false, null),
 			new BasemapEntry("esri-natgeo", "Esri National Geographic", "Illustrierte Referenzkarte im National-Geographic-Stil",
 					GROUP_THEMATISCH,
 					"https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}",
 					esriAttribution(
 							"National Geographic, Esri, Garmin, HERE, UNEP-WCMC, USGS, NASA, ESA, METI, NRCAN, GEBCO, NOAA, increment P Corp."),
-					0, 16, COVERAGE_WORLD, true, false, null),
+					0, 12, COVERAGE_WORLD, true, false, null),
 			new BasemapEntry("esri-shaded-relief", "Esri Shaded Relief", "Schummerung ohne Beschriftung", GROUP_GELAENDE,
 					"https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}",
 					esriAttribution("© 2014 Esri"), 0, 13, COVERAGE_WORLD, true, false, null),

@@ -121,6 +121,48 @@ class BasemapCatalogTest {
 		assertThat(BasemapCatalog.list()).hasSize(49);
 	}
 
+	/**
+	 * Measured against the live services on 27.08. by fetching one tile per zoom level
+	 * at several places (Hamburg, Munich, Berlin, New York, open Atlantic, North Sea).
+	 * Past its real limit Esri answers 200 with a fixed "Map data not yet available"
+	 * placeholder, not an error: 2521 bytes for the grey services, 14226 for the blue
+	 * ocean one. Same bytes at unrelated places is what identifies it.
+	 *
+	 * <p>The number matters because {@code basemap.ts} passes it to MapLibre as the
+	 * source's {@code maxzoom}. Set right, MapLibre scales the deepest real tile up and
+	 * the map stays readable. Set too deep, the user gets the placeholder text tiled
+	 * across the screen -- which is what happened with the two Canvas maps.
+	 *
+	 * <p>Where a service reaches deeper in some regions than others, the world-wide
+	 * value wins: {@code esri-imagery} serves zoom 20 over Hamburg, Berlin and New York
+	 * but not over Munich, so 19 is what the catalog claims.
+	 */
+	@Test
+	void esriZoomLimitsMatchWhatTheServiceActuallySends() {
+		assertThat(entry("esri-imagery").maxZoom()).isEqualTo(19);
+		assertThat(entry("esri-topo").maxZoom()).isEqualTo(19);
+		assertThat(entry("esri-streets").maxZoom()).isEqualTo(19);
+		assertThat(entry("esri-gray-light").maxZoom()).isEqualTo(16);
+		assertThat(entry("esri-gray-dark").maxZoom()).isEqualTo(16);
+		assertThat(entry("esri-ocean").maxZoom()).isEqualTo(10);
+		assertThat(entry("esri-natgeo").maxZoom()).isEqualTo(12);
+		assertThat(entry("esri-shaded-relief").maxZoom()).isEqualTo(13);
+		assertThat(entry("esri-physical").maxZoom()).isEqualTo(8);
+	}
+
+	/**
+	 * No tile service in this catalog serves past zoom 22. A higher number is not a
+	 * generous default, it is a promise the service does not keep, and the user sees the
+	 * broken end of it. Whoever adds an entry above this measures first.
+	 */
+	@Test
+	void noEntryClaimsAZoomBeyondWhatAnyServiceReaches() {
+		assertThat(BasemapCatalog.list())
+				.allSatisfy(candidate -> assertThat(candidate.maxZoom())
+						.as("maxZoom of %s", candidate.id())
+						.isLessThanOrEqualTo(22));
+	}
+
 	/** Only the nine Esri layers require an ArcGIS account. */
 	@Test
 	void exactlyTheNineEsriLayersRequireAnAccount() {

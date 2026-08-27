@@ -426,6 +426,26 @@ Kachel-URL mit 500 statt 400 ab (`V15`). Und ein Test der Oberfläche verbot pau
 jedes `?` in einer Kachel-URL. Das war richtig für ein Kachelraster, aber unmöglich für
 eine WMS-Adresse, die fast nur aus Parametern besteht.
 
+**Ein dritter Fehler, gefunden am 27.08. beim Benutzen.** Sieben der neun Esri-Dienste
+trugen ein zu hohes `maxZoom`. Bei Esri Dark Gray Canvas ab Zoom 17 kachelte die Karte
+den Text „Map data not yet available" über den Bildschirm. Die Ursache liegt in der
+Quelle der Zahl: `MapServer?f=json` meldet für jeden dieser Dienste LODs bis 23, aber
+Esri füllt sie nicht. Über der echten Grenze antwortet der Dienst mit 200 und einer
+festen Platzhalter-Kachel, nicht mit einem Fehler. Wer den Statuscode prüft, merkt
+nichts.
+
+Die Grenzen sind jetzt gemessen, indem an mehreren Orten eine Kachel je Zoomstufe
+geladen und verglichen wurde. Zwei Orte mit gleichen Bytes sind der Platzhalter. Die
+Werte: `esri-imagery`, `esri-topo` und `esri-streets` auf 19, die beiden Canvas-Karten
+auf 16, `esri-natgeo` auf 12, `esri-ocean` auf 10. Wo ein Dienst regional tiefer reicht,
+gilt der weltweit sichere Wert. `esri-imagery` liefert Zoom 20 über Hamburg, Berlin und
+New York, über München nicht.
+
+Richtig gesetzt kostet die Zahl nichts: `basemap.ts` reicht sie als `maxzoom` an
+MapLibre, das die tiefste echte Kachel hochskaliert. Der Nutzer sieht ein unscharfes
+Bild statt einer Fehlermeldung. Die übrigen 40 Einträge sind auf dieselbe Weise noch
+nicht geprüft.
+
 ---
 
 ## 5.1 Stufe A: abgeschlossen am 26.08.
