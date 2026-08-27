@@ -658,16 +658,22 @@ Parameter ist es nicht von selbst.
 `RequestGuard` prüft jede Anfrage gegen eine feste Liste, bevor sie den
 Transport erreicht -- egal ob sie über `client.get(...)` kommt oder direkt
 über `client._send(...)`. Erlaubt sind lesende Anfragen (jedes `GET`) sowie
-genau die Schreibvorgänge oben. Alles andere -- Objekte teilen oder
-zusammenführen etwa -- lehnt die Bibliothek mit `hgis.GuardError` ab, bevor
-der Server sie sieht.
+genau die Schreibvorgänge oben. Alles andere -- die Wartungsendpunkte des
+Servers etwa, die kein Projekt und keinen Layer hinter sich haben -- lehnt
+die Bibliothek mit `hgis.GuardError` ab, bevor der Server sie sieht.
 
 ```python
->>> client._send("POST", f"/api/layers/{lid}/features/merge", json={})
-hgis.errors.GuardError: POST /api/layers/.../features/merge ist nicht
-vorgesehen. Erlaubt sind lesende Anfragen, project.select() und die
-Schreibwege dieser Stufe: ...
+>>> client._send("POST", "/api/places/refresh", json={})
+hgis.errors.GuardError: POST /api/places/refresh ist nicht vorgesehen.
+Erlaubt sind lesende Anfragen, project.select() und die Schreibwege dieser
+Stufe: ...
 ```
+
+Das Beispiel stand bis zum 27.08. auf einem Weg, den diese Stufe noch nicht
+öffnete -- erst Layer neu ordnen, dann Objekte zusammenführen. Beide sind
+inzwischen offen, und das Beispiel musste jedes Mal nachgezogen werden. Ein
+Pfad, auf den die Bibliothek zuarbeitet, taugt schlecht als Beispiel für
+einen, den sie verweigert.
 
 Das ist kein Schloss. Wer schreiben will, bindet `httpx` ein und umgeht die
 Bibliothek. Es schützt vor dem Versehen -- einer Anfrage, die niemand

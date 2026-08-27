@@ -20,7 +20,7 @@ Phasenberichte. Diese Datei ersetzt ihn nicht.
 |---|---|---|
 | Backend (Spring Boot 4.1, Java) | **1199** | `cd backend && ./mvnw test` |
 | Frontend (React 19, TypeScript) | **1306** | `cd frontend && npx vitest run` |
-| Python-Bibliothek und MCP-Server | **506** | `cd python && .venv/bin/python -m pytest -q` |
+| Python-Bibliothek und MCP-Server | **577** | `cd python && .venv/bin/python -m pytest -q` |
 
 Alle drei laufen lokal und in der CI grün. Die Zahlen sind am 27.08. gemessen, nicht
 geschätzt.
@@ -42,7 +42,7 @@ Das Backend braucht rund 20 Sekunden bis zur ersten Antwort. Prüfen mit
 
 ### Der MCP-Server
 
-Seit dem 25.08. gibt `python/src/hgis/mcp/` hGIS als **32 Werkzeuge** an einen Agenten
+Seit dem 25.08. gibt `python/src/hgis/mcp/` hGIS als **42 Werkzeuge** an einen Agenten
 (elf lesende, neunzehn schreibende, 101 Parameter). `.mcp.json` im Projektwurzel-
 verzeichnis bindet ihn in Claude Code ein. Ein Werkzeugaufruf beantwortet eine kleine
 Frage; für alles, was rechnet, gibt es die Bibliothek `hgis`. Näheres in
@@ -462,6 +462,40 @@ gültiges JSON ohne GeoJSON-Struktur, GeoJSON mit unbekanntem CRS.
 ---
 
 ### 21 — Sechs Schreibwege, die nur die Oberfläche hat
+
+**Erledigt am 27.08.** Alle sechs sind offen, von drei Agenten in getrennten
+Worktrees gebaut, jeder mit einem Test, der ohne seinen Fix rot ist. Die
+Beschreibung bleibt stehen, weil sie erklärt, welche Regel dabei galt.
+
+`layer.split()`, `layer.merge()`, `layer.rename_field()`,
+`project.create_map_layer()`, `project.duplicate()`, `project.reorder_layers()`
+und `project.move_layer()` -- dazu neun Werkzeuge, denn zu zwei Schreibwegen
+gehört ein Leseweg, ohne den sie nichts nützen: `field_usage` sagt, wo ein
+Feld gebraucht wird, `wms_capabilities` sagt, was ein Dienst anbietet.
+`serviceUrl` und `layers` kann ein Agent nicht raten.
+
+**Vier Befunde aus der Umsetzung, die keiner der drei Aufträge vorhersah:**
+
+Eine Annahme im Auftrag war falsch. Ein Feldname steckt **nicht** im Stil: Eine
+Umbenennung ändert nur `source_name`, während Stil und Kacheln über das
+unveränderliche `column_name` verdrahtet sind. Deshalb warnt `rename_field`
+nicht -- ein Werkzeug, das vor Harmlosem warnt, erzieht zum Überlesen.
+
+`Job.wait()` hätte für einen Duplizier-Job bis zum Zeitablauf gewartet, ohne
+je etwas zu hören: `ProjectDuplicateTransactions.complete()` meldet ein
+Ereignis, `compensateAndFail()` meldet gar keins. Für diesen Job-Typ wird
+jetzt nachgefragt statt gelauscht. Die Lücke im Backend bleibt.
+
+`split()` ist unwiederbringlich, `merge()` nur teilweise. Beide protokollieren
+als `FEATURE_UPDATE` mit `null`, sodass die Ausgangsgeometrie nirgends steht;
+die beim Zusammenführen gelöschten Objekte stehen dagegen im
+Änderungsprotokoll wie jede Löschung.
+
+Das Negativbeispiel der Wächter-Tests stand auf einem Pfad, den diese Aufgabe
+selbst öffnete -- gleich zweimal, in zwei Paketen unabhängig voneinander. Es
+steht jetzt auf `POST /api/places/refresh`: ein Wartungsjob ohne Projekt,
+Layer oder Objekt dahinter. Ein Weg, auf den die Bibliothek zuarbeitet, taugt
+nicht als Beispiel für einen, den sie verweigert.
 
 **Mittelgroß, gut teilbar.** Neu am 26.08.
 
