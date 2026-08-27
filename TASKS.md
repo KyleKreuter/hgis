@@ -1,6 +1,6 @@
 # Aufgaben in hGIS
 
-Stand: 26.08.2026, Commit `ae17982`. Diese Datei ist für jemanden geschrieben, der neu
+Stand: 27.08.2026, Commit `6227496` plus die Fixes aus Abschnitt 5.0. Diese Datei ist für jemanden geschrieben, der neu
 dazukommt und eine der offenen Aufgaben übernimmt. Sie enthält den Zustand des Projekts,
 die Regeln der Zusammenarbeit und zu jeder Aufgabe genug Kontext, um ohne Rückfragen zu
 beginnen.
@@ -18,11 +18,11 @@ Phasenberichte. Diese Datei ersetzt ihn nicht.
 
 | Teil | Tests | Wie prüfen |
 |---|---|---|
-| Backend (Spring Boot 4.1, Java) | **1134** | `cd backend && ./mvnw test` |
-| Frontend (React 19, TypeScript) | **1277** | `cd frontend && npx vitest run` |
-| Python-Bibliothek und MCP-Server | **482** | `cd python && .venv/bin/python -m pytest -q` |
+| Backend (Spring Boot 4.1, Java) | **1155** | `cd backend && ./mvnw test` |
+| Frontend (React 19, TypeScript) | **1281** | `cd frontend && npx vitest run` |
+| Python-Bibliothek und MCP-Server | **490** | `cd python && .venv/bin/python -m pytest -q` |
 
-Alle drei laufen lokal und in der CI grün. Die Zahlen sind am 26.08. gemessen, nicht
+Alle drei laufen lokal und in der CI grün. Die Zahlen sind am 27.08. gemessen, nicht
 geschätzt.
 
 **Aus der Stufenliste in `PLAN.md` ist nur noch Schritt 6 offen** (Editor mit Pyodide,
@@ -106,6 +106,8 @@ wirklich. Drei Stellen sind als Illustration gekennzeichnet
 | Antwort eines MCP-Werkzeugs steht in `structured_content` **direkt** bei einer einzelnen Struktur, unter `"result"` bei einer Liste | Nachsehen statt raten |
 | Beim MCP-Client heißen die Felder snake_case | `input_schema`, `output_schema`, `structured_content`, `is_error` |
 | Docker antwortete tagelang nicht, weil die virtuelle Platte voll war (nicht weil es hing) | `~/Library/Containers/com.docker.docker/Data/log/host/monitor.log` lesen, bevor man neu startet |
+| Der Tomcat-Connector steht seit dem 27.08. auf `PASS_THROUGH` statt `REJECT`, damit ein kodierter Schrägstrich in einer Geoportal-Id durchkommt (`GeoportalEncodedSlashConfig`) | Anwendungsweit, Tomcat kennt nichts Pfadbezogenes. Unbedenklich, solange es keine pfadbasierte Zugriffsprüfung gibt. **Wer Spring Security einbaut, bewertet diese Klasse neu** |
+| Die CI führt für Python nur `ruff check src tests`, kein `ruff format --check` | `ruff format --check` schlägt baumweit auf Altbestand fehl und ist kein Prüfkriterium |
 
 ---
 
@@ -185,9 +187,175 @@ Die letzten zwei bleiben zu. Sie sind Wartung des Servers, nicht Arbeit an Daten
 
 ## 5. Offene Aufgaben
 
-Drei Stufen. **Stufe A ist seit dem 26.08. fertig** — hGIS ist agent native, gemessen an
-der Abnahmeprobe. Stufe B schliesst die Lücke zur Oberfläche, Stufe C hält das Ergebnis.
-Innerhalb einer Stufe steht die Reihenfolge des Nutzens.
+**Abschnitt 5.0 geht vor.** Dort stehen sechs Fehler aus dem Bustest vom 27.08.; einer
+davon macht ein Projekt unbenutzbar. Danach folgen drei Stufen: **Stufe A ist seit dem
+26.08. fertig** — hGIS ist agent native, gemessen an der Abnahmeprobe. Stufe B schließt
+die Lücke zur Oberfläche, Stufe C hält das Ergebnis. Innerhalb einer Stufe steht die
+Reihenfolge des Nutzens.
+
+## 5.0 Fehler aus dem Bustest vom 27.08. — alle sechs behoben
+
+Am 27.08. hat ein Agent versucht, eine Karte nach dieser Aufgabenstellung zu bauen:
+Heatmap der Auslastung der Buslinien, Hintergrundkarte schwarz-weiß, Erreichbarkeit im
+Fünf-Minuten-Radius um eine Haltestelle. Die Karte ist entstanden — mit HVV-Daten aus
+dem Geoportal, 2.122 Bushaltestellen und 684 selbst gerechneten 400-Meter-Puffern. Auf
+dem Weg dorthin sind sechs Fehler aufgefallen, einer davon machte die Anwendung
+unbenutzbar. **Alle sechs sind am 27.08. behoben** — von vier Agenten in getrennten
+Worktrees, jeder mit einem Test, der ohne seinen Fix rot ist. Jeder Befund wurde danach
+am laufenden System gegen echte Daten nachgestellt. Die Beschreibungen bleiben stehen,
+weil sie erklären, wonach künftig zu suchen ist.
+
+**Das mentale Modell, an dem sich diese Aufgaben messen** (vom Nutzer am 27.08.
+festgelegt): Die HTTP-Schnittstelle soll gar nicht benutzt werden. MCP ist für
+Discovery und für das Verwalten von Karte und Projekt zuständig, die Python-Bibliothek
+für alles, was gerechnet werden muss. Wer Daten braucht, holt sie sich und schreibt ein
+Python-Skript, das die Karte anpasst. Jede Stelle, an der ein Agent zu `curl` greifen
+muss, ist ein Mangel.
+
+### 27 — Ein Stil ohne `fallback_symbol` legt die Anwendung lahm
+
+**Behoben am 27.08.** auf allen drei Ebenen. Das Frontend fällt in `dataDriven` und
+`representativeSymbol` auf `DEFAULT_FILL` zurück, das Backend lehnt einen solchen Stil
+mit 400 ab, und die Werkzeugbeschreibung nennt `fallback_symbol` jetzt als Pflichtfeld.
+Der Backend-Fix machte neun bestehende Tests rot, die die Lücke unbemerkt ausgenutzt
+hatten.
+
+**Zweite Hälfte, die beinahe liegen geblieben wäre:** Der erste Durchgang schützte nur
+die Kartendarstellung. `GraduatedEditor.tsx`, `CategorizedEditor.tsx` und `renderer.ts`
+lasen `fallbackSymbol` weiter ungeprüft — wer für einen Bestandsstil das Stil-Panel
+öffnete, sah denselben weißen Bildschirm an anderer Stelle. Die Validierung allein
+hilft dort nicht: Sie verhindert nur neue kaputte Stile, nicht die schon gespeicherten.
+Merke für ähnliche Fälle: Nach dem Fix das ganze Verzeichnis nach demselben Zugriff
+durchsuchen, nicht nur die Stelle aus dem Stackframe.
+
+**Schwer. Ein Agent kann den Menschen aus seinem Projekt aussperren.**
+
+Ein Renderer vom Typ `graduated` oder `categorized` ohne `fallbackSymbol` führt zum
+weißen Bildschirm: „Das Programm konnte das Projekt nicht laden",
+`TypeError: Cannot read properties of undefined (reading 'kind')`. Das Projekt lässt
+sich danach nicht mehr öffnen. Nur ein erneuter Schreibzugriff über die API befreit
+es — wer nur die Oberfläche hat, kommt nicht mehr heran.
+
+Drei Ebenen lassen den Stil durch:
+
+- `frontend/src/styling/styleToMapLibre.ts:629` — `valueOf(renderer.fallbackSymbol)`
+  ohne Prüfung auf undefined, für beide Renderer-Typen
+- `backend/.../catalog/LayerStyleService.java:405` — prüft das Symbol nur, wenn es da
+  ist; fehlt es, geht der Stil durch
+- `python/src/hgis/mcp/write_tools.py`, Beschreibung von `set_style` — nennt für
+  `graduated` nur `field` und `classes`. Ein Agent, der der Beschreibung folgt, baut
+  genau den Stil, der abstürzt.
+
+### 28 — `basemap` nimmt jeden String an
+
+**Behoben am 27.08.** Neues Enum `common/Basemap.java` mit den fünf Werten, geprüft auf
+Projekt- und Layer-Ebene. Der Lookup läuft über `fromToken()` statt `Enum.valueOf`, weil
+`osm-light` einen Bindestrich trägt und keine Enum-Konstante sein kann. Die
+Längenprüfung `MAX_BASEMAP_LENGTH` ist entfallen, die Whitelist macht sie überflüssig.
+`basemapOpacity` war bereits korrekt auf 0..1 geprüft.
+
+`PATCH /api/projects/{id}` mit `{"basemap": "grayscale"}` antwortet 200. Den Wert gibt
+es nicht. Das Frontend fällt still auf OpenStreetMap zurück
+(`frontend/src/map/basemap.ts:171`), der ungültige Wert bleibt in der Datenbank stehen.
+Kein Fehler, keine Meldung, und der Aufrufer hält für erledigt, was nie passiert ist.
+
+Gültig sind `osm`, `osm-light`, `osm-dark`, `opentopo`, `none`. Keiner heißt
+„Graustufen"; `osm-light` ist die entsättigte Variante. Betroffen sind Projekt- und
+Layer-Ebene, denn ein Layer kann die Hintergrundkarte des Projekts überschreiben.
+
+### 29 — Groß- und Kleinschreibung bricht drei Aufrufe hintereinander
+
+**Behoben am 27.08.** `FieldType.fromToken()` löst jetzt case-insensitiv auf, und zwar
+gegen den Enum-Namen wie gegen `pgType()` — `describe_layer` meldet den zweiten Weg.
+Objekteigenschaften löst `EditService` über `LayerFields` auf, dieselbe Klasse, die
+`FilterParser` und `QueryFields` längst benutzen; damit zählt weder Schreibweise noch
+die Wahl zwischen Anzeige- und Spaltenname. Die „Verfügbar"-Liste in der Fehlermeldung
+nennt seitdem Anzeigenamen statt Spaltennamen.
+
+**Nebenwirkung auf den Wachtest:** `EnumValueOfNamesValidValuesTest` findet `FieldType`
+nicht mehr, weil dort kein `Enum.valueOf` mehr steht. Die Sanity-Schwelle sank von 5 auf
+3 — richtig, aber `fromToken` ist jetzt ein zweites Muster, das kein Test bewacht. Wer
+es künftig ohne `unknownTypeMessage` baut, merkt nichts.
+
+Ein Python-Skript, das einen Layer anlegt und Objekte einfügt, ist dreimal abgebrochen:
+
+1. `describe_layer` gibt Feldtypen klein aus (`text`, `bigint`), `create_layer` verlangt
+   sie groß (`TEXT`). Wer den Typ eines bestehenden Feldes abliest und weiterreicht,
+   läuft auf.
+2. `create_layer(fields={"Haltestelle": ...})` legt die Spalte `haltestelle` an.
+   `insert_many` verlangt danach `haltestelle` — der Aufrufer bekommt seinen eigenen
+   Feldnamen nicht zurück.
+
+Die Meldungen selbst waren gut und nannten jedes Mal die gültigen Werte; das ist
+Aufgabe 18, die wirkt. Nötig gewesen wären sie trotzdem nicht.
+
+### 30 — `z_index`, `min_zoom` und `max_zoom` sind schreibbar, aber nicht lesbar
+
+**Behoben am 27.08.** Dazu kamen `basemap`, `basemap_opacity`, `clip_mode` und `source`
+(neue Datenklasse `LayerSource` mit Attribution und Lizenz), und bei `Project` fehlten
+`basemap` und `basemap_opacity` ebenfalls ganz. Fehlt ein Feld in der Antwort, liefern
+die Properties `None` statt eines geratenen Werts: 0 ist eine gültige Position und wäre
+von einem echten Wert nicht zu unterscheiden. Die Versionszähler (`dataVersion`,
+`styleVersion`, `renderVersion`, `clipVersion`) bleiben bewusst draußen — Cache-Buster
+für die Kachel-URL, keine Aussage für einen Aufrufer.
+
+`Layer.update()` (`python/src/hgis/layer.py:348`) nimmt alle drei entgegen, und die API
+liefert sie auch (`zIndex`, `minZoom`, `maxZoom`). Die Bibliothek hat keine Property
+dafür. Wer die Layer-Reihenfolge ändert, kann nicht nachsehen, was jetzt gilt.
+
+### 31 — Jeder Geoportal-Import legt ein leeres Textfeld `geom` an
+
+**Behoben am 27.08.** in `ingest/reader/QueryablesSchema.java`. Die Geometriespalte wird
+an ihrer Rolle erkannt, nicht am Namen: Das queryables-Schema (OGC API Features Part 3)
+markiert sie mit `x-ogc-role: primary-geometry`. Ein Datensatz, dessen echtes Attribut
+zufällig `geom` heißt, bleibt damit erhalten. Der Fix wirkt an einer Stelle für beide
+Symptome, weil Import und Katalogvorschau dieselbe Klasse benutzen.
+
+Nach dem Import steht ein Feld `geom` vom Typ `text` im Layer, zu 100 Prozent `NULL` —
+in allen drei geprüften Datensätzen. Der Katalog führt die Geometriespalte in
+derselben Liste wie die Attribute, und der Import übernimmt sie unverändert.
+
+### 32 — Katalog-Detail mit URL-kodiertem Schrägstrich gibt 400
+
+**Behoben am 27.08.** Die Ursache lag unterhalb von Spring: Tomcats Connector lehnt
+`%2F` per Default ab (`EncodedSolidusHandling.REJECT`), bevor die Anfrage einen
+Controller erreicht. Neue Klasse `geoportal/GeoportalEncodedSlashConfig` setzt
+`PASS_THROUGH` — nicht `DECODE`, das würde das Routing überall ändern. Siehe den
+Fallstrick in Abschnitt 3: Die Einstellung gilt anwendungsweit und ist bei einer
+späteren Zugriffsprüfung neu zu bewerten.
+
+```
+/api/geoportal/datasets/elektrobusdisposition%2Flinienranking  ->  400
+/api/geoportal/datasets/elektrobusdisposition/linienranking    ->  200
+```
+
+Die Dataset-Id enthält einen Schrägstrich. Wer sie korrekt kodiert, bekommt eine
+nackte Tomcat-Fehlerseite ohne Erklärung.
+
+### Was der Bustest sonst gezeigt hat
+
+Kein Fehler, aber offen, und Kandidaten für Stufe B:
+
+- **Keine Katalogsuche.** 1.217 Datensätze im Geoportal, kein Werkzeug, das sie
+  durchsucht. Der Docstring von `import_geoportal` verweist selbst auf
+  `GET /api/geoportal/datasets` — die einzige Stelle, an der hGIS einen Agenten
+  ausdrücklich zur HTTP-Schnittstelle schickt.
+- **Kein Werkzeug für die Hintergrundkarte.** Kartensteuerung ist MCP-Aufgabe, aber es
+  gibt weder ein `set_basemap` noch eine Liste der Auswahl.
+- **`update_layer` kann zu wenig.** Es kennt `name` und `visible`; die Bibliothek kann
+  zusätzlich `z_index`, `min_zoom` und `max_zoom` — alles drei Kartensteuerung.
+- **`Client.get()` und `Client.request()`** (`python/src/hgis/client.py:618` und `:350`)
+  sind generische Wege in die HTTP-Schnittstelle. Solange sie da sind und ein Docstring
+  auf sie zeigt, nimmt sie jeder Agent, sobald etwas fehlt.
+- **Eine Heatmap auf einem Polygon-Layer** wird angenommen und gezeichnet, zählt aber
+  die Stützpunkte statt der Fläche. Bei Zoom 14 blieben von 733 Einzugsbereichen zwei
+  Farbflecken übrig. Die Karte ist dann still falsch.
+- **Der Heatmap-Parameter `radius` zählt Bildschirmpixel**, nicht Meter. Ein Radius in
+  Gehminuten lässt sich damit nicht ausdrücken, er ändert sich mit jedem Zoomschritt.
+  Wer so etwas braucht, rechnet den Puffer in Python — das dauerte für 684 Haltestellen
+  0,7 Sekunden.
+
+---
 
 ## 5.1 Stufe A — abgeschlossen am 26.08.
 
