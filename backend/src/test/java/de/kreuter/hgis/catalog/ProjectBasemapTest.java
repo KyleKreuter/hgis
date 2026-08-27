@@ -8,7 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import de.kreuter.hgis.TestcontainersConfiguration;
+import de.kreuter.hgis.basemap.BasemapCatalog;
 import java.util.UUID;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -102,6 +104,11 @@ class ProjectBasemapTest {
 	 * {@code basemap: "grayscale"} used to be accepted with 200 and stored forever --
 	 * {@code frontend/src/map/basemap.ts:171} silently falls back to OSM for any token it
 	 * does not recognise, so the caller never learns the write did not do what it asked.
+	 *
+	 * <p>Checks the message's prefix and suffix rather than its full text: {@link
+	 * BasemapCatalog#unknownValueMessage} now names every catalog id (Aufgabe
+	 * "Hintergrundkarten-Katalog", 27.08.), and asserting that whole list here would make
+	 * this test change every time an id is added, for no reason this test cares about.
 	 */
 	@Test
 	void rejectsAnUnknownBasemapToken() throws Exception {
@@ -109,9 +116,12 @@ class ProjectBasemapTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{ \"basemap\": \"grayscale\" }"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.errors.basemap").value(
-						"Unbekannte Hintergrundkarte: grayscale. Gültig sind "
-								+ "osm, osm-light, osm-dark, opentopo, none."));
+				.andExpect(jsonPath("$.errors.basemap")
+						.value(Matchers.startsWith("Unbekannte Hintergrundkarte: grayscale. Gültig sind osm, ")))
+				.andExpect(jsonPath("$.errors.basemap")
+						.value(Matchers.endsWith(
+								"oder eine URL-Vorlage, die mit https:// beginnt und entweder {z}, {x} und {y} "
+								+ "oder {bbox-epsg-3857} enthält.")));
 
 		Project reloaded = projectRepository.findById(project.getId()).orElseThrow();
 		assertThat(reloaded.getBasemap()).isEqualTo("osm");
@@ -140,8 +150,109 @@ class ProjectBasemapTest {
 						.content("{ \"name\": \"Neues Projekt " + UUID.randomUUID()
 								+ "\", \"basemap\": \"grayscale\" }"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.errors.basemap").value(
-						"Unbekannte Hintergrundkarte: grayscale. Gültig sind "
-								+ "osm, osm-light, osm-dark, opentopo, none."));
+				.andExpect(jsonPath("$.errors.basemap")
+						.value(Matchers.startsWith("Unbekannte Hintergrundkarte: grayscale. Gültig sind osm, ")));
+	}
+
+	/**
+	 * The full catalog is what actually matters (Aufgabe "Hintergrundkarten-Katalog"):
+	 * every id {@link BasemapCatalog} declares must be accepted, not just the five that
+	 * predate it.
+	 */
+	@Test
+	void acceptsEveryCatalogId() throws Exception {
+		for (String id : BasemapCatalog.list().stream().map(entry -> entry.id()).toList()) {
+			mockMvc.perform(patch("/api/projects/{id}", project.getId())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{ \"basemap\": \"" + id + "\" }"))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.basemap").value(id));
+		}
+	}
+
+	/**
+	 * Setzen: die bestehenden Endpunkte (VERTRAG.md) -- a value starting with
+	 * {@code https://} is a free-text tile-URL template, not a catalog id, and is
+	 * accepted as long as it carries {@code {z}}, {@code {x}} and {@code {y}}.
+	 */
+	@Test
+	void acceptsAValidUrlTemplate() throws Exception {
+		String url = "https://tiles.example.org/{z}/{x}/{y}.png";
+		mockMvc.perform(patch("/api/projects/{id}", project.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{ \"basemap\": \"" + url + "\" }"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.basemap").value(url));
+
+		Project reloaded = projectRepository.findById(project.getId()).orElseThrow();
+		assertThat(reloaded.getBasemap()).isEqualTo(url);
+	}
+
+	@Test
+	void rejectsAnHttpUrlTemplate() throws Exception {
+		mockMvc.perform(patch("/api/projects/{id}", project.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{ \"basemap\": \"http://tiles.example.org/{z}/{x}/{y}.png\" }"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void rejectsAJavascriptScheme() throws Exception {
+		mockMvc.perform(patch("/api/projects/{id}", project.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{ \"basemap\": \"javascript:alert(1)\" }"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void rejectsAnHttpsUrlWithoutPlaceholders() throws Exception {
+		mockMvc.perform(patch("/api/projects/{id}", project.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{ \"basemap\": \"https://tiles.example.org/fixed.png\" }"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.errors.basemap")
+						.value("Die URL-Vorlage muss entweder {z}, {x} und {y} oder {bbox-epsg-3857} enthalten."));
+	}
+
+	/**
+	 * Form B (VERTRAG.md "Zwei Formen von urlTemplate", 27.08.) -- a WMS-GetMap template
+	 * with {@code {bbox-epsg-3857}} instead of the tile triple, the shape Hamburg's
+	 * aerial imagery needs.
+	 */
+	@Test
+	void acceptsAWmsGetMapUrlTemplate() throws Exception {
+		String url = "https://geodienste.hamburg.de/wms_dop?SERVICE=WMS&REQUEST=GetMap&BBOX={bbox-epsg-3857}";
+		mockMvc.perform(patch("/api/projects/{id}", project.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{ \"basemap\": \"" + url + "\" }"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.basemap").value(url));
+
+		Project reloaded = projectRepository.findById(project.getId()).orElseThrow();
+		assertThat(reloaded.getBasemap()).isEqualTo(url);
+	}
+
+	@Test
+	void rejectsAnHttpsUrlWithCredentials() throws Exception {
+		mockMvc.perform(patch("/api/projects/{id}", project.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{ \"basemap\": \"https://user:pass@tiles.example.org/{z}/{x}/{y}.png\" }"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.errors.basemap")
+						.value("Die URL-Vorlage darf keine Zugangsdaten enthalten."));
+
+		Project reloaded = projectRepository.findById(project.getId()).orElseThrow();
+		assertThat(reloaded.getBasemap()).isEqualTo("osm");
+	}
+
+	@Test
+	void rejectsAnOverlongUrlTemplate() throws Exception {
+		String url = "https://tiles.example.org/" + "a".repeat(2000) + "/{z}/{x}/{y}.png";
+		mockMvc.perform(patch("/api/projects/{id}", project.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{ \"basemap\": \"" + url + "\" }"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.errors.basemap")
+						.value("Die URL-Vorlage darf höchstens 2000 Zeichen lang sein."));
 	}
 }

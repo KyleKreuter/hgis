@@ -1,8 +1,8 @@
 package de.kreuter.hgis.catalog;
 
 import de.kreuter.hgis.catalog.dto.ProjectDtos;
+import de.kreuter.hgis.basemap.BasemapCatalog;
 import de.kreuter.hgis.common.BadRequestException;
-import de.kreuter.hgis.common.Basemap;
 import de.kreuter.hgis.common.FieldValidationException;
 import de.kreuter.hgis.common.GeometryConfig;
 import de.kreuter.hgis.common.NotFoundException;
@@ -359,21 +359,22 @@ public class ProjectService {
 	}
 
 	/**
-	 * Validates a client-supplied basemap token before it is written -- see
-	 * {@link Basemap} for why (Befund 1): a token that is not one of its five values
+	 * Validates a client-supplied basemap value before it is written -- see
+	 * {@link BasemapCatalog} for why (Befund 1, extended for the catalog and the
+	 * URL-template case): a value that was neither a known token nor a valid tile URL
 	 * used to be accepted with 200 and sat in the database forever, silently falling back
 	 * to OSM on every client that ever read it.
 	 *
 	 * @param basemap null is left alone -- {@link Project}'s constructor and
 	 *                {@link #update} both already treat null as "leave the default /
-	 *                current value", never as a token to check
+	 *                current value", never as a value to check
 	 */
 	private void requireKnownBasemap(String basemap) {
 		if (basemap == null) {
 			return;
 		}
 		try {
-			Basemap.fromToken(basemap);
+			BasemapCatalog.requireValid(basemap);
 		}
 		catch (IllegalArgumentException e) {
 			throw new FieldValidationException("basemap", e.getMessage());

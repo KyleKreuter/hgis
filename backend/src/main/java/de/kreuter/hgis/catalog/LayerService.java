@@ -3,8 +3,8 @@ package de.kreuter.hgis.catalog;
 import de.kreuter.hgis.catalog.dto.LayerDtos;
 import de.kreuter.hgis.changelog.ChangeLogAction;
 import de.kreuter.hgis.changelog.ChangeLogService;
+import de.kreuter.hgis.basemap.BasemapCatalog;
 import de.kreuter.hgis.common.BadRequestException;
-import de.kreuter.hgis.common.Basemap;
 import de.kreuter.hgis.common.ConflictException;
 import de.kreuter.hgis.common.FieldType;
 import de.kreuter.hgis.common.FieldValidationException;
@@ -496,7 +496,7 @@ public class LayerService {
 		}
 		String value = node.asString();
 		try {
-			Basemap.fromToken(value);
+			BasemapCatalog.requireValid(value);
 		}
 		catch (IllegalArgumentException e) {
 			throw new FieldValidationException("basemap", e.getMessage());
