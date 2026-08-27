@@ -125,6 +125,46 @@ describe('unvollständige Symbole', () => {
   })
 
   /**
+   * The crash actually seen on the running system: a stored `categorized`/`graduated`
+   * renderer without `fallbackSymbol` at all, not merely one short of members. The schema
+   * marks it required, but an older row or a client that skipped validation (the MCP
+   * `set_style` tool, before its description named `fallback_symbol`) can still omit it
+   * entirely -- and `renderer.fallbackSymbol.kind` on `undefined` used to take down the
+   * whole map (`TypeError: Cannot read properties of undefined (reading 'kind')`), not
+   * just this one layer.
+   */
+  it('übersteht Kategorien und Klassen ganz ohne fallbackSymbol', () => {
+    const categorized = asStyle({
+      version: 1,
+      renderer: {
+        type: 'categorized',
+        field: 'art',
+        categories: [{ value: 'A', label: 'A', symbol: { kind: 'fill', fillColor: '#111111' } }],
+      },
+      opacity: 1,
+    })
+    const graduated = asStyle({
+      version: 1,
+      renderer: {
+        type: 'graduated',
+        field: 'hoehe',
+        classes: [{ min: 0, max: 10, label: '0 – 10', symbol: { kind: 'line', color: '#111111' } }],
+      },
+      opacity: 1,
+    })
+
+    for (const geometryType of GEOMETRY_TYPES) {
+      const categorizedSpecs = styleToMapLibre(categorized, makeLayer(geometryType), 'src')
+      const graduatedSpecs = styleToMapLibre(graduated, makeLayer(geometryType), 'src')
+
+      expect(categorizedSpecs.length, geometryType).toBeGreaterThan(0)
+      expect(graduatedSpecs.length, geometryType).toBeGreaterThan(0)
+      expect(undefinedProperties(categorizedSpecs), geometryType).toEqual([])
+      expect(undefinedProperties(graduatedSpecs), geometryType).toEqual([])
+    }
+  })
+
+  /**
    * `opacity` multiplies into the paint values, so a missing one produces NaN rather
    * than a wrong colour -- and MapLibre rejects that exactly as harshly.
    */

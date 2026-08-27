@@ -600,8 +600,16 @@ function asMarker(symbol: LayerSymbol): MarkerSymbol {
   }
 }
 
+/**
+ * `fallbackSymbol` is required by the schema, but the backend only enforced that when
+ * it was present at all (`LayerStyleService.validateSymbol`) and an older stored style,
+ * or a client that bypasses validation, can still omit it. `DEFAULT_FILL` is the same
+ * stand-in `roleFor` already picks for a GEOMETRY layer's shared symbol -- the one shape
+ * with a distinct fill and outline, so nothing is lost converting it to a line or marker
+ * symbol below.
+ */
 function representativeSymbol(renderer: ClassicRenderer): LayerSymbol {
-  return renderer.type === 'single' ? renderer.symbol : renderer.fallbackSymbol
+  return renderer.type === 'single' ? renderer.symbol : (renderer.fallbackSymbol ?? DEFAULT_FILL)
 }
 
 // -- data-driven values -----------------------------------------------------------
@@ -626,7 +634,10 @@ function dataDriven<R, T extends string | number>(
 
   if (renderer.type === 'single') return valueOf(renderer.symbol)
 
-  const fallback = valueOf(renderer.fallbackSymbol)
+  // Same missing-`fallbackSymbol` guard as `representativeSymbol` -- without it, a
+  // classified renderer that predates validation (or a client that skipped it) reads
+  // `undefined.kind` here and drops the whole layer.
+  const fallback = valueOf(renderer.fallbackSymbol ?? DEFAULT_FILL)
   return renderer.type === 'categorized'
     ? matchExpression(renderer.field, renderer.categories ?? [], valueOf, fallback)
     : stepExpression(renderer.field, renderer.classes ?? [], valueOf, fallback)
