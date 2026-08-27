@@ -369,6 +369,14 @@ public class LayerStyleService {
 		if (type.equals(StyleDtos.RENDERER_SINGLE) && renderer.symbol() == null) {
 			throw new BadRequestException("Ein Einzelsymbol-Renderer braucht ein symbol");
 		}
+		// `validateSymbol` below only checks a fallbackSymbol that is present -- without
+		// this, a categorized/graduated renderer without one passed straight through and
+		// reached the frontend as a document `renderer.fallbackSymbol.kind` cannot read,
+		// which cost it not just the layer but the whole map (`styleToMapLibre.ts`'s
+		// `dataDriven`, called from React render, uncaught).
+		if (classifies(type) && renderer.fallbackSymbol() == null) {
+			throw new BadRequestException("Der Renderer-Typ " + type + " braucht ein fallbackSymbol");
+		}
 		if (type.equals(StyleDtos.RENDERER_HEATMAP)) {
 			requireNoClassificationMembers(renderer);
 		}

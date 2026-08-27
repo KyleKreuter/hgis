@@ -117,7 +117,8 @@ class TileControllerTest {
 						.content("""
 								{ "style": { "renderer": { "type": "categorized", "field": "Nutzungsart",
 								  "categories": [ { "value": "Wohnen",
-								                    "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+								                    "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ],
+								  "fallbackSymbol": { "kind": "fill", "fillColor": "#cccccc" } } } }
 								"""))
 				.andExpect(status().isOk());
 
