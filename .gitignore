@@ -64,3 +64,6 @@ venv/
 
 # Screenshots aus Browserpruefungen, im Projektstamm abgelegt
 /*.png
+
+# Arbeitsdateien laufender Sitzungen
+.tmp/

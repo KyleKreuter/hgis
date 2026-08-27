@@ -18,9 +18,9 @@ Phasenberichte. Diese Datei ersetzt ihn nicht.
 
 | Teil | Tests | Wie prüfen |
 |---|---|---|
-| Backend (Spring Boot 4.1, Java) | **1155** | `cd backend && ./mvnw test` |
-| Frontend (React 19, TypeScript) | **1281** | `cd frontend && npx vitest run` |
-| Python-Bibliothek und MCP-Server | **490** | `cd python && .venv/bin/python -m pytest -q` |
+| Backend (Spring Boot 4.1, Java) | **1198** | `cd backend && ./mvnw test` |
+| Frontend (React 19, TypeScript) | **1306** | `cd frontend && npx vitest run` |
+| Python-Bibliothek und MCP-Server | **506** | `cd python && .venv/bin/python -m pytest -q` |
 
 Alle drei laufen lokal und in der CI grün. Die Zahlen sind am 27.08. gemessen, nicht
 geschätzt.
@@ -42,7 +42,7 @@ Das Backend braucht rund 20 Sekunden bis zur ersten Antwort. Prüfen mit
 
 ### Der MCP-Server
 
-Seit dem 25.08. gibt `python/src/hgis/mcp/` hGIS als **30 Werkzeuge** an einen Agenten
+Seit dem 25.08. gibt `python/src/hgis/mcp/` hGIS als **32 Werkzeuge** an einen Agenten
 (elf lesende, neunzehn schreibende, 101 Parameter). `.mcp.json` im Projektwurzel-
 verzeichnis bindet ihn in Claude Code ein. Ein Werkzeugaufruf beantwortet eine kleine
 Frage; für alles, was rechnet, gibt es die Bibliothek `hgis`. Näheres in
@@ -108,6 +108,8 @@ wirklich. Drei Stellen sind als Illustration gekennzeichnet
 | Docker antwortete tagelang nicht, weil die virtuelle Platte voll war (nicht weil es hing) | `~/Library/Containers/com.docker.docker/Data/log/host/monitor.log` lesen, bevor man neu startet |
 | Der Tomcat-Connector steht seit dem 27.08. auf `PASS_THROUGH` statt `REJECT`, damit ein kodierter Schrägstrich in einer Geoportal-Id durchkommt (`GeoportalEncodedSlashConfig`) | Anwendungsweit, Tomcat kennt nichts Pfadbezogenes. Unbedenklich, solange es keine pfadbasierte Zugriffsprüfung gibt. **Wer Spring Security einbaut, bewertet diese Klasse neu** |
 | Die CI führt für Python nur `ruff check src tests`, kein `ruff format --check` | `ruff format --check` schlägt baumweit auf Altbestand fehl und ist kein Prüfkriterium |
+| Maven hält kompilierte Klassen und Migrationsressourcen für aktuell, wenn eine zurückgespielte Datei durch `mv` den alten Zeitstempel trägt — der Rot-Beweis läuft dann mit dem falschen Bytecode grün durch | Nach dem Zurückspielen `touch` auf die Datei; bei Migrationen zusätzlich `rm target/classes/db/migration/<datei>` |
+| Ein Kacheldienst antwortet mit 200 und liefert trotzdem kein brauchbares Bild — CARTO legt ein Wasserzeichen über die Kachel, Thüringen schickt eine XML-Fehlerantwort, Sachsen ein Palettenbild | Kachel herunterladen und **ansehen**, nicht nur Status und Content-Type prüfen |
 
 ---
 
@@ -248,11 +250,16 @@ Drei Ebenen lassen den Stil durch:
 
 ### 28 — `basemap` nimmt jeden String an
 
-**Behoben am 27.08.** Neues Enum `common/Basemap.java` mit den fünf Werten, geprüft auf
-Projekt- und Layer-Ebene. Der Lookup läuft über `fromToken()` statt `Enum.valueOf`, weil
-`osm-light` einen Bindestrich trägt und keine Enum-Konstante sein kann. Die
-Längenprüfung `MAX_BASEMAP_LENGTH` ist entfallen, die Whitelist macht sie überflüssig.
-`basemapOpacity` war bereits korrekt auf 0..1 geprüft.
+**Behoben am 27.08.** Zuerst als Enum `common/Basemap.java` mit den fünf Werten,
+geprüft auf Projekt- und Layer-Ebene. Der Lookup lief über `fromToken()` statt
+`Enum.valueOf`, weil `osm-light` einen Bindestrich trägt und keine Enum-Konstante sein
+kann. Die Längenprüfung `MAX_BASEMAP_LENGTH` ist entfallen, die Whitelist macht sie
+überflüssig. `basemapOpacity` war bereits korrekt auf 0..1 geprüft.
+
+**Noch am selben Tag abgelöst** durch den Katalog aus Abschnitt 5.0b: Das Enum konnte
+ein Token prüfen, hatte aber keinen Platz für URL, Quellenvermerk, Zoombereich oder
+Gruppe — und fünf Karten sind keine Auswahl. `BasemapCatalog` prüft jetzt dieselbe
+Sache gegen 49 Einträge und lässt zusätzlich eine eigene URL-Vorlage zu.
 
 `PATCH /api/projects/{id}` mit `{"basemap": "grayscale"}` antwortet 200. Den Wert gibt
 es nicht. Das Frontend fällt still auf OpenStreetMap zurück
@@ -354,6 +361,49 @@ Kein Fehler, aber offen, und Kandidaten für Stufe B:
   Gehminuten lässt sich damit nicht ausdrücken, er ändert sich mit jedem Zoomschritt.
   Wer so etwas braucht, rechnet den Puffer in Python — das dauerte für 684 Haltestellen
   0,7 Sekunden.
+
+---
+
+## 5.0b Hintergrundkarten aus einem Katalog — abgeschlossen am 27.08.
+
+Aufgabe 28 hatte nur verhindert, dass `basemap` jeden String annimmt. Damit blieben es
+fünf Karten, und ein Agent konnte nicht erfahren, welche. **Seit dem 27.08. gibt es
+einen Katalog mit 49 Einträgen** in sechs Gruppen, gebaut von vier Agenten in
+getrennten Worktrees.
+
+`GET /api/basemaps` ist die eine Quelle der Wahrheit; Oberfläche und MCP lesen von
+dort, statt eigene Listen zu pflegen. Ein Agent ruft `list_basemaps()` und setzt mit
+`set_basemap(project, basemap, layer=None, opacity=None)` — für das Projekt oder für
+einen einzelnen Layer. Die fünf alten Ids und ihre URLs sind unverändert; zwölf
+Projekte tragen sie in der Datenbank.
+
+**Eine Hintergrundkarte ist entweder eine Katalog-Id oder eine eigene URL-Vorlage**,
+erkennbar am `https://`-Präfix. Eine Vorlage ist gültig, wenn sie `{z}`, `{x}` und
+`{y}` trägt oder `{bbox-epsg-3857}` für eine WMS-GetMap-Adresse. Die zweite Form gibt
+es, weil die meisten deutschen Landesvermessungen keinen WMTS anbieten — die Hamburger
+Luftbilder existieren nur so. MapLibre ersetzt beide Platzhalter-Arten in derselben
+Kette, `wmsTiles.ts` baut die Form für Kartenbild-Layer schon länger.
+
+**Was der Katalog trägt:** die fünf bestehenden Karten, sechs amtliche für Deutschland,
+neun thematische, die neun Esri-Dienste (mit `requiresAccount`, sichtbar statt versteckt),
+drei EOX-Satellitenbilder und 18 Landesdienste aus 14 Bundesländern. Jede URL ist mit
+einem abgerufenen und angesehenen Bild belegt. Die Belege, die verworfenen Kandidaten
+und die wörtlichen Lizenzzitate stehen in `docs/basemap-recherche.md`.
+
+**Was bewusst fehlt.** Rheinland-Pfalz und das Saarland erlauben die kostenfreie
+Anzeige nur im landeseigenen Portal; jede Einbindung anderswo ist vertragspflichtig.
+Baden-Württemberg funktioniert nur mit fremden Zugangsdaten aus einem öffentlich
+indexierten Treffer. Sachsen-Anhalt nennt keinen Lizenzstatus. CARTO legt seit einer
+Umstellung ein Wasserzeichen über jede Kachel, Stamen steht hinter einem Schlüssel.
+Ein WMTS mit eigenem Kachelgitter (Brandenburg, NRW) braucht Rechnen statt
+Textersetzung und passt in keine URL-Vorlage — für diese Länder steht der WMS-Zwilling
+desselben Datensatzes im Katalog.
+
+**Zwei Fehler, die erst die neuen Tests sichtbar machten:** `layer.basemap` trug eine
+Längengrenze von 64 Zeichen aus der Zeit der kurzen Tokens und wies jede echte
+Kachel-URL mit 500 statt 400 ab (`V15`). Und ein Test der Oberfläche verbot pauschal
+jedes `?` in einer Kachel-URL — richtig für ein Kachelraster, unmöglich für eine
+WMS-Adresse, die fast nur aus Parametern besteht.
 
 ---
 
