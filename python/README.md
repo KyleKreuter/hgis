@@ -1205,7 +1205,7 @@ Für Claude Code liegt eine `.mcp.json` im Projektwurzelverzeichnis:
 ```
 
 Gemessen: Genau dieser Start verbindet sich mit einem laufenden hGIS und
-meldet 30 Werkzeuge.
+meldet 42 Werkzeuge.
 
 Für einen anderen Host reicht der Befehl `hgis-mcp` allein -- gleichwertig
 `python -m hgis.mcp`. `HGIS_URL` bestimmt, wohin er sich verbindet; ohne sie
@@ -1342,7 +1342,7 @@ vorher liefert, ohne etwas zu löschen.
 
 ### Die volle Oberfläche, ohne Schalter
 
-Alle 30 Werkzeuge stehen von Anfang an bereit, ohne Erlaubnisschalter, der
+Alle 42 Werkzeuge stehen von Anfang an bereit, ohne Erlaubnisschalter, der
 die schreibenden abschalten könnte. Das ist eine ausdrückliche Entscheidung
 des Nutzers, nachdem ihm das Risiko vorgelegt wurde: `purge_layer` und
 `delete_project` löschen endgültig, `delete_features` ist über diese
@@ -1352,7 +1352,7 @@ mit Verbindung zum Server erreichbar.
 Die Folge: **Der Docstring jedes Werkzeugs ist die einzige Warnung, die es
 gibt.** Jedes zerstörende Werkzeug nennt im ersten Satz seiner Beschreibung,
 was es zerstört -- das ist keine Höflichkeit, sondern der einzige Schutz, den
-dieser Server bietet. Gemessen: alle 101 Parameter der 30 Werkzeuge tragen
+dieser Server bietet. Gemessen: alle 141 Parameter der 42 Werkzeuge tragen
 eine eigene Beschreibung, nicht nur der Werkzeugname selbst.
 
 ## Tests
