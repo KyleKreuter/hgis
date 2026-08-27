@@ -1053,3 +1053,134 @@ def set_style(
         )
     except Exception as error:
         raise tool_error(error, doing=f"Setzen des Stils von '{layer}'") from error
+
+
+# --- basemap: what draws under everything else --------------------------
+
+
+#: Das echte Beispiel aus VERTRAG.md ("Zwei Formen von urlTemplate", 27.08.) --
+#: eine WMS-GetMap-URL der Hamburger Luftbilder, Form B. Als eigene Konstante,
+#: damit die Feldbeschreibung unten nicht an einer einzigen, über 100 Zeichen
+#: langen Quellzeile scheitert (ruff E501) und trotzdem als eine
+#: zusammenhängende, unveränderte URL bei der Anfrage ankommt.
+_WMS_BBOX_EXAMPLE = (
+    "https://geodienste.hamburg.de/wms_dop_zeitreihe_unbelaubt?SERVICE=WMS"
+    "&VERSION=1.3.0&REQUEST=GetMap&LAYERS=dop_zeitreihe_unbelaubt&STYLES="
+    "&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png"
+)
+
+
+@server.tool()
+def set_basemap(
+    project: Annotated[str, Field(description="Name oder Id des Projekts.")],
+    basemap: Annotated[
+        str | None,
+        Field(
+            description="Entweder eine Katalog-Id aus list_basemaps (z.B. \"osm\") "
+            "oder eine eigene Kachel-URL-Vorlage für einen selbst gehosteten oder "
+            "sonst nicht gelisteten Dienst -- zwei Formen: mit {z}, {x}, {y} (XYZ "
+            'oder WMTS), z.B. "https://kacheln.example.org/{z}/{x}/{y}.png", oder '
+            "mit {bbox-epsg-3857} an ihrer Stelle (eine WMS-GetMap-URL), z.B. "
+            f'"{_WMS_BBOX_EXAMPLE}". Ein Wert, der mit "https://" beginnt, gilt als '
+            "eigene URL-Vorlage; jeder andere Wert muss eine gültige Katalog-Id "
+            "sein -- eine unbekannte Id meldet der Server mit den gültigen. Die "
+            "Katalog-Id \"none\" bedeutet \"bewusst gar keine Hintergrundkarte "
+            "zeichnen\" -- etwas anderes als das Weglassen dieses Arguments: "
+            "Weggelassen heißt stattdessen \"die Karte des Projekts übernehmen\" "
+            "(bei layer) oder \"nur opacity ändern, die Karte selbst unverändert "
+            "lassen\" (ohne layer, zusammen mit opacity). Weder layer noch "
+            "basemap noch opacity angegeben ist ein Fehler -- dann gibt es "
+            "nichts, das dieser Aufruf täte."
+        ),
+    ] = None,
+    layer: Annotated[
+        str | None,
+        Field(
+            description="Name oder Id des Layers. Angegeben, betrifft dies die "
+            "Hintergrundkarte dieses einen Layers statt der des Projekts. Dabei "
+            "lässt sich basemap weglassen: ohne opacity setzt das den Layer auf "
+            "'folgt der Karte des Projekts' zurück; mit opacity ändert es "
+            "stattdessen nur die Deckkraft und lässt die Karte des Layers "
+            "unangetastet. Karte und opacity werden unabhängig voneinander "
+            "vererbt und zurückgesetzt -- ein Layer mit eigener Karte, aber ohne "
+            "eigene opacity, übernimmt weiterhin die opacity des Projekts, und "
+            "umgekehrt."
+        ),
+    ] = None,
+    opacity: Annotated[
+        float | None,
+        Field(
+            description="Deckkraft der Hintergrundkarte, 0 bis 1. Weggelassen bleibt "
+            "sie, wie sie zuvor war.",
+            ge=0,
+            le=1,
+        ),
+    ] = None,
+) -> WriteResult:
+    """
+    Setzt die Hintergrundkarte -- des Projekts, oder eines einzelnen Layers,
+    wenn layer angegeben ist. Rufen Sie list_basemaps zuerst auf, um eine
+    gültige Id zu sehen, statt sie zu raten.
+
+    Bei layer lässt sich basemap weglassen: ohne opacity setzt das den Layer
+    auf die Karte des Projekts zurück, mit opacity ändert es nur die
+    Deckkraft und lässt die Karte des Layers unangetastet. Ohne layer lässt
+    sich basemap ebenfalls weglassen, wenn opacity angegeben ist -- dann
+    ändert dieser Aufruf nur die Deckkraft der Karte des Projekts. Weder
+    layer noch basemap noch opacity angegeben, gibt es nichts zu tun, und
+    das wird abgelehnt statt still nichts zu bewirken.
+    """
+    try:
+        if layer is None and basemap is None and opacity is None:
+            raise InvalidArgumentError(
+                "Weder basemap noch opacity angegeben. Ohne layer setzt dieser "
+                "Aufruf die Karte des Projekts -- dafür braucht es mindestens "
+                "eines von beiden, denn ein Projekt hat keine übergeordnete "
+                "Karte, auf die es zurückfallen könnte, wie ein Layer sie mit "
+                "layer=... hat. Nennen Sie eine Katalog-Id (siehe list_basemaps) "
+                "oder eine eigene URL-Vorlage, oder eine Deckkraft."
+            )
+
+        proj = _project(project)
+        kwargs: dict[str, Any] = {}
+        if opacity is not None:
+            kwargs["basemap_opacity"] = opacity
+
+        if layer is not None:
+            target = proj.layer(layer)
+            if basemap is not None:
+                kwargs["basemap"] = basemap
+            elif opacity is None:
+                # Weder basemap noch opacity angegeben: der reine Reset-Fall.
+                kwargs["basemap"] = None
+            # Sonst (basemap weggelassen, opacity angegeben): basemap bleibt
+            # aus kwargs -- Layer.update() lässt es dann unangetastet, siehe
+            # dessen _UNSET-Default.
+            target.update(**kwargs)
+            where = f"Layer '{target.name}'"
+
+            if basemap is not None:
+                opacity_note = f", Deckkraft {opacity}" if opacity is not None else ""
+                summary = f"{where}: Hintergrundkarte auf '{basemap}' gesetzt{opacity_note}."
+            elif opacity is not None:
+                summary = f"{where}: Deckkraft auf {opacity} gesetzt, Hintergrundkarte unverändert."
+            else:
+                summary = f"{where}: folgt jetzt wieder der Hintergrundkarte des Projekts."
+        else:
+            # basemap kann hier None sein (siehe die verengte Bedingung oben --
+            # dann ist opacity garantiert gegeben): nur die Deckkraft des
+            # Projekts ändern, ohne seine Karte anzufassen.
+            if basemap is not None:
+                kwargs["basemap"] = basemap
+            proj.update(**kwargs)
+            where = f"Projekt '{proj.name}'"
+
+            if basemap is not None:
+                opacity_note = f", Deckkraft {opacity}" if opacity is not None else ""
+                summary = f"{where}: Hintergrundkarte auf '{basemap}' gesetzt{opacity_note}."
+            else:
+                summary = f"{where}: Deckkraft auf {opacity} gesetzt, Hintergrundkarte unverändert."
+
+        return WriteResult(summary=summary)
+    except Exception as error:
+        raise tool_error(error, doing=f"Setzen der Hintergrundkarte für '{project}'") from error

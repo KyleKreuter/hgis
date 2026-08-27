@@ -15,6 +15,51 @@ def test_projects_are_listed(client) -> None:
     assert all(isinstance(p, hgis.Project) for p in projects)
 
 
+def test_basemaps_reads_the_catalog(client) -> None:
+    """
+    The gap this closes: before ``Client.basemaps()`` existed, the only way
+    to read the catalog was ``client.get("/api/basemaps")`` -- a raw path an
+    agent has no business reaching for. See ``responses/basemaps.json`` for
+    the stored answer this reads.
+    """
+    catalog = client.basemaps()
+    assert len(catalog) == 8
+    assert all(isinstance(item, hgis.Basemap) for item in catalog)
+
+    osm = next(item for item in catalog if item.id == "osm")
+    assert osm.title == "OpenStreetMap"
+    assert osm.group == "Standard"
+    assert osm.coverage == "world"
+    assert (osm.min_zoom, osm.max_zoom) == (0, 19)
+    assert osm.requires_account is False
+    assert osm.deprecated is False
+    assert osm.paint is None
+    assert osm.attribution == [
+        hgis.BasemapAttribution(text="© "),
+        hgis.BasemapAttribution(
+            text="OpenStreetMap", href="https://www.openstreetmap.org/copyright"
+        ),
+        hgis.BasemapAttribution(text=" contributors"),
+    ]
+
+    none_entry = next(item for item in catalog if item.id == "none")
+    assert none_entry.url_template is None
+    assert none_entry.attribution == []
+
+    esri = next(item for item in catalog if item.id == "esri-welt-satellit")
+    assert esri.requires_account is True
+
+    laut = next(item for item in catalog if item.id == "laut-thematisch")
+    assert laut.deprecated is True
+
+    osm_light = next(item for item in catalog if item.id == "osm-light")
+    assert osm_light.paint == {
+        "raster-saturation": -0.9,
+        "raster-brightness-min": 0.32,
+        "raster-contrast": -0.22,
+    }
+
+
 def test_a_project_is_found_by_name(client) -> None:
     project = client.project("Leitungsnetz Nord")
     assert project.id == PROJECT_ID

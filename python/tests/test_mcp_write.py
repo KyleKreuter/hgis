@@ -308,6 +308,8 @@ def _write_stub(
                 "visible": body.get("visible", True),
                 "extent": None,
                 "style": body["style"] if "style" in body else None,
+                "basemap": body.get("basemap"),
+                "basemapOpacity": body.get("basemapOpacity"),
                 "fields": [
                     {
                         "id": STRASSE_FIELD_ID,
@@ -1117,6 +1119,164 @@ def test_update_layer_with_nothing_given_still_reports_that(mcp_client, transpor
     assert result.summary == "Layer 'Gebäude Speicherstadt': keine Änderung angegeben."
     patch = next(r for r in transport.requests if r.method == "PATCH")
     assert _body_of(transport, patch) == {}
+
+
+def test_set_basemap_without_a_layer_sets_the_projects_own_basemap(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import set_basemap
+
+    result = set_basemap(PROJECT_ID, "opentopo")
+
+    assert result.summary == "Projekt 'Leitungsnetz Nord': Hintergrundkarte auf 'opentopo' gesetzt."
+    patch = next(r for r in transport.requests if r.method == "PATCH")
+    assert patch.path == f"/api/projects/{PROJECT_ID}"
+    assert _body_of(transport, patch) == {"basemap": "opentopo"}
+
+
+def test_set_basemap_without_a_layer_sends_opacity_too(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import set_basemap
+
+    result = set_basemap(PROJECT_ID, "opentopo", opacity=0.6)
+
+    assert result.summary == (
+        "Projekt 'Leitungsnetz Nord': Hintergrundkarte auf 'opentopo' gesetzt, Deckkraft 0.6."
+    )
+    patch = next(r for r in transport.requests if r.method == "PATCH")
+    assert patch.path == f"/api/projects/{PROJECT_ID}"
+    assert _body_of(transport, patch) == {"basemap": "opentopo", "basemapOpacity": 0.6}
+
+
+def test_set_basemap_with_a_layer_overrides_the_layer_not_the_project(
+    mcp_client, transport
+) -> None:
+    """
+    The distinction the surface already knows (VERTRAG.md): given ``layer``,
+    this writes the layer's own override, PATCH .../layers/{id} -- never the
+    project. Without ``opacity``, only ``basemap`` travels, exactly the "one
+    overridden without the other" independence resolveBasemapSettings.ts
+    documents on the frontend side.
+    """
+    from hgis.mcp.write_tools import set_basemap
+
+    result = set_basemap(PROJECT_ID, "opentopo", layer="Gebäude Speicherstadt")
+
+    assert result.summary == (
+        "Layer 'Gebäude Speicherstadt': Hintergrundkarte auf 'opentopo' gesetzt."
+    )
+    patch = next(r for r in transport.requests if r.method == "PATCH")
+    assert patch.path == f"/api/layers/{LAYER_ID}"
+    assert _body_of(transport, patch) == {"basemap": "opentopo"}
+    # The project is only ever read to resolve project/layer -- never PATCHed.
+    assert not any(
+        r.method == "PATCH" and r.path == f"/api/projects/{PROJECT_ID}" for r in transport.requests
+    )
+
+
+def test_set_basemap_with_a_layer_and_opacity_sends_both_fields(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import set_basemap
+
+    result = set_basemap(PROJECT_ID, "opentopo", layer=LAYER_ID, opacity=0.4)
+
+    assert result.summary == (
+        "Layer 'Gebäude Speicherstadt': Hintergrundkarte auf 'opentopo' gesetzt, Deckkraft 0.4."
+    )
+    patch = next(r for r in transport.requests if r.method == "PATCH")
+    assert patch.path == f"/api/layers/{LAYER_ID}"
+    assert _body_of(transport, patch) == {"basemap": "opentopo", "basemapOpacity": 0.4}
+
+
+def test_set_basemap_with_a_layer_and_no_basemap_resets_it_to_follow_the_project(
+    mcp_client, transport
+) -> None:
+    """
+    The gap this closes: before ``basemap`` could be left out, a layer that
+    had been given its own basemap had no way back through this tool -- an
+    agent could set it to ``osm`` but never make it follow the project's
+    again. Omitting ``basemap`` for a named ``layer`` is what
+    ``Layer.update(basemap=None)`` calls a reset -- see test_writes.py's
+    ``test_layer_update_basemap_none_resets_it_to_follow_the_project``, the
+    library-level proof this tool now reaches through to.
+    """
+    from hgis.mcp.write_tools import set_basemap
+
+    result = set_basemap(PROJECT_ID, layer=LAYER_ID)
+
+    assert result.summary == (
+        "Layer 'Gebäude Speicherstadt': folgt jetzt wieder der Hintergrundkarte "
+        "des Projekts."
+    )
+    patch = next(r for r in transport.requests if r.method == "PATCH")
+    assert patch.path == f"/api/layers/{LAYER_ID}"
+    assert _body_of(transport, patch) == {"basemap": None}
+
+
+def test_set_basemap_with_a_layer_no_basemap_and_opacity_only_changes_opacity(
+    mcp_client, transport
+) -> None:
+    """
+    Giving ``opacity`` alongside an omitted ``basemap`` is not the reset
+    above -- it is the ordinary "just the slider moved" call, and must not
+    silently drop whatever basemap override the layer already had. Only
+    ``basemapOpacity`` travels; ``basemap`` is left out of the body
+    entirely, which is what leaves it exactly as it stood (see
+    ``Layer.update``'s own distinction between "not given" and "given as
+    None").
+    """
+    from hgis.mcp.write_tools import set_basemap
+
+    result = set_basemap(PROJECT_ID, layer=LAYER_ID, opacity=0.3)
+
+    assert result.summary == (
+        "Layer 'Gebäude Speicherstadt': Deckkraft auf 0.3 gesetzt, "
+        "Hintergrundkarte unverändert."
+    )
+    patch = next(r for r in transport.requests if r.method == "PATCH")
+    assert patch.path == f"/api/layers/{LAYER_ID}"
+    assert _body_of(transport, patch) == {"basemapOpacity": 0.3}
+
+
+def test_set_basemap_without_a_layer_or_a_basemap_is_refused_before_any_request(
+    mcp_client, transport
+) -> None:
+    """
+    A project has no parent to fall back to, so omitting ``basemap`` without
+    ``layer`` cannot mean "reset" the way it does for a layer -- there is
+    nothing to reset to. With ``opacity`` also missing, this call would do
+    nothing at all; refused with a message naming why, instead of silently
+    succeeding at nothing. See the next test for the case one field over --
+    ``opacity`` given, which is allowed.
+    """
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import set_basemap
+
+    with pytest.raises(ToolError, match="übergeordnete Karte"):
+        set_basemap(PROJECT_ID)
+
+    assert transport.requests == []
+
+
+def test_set_basemap_without_a_layer_or_a_basemap_but_with_opacity_still_works(
+    mcp_client, transport
+) -> None:
+    """
+    The gap this closes: changing a project's basemap opacity without also
+    naming a basemap is an everyday request -- the frontend has its own
+    slider for exactly this, independent of the map picker. Before the
+    condition above was narrowed to also check ``opacity``, this call was
+    refused just like the truly-empty one above, even though there was
+    something real to do: set the project's own opacity, leaving its
+    basemap untouched.
+    """
+    from hgis.mcp.write_tools import set_basemap
+
+    result = set_basemap(PROJECT_ID, opacity=0.7)
+
+    assert result.summary == (
+        "Projekt 'Leitungsnetz Nord': Deckkraft auf 0.7 gesetzt, Hintergrundkarte "
+        "unverändert."
+    )
+    patch = next(r for r in transport.requests if r.method == "PATCH")
+    assert patch.path == f"/api/projects/{PROJECT_ID}"
+    assert _body_of(transport, patch) == {"basemapOpacity": 0.7}
 
 
 def test_delete_layer_moves_to_trash_and_names_the_id_for_restore(mcp_client, transport) -> None:

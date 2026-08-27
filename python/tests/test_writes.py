@@ -411,6 +411,57 @@ def test_layer_update_with_nothing_sends_an_empty_body() -> None:
     assert transport.bodies[-1] == {}
 
 
+def test_layer_update_sets_basemap_and_opacity() -> None:
+    def handle(request: object) -> Response:
+        return Response(
+            200,
+            f'{{"id":"{LAYER_ID}","name":"Gebäude Speicherstadt","kind":"VECTOR",'
+            '"geometryType":"MULTIPOLYGON","srid":25832,"featureCount":1003,'
+            '"visible":true,"basemap":"opentopo","basemapOpacity":0.6,"fields":[]}',
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    result = layer.update(basemap="opentopo", basemap_opacity=0.6)
+
+    assert transport.bodies[-1] == {"basemap": "opentopo", "basemapOpacity": 0.6}
+    assert result is layer
+    assert layer.basemap == "opentopo"
+    assert layer.basemap_opacity == 0.6
+
+
+def test_layer_update_basemap_none_resets_it_to_follow_the_project() -> None:
+    """
+    The gap this closes: ``update()``'s five original arguments all treat a
+    plain ``None`` default as "leave this alone", the same rule
+    ``basemap``/``basemap_opacity`` cannot follow -- the server tells
+    "unchanged" (key absent) apart from "reset to follow the project" (key
+    present, null), the same way it already does for a layer's style. Before
+    the private ``_UNSET`` sentinel existed as their default, an explicit
+    ``basemap=None`` would have been indistinguishable from not passing
+    ``basemap`` at all, and this call would have sent an empty body instead
+    of the reset -- silently doing nothing.
+    """
+
+    def handle(request: object) -> Response:
+        return Response(
+            200,
+            f'{{"id":"{LAYER_ID}","name":"Gebäude Speicherstadt","kind":"VECTOR",'
+            '"geometryType":"MULTIPOLYGON","srid":25832,"featureCount":1003,'
+            '"visible":true,"fields":[]}',
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.update(basemap=None, basemap_opacity=None)
+
+    assert transport.bodies[-1] == {"basemap": None, "basemapOpacity": None}
+    assert layer.basemap is None
+    assert layer.basemap_opacity is None
+
+
 def test_layer_delete_reports_none_if_the_answer_ever_has_no_body() -> None:
     """
     Not today's backend (see the test below, which is) -- a defensive case:

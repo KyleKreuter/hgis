@@ -96,6 +96,39 @@ def test_set_style_names_fallback_symbol_for_categorized_and_graduated() -> None
         )
 
 
+def test_set_basemap_names_the_freetext_url_case_in_its_description() -> None:
+    """
+    ``basemap`` accepts two shapes: a catalog id, or an own tile URL template
+    for a service the catalog does not list. An agent who only reads "eine
+    Katalog-Id" would never think to try a URL of its own -- the same failure
+    mode ``test_set_style_names_fallback_symbol_...`` above guards against for
+    ``set_style``, one round trip earlier than a 400 from the server.
+
+    The own URL template itself has two forms (VERTRAG.md, "Zwei Formen von
+    urlTemplate", nachgetragen 27.08.): {z}/{x}/{y} for XYZ/WMTS, or
+    {bbox-epsg-3857} for a WMS GetMap URL -- most German state surveying
+    services (e.g. the Hamburg aerial imagery) only offer the latter. An
+    agent who only reads about {z}/{x}/{y} would conclude, wrongly, that a
+    WMS-only service cannot be used at all.
+    """
+    import asyncio
+
+    from hgis.mcp import read_tools, write_tools  # noqa: F401
+    from hgis.mcp.server import server
+
+    tools = asyncio.run(server.list_tools())
+    set_basemap = next(tool for tool in tools if tool.name == "set_basemap")
+    description = set_basemap.input_schema["properties"]["basemap"]["description"]
+
+    assert "https://" in description, (
+        f"set_basemap nennt den Freitext-Fall (eigene URL) nicht: {description}"
+    )
+    for placeholder in ("{z}", "{x}", "{y}", "{bbox-epsg-3857}"):
+        assert placeholder in description, (
+            f"set_basemap nennt den Platzhalter {placeholder} nicht: {description}"
+        )
+
+
 def test_tool_names_are_unique() -> None:
     from hgis.mcp.server import registered_tool_names
 

@@ -1,0 +1,136 @@
+{
+  "basemaps": [
+    {
+      "id": "hh-dop",
+      "title": "Digitale Orthophotos Hamburg",
+      "hint": "Luftbild, amtlich, nur für Hamburg",
+      "group": "Bundesländer",
+      "urlTemplate": "https://geodienste.hamburg.de/dop/{z}/{x}/{y}.png",
+      "attribution": [
+        { "text": "© " },
+        { "text": "Freie und Hansestadt Hamburg", "href": "https://www.hamburg.de/bkg-online/" }
+      ],
+      "minZoom": 0,
+      "maxZoom": 20,
+      "coverage": "HH",
+      "requiresAccount": false,
+      "deprecated": false,
+      "paint": null
+    },
+    {
+      "id": "laut-thematisch",
+      "title": "Lärmkarte",
+      "hint": "Thematische Überlagerung, kein eigenständiger Untergrund",
+      "group": "Thematisch",
+      "urlTemplate": "https://beispiel.example.org/laerm/{z}/{x}/{y}.png",
+      "attribution": [{ "text": "© Beispieldienst" }],
+      "minZoom": 0,
+      "maxZoom": 18,
+      "coverage": "DE",
+      "requiresAccount": false,
+      "deprecated": true,
+      "paint": null
+    },
+    {
+      "id": "osm",
+      "title": "OpenStreetMap",
+      "hint": "Standardkarte, farbig",
+      "group": "Standard",
+      "urlTemplate": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "attribution": [
+        { "text": "© " },
+        { "text": "OpenStreetMap", "href": "https://www.openstreetmap.org/copyright" },
+        { "text": " contributors" }
+      ],
+      "minZoom": 0,
+      "maxZoom": 19,
+      "coverage": "world",
+      "requiresAccount": false,
+      "deprecated": false,
+      "paint": null
+    },
+    {
+      "id": "basemapde-grau",
+      "title": "basemap.de Grau",
+      "hint": "Amtliche Karte für Deutschland, Graustufen",
+      "group": "Deutschland",
+      "urlTemplate": "https://sgx.geodatenzentrum.de/wmts_basemapde/tile/1.0.0/de_basemapde_web_raster_grau/default/GLOBAL_WEBMERCATOR/{z}/{y}/{x}.png",
+      "attribution": [
+        { "text": "© " },
+        { "text": "GeoBasis-DE / BKG", "href": "https://basemap.de/" },
+        { "text": " (dl-de/by-2-0)", "href": "https://www.govdata.de/dl-de/by-2-0" }
+      ],
+      "minZoom": 0,
+      "maxZoom": 18,
+      "coverage": "DE",
+      "requiresAccount": false,
+      "deprecated": false,
+      "paint": null
+    },
+    {
+      "id": "esri-welt-satellit",
+      "title": "Esri World Imagery",
+      "hint": "Satellitenbild, weltweit",
+      "group": "Luft- und Satellitenbild",
+      "urlTemplate": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      "attribution": [{ "text": "© Esri" }],
+      "minZoom": 0,
+      "maxZoom": 20,
+      "coverage": "world",
+      "requiresAccount": true,
+      "deprecated": false,
+      "paint": null
+    },
+    {
+      "id": "opentopo",
+      "title": "OpenTopoMap",
+      "hint": "Topografisch mit Höhenlinien, bis Zoom 17",
+      "group": "Gelände",
+      "urlTemplate": "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
+      "attribution": [
+        { "text": "Kartendaten: © " },
+        { "text": "OpenStreetMap-Mitwirkende", "href": "https://www.openstreetmap.org/copyright" },
+        { "text": ", SRTM | Kartendarstellung: © " },
+        { "text": "OpenTopoMap", "href": "https://opentopomap.org/" }
+      ],
+      "minZoom": 0,
+      "maxZoom": 17,
+      "coverage": "world",
+      "requiresAccount": false,
+      "deprecated": false,
+      "paint": null
+    },
+    {
+      "id": "osm-light",
+      "title": "Hell",
+      "hint": "Darstellungsvariante: OSM aufgehellt und entsättigt",
+      "group": "Standard",
+      "urlTemplate": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "attribution": [
+        { "text": "© " },
+        { "text": "OpenStreetMap", "href": "https://www.openstreetmap.org/copyright" },
+        { "text": " contributors" }
+      ],
+      "minZoom": 0,
+      "maxZoom": 19,
+      "coverage": "world",
+      "requiresAccount": false,
+      "deprecated": false,
+      "paint": { "raster-saturation": -0.9, "raster-brightness-min": 0.32, "raster-contrast": -0.22 }
+    },
+    {
+      "id": "none",
+      "title": "Keine Hintergrundkarte",
+      "hint": "Leere Karte ohne Untergrund",
+      "group": "Standard",
+      "urlTemplate": null,
+      "attribution": [],
+      "minZoom": 0,
+      "maxZoom": 24,
+      "coverage": "world",
+      "requiresAccount": false,
+      "deprecated": false,
+      "paint": null
+    }
+  ]
+}

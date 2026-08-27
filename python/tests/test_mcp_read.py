@@ -714,3 +714,72 @@ def test_list_trash_resolves_project_by_name(mcp_client) -> None:
     result = list_trash("Leitungsnetz Nord")
     assert len(result) == 1
     assert result[0].name == "Alte Gebäude"
+
+
+# --- list_basemaps -------------------------------------------------------
+
+
+def test_list_basemaps_groups_entries_in_the_catalogs_own_order(mcp_client) -> None:
+    """
+    ``responses/basemaps.json`` deliberately lists its eight entries in a
+    scrambled group order (Bundesländer first, Standard split across three
+    non-adjacent entries) -- exactly what a real catalog of ~35 entries would
+    do once entries are added over time rather than written in one grouped
+    pass. This proves list_basemaps groups by ``group`` and then sorts the
+    *groups* into the picker's own order, rather than merely repeating
+    whatever order the server happened to answer in.
+    """
+    from hgis.mcp.read_tools import list_basemaps
+
+    result = list_basemaps()
+
+    assert [group.group for group in result.groups] == [
+        "Standard",
+        "Deutschland",
+        "Luft- und Satellitenbild",
+        "Gelände",
+        "Thematisch",
+        "Bundesländer",
+    ]
+
+    standard = next(group for group in result.groups if group.group == "Standard")
+    assert {item.id for item in standard.basemaps} == {"osm", "osm-light", "none"}
+
+    bundeslaender = next(group for group in result.groups if group.group == "Bundesländer")
+    assert [item.id for item in bundeslaender.basemaps] == ["hh-dop"]
+
+
+def test_list_basemaps_reports_the_flags_an_agent_needs_to_decide(mcp_client) -> None:
+    """
+    Neither urlTemplate, attribution nor paint travel into the summary --
+    they matter for actually drawing the tiles, not for choosing among them.
+    requires_account and deprecated do, since both change whether an id is a
+    reasonable choice at all.
+    """
+    from hgis.mcp.read_tools import list_basemaps
+
+    result = list_basemaps()
+    by_id = {item.id: item for group in result.groups for item in group.basemaps}
+
+    assert by_id["esri-welt-satellit"].requires_account is True
+    assert by_id["osm"].requires_account is False
+    assert by_id["laut-thematisch"].deprecated is True
+    assert by_id["osm"].deprecated is False
+    assert not hasattr(by_id["osm"], "url_template")
+    assert not hasattr(by_id["osm"], "attribution")
+    assert not hasattr(by_id["osm"], "paint")
+
+
+def test_list_basemaps_text_names_every_entry_grouped(mcp_client) -> None:
+    from hgis.mcp.read_tools import list_basemaps
+
+    text = list_basemaps().text
+
+    assert "Standard:" in text
+    assert "Bundesländer:" in text
+    assert "osm — OpenStreetMap: Standardkarte, farbig" in text
+    assert "Konto erforderlich" in text  # esri-welt-satellit
+    assert "abgekündigt" in text  # laut-thematisch
+    # A world-wide entry names no coverage restriction that does not exist.
+    assert "Abdeckung world" not in text
+    assert "Abdeckung DE" in text  # basemapde-grau

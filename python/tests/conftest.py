@@ -127,6 +127,8 @@ def stub_server(request: Recorded) -> Response:
     """
     path = request.path
 
+    if path == "/api/basemaps":
+        return ok("basemaps.json")
     if path == "/api/projects":
         return ok("projects.json")
     if path == f"/api/projects/{PROJECT_ID}":

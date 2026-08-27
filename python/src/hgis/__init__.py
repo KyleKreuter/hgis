@@ -28,6 +28,7 @@ reaches the server -- see :class:`hgis.errors.GuardError`.
 works without them.
 """
 
+from .basemap import Basemap, BasemapAttribution
 from .channel import (
     PROJECT_CATALOG_EVENT,
     PROJECT_VIEW_STATE_EVENT,
@@ -117,6 +118,9 @@ __all__ = [
     "ValueCounts",
     "Classification",
     "LayerSource",
+    # the basemap catalog, see Client.basemaps
+    "Basemap",
+    "BasemapAttribution",
     # importing, see Project.inspect_import/.import_file/.import_geoportal
     "Job",
     "Inspection",
