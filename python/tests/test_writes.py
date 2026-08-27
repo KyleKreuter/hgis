@@ -1090,6 +1090,8 @@ def test_a_row_version_conflict_carries_the_current_row() -> None:
         lambda layer, project: layer.delete_features([1]),
         lambda layer, project: layer.create_field("Neu", "TEXT"),
         lambda layer, project: layer.delete_field(layer.fields()[0]),
+        lambda layer, project: layer.split(1, _line()),
+        lambda layer, project: layer.merge([1, 2], 1),
     ],
     ids=[
         "create_layer",
@@ -1101,6 +1103,8 @@ def test_a_row_version_conflict_carries_the_current_row() -> None:
         "delete_features",
         "create_field",
         "delete_field",
+        "split",
+        "merge",
     ],
 )
 def test_every_write_carries_the_client_name(act) -> None:
@@ -1132,6 +1136,10 @@ def test_every_write_carries_the_client_name(act) -> None:
             )
         if path.endswith("/restore"):
             return Response(204, "")
+        if path.endswith("/split"):
+            return Response(200, '{"fids":[1,1301],"dataVersion":1,"featureCount":1}')
+        if path.endswith("/features/merge"):
+            return Response(200, '{"fid":1,"dataVersion":1,"featureCount":1}')
         if request.method == "GET":
             return Response(
                 200,
@@ -1151,3 +1159,168 @@ def test_every_write_carries_the_client_name(act) -> None:
     assert writes, "Der Testfall hat keinen Schreibvorgang ausgelöst."
     for request in writes:
         assert request.headers.get(hgis.client.CLIENT_HEADER) == "agent-a"
+
+
+# --- split and merge (Aufgabe 21, Paket A) -----------------------------------
+
+
+def _line() -> dict:
+    return {"type": "LineString", "coordinates": [[9.98, 53.54], [9.982, 53.542]]}
+
+
+def test_split_sends_the_line_and_no_row_version_key_when_omitted() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, '{"fids":[1,1301],"dataVersion":12,"featureCount":884}')
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.split(1, _line())
+
+    assert transport.requests[-1].path == f"/api/layers/{LAYER_ID}/features/1/split"
+    assert transport.bodies[-1] == {"line": _line()}
+
+
+def test_split_with_row_version_sends_it() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, '{"fids":[1,1301],"dataVersion":12,"featureCount":884}')
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.split(1, _line(), row_version="875")
+
+    assert transport.bodies[-1] == {"line": _line(), "rowVersion": "875"}
+
+
+def test_split_reports_the_original_first_then_the_new_parts() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, '{"fids":[1,1301,1302],"dataVersion":12,"featureCount":885}')
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    result = layer.split(1, _line())
+
+    assert result.fids == [1, 1301, 1302]
+    assert result.new_fids == [1301, 1302]
+    assert result.data_version == 12
+    assert result.feature_count == 885
+    assert layer.feature_count == 885, "feature_count zieht nicht mit dem Ergebnis mit."
+
+
+def test_a_split_row_version_conflict_carries_the_current_row() -> None:
+    def handle(request: object) -> Response:
+        return Response(
+            409,
+            (
+                '{"detail":"Eine andere Stelle hat Objekt 1 zwischenzeitlich '
+                'geändert","status":409,"title":"Konflikt",'
+                '"current":{"fid":1,"row_version":"999"}}'
+            ),
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    with pytest.raises(hgis.ConflictError) as error:
+        layer.split(1, _line(), row_version="875")
+
+    assert error.value.status == 409
+    assert error.value.current == {"fid": 1, "row_version": "999"}
+
+
+def test_merge_sends_fids_lead_fid_and_row_versions_with_string_keys() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, '{"fid":1,"dataVersion":13,"featureCount":882}')
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.merge([1, 2, 3], 1, row_versions={1: "10", 2: "20", 3: "30"})
+
+    assert transport.requests[-1].path == f"/api/layers/{LAYER_ID}/features/merge"
+    assert transport.bodies[-1] == {
+        "fids": [1, 2, 3],
+        "leadFid": 1,
+        "rowVersions": {"1": "10", "2": "20", "3": "30"},
+    }
+
+
+def test_merge_without_row_versions_omits_the_key() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, '{"fid":1,"dataVersion":13,"featureCount":882}')
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.merge([1, 2], 1)
+
+    assert transport.bodies[-1] == {"fids": [1, 2], "leadFid": 1}
+
+
+def test_merge_reports_the_lead_fid_data_version_and_feature_count() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, '{"fid":2,"dataVersion":13,"featureCount":882}')
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    result = layer.merge([1, 2, 3], 2)
+
+    assert result.fid == 2
+    assert result.data_version == 13
+    assert result.feature_count == 882
+    assert layer.feature_count == 882, "feature_count zieht nicht mit dem Ergebnis mit."
+
+
+def test_merge_rejects_a_lead_fid_that_is_not_part_of_fids() -> None:
+    """
+    lead_fid ist eine Entscheidung, keine Reihenfolge -- ein Aufruf, der sie
+    versehentlich falsch herum benennt, darf gar nicht erst senden.
+    """
+
+    def handle(request: object) -> Response:  # pragma: no cover - must not run
+        raise AssertionError("Ein ungültiges lead_fid hätte nichts senden dürfen.")
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    with pytest.raises(hgis.InvalidArgumentError):
+        layer.merge([1, 2, 3], 99)
+
+    assert transport.count == 0
+
+
+def test_merge_rejects_a_scalar_iterable_for_fids() -> None:
+    def handle(request: object) -> Response:  # pragma: no cover - must not run
+        raise AssertionError("Eine Zeichenfolge statt einer Liste hätte nichts senden dürfen.")
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    with pytest.raises(hgis.InvalidArgumentError):
+        layer.merge("123", 1)
+
+    assert transport.count == 0
+
+
+def test_a_merge_row_version_conflict_carries_the_current_row() -> None:
+    def handle(request: object) -> Response:
+        return Response(
+            409,
+            (
+                '{"detail":"Eine andere Stelle hat Objekt 2 zwischenzeitlich '
+                'geändert","status":409,"title":"Konflikt",'
+                '"current":{"fid":2,"row_version":"77"}}'
+            ),
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    with pytest.raises(hgis.ConflictError) as error:
+        layer.merge([1, 2], 1, row_versions={1: "10", 2: "20"})
+
+    assert error.value.status == 409
+    assert error.value.current == {"fid": 2, "row_version": "77"}

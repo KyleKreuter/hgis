@@ -379,6 +379,19 @@ def _write_stub(
             },
         )
 
+    if method == "POST" and path.startswith(f"/api/layers/{LAYER_ID}/features/") and path.endswith(
+        "/split"
+    ):
+        split_fid = int(path.rsplit("/", 2)[-2])
+        return _json_response(
+            200, {"fids": [split_fid, 1301], "dataVersion": 77, "featureCount": 1004}
+        )
+
+    if method == "POST" and path == f"/api/layers/{LAYER_ID}/features/merge":
+        return _json_response(
+            200, {"fid": body["leadFid"], "dataVersion": 78, "featureCount": 1001}
+        )
+
     if method == "POST" and path == f"/api/layers/{LAYER_ID}/fields":
         return _json_response(
             201,
@@ -1504,3 +1517,61 @@ def test_layer_id_alone_needs_no_project(mcp_client, transport) -> None:
     result = update_layer(LAYER_ID, visible=True)
 
     assert "sichtbar geschaltet" in result.summary
+
+
+# --- split_feature and merge_features (Aufgabe 21, Paket A) -----------------
+
+
+def _line() -> dict:
+    return {"type": "LineString", "coordinates": [[9.98, 53.54], [9.982, 53.542]]}
+
+
+def test_split_feature_reads_the_row_version_first_then_sends_the_cut(
+    mcp_client, transport
+) -> None:
+    from hgis.mcp.write_tools import split_feature
+
+    result = split_feature(LAYER_ID, 1, _line())
+
+    assert result.inserted == 1
+    assert result.updated == 1
+    assert result.new_fids == [1301]
+    assert "geteilt" in result.summary
+    assert "1301" in result.summary
+
+    split_request = next(r for r in transport.requests if r.path.endswith("/split"))
+    assert split_request.path == f"/api/layers/{LAYER_ID}/features/1/split"
+    body = _body_of(transport, split_request)
+    assert body == {"line": _line(), "rowVersion": "rv-1"}
+
+
+def test_merge_features_reads_every_row_version_and_reports_what_was_kept(
+    mcp_client, transport
+) -> None:
+    from hgis.mcp.write_tools import merge_features
+
+    result = merge_features(LAYER_ID, [1, 2, 3], lead_fid=1)
+
+    assert result.updated == 1
+    assert result.deleted == 2
+    assert "zu Objekt" in result.summary
+
+    merge_request = next(r for r in transport.requests if r.path.endswith("/features/merge"))
+    body = _body_of(transport, merge_request)
+    assert body == {
+        "fids": [1, 2, 3],
+        "leadFid": 1,
+        "rowVersions": {"1": "rv-1", "2": "rv-2", "3": "rv-3"},
+    }
+
+
+def test_merge_features_with_a_lead_fid_outside_the_selection_sends_nothing(
+    mcp_client, transport
+) -> None:
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import merge_features
+
+    with pytest.raises(ToolError, match="lead_fid"):
+        merge_features(LAYER_ID, [1, 2, 3], lead_fid=99)
+
+    assert not any(r.path.endswith("/features/merge") for r in transport.requests)

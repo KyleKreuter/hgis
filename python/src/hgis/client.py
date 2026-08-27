@@ -6,7 +6,7 @@ import os
 import re
 import threading
 import uuid
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, Mapping
 from urllib.parse import urljoin, urlsplit
 
 from .channel import ChannelItem
@@ -192,9 +192,11 @@ _EVENTS_PATH = "/api/events"
 #: in -- inspecting a file or upload before anything is written
 #: (:meth:`Client.inspect_import`), importing one into a new layer
 #: (:meth:`Client.start_import`), and the same from the Geoportal Hamburg
-#: instead of a file (:meth:`Client.start_geoportal_import`). Every other
-#: method or path is refused before it reaches the network -- split, merge
-#: and layer reordering among them, which this stage does not open.
+#: instead of a file (:meth:`Client.start_geoportal_import`); one saved
+#: feature split along a line, and several saved features merged into one
+#: (:meth:`hgis.layer.Layer.split`, :meth:`hgis.layer.Layer.merge`). Every
+#: other method or path is refused before it reaches the network -- layer
+#: reordering among them, which this stage does not open.
 #:
 #: A deleted project has no trash behind it, the same as a purged layer --
 #: :meth:`Client.delete_project` is as final as :meth:`Client.purge_layer`
@@ -228,6 +230,9 @@ _ALLOWED: tuple[tuple[str, str], ...] = (
     ("POST", rf"/api/layers/{_UUID}/edits"),
     ("POST", rf"/api/layers/{_UUID}/fields"),
     ("DELETE", rf"/api/layers/{_UUID}/fields/{_UUID}"),
+    # --- Paket A (Aufgabe 21): Objekt teilen und Objekte zusammenführen ---
+    ("POST", rf"/api/layers/{_UUID}/features/\d+/split"),
+    ("POST", rf"/api/layers/{_UUID}/features/merge"),
 )
 
 
@@ -250,10 +255,11 @@ def _check_allowed(method: str, url: str) -> None:
         "Layer anlegen, ändern, löschen, wiederherstellen oder endgültig löschen "
         "(project.create_layer(), layer.update()/.delete()/.restore()/.purge()), "
         "ein Stapel Objekt-Änderungen (layer.edit(), layer.insert(), "
-        "layer.update_feature(), layer.delete_features()), ein Feld anlegen "
-        "oder löschen (layer.create_field(), layer.delete_field()) sowie Daten "
-        "hereinholen (project.inspect_import(), project.import_file(), "
-        "project.import_geoportal())."
+        "layer.update_feature(), layer.delete_features()), ein Objekt teilen "
+        "oder mehrere zusammenführen (layer.split(), layer.merge()), ein Feld "
+        "anlegen oder löschen (layer.create_field(), layer.delete_field()) "
+        "sowie Daten hereinholen (project.inspect_import(), "
+        "project.import_file(), project.import_geoportal())."
     )
 
 
@@ -659,6 +665,57 @@ class Client:
 
         items = self.get("/api/basemaps")["basemaps"]
         return [_to_basemap(item) for item in items]
+
+    # --- structural: splitting and merging (Aufgabe 21, Paket A) -----------
+
+    def split_feature(
+        self,
+        layer_id: str,
+        fid: int,
+        line: Mapping[str, Any],
+        *,
+        row_version: str | None = None,
+    ) -> Any:
+        """
+        Cut one saved feature along ``line``. See :meth:`hgis.layer.Layer.split`,
+        which is how to call this.
+
+        :param line: GeoJSON ``LineString`` or ``MultiLineString`` in
+            EPSG:4326 -- the same shape ``shapely.geometry.mapping(line)``
+            produces, so a caller doing the cut geometry with Shapely can pass
+            its result straight through
+        :param row_version: the fid's ``xmin`` as it was read; a mismatch
+            raises :class:`hgis.errors.ConflictError`. Omitted, no conflict
+            check is made -- the same rule :meth:`apply_edits` follows for an
+            update.
+        """
+        body: dict[str, Any] = {"line": dict(line)}
+        if row_version is not None:
+            body["rowVersion"] = row_version
+        return self._send("POST", f"/api/layers/{layer_id}/features/{fid}/split", json=body)
+
+    def merge_features(
+        self,
+        layer_id: str,
+        fids: Iterable[int],
+        lead_fid: int,
+        *,
+        row_versions: Mapping[int, str] | None = None,
+    ) -> Any:
+        """
+        Join several saved features into ``lead_fid``. See
+        :meth:`hgis.layer.Layer.merge`, which is how to call this.
+
+        :param row_versions: the ``xmin`` per fid, as it was read, keyed by
+            fid. Converted here to the string keys the wire body needs --
+            JSON object keys are always strings, and a caller of this library
+            should not have to know that. A fid missing from the mapping
+            skips its own conflict check.
+        """
+        body: dict[str, Any] = {"fids": [int(fid) for fid in fids], "leadFid": int(lead_fid)}
+        if row_versions:
+            body["rowVersions"] = {str(fid): version for fid, version in row_versions.items()}
+        return self._send("POST", f"/api/layers/{layer_id}/features/merge", json=body)
 
     # --- HTTP --------------------------------------------------------------
 
