@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterator, Mapping, Sequence
 
-from .errors import UnknownNameError
+from .errors import InvalidArgumentError, UnknownNameError
 
 if TYPE_CHECKING:
     from .client import Client
@@ -186,6 +186,99 @@ class Project:
         )
         return Layer(self._client, data, project=self)
 
+    def reorder_layers(
+        self, layer_ids_bottom_to_top: Sequence["Layer | str"]
+    ) -> list["Layer"]:
+        """
+        Write this project's whole drawing order in one call -- lowest
+        first, the same order :meth:`layers` returns.
+
+        Dragging one layer in the tree changes the position of every layer
+        it passes, so the server accepts only the complete order, never a
+        delta: this has to name every layer the project has, each exactly
+        once, or the write is refused outright and nothing changes -- there
+        is no partial reorder to accidentally leave a layer out of. See
+        :meth:`move_layer` to move one layer without building this whole
+        list by hand.
+
+        >>> layers = project.layers()
+        >>> project.reorder_layers([layers[1], layers[0], *layers[2:]])
+
+        :param layer_ids_bottom_to_top: every layer of this project, each
+            once, as a :class:`~hgis.layer.Layer` or its id
+        :raises hgis.errors.ApiError: the list leaves a layer out, names an
+            unknown one, or repeats one -- named in the server's own message
+        :return: every layer of the project, in its new order, bottom first
+        """
+        from .layer import Layer
+
+        ids = [item if isinstance(item, str) else item.id for item in layer_ids_bottom_to_top]
+        data = self._client.reorder_layers(self.id, ids)
+        return [Layer(self._client, item, project=self) for item in data]
+
+    def move_layer(
+        self,
+        layer: "Layer | str",
+        *,
+        to_top: bool = False,
+        to_bottom: bool = False,
+        above: "Layer | str | None" = None,
+        below: "Layer | str | None" = None,
+    ) -> list["Layer"]:
+        """
+        Move one layer to a new position among this project's others,
+        without naming every layer by hand the way :meth:`reorder_layers`
+        itself requires.
+
+        Reads the current order fresh, works out where ``layer`` belongs,
+        and sends the complete list on -- the only way the server accepts a
+        reorder at all, so this can never lose one: the set it sends always
+        comes from :meth:`layers` just now, never from what a caller
+        remembered or half-built.
+
+        Exactly one of the four keywords.
+
+        >>> project.move_layer(new_layer, to_top=True)
+        >>> project.move_layer(mask, above=base_layer)  # direkt über base_layer
+
+        :param above: put ``layer`` directly above this one -- i.e. right
+            after it in the bottom-to-top order this returns
+        :param below: put ``layer`` directly below this one
+        :raises hgis.errors.InvalidArgumentError: not exactly one of
+            ``to_top``/``to_bottom``/``above``/``below`` was given
+        :raises hgis.errors.UnknownNameError: ``layer``, ``above`` or
+            ``below`` names a layer this project does not have
+        :return: every layer of the project, in its new order, bottom first
+        """
+        chosen = [to_top, to_bottom, above is not None, below is not None]
+        if sum(1 for value in chosen if value) != 1:
+            raise InvalidArgumentError(
+                "Genau eins von to_top, to_bottom, above oder below angeben."
+            )
+
+        ids = [item.id for item in self.layers()]
+        moving_id = layer if isinstance(layer, str) else layer.id
+        if moving_id not in ids:
+            raise UnknownNameError(
+                f"Layer {moving_id} gehört nicht zu Projekt '{self.name}'."
+            )
+        ids.remove(moving_id)
+
+        if to_top:
+            ids.append(moving_id)
+        elif to_bottom:
+            ids.insert(0, moving_id)
+        else:
+            anchor = above if above is not None else below
+            anchor_id = anchor if isinstance(anchor, str) else anchor.id
+            if anchor_id not in ids:
+                raise UnknownNameError(
+                    f"Layer {anchor_id} gehört nicht zu Projekt '{self.name}'."
+                )
+            ids.insert(ids.index(anchor_id) + (1 if above is not None else 0), moving_id)
+
+        return self.reorder_layers(ids)
+
     def update(
         self,
         *,
@@ -358,6 +451,66 @@ class Project:
             self.id, dataset_id, bbox=bbox, fields=fields, name=name
         )
         return Job(self._client, data, project_id=self.id)
+
+    # --- duplicating ---------------------------------------------------
+
+    def duplicate(
+        self,
+        name: str | None = None,
+        *,
+        wait: bool = True,
+        timeout: float | None = None,
+    ) -> "Project | Job":
+        """
+        Copy this whole project -- every layer, every object, its style and
+        properties -- into a new, independent one. The original is never
+        touched.
+
+        The most useful of hGIS's write paths for an agent that wants to try
+        something on real data: duplicate first, work on the copy, then
+        :meth:`hgis.client.Client.delete_project` it when done, instead of
+        risking a project a person has open. What does **not** come along:
+        the saved view state (:meth:`select`'s selection, per-layer sort and
+        filter -- it would name layer ids the copy does not have) and each
+        layer's trash; a copy always opens clean.
+
+        Runs on the server as a job, like :meth:`import_file` -- but unlike
+        an import, copying a large project can take a while, so ``wait``
+        defaults to True here and this blocks until the copy is done,
+        handing back the finished :class:`Project` directly rather than a
+        :class:`~hgis.jobs.Job` to follow up on by hand.
+
+        >>> scratch = project.duplicate("Testfläche")
+        >>> scratch.create_layer("Punkte", "MULTIPOINT")  # ausprobieren
+        >>> client.delete_project(scratch.id)
+
+        :param name: the new project's name. None names it the way the UI's
+            own duplicate button does -- ``"<Name> (Kopie)"``, then
+            ``"<Name> (Kopie 2)"`` and so on
+        :param wait: block until the copy is finished (or fails) and return
+            it. False returns the still-``PENDING`` :class:`~hgis.jobs.Job`
+            right away instead, for a copy expected to take longer than is
+            worth blocking for
+        :param timeout: seconds to wait, when ``wait`` is True. None waits
+            without limit; a copy still not done when ``timeout`` elapses
+            comes back as the still-running :class:`~hgis.jobs.Job`, the
+            same as a failed one -- check :attr:`~hgis.jobs.Job.done` and
+            :attr:`~hgis.jobs.Job.failed` to tell the two apart, and follow
+            up with :meth:`hgis.jobs.Job.wait` or
+            :func:`hgis.mcp.write_tools.duplicate_wait`
+        :return: the finished copy, or the :class:`~hgis.jobs.Job` when
+            ``wait`` is False, it failed, or ``timeout`` elapsed first
+        """
+        from .jobs import Job
+
+        data = self._client.duplicate_project(self.id, name=name)
+        job = Job(self._client, data, project_id=self.id)
+        if not wait:
+            return job
+        job.wait(timeout=timeout)
+        if job.succeeded and job.output_project_id:
+            return self._client.project(job.output_project_id)
+        return job
 
     # --- what the user is looking at ---------------------------------------
 

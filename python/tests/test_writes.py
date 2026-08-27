@@ -1090,6 +1090,7 @@ def test_a_row_version_conflict_carries_the_current_row() -> None:
         lambda layer, project: layer.delete_features([1]),
         lambda layer, project: layer.create_field("Neu", "TEXT"),
         lambda layer, project: layer.delete_field(layer.fields()[0]),
+        lambda layer, project: project.reorder_layers([layer.id]),
     ],
     ids=[
         "create_layer",
@@ -1101,6 +1102,7 @@ def test_a_row_version_conflict_carries_the_current_row() -> None:
         "delete_features",
         "create_field",
         "delete_field",
+        "reorder_layers",
     ],
 )
 def test_every_write_carries_the_client_name(act) -> None:
@@ -1132,6 +1134,13 @@ def test_every_write_carries_the_client_name(act) -> None:
             )
         if path.endswith("/restore"):
             return Response(204, "")
+        if path.endswith("/layers/order") and request.method == "PUT":
+            return Response(
+                200,
+                f'[{{"id":"{LAYER_ID}","name":"N","kind":"VECTOR",'
+                '"geometryType":"MULTIPOLYGON","srid":25832,'
+                '"featureCount":1003,"visible":true}]',
+            )
         if request.method == "GET":
             return Response(
                 200,
@@ -1151,3 +1160,291 @@ def test_every_write_carries_the_client_name(act) -> None:
     assert writes, "Der Testfall hat keinen Schreibvorgang ausgelöst."
     for request in writes:
         assert request.headers.get(hgis.client.CLIENT_HEADER) == "agent-a"
+
+
+# --- Paket 21-B: Projekt duplizieren, Layer neu ordnen --------------------
+
+DUP_JOB_ID = "019ff9aa-8888-9999-0000-111122223333"
+DUP_COPY_ID = "019ff9aa-2222-3333-4444-555566667777"
+LAYER_A_ID = "019fecb8-6f1d-7f11-abbf-beeeb5953247"
+LAYER_B_ID = "019fecc1-48a2-76b7-8732-019e83d5532a"
+LAYER_C_ID = "019fecc2-58a3-77c8-8843-12ab34cd56ef"
+
+
+def _layers_json(ids_bottom_to_top: list[str]) -> str:
+    """The shape ``GET .../layers`` and ``PUT .../layers/order`` both answer with."""
+    names = {LAYER_A_ID: "A", LAYER_B_ID: "B", LAYER_C_ID: "C"}
+    items = ",".join(
+        f'{{"id":"{lid}","name":"{names.get(lid, lid)}","kind":"VECTOR",'
+        '"geometryType":"MULTIPOLYGON","srid":25832,"featureCount":0,"visible":true}'
+        for lid in ids_bottom_to_top
+    )
+    return f"[{items}]"
+
+
+def _duplicate_job_json(status: str, *, output_project_id: str | None = None) -> str:
+    output = f'"{output_project_id}"' if output_project_id else "null"
+    return (
+        f'{{"id":"{DUP_JOB_ID}","type":"DUPLICATE","status":"{status}",'
+        f'"filename":null,"processedCount":0,"totalCount":null,"skippedCount":0,'
+        f'"outputLayerId":null,"outputProjectId":{output},"message":null,'
+        f'"startedAt":null,"finishedAt":null,"createdAt":"2026-01-01T00:00:00Z"}}'
+    )
+
+
+def test_client_duplicate_project_sends_only_the_given_name() -> None:
+    def handle(request: object) -> Response:
+        return Response(202, _duplicate_job_json("PENDING"))
+
+    client, transport = _client(handle)
+
+    client.duplicate_project(PROJECT_ID)
+
+    assert transport.requests[-1].method == "POST"
+    assert transport.requests[-1].path == f"/api/projects/{PROJECT_ID}/duplicate"
+    assert transport.bodies[-1] == {}
+
+
+def test_client_duplicate_project_sends_the_name_when_given() -> None:
+    def handle(request: object) -> Response:
+        return Response(202, _duplicate_job_json("PENDING"))
+
+    client, transport = _client(handle)
+
+    client.duplicate_project(PROJECT_ID, name="Testfläche")
+
+    assert transport.bodies[-1] == {"name": "Testfläche"}
+
+
+def test_client_reorder_layers_sends_the_ids_bottom_to_top_in_order() -> None:
+    order = [LAYER_C_ID, LAYER_A_ID, LAYER_B_ID]
+
+    def handle(request: object) -> Response:
+        return Response(200, _layers_json(order))
+
+    client, transport = _client(handle)
+
+    client.reorder_layers(PROJECT_ID, order)
+
+    assert transport.requests[-1].method == "PUT"
+    assert transport.requests[-1].path == f"/api/projects/{PROJECT_ID}/layers/order"
+    assert transport.bodies[-1] == {"layerIdsBottomToTop": order}
+
+
+def test_project_reorder_layers_accepts_layer_objects_or_bare_ids() -> None:
+    order = [LAYER_C_ID, LAYER_A_ID, LAYER_B_ID]
+
+    def handle(request: object) -> Response:
+        return Response(200, _layers_json(order))
+
+    client, transport = _client(handle)
+    project = _project(client)
+    layer_c = hgis.Layer(client, {"id": LAYER_C_ID, "name": "C", "kind": "VECTOR"})
+
+    result = project.reorder_layers([layer_c, LAYER_A_ID, LAYER_B_ID])
+
+    assert transport.bodies[-1] == {"layerIdsBottomToTop": order}
+    assert [layer.name for layer in result] == ["C", "A", "B"]
+    assert all(isinstance(layer, hgis.Layer) for layer in result)
+
+
+def test_project_move_layer_requires_exactly_one_target() -> None:
+    client, _ = _client(lambda request: Response(200, _layers_json([LAYER_A_ID])))
+    project = _project(client)
+
+    with pytest.raises(hgis.InvalidArgumentError):
+        project.move_layer(LAYER_A_ID)  # nichts angegeben
+    with pytest.raises(hgis.InvalidArgumentError):
+        project.move_layer(LAYER_A_ID, to_top=True, to_bottom=True)  # zwei angegeben
+
+
+def test_project_move_layer_rejects_a_layer_outside_this_project() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, _layers_json([LAYER_A_ID, LAYER_B_ID]))
+
+    client, _ = _client(handle)
+    project = _project(client)
+
+    with pytest.raises(hgis.UnknownNameError):
+        project.move_layer(LAYER_C_ID, to_top=True)
+
+
+def test_project_move_layer_rejects_an_unknown_anchor() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, _layers_json([LAYER_A_ID, LAYER_B_ID]))
+
+    client, _ = _client(handle)
+    project = _project(client)
+
+    with pytest.raises(hgis.UnknownNameError):
+        project.move_layer(LAYER_A_ID, above=LAYER_C_ID)
+
+
+def test_project_move_layer_to_top_sends_the_full_order_with_it_last() -> None:
+    """
+    The trap CONTRACT.md's Aufgabe 21 names: an agent that wants to raise one
+    layer must not have to name every other one by hand, and must never end
+    up sending a list that silently drops one. This reads the current order
+    fresh (the first GET below) and sends every layer back, moved.
+    """
+    calls: list[str] = []
+
+    def handle(request: object) -> Response:
+        calls.append(request.method)
+        if request.method == "GET":
+            return Response(200, _layers_json([LAYER_A_ID, LAYER_B_ID, LAYER_C_ID]))
+        return Response(200, _layers_json([LAYER_B_ID, LAYER_C_ID, LAYER_A_ID]))
+
+    client, transport = _client(handle)
+    project = _project(client)
+
+    result = project.move_layer(LAYER_A_ID, to_top=True)
+
+    assert calls == ["GET", "PUT"], "move_layer muss die aktuelle Reihenfolge frisch lesen."
+    assert transport.bodies[-1] == {
+        "layerIdsBottomToTop": [LAYER_B_ID, LAYER_C_ID, LAYER_A_ID]
+    }
+    assert [layer.id for layer in result] == [LAYER_B_ID, LAYER_C_ID, LAYER_A_ID]
+
+
+def test_project_move_layer_to_bottom_sends_the_full_order_with_it_first() -> None:
+    def handle(request: object) -> Response:
+        if request.method == "GET":
+            return Response(200, _layers_json([LAYER_A_ID, LAYER_B_ID, LAYER_C_ID]))
+        return Response(200, _layers_json([LAYER_C_ID, LAYER_A_ID, LAYER_B_ID]))
+
+    client, transport = _client(handle)
+    project = _project(client)
+
+    project.move_layer(LAYER_C_ID, to_bottom=True)
+
+    assert transport.bodies[-1] == {
+        "layerIdsBottomToTop": [LAYER_C_ID, LAYER_A_ID, LAYER_B_ID]
+    }
+
+
+def test_project_move_layer_above_inserts_directly_after_the_anchor() -> None:
+    """'above' in the bottom-to-top order this library uses -- one slot later, not earlier."""
+
+    def handle(request: object) -> Response:
+        if request.method == "GET":
+            return Response(200, _layers_json([LAYER_A_ID, LAYER_B_ID, LAYER_C_ID]))
+        return Response(200, _layers_json([LAYER_B_ID, LAYER_A_ID, LAYER_C_ID]))
+
+    client, transport = _client(handle)
+    project = _project(client)
+
+    project.move_layer(LAYER_A_ID, above=LAYER_B_ID)
+
+    assert transport.bodies[-1] == {
+        "layerIdsBottomToTop": [LAYER_B_ID, LAYER_A_ID, LAYER_C_ID]
+    }
+
+
+def test_project_move_layer_below_inserts_directly_before_the_anchor() -> None:
+    def handle(request: object) -> Response:
+        if request.method == "GET":
+            return Response(200, _layers_json([LAYER_A_ID, LAYER_B_ID, LAYER_C_ID]))
+        return Response(200, _layers_json([LAYER_A_ID, LAYER_C_ID, LAYER_B_ID]))
+
+    client, transport = _client(handle)
+    project = _project(client)
+
+    project.move_layer(LAYER_C_ID, below=LAYER_B_ID)
+
+    assert transport.bodies[-1] == {
+        "layerIdsBottomToTop": [LAYER_A_ID, LAYER_C_ID, LAYER_B_ID]
+    }
+
+
+def test_project_duplicate_wait_false_returns_the_job_right_away() -> None:
+    def handle(request: object) -> Response:
+        return Response(202, _duplicate_job_json("PENDING"))
+
+    client, transport = _client(handle)
+    project = _project(client)
+
+    result = project.duplicate("Kopie-Test", wait=False)
+
+    assert isinstance(result, hgis.Job)
+    assert result.status == "PENDING"
+    assert result.type == "DUPLICATE"
+    assert transport.bodies[-1] == {"name": "Kopie-Test"}
+    assert len(transport.requests) == 1, "wait=False darf nicht auf den Job warten."
+
+
+def test_project_duplicate_waits_and_returns_the_finished_copy(monkeypatch) -> None:
+    """
+    The default: an agent that duplicates gets a working :class:`hgis.Project`
+    back, not a job id to poll by hand -- see the module docstring's own
+    reasoning in ``project.py``.
+    """
+    import hgis.jobs as jobs_module
+
+    monkeypatch.setattr(jobs_module, "_DUPLICATE_POLL_INTERVAL", 0.01)
+    job_gets = {"count": 0}
+
+    def handle(request: object) -> Response:
+        path = request.path
+        if path.endswith("/duplicate") and request.method == "POST":
+            return Response(202, _duplicate_job_json("PENDING"))
+        if path == f"/api/jobs/{DUP_JOB_ID}":
+            job_gets["count"] += 1
+            if job_gets["count"] == 1:
+                return Response(200, _duplicate_job_json("RUNNING", output_project_id=DUP_COPY_ID))
+            return Response(200, _duplicate_job_json("SUCCEEDED", output_project_id=DUP_COPY_ID))
+        if path == f"/api/projects/{DUP_COPY_ID}":
+            return Response(
+                200,
+                f'{{"id":"{DUP_COPY_ID}","name":"P (Kopie)","description":null,"srid":25832,'
+                '"basemap":"osm","basemapOpacity":1.0,"center":null,"zoom":null,'
+                '"extent":null,"layerCount":1,"featureCount":1003,'
+                '"lastOpenedAt":null,"createdAt":"2026-01-01T00:00:00Z",'
+                '"updatedAt":"2026-01-01T00:00:00Z"}',
+            )
+        raise AssertionError(f"unerwarteter Aufruf: {request.method} {path}")
+
+    client, transport = _client(handle)
+    project = _project(client)
+
+    result = project.duplicate()
+
+    assert isinstance(result, hgis.Project)
+    assert result.id == DUP_COPY_ID
+    assert result.name == "P (Kopie)"
+    assert transport.bodies[0] == {}
+
+
+def test_project_duplicate_returns_the_job_when_it_failed(monkeypatch) -> None:
+    """
+    A failed copy is reported, not raised -- the same convention
+    ``hgis.mcp.write_tools.import_file`` follows for a failed import: data
+    an agent can check (:attr:`hgis.jobs.Job.failed`, :attr:`~hgis.jobs.Job.message`),
+    not an exception it has to catch to learn why.
+    """
+    import hgis.jobs as jobs_module
+
+    monkeypatch.setattr(jobs_module, "_DUPLICATE_POLL_INTERVAL", 0.01)
+
+    def handle(request: object) -> Response:
+        path = request.path
+        if path.endswith("/duplicate") and request.method == "POST":
+            return Response(202, _duplicate_job_json("PENDING"))
+        assert path == f"/api/jobs/{DUP_JOB_ID}"
+        return Response(
+            200,
+            '{"id":"' + DUP_JOB_ID + '","type":"DUPLICATE","status":"FAILED",'
+            '"filename":null,"processedCount":0,"totalCount":null,"skippedCount":0,'
+            '"outputLayerId":null,"outputProjectId":null,'
+            '"message":"Name bereits vergeben","startedAt":null,"finishedAt":null,'
+            '"createdAt":"2026-01-01T00:00:00Z"}',
+        )
+
+    client, _ = _client(handle)
+    project = _project(client)
+
+    result = project.duplicate()
+
+    assert isinstance(result, hgis.Job)
+    assert result.failed
+    assert result.message == "Name bereits vergeben"

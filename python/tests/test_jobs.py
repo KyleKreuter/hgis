@@ -223,3 +223,81 @@ def test_repr_names_id_type_and_status() -> None:
     job = hgis.Job(client, jsonlib.loads(_job_body("RUNNING")), project_id=PROJECT_ID)
 
     assert repr(job) == f"<hgis.Job {JOB_ID} IMPORT RUNNING>"
+
+
+# --- DUPLICATE jobs: wait() polls instead of listening on the channel ------
+#
+# See Job._wait_by_polling's own docstring for why: the class only ever
+# listens for a catalog event on the *source* project (the one it is handed
+# at construction), but a duplicate's own completion is announced -- if at
+# all -- on the *target* project, whose id is not even known until the job
+# has actually started. A failed duplicate announces nothing at all. Both
+# tests below prove the channel is never opened for a DUPLICATE job, the
+# same load-bearing assertion the IMPORT tests above make about the opposite
+# case.
+
+PROJECT_COPY_ID = "019ff9aa-2222-3333-4444-555566667777"
+
+
+def _duplicate_job_body(status: str, **overrides: object) -> str:
+    return _job_body(status, type="DUPLICATE", **overrides)
+
+
+def test_wait_polls_a_duplicate_job_instead_of_opening_the_channel(monkeypatch) -> None:
+    """A DUPLICATE job reaches SUCCEEDED by repeated refresh() alone, never events()."""
+    import hgis.jobs as jobs_module
+
+    monkeypatch.setattr(jobs_module, "_DUPLICATE_POLL_INTERVAL", 0.01)
+    transport = _JobTransport(
+        job_bodies=[
+            _duplicate_job_body("PENDING"),
+            _duplicate_job_body("RUNNING", outputProjectId=PROJECT_COPY_ID),
+            _duplicate_job_body("SUCCEEDED", outputProjectId=PROJECT_COPY_ID),
+        ],
+        # A catalog change sitting right there, matching this job's own
+        # project id -- wait() must not even look at it for a DUPLICATE job.
+        channel_items=[_catalog_change()],
+    )
+    client = _client(transport)
+    job = hgis.Job(client, jsonlib.loads(_duplicate_job_body("PENDING")), project_id=PROJECT_ID)
+
+    result = job.wait(timeout=5)
+
+    assert result is job
+    assert job.succeeded
+    assert job.output_project_id == PROJECT_COPY_ID
+    assert transport.events_opened == 0, "eine DUPLICATE-wait() darf den Live-Kanal nicht öffnen."
+    assert len(transport.requests) == 3
+
+
+def test_wait_gives_up_on_a_duplicate_job_after_the_deadline() -> None:
+    """
+    A duplicate still RUNNING when the deadline passes -- wait() returns
+    the current, unfinished state rather than blocking past ``timeout``.
+    """
+    transport = _JobTransport(
+        job_bodies=[_duplicate_job_body("PENDING"), _duplicate_job_body("RUNNING")],
+    )
+    client = _client(transport)
+    job = hgis.Job(client, jsonlib.loads(_duplicate_job_body("PENDING")), project_id=PROJECT_ID)
+
+    result = job.wait(timeout=0.15)
+
+    assert result is job
+    assert not job.done
+    assert job.status == "RUNNING"
+    assert transport.events_opened == 0
+    assert len(transport.requests) == 2, "genau ein refresh() vor und eins nach der Frist"
+
+
+def test_output_project_id_reads_the_field_the_import_job_never_carries() -> None:
+    client = _client(_JobTransport(job_bodies=[]))
+    job = hgis.Job(
+        client, jsonlib.loads(_duplicate_job_body("RUNNING", outputProjectId=PROJECT_COPY_ID)),
+        project_id=PROJECT_ID,
+    )
+
+    assert job.output_project_id == PROJECT_COPY_ID
+
+    import_job = hgis.Job(client, jsonlib.loads(_job_body("RUNNING")), project_id=PROJECT_ID)
+    assert import_job.output_project_id is None

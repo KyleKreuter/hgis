@@ -261,6 +261,46 @@ was das wäre, ohne etwas zu zerstören. Der MCP-Server verlangt für diesen
 Weg zusätzlich den Projektnamen wörtlich als zweite Angabe -- siehe
 [Die Werkzeuge](#die-werkzeuge).
 
+### Projekt duplizieren
+
+```python
+eigenes = client.create_project("agent-duplicate-test")
+eigenes.create_layer("Punkte", "MULTIPOINT", fields={"Name": "TEXT"})
+
+kopie = eigenes.duplicate()
+print(kopie.name, kopie.layer_count, kopie.feature_count)
+
+client.delete_project(eigenes.id)
+client.delete_project(kopie.id)
+```
+
+Ausgeführt:
+
+```
+agent-duplicate-test (Kopie) 1 0
+```
+
+Der nützlichste Schreibweg für einen Agenten, der mit echten Daten etwas
+ausprobieren will, ohne das Original zu riskieren: jeder Layer, jedes
+Objekt, Stil und Eigenschaften kommen mit. Nicht mitkopiert werden der
+gespeicherte Kartenausschnitt samt Auswahl und der Papierkorb jedes Layers
+-- eine Kopie startet sauber.
+
+Läuft im Hintergrund als Job, wie `import_file()` -- anders als dort wartet
+`duplicate()` aber standardmäßig darauf und gibt das fertige `Project`
+direkt zurück, kein `Job` zum selbst Nachfassen. `wait=False` gibt den noch
+laufenden `Job` sofort zurück, für eine Kopie, die absehbar zu lange dauert,
+um darauf zu warten:
+
+```python
+job = eigenes.duplicate(wait=False)
+job.wait(timeout=120)
+```
+
+Schlägt der Job fehl, oder läuft `timeout` ab, bevor er fertig ist, kommt
+statt des `Project` derselbe `Job` zurück -- `job.failed`/`job.message`
+unterscheiden die beiden Fälle.
+
 ### Layer anlegen, ändern, löschen
 
 ```python
@@ -291,6 +331,39 @@ etwas zu berichten. Die Rückgabe bleibt `TrashEntry | None`: Antwortet ein
 Endpunkt einmal mit einem leeren 204 statt einem Rumpf, liefert die
 Bibliothek `None`, statt eine Objektzahl aus dem zu raten, was sie vor dem
 Aufruf über den Layer wusste -- das könnte inzwischen nicht mehr stimmen.
+
+### Layer neu ordnen
+
+```python
+projekt = client.create_project("agent-reorder-test")
+a = projekt.create_layer("A", "MULTIPOINT")
+b = projekt.create_layer("B", "MULTIPOLYGON")
+c = projekt.create_layer("C", "MULTILINESTRING")
+
+projekt.move_layer(a, to_top=True)
+print([l.name for l in projekt.layers()])
+
+projekt.reorder_layers([c.id, a.id, b.id])
+print([l.name for l in projekt.layers()])
+
+client.delete_project(projekt.id)
+```
+
+Ausgeführt:
+
+```
+['B', 'C', 'A']
+['C', 'A', 'B']
+```
+
+Der Server verlangt für `reorder_layers()` jeden Layer des Projekts genau
+einmal, von unten nach oben -- fehlt einer, wird nichts geändert, statt
+teilweise zu schreiben. `move_layer()` ist der bequemere Weg für den
+häufigen Fall, nur einen Layer zu verschieben: es liest die aktuelle
+Reihenfolge frisch und schickt sie komplett neu, ohne dass der Aufrufer sie
+selbst zusammenstellen muss -- und ohne die Gefahr, dabei versehentlich
+einen Layer zu vergessen. Genau eins von `to_top`, `to_bottom`, `above`,
+`below` angeben.
 
 ### Stil setzen
 
@@ -460,13 +533,13 @@ Parameter ist es nicht von selbst.
 `RequestGuard` prüft jede Anfrage gegen eine feste Liste, bevor sie den
 Transport erreicht -- egal ob sie über `client.get(...)` kommt oder direkt
 über `client._send(...)`. Erlaubt sind lesende Anfragen (jedes `GET`) sowie
-genau die Schreibvorgänge oben. Alles andere -- Layer neu ordnen, Objekte
-teilen oder zusammenführen -- lehnt die Bibliothek mit `hgis.GuardError` ab,
-bevor der Server sie sieht.
+genau die Schreibvorgänge oben. Alles andere -- Objekte teilen oder
+zusammenführen etwa -- lehnt die Bibliothek mit `hgis.GuardError` ab, bevor
+der Server sie sieht.
 
 ```python
->>> client._send("PUT", f"/api/projects/{pid}/layers/order", json={})
-hgis.errors.GuardError: PUT /api/projects/.../layers/order ist nicht
+>>> client._send("POST", f"/api/layers/{lid}/features/merge", json={})
+hgis.errors.GuardError: POST /api/layers/.../features/merge ist nicht
 vorgesehen. Erlaubt sind lesende Anfragen, project.select() und die
 Schreibwege dieser Stufe: ...
 ```
@@ -1086,7 +1159,7 @@ field_classes(layer="Gebäude Speicherstadt", project="Leitungsnetz Nord",
 `breaks` hat `classes + 1` Einträge -- jede Untergrenze plus das Maximum --,
 außer das Feld hat weniger unterschiedliche Werte, als `classes` verlangt.
 
-Neunzehn schreibende. Auswahl und Ansicht kosten nichts, wenn ein Aufruf
+Dreiundzwanzig schreibende. Auswahl und Ansicht kosten nichts, wenn ein Aufruf
 danebengeht -- der nächste setzt beides wieder zurecht. Projekte, Objekte,
 Layer, Felder und Stil sind unterschiedlich weit rückgängig zu machen,
 dieselbe Unterscheidung wie in
@@ -1098,6 +1171,8 @@ dieselbe Unterscheidung wie in
 | `set_view(project, layer=, center=, zoom=)` | bewegt die Karte, wechselt den aktiven Layer | ja, jederzeit |
 | `create_project(name, description=, srid=, basemap=)` | legt ein leeres Projekt an | ja, mit `delete_project` |
 | `delete_project(project, confirm_name)` | löscht ein ganzes Projekt endgültig | **nein**, und der einzige unwiderrufliche Aufruf dieses Werkzeugsatzes |
+| `duplicate_project(project, name=, timeout=)` | kopiert ein ganzes Projekt, wartet auf die fertige Kopie | ja, mit `delete_project` -- das Original bleibt ohnehin unangetastet |
+| `duplicate_wait(job_id, project, timeout=)` | fasst nach, wenn `duplicate_project`s eigene Frist zuvor ablief | -- |
 | `inspect_import(project, file_path=, upload_id=, ...)` | zeigt, was ein Import erzeugen würde | -- (folgenlos, legt nichts an) |
 | `import_file(project, file_path=, upload_id=, ..., timeout=)` | importiert eine Datei, wartet auf den fertigen Layer | ja, mit `delete_layer` |
 | `import_geoportal(project, dataset_id, ..., timeout=)` | importiert einen Geoportal-Hamburg-Datensatz, wartet auf den fertigen Layer | ja, mit `delete_layer` |
@@ -1107,6 +1182,8 @@ dieselbe Unterscheidung wie in
 | `delete_features(layer, fids, ...)` | löscht Objekte | **nein**, nur über das Änderungsprotokoll |
 | `create_layer(project, name, geometry_type, fields=)` | legt einen leeren Layer an | ja, mit `delete_layer` |
 | `update_layer(layer, name=, visible=, ...)` | ändert Name/Sichtbarkeit | ja, jederzeit |
+| `reorder_layers(project, layer_ids_bottom_to_top)` | setzt die komplette Stapelreihenfolge neu | ja, mit der vorher gelesenen Reihenfolge |
+| `move_layer(project, layer, to_top=, to_bottom=, above=, below=)` | verschiebt einen Layer, ohne die übrigen zu nennen | ja, mit der vorher gelesenen Reihenfolge |
 | `delete_layer(layer, ...)` | Layer in den Papierkorb | ja, mit `restore_layer` -- bis `purge_layer` |
 | `restore_layer(layer_id)` | Layer aus dem Papierkorb zurück | -- |
 | `purge_layer(layer_id)` | Layer und Daten endgültig löschen | **nein** |
@@ -1167,8 +1244,8 @@ python -m pytest -m "not live"                        # ohne
 
 - Kein Umbenennen eines Felds (`PATCH .../fields/{id}`) -- nur anlegen und
   löschen.
-- Kein Teilen, Zusammenführen oder Neuordnen von Layern über diese
-  Bibliothek.
+- Kein Teilen oder Zusammenführen von Objekten über diese Bibliothek. Layer
+  neu ordnen gibt es seit Paket 21-B (`reorder_layers()`, `move_layer()`).
 - Kein Lesen des Papierkorbs oder des Änderungsprotokolls über eine eigene
   Methode -- `client.get(".../trash")` und `client.get(".../changes")`
   funktionieren bereits, denn Lesen ist uneingeschränkt; eine eigene,
