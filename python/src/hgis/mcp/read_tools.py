@@ -865,3 +865,169 @@ def list_basemaps() -> BasemapCatalog:
         return BasemapCatalog(groups=groups, text=_basemap_catalog_text(groups))
     except Exception as error:
         raise tool_error(error, doing="Lesen des Hintergrundkarten-Katalogs") from error
+
+
+@dataclass(frozen=True)
+class WmsLayerSummary:
+    """
+    Ein Layer eines WMS-Diensts, wie wms_capabilities ihn zeigt -- flach aus
+    dem verschachtelten Layer-Baum des Diensts.
+    """
+
+    #: None für eine reine Gruppierung ohne eigenen Inhalt -- nicht wählbar,
+    #: aber aufgeführt, um ihre Kinder einzuordnen (siehe depth).
+    name: str | None
+    title: str | None
+    #: Verschachtelungstiefe, ab 0. Ein Kind einer Gruppierung liegt eine
+    #: Stufe tiefer als diese.
+    depth: int
+    queryable: bool
+    legend_url: str | None = None
+    min_scale: float | None = None
+    max_scale: float | None = None
+    #: [minLng, minLat, maxLng, maxLat] in EPSG:4326, oder None.
+    bbox: list[float] | None = None
+
+
+@dataclass(frozen=True)
+class WmsCapabilities:
+    """
+    Was ein WMS-Dienst anbietet, wie wms_capabilities es fand -- als
+    Struktur und zusätzlich als fertiger Fließtext, dasselbe Muster wie
+    BasemapCatalog.
+    """
+
+    service_url: str
+    title: str | None
+    version: str
+    image_formats: list[str]
+    layers: list[WmsLayerSummary]
+    #: Dieselbe Antwort als druckfertiger Text -- siehe
+    #: hgis.layer.LayerDescription.to_text, das für dasselbe Kontextfenster
+    #: gebaut ist.
+    text: str
+
+
+def _wms_capabilities_text(
+    service_url: str, title: str | None, image_formats: list[str], layers: list[WmsLayerSummary]
+) -> str:
+    """Der Dienst als druckfertiger Text, ein Layer je Zeile, eingerückt nach depth."""
+    lines = [
+        f"{title or service_url} ({service_url})",
+        "Bildformate: " + ", ".join(image_formats),
+        "",
+    ]
+    for item in layers:
+        indent = "  " * item.depth
+        if item.name is None:
+            lines.append(f"{indent}{item.title or '(ohne Titel)'}:")
+            continue
+        parts = [f"{indent}{item.name} — {item.title or item.name}"]
+        if not item.queryable:
+            parts.append("nicht abfragbar")
+        lines.append("  ".join(parts))
+    return "\n".join(lines).rstrip("\n")
+
+
+@server.tool()
+def wms_capabilities(
+    url: Annotated[
+        str,
+        Field(
+            description="Adresse des WMS-Diensts, mit oder ohne Query-Parameter, "
+            'z.B. "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten". Der Server '
+            "ergänzt SERVICE=WMS&REQUEST=GetCapabilities selbst, falls nötig, und "
+            "ruft die Adresse ab -- private, lokale oder sonst nicht öffentlich "
+            "erreichbare Adressen werden abgelehnt."
+        ),
+    ],
+) -> WmsCapabilities:
+    """
+    Was ein WMS-Dienst anbietet: seine Layer-Namen und -Titel, in welchen
+    Bildformaten er zeichnet, und wo jeder Layer auf der Karte liegt.
+
+    Der übliche Aufruf vor create_map_layer, dessen service_url, layers und
+    image_format sich nicht raten lassen -- dieses Werkzeug zeigt, was der
+    Dienst tatsächlich hat. name ist null für eine reine Gruppierung ohne
+    eigenen Inhalt; ihre Kinder stehen trotzdem in der Liste, eine Stufe
+    tiefer (depth) und mit ihr als Überschrift.
+    """
+    try:
+        data = client().get("/api/wms/capabilities", url=url)
+        layers = [
+            WmsLayerSummary(
+                name=item["name"],
+                title=item["title"],
+                depth=item["depth"],
+                queryable=item["queryable"],
+                legend_url=item.get("legendUrl"),
+                min_scale=item.get("minScale"),
+                max_scale=item.get("maxScale"),
+                bbox=item.get("bbox"),
+            )
+            for item in data["layers"]
+        ]
+        return WmsCapabilities(
+            service_url=data["serviceUrl"],
+            title=data["title"],
+            version=data["version"],
+            image_formats=data["imageFormats"],
+            layers=layers,
+            text=_wms_capabilities_text(
+                data["serviceUrl"], data["title"], data["imageFormats"], layers
+            ),
+        )
+    except Exception as error:
+        raise tool_error(error, doing=f"Lesen der Capabilities von '{url}'") from error
+
+
+@dataclass(frozen=True)
+class FieldUsageInfo:
+    """Was ein Feld gerade trägt, wie field_usage es fand."""
+
+    field_id: str
+    field_name: str
+    #: Objekte mit einem nicht-null Wert in diesem Feld.
+    value_count: int
+    #: Der Stil klassifiziert (categorized oder graduated) nach diesem Feld.
+    used_by_renderer: bool
+    #: Beschriftung ist eingeschaltet und liest dieses Feld.
+    used_by_labels: bool
+
+
+@server.tool()
+def field_usage(
+    layer: Annotated[str, Field(description="Name oder Id des Layers.")],
+    field: Annotated[
+        str,
+        Field(description="Name, Spaltenname oder Id des Felds."),
+    ],
+    project: Annotated[
+        str | None, Field(description="Name oder Id des Projekts.")
+    ] = None,
+) -> FieldUsageInfo:
+    """
+    Was ein Feld gerade trägt: wie viele Objekte einen Wert darin haben, und
+    ob der Stil des Layers danach klassifiziert oder beschriftet.
+
+    Der übliche Aufruf vor delete_field, dessen Löschung genau das
+    unwiderruflich mitreißt -- der Server passt den Stil dabei zwar
+    automatisch an, aber die Klassifizierung oder Beschriftung selbst ist
+    danach weg. Für rename_field ist diese Auskunft ohne Bedeutung: Stil und
+    bereits gezeichnete Kacheln verweisen auf die Spalte, nie auf den
+    Anzeigenamen, den rename_field ändert, und bleiben von einer Umbenennung
+    unberührt.
+    """
+    try:
+        layer_obj = _resolve_layer(layer, project)
+        resolved_field = layer_obj.field(field)
+        usage = layer_obj.field_usage(resolved_field)
+        return FieldUsageInfo(
+            field_id=resolved_field.id,
+            field_name=resolved_field.name,
+            value_count=usage.value_count,
+            used_by_renderer=usage.used_by_renderer,
+            used_by_labels=usage.used_by_labels,
+        )
+    except Exception as error:
+        raise tool_error(error, doing=f"Lesen der Nutzung von '{field}'") from error

@@ -130,6 +130,8 @@ def test_there_is_no_generic_write_verb() -> None:
         "merge_features",
         "duplicate_project",
         "reorder_layers",
+        "rename_field",
+        "create_map_layer",
     ):
         assert hasattr(hgis.Client, named)
 
@@ -203,6 +205,8 @@ def test_the_view_state_write_still_works(transport) -> None:
         ("POST", f"/api/layers/{LAYER_ID}/features/merge"),
         ("POST", f"/api/projects/{PROJECT_ID}/duplicate"),  # Paket 21-B
         ("PUT", f"/api/projects/{PROJECT_ID}/layers/order"),  # Paket 21-B
+        ("PATCH", f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}"),
+        ("POST", f"/api/projects/{PROJECT_ID}/map-layers"),
     ],
 )
 def test_this_stages_write_paths_are_allowed(method, path) -> None:
@@ -444,6 +448,7 @@ def test_the_layer_write_paths_need_a_real_layer_id(guarded, transport, layer_id
         ("DELETE", f"/api/layers/{layer_id}/purge"),
         ("POST", f"/api/layers/{layer_id}/edits"),
         ("POST", f"/api/layers/{layer_id}/fields"),
+        ("PATCH", f"/api/layers/{layer_id}/fields/{OTHER_UUID}"),
     ):
         with pytest.raises(hgis.GuardError):
             guarded._send(method, path, json={})

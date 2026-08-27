@@ -27,8 +27,11 @@ import pytest
 import hgis
 from conftest import (
     AMBIGUOUS_LAYER_ID,
+    BAUJAHR_FIELD_ID,
+    HOEHE_FIELD_ID,
     LAYER_ID,
     PROJECT_ID,
+    STRASSE_FIELD_ID,
     FakeTransport,
     Response,
     needs_mcp,
@@ -460,6 +463,122 @@ def test_field_classes_unknown_name_names_the_available_fields(mcp_client) -> No
 
     with pytest.raises(ToolError, match="Unbekanntes Feld"):
         field_classes(LAYER_ID, "osm_id")
+
+
+# --- field_usage -------------------------------------------------------
+
+
+def test_field_usage_reports_the_renderer_field(mcp_client) -> None:
+    from hgis.mcp.read_tools import field_usage
+
+    result = field_usage(LAYER_ID, "Baujahr")
+
+    assert result.field_id == BAUJAHR_FIELD_ID
+    assert result.field_name == "Baujahr"
+    assert result.value_count == 1003
+    assert result.used_by_renderer is True
+    assert result.used_by_labels is False
+
+
+def test_field_usage_reports_the_labels_field(mcp_client) -> None:
+    from hgis.mcp.read_tools import field_usage
+
+    result = field_usage(LAYER_ID, "Höhe")
+
+    assert result.field_id == HOEHE_FIELD_ID
+    assert result.used_by_renderer is False
+    assert result.used_by_labels is True
+
+
+def test_field_usage_reports_an_unused_field(mcp_client) -> None:
+    from hgis.mcp.read_tools import field_usage
+
+    result = field_usage(LAYER_ID, "Straße")
+
+    assert result.field_id == STRASSE_FIELD_ID
+    assert result.used_by_renderer is False
+    assert result.used_by_labels is False
+
+
+def test_field_usage_sends_the_resolved_field_id(mcp_client, transport) -> None:
+    from hgis.mcp.read_tools import field_usage
+
+    field_usage(LAYER_ID, "hoehe")
+
+    request = transport.requests[-1]
+    assert request.path == f"/api/layers/{LAYER_ID}/fields/{HOEHE_FIELD_ID}/usage"
+
+
+def test_field_usage_unknown_name_names_the_available_fields(mcp_client) -> None:
+    from hgis.mcp.read_tools import field_usage
+
+    with pytest.raises(ToolError, match="Unbekanntes Feld"):
+        field_usage(LAYER_ID, "osm_id")
+
+
+def test_field_usage_ambiguous_name_names_both_candidates(mcp_client) -> None:
+    from hgis.mcp.read_tools import field_usage
+
+    with pytest.raises(ToolError, match="Mehrdeutiges Feld") as excinfo:
+        field_usage(AMBIGUOUS_LAYER_ID, "stammumfang")
+    text = str(excinfo.value)
+    assert "Stammumfang Quelle" in text
+    assert "Stammumfang" in text
+
+
+# --- wms_capabilities --------------------------------------------------
+
+
+def test_wms_capabilities_reads_service_and_formats(mcp_client) -> None:
+    from hgis.mcp.read_tools import wms_capabilities
+
+    result = wms_capabilities("https://geodienste.hamburg.de/HH_WMS_Geobasiskarten")
+
+    assert result.service_url == "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten"
+    assert result.title == "Geobasiskarten Hamburg"
+    assert result.version == "1.3.0"
+    assert result.image_formats == ["image/png", "image/jpeg"]
+
+
+def test_wms_capabilities_lists_layers_including_an_unnamed_group(mcp_client) -> None:
+    from hgis.mcp.read_tools import wms_capabilities
+
+    result = wms_capabilities("https://geodienste.hamburg.de/HH_WMS_Geobasiskarten")
+
+    assert len(result.layers) == 3
+    group, first, second = result.layers
+    assert group.name is None
+    assert group.title == "Geobasiskarten"
+    assert group.depth == 0
+    assert first.name == "De_Basiskarte_HH"
+    assert first.title == "Stadtkarte Hamburg farbig"
+    assert first.depth == 1
+    assert first.queryable is True
+    assert first.bbox == [9.7, 53.4, 10.3, 53.7]
+    assert second.name == "De_Graukarte_HH"
+    assert second.queryable is False
+
+
+def test_wms_capabilities_text_lists_every_named_layer(mcp_client) -> None:
+    from hgis.mcp.read_tools import wms_capabilities
+
+    result = wms_capabilities("https://geodienste.hamburg.de/HH_WMS_Geobasiskarten")
+
+    assert "Geobasiskarten Hamburg" in result.text
+    assert "image/png" in result.text
+    assert "De_Basiskarte_HH" in result.text
+    assert "De_Graukarte_HH" in result.text
+    assert "nicht abfragbar" in result.text
+
+
+def test_wms_capabilities_sends_the_url_as_a_query_parameter(mcp_client, transport) -> None:
+    from hgis.mcp.read_tools import wms_capabilities
+
+    wms_capabilities("https://geodienste.hamburg.de/HH_WMS_Geobasiskarten")
+
+    request = transport.requests[-1]
+    assert request.path == "/api/wms/capabilities"
+    assert request.param("url") == "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten"
 
 
 # --- get_style -------------------------------------------------------------

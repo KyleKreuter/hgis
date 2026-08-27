@@ -472,6 +472,33 @@ def _write_stub(
         # der Pfad selbst, den der aufrufende Test danach prueft.
         return Response(204, "")
 
+    if method == "PATCH" and path == f"/api/layers/{LAYER_ID}/fields/{STRASSE_FIELD_ID}":
+        return _json_response(
+            200,
+            {
+                "id": STRASSE_FIELD_ID,
+                "sourceName": body["name"],
+                "columnName": "strasse",
+                "dataType": "text",
+            },
+        )
+
+    if method == "POST" and path == f"/api/projects/{PROJECT_ID}/map-layers":
+        return _json_response(
+            201,
+            {
+                "id": NEW_LAYER_ID,
+                "name": body.get("name") or "Geobasiskarten Hamburg",
+                "kind": "WMS",
+                "geometryType": None,
+                "srid": None,
+                "featureCount": 0,
+                "visible": True,
+                "extent": None,
+                "style": None,
+            },
+        )
+
     if method == "POST" and path == f"/api/projects/{PROJECT_ID}/imports/inspect":
         filename = file[0] if file is not None else "baeume.geojson"
         return _json_response(
@@ -1445,6 +1472,29 @@ def test_delete_field_resolves_by_source_name(mcp_client, transport) -> None:
     assert delete.path == f"/api/layers/{LAYER_ID}/fields/{HOEHE_FIELD_ID}"
 
 
+def test_rename_field_sends_the_new_name_and_reports_old_and_new(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import rename_field
+
+    result = rename_field(LAYER_ID, "Straße", "Straßenname")
+
+    assert result.summary == (
+        "Feld 'Straße' in 'Gebäude Speicherstadt' umbenannt in 'Straßenname'."
+    )
+    patch = next(r for r in transport.requests if r.method == "PATCH" and "/fields/" in r.path)
+    assert patch.path == f"/api/layers/{LAYER_ID}/fields/{STRASSE_FIELD_ID}"
+    assert _body_of(transport, patch) == {"name": "Straßenname"}
+
+
+def test_rename_field_rejects_an_unknown_field_before_any_request(mcp_client, transport) -> None:
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import rename_field
+
+    with pytest.raises(ToolError, match="Unbekanntes Feld"):
+        rename_field(LAYER_ID, "Postleitzahl", "Neu")
+
+    assert not any(r.method == "PATCH" for r in transport.requests)
+
+
 # --- style: what is stored -----------------------------------------------
 
 
@@ -1758,3 +1808,48 @@ def test_move_layer_rejects_zero_and_more_than_one_target(mcp_client, transport)
     assert not any(
         r.path == f"/api/projects/{PROJECT_ID}/layers/order" for r in transport.requests
     )
+# --- map layers: what is stored --------------------------------------------
+
+
+def test_create_map_layer_sends_the_required_fields(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import create_map_layer
+
+    result = create_map_layer(
+        PROJECT_ID,
+        "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten",
+        ["De_Basiskarte_HH"],
+        "image/png",
+    )
+
+    assert result.summary == (
+        "Kartenbild-Layer 'Geobasiskarten Hamburg' in 'Leitungsnetz Nord' angelegt "
+        "(1 Layer aus https://geodienste.hamburg.de/HH_WMS_Geobasiskarten)."
+    )
+    post = next(r for r in transport.requests if r.path == f"/api/projects/{PROJECT_ID}/map-layers")
+    assert _body_of(transport, post) == {
+        "serviceUrl": "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten",
+        "layers": ["De_Basiskarte_HH"],
+        "imageFormat": "image/png",
+    }
+
+
+def test_create_map_layer_sends_name_and_dataset_id_when_given(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import create_map_layer
+
+    create_map_layer(
+        PROJECT_ID,
+        "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten",
+        ["a", "b"],
+        "image/jpeg",
+        name="Eigener Name",
+        dataset_id="ds-1",
+    )
+
+    post = next(r for r in transport.requests if r.path == f"/api/projects/{PROJECT_ID}/map-layers")
+    assert _body_of(transport, post) == {
+        "serviceUrl": "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten",
+        "layers": ["a", "b"],
+        "imageFormat": "image/jpeg",
+        "name": "Eigener Name",
+        "datasetId": "ds-1",
+    }

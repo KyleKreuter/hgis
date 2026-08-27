@@ -126,6 +126,30 @@ class MergeResult:
     feature_count: int
 
 
+@dataclass(frozen=True)
+class FieldUsage:
+    """
+    What :meth:`Layer.field_usage` reports about one field -- mirrors the
+    backend's ``LayerDtos.FieldUsage``, built there for the confirmation
+    dialog in front of a delete.
+
+    Says nothing worth acting on before :meth:`Layer.rename_field`: both
+    ``used_by_renderer`` and ``used_by_labels`` key on the field's column,
+    which a rename never touches (see that method's own docstring). It is
+    :meth:`Layer.delete_field` this describes -- deleting drops the column
+    itself, and takes whatever depended on it along.
+
+    :param value_count: objects with a non-null value in this field
+    :param used_by_renderer: the layer's style classifies (categorized or
+        graduated) by this field
+    :param used_by_labels: labels are switched on and read this field
+    """
+
+    value_count: int
+    used_by_renderer: bool
+    used_by_labels: bool
+
+
 class ValueCounts(list):
     """
     What :meth:`Layer.values` answers: ``(value, count)`` pairs, most
@@ -452,6 +476,29 @@ class Layer:
         available = ", ".join(item.name for item in self.fields())
         raise UnknownNameError(f"Unbekanntes Feld: {name}. Verfügbar: {available}.")
 
+    def field_usage(self, field: "Field | str") -> FieldUsage:
+        """
+        What this field currently carries -- by :class:`Field`, id, source
+        name or column name, resolved the same way :meth:`field` resolves
+        one.
+
+        Asks the server fresh every call, unlike :meth:`fields`. Read this
+        before :meth:`delete_field`, which is the change this describes: the
+        server rewrites the style in the same transaction if it depended on
+        the field, so the field survives losing its column only in name --
+        the classification or labelling built on it does not. Not useful
+        ahead of :meth:`rename_field`, which this cannot warn about: both
+        flags key on the column, and a rename never touches that -- see that
+        method's own docstring for what a rename can leave stale instead.
+        """
+        resolved = field if isinstance(field, Field) else self.field(field)
+        data = self._client.get(f"/api/layers/{self.id}/fields/{resolved.id}/usage")
+        return FieldUsage(
+            value_count=data["valueCount"],
+            used_by_renderer=data["usedByRenderer"],
+            used_by_labels=data["usedByLabels"],
+        )
+
     def ambiguous_names(self) -> set[str]:
         """
         The lowercased spellings that fit more than one field of this layer.
@@ -497,7 +544,10 @@ class Layer:
 
         Drops the column. What was in it is gone from the live table; the only
         way back is the server's change log, never this library -- the same
-        rule a deleted object follows, see :meth:`delete_features`.
+        rule a deleted object follows, see :meth:`delete_features`. Call
+        :meth:`field_usage` first to see whether the style depends on this
+        field -- the server rewrites the style along with the delete if it
+        does, rather than leaving it pointing at a column that is gone.
 
         :raises hgis.errors.UnknownNameError: the name fits none or more than
             one field of this layer
@@ -506,6 +556,38 @@ class Layer:
         self._client.delete_field(self.id, resolved.id)
         if self._fields is not None:
             self._fields = [item for item in self._fields if item.id != resolved.id]
+
+    def rename_field(self, field: "Field | str", name: str) -> Field:
+        """
+        Rename one attribute field's display name -- by :class:`Field`, id,
+        source name or column name, resolved the same way :meth:`field`
+        resolves one.
+
+        Only ``source_name`` changes; the column and its type stay exactly
+        as they are, immutable since the field was created. That is also
+        what makes this safe to call without checking anything first: the
+        layer's style and every tile already drawn key on the column, never
+        on this display name, so neither one is affected by a rename (see
+        :meth:`field_usage` for the check that matters before
+        :meth:`delete_field` instead, which this method has no equivalent
+        of). What does not follow along is a saved sort order in a
+        project's view state (:meth:`hgis.project.Project.select` writes
+        one) -- it stores the field's name as it was given, unchecked
+        against this layer's fields, and the attribute table reports
+        "Unbekanntes Sortierfeld" if that name stops matching after a
+        rename, rather than sorting by the wrong field silently.
+
+        :param name: not empty, at most 200 characters
+        :raises hgis.errors.ApiError: another field of this layer already
+            has this name, source or column spelling, case-insensitively
+        :return: the field with its new name, already reflected in
+            :meth:`fields`
+        """
+        resolved = field if isinstance(field, Field) else self.field(field)
+        renamed = _to_field(self._client.rename_field(self.id, resolved.id, name))
+        if self._fields is not None:
+            self._fields = [renamed if item.id == renamed.id else item for item in self._fields]
+        return renamed
 
     # --- writing the layer itself ---------------------------------------
 

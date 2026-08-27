@@ -43,6 +43,13 @@ OTHER_LAYER_ID = "019fecc1-48a2-76b7-8732-019e83d5532a"
 #: The tree register, whose field names collide. See the module docstring.
 AMBIGUOUS_LAYER_ID = "019ff731-1f0c-7de5-9100-b9022e19ea3f"
 
+#: Field ids of LAYER_ID's own fields ("Gebäude Speicherstadt"), real ids
+#: taken from layer.json -- "Baujahr" is the field the stored style
+#: classifies by, "Höhe" the one it labels by, "Straße" neither.
+STRASSE_FIELD_ID = "019fecb8-6f22-70d0-b6d7-13a6d85542bf"
+HOEHE_FIELD_ID = "019fecb8-6f22-725a-ad67-57e4211fb2fc"
+BAUJAHR_FIELD_ID = "019fecb8-6f22-737c-bbd2-2c9295bd8731"
+
 
 def load(name: str) -> str:
     """One stored response, as it came off the wire."""
@@ -176,6 +183,18 @@ def stub_server(request: Recorded) -> Response:
         if field_name == "Baujahr":
             return ok("classify-baujahr.json")
         return Response(400, load("error-unknown-field.json"))
+    if path.startswith(f"/api/layers/{LAYER_ID}/fields/") and path.endswith("/usage"):
+        field_id = path.removeprefix(f"/api/layers/{LAYER_ID}/fields/").removesuffix("/usage")
+        # Matches the real style in layer.json: it classifies by "Baujahr"
+        # and labels by "Höhe" -- "Straße" drives neither.
+        if field_id == BAUJAHR_FIELD_ID:
+            return ok("field-usage-renderer.json")
+        if field_id == HOEHE_FIELD_ID:
+            return ok("field-usage-labels.json")
+        return ok("field-usage-unused.json")
+
+    if path == "/api/wms/capabilities":
+        return ok("wms-capabilities.json")
 
     if path.startswith(f"/api/layers/{AMBIGUOUS_LAYER_ID}/"):
         return _ambiguous_layer_statistics(request, path)
