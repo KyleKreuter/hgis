@@ -148,6 +148,32 @@ _PROJECT_PAGE_SIZE = 100
 
 _UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 
+
+class _Unset:
+    """
+    The default for a keyword that can also be set to ``None`` on purpose.
+
+    Every optional argument on :meth:`Client.update_layer` except ``basemap``
+    and ``basemap_opacity`` treats a plain ``None`` default as "leave this
+    alone" -- there is no meaningful ``None`` of its own to confuse it with.
+    Those two are the exception: a layer's basemap can be reset back to
+    following its project's again, and the server tells that apart from
+    "unchanged" exactly the way :meth:`Layer.set_style
+    <hgis.layer.Layer.set_style>` already does for style -- by whether the
+    key is present in the body at all, not by what it holds. ``None`` itself
+    has to stay free to mean that reset, so it cannot double as the "not
+    given" default the way it does everywhere else in this library. This
+    class exists only to be that other default; see :data:`_UNSET`, its one
+    instance.
+    """
+
+    def __repr__(self) -> str:
+        return "<nicht angegeben>"
+
+
+#: The one instance of :class:`_Unset` every default below uses.
+_UNSET = _Unset()
+
 #: The one path :meth:`RequestGuard.events` may open. See its docstring for
 #: why this is a literal check rather than an entry in :data:`_ALLOWED`.
 _EVENTS_PATH = "/api/events"
@@ -613,6 +639,27 @@ class Client:
 
         return Layer(self, self.get(f"/api/layers/{layer_id}"))
 
+    def basemaps(self) -> list["Basemap"]:
+        """
+        The basemap catalog -- every background map :meth:`hgis.project.Project.update`'s
+        ``basemap`` and :meth:`hgis.layer.Layer.update`'s ``basemap`` accept as a
+        catalog id, alongside the other case both also accept: an own tile URL
+        template, with ``{z}``, ``{x}``, ``{y}``, for a service the catalog
+        does not list.
+
+        Reading is unrestricted, so this is one ordinary GET -- unlike
+        :meth:`projects`, the catalog is small enough that the server does
+        not page it.
+
+        >>> catalog = client.basemaps()
+        >>> [item.id for item in catalog if item.group == "Deutschland"]
+        ['basemapde-grau', ...]
+        """
+        from .basemap import _to_basemap
+
+        items = self.get("/api/basemaps")["basemaps"]
+        return [_to_basemap(item) for item in items]
+
     # --- HTTP --------------------------------------------------------------
 
     def get(self, path: str, **params: Any) -> Any:
@@ -789,16 +836,30 @@ class Client:
         z_index: int | None = None,
         min_zoom: int | None = None,
         max_zoom: int | None = None,
+        basemap: str | None | _Unset = _UNSET,
+        basemap_opacity: float | None | _Unset = _UNSET,
     ) -> Any:
         """
         Change a layer's ordinary properties. See :meth:`hgis.layer.Layer.update`.
 
-        Every argument left at None is left as it stood -- none of the five
-        has a meaningful None of its own, so this cannot be told apart from
-        "leave alone" the way :attr:`hgis.catalog.dto.LayerDtos.UpdateRequest`'s
-        style, basemap and clipMode can. Style has its own call,
-        :meth:`update_layer_style` -- see :meth:`hgis.layer.Layer.set_style`.
-        Basemap and clipMode are still not part of this stage.
+        ``name``, ``visible``, ``z_index``, ``min_zoom`` and ``max_zoom`` left
+        at None are left as they stood -- none of the five has a meaningful
+        None of its own. Style has its own call, :meth:`update_layer_style`
+        -- see :meth:`hgis.layer.Layer.set_style`. Clip mode is still not
+        part of this stage.
+
+        :param basemap: catalog id (see :meth:`basemaps`) or own tile URL
+            template overriding the project's basemap for this one layer --
+            in one of two forms, with ``{z}``, ``{x}``, ``{y}`` (XYZ or
+            WMTS) or with ``{bbox-epsg-3857}`` in their place instead (a WMS
+            ``GetMap`` URL, see :func:`hgis.mcp.write_tools.set_basemap` for
+            a full example). Left at the default (:data:`_UNSET`), the
+            layer's basemap is unchanged; given explicitly as None, it is
+            reset to follow its project's basemap again -- a third state
+            plain None cannot serve as the default for, unlike every
+            argument above
+        :param basemap_opacity: the same for opacity, 0 to 1, independently
+            of ``basemap`` -- a layer can override one without the other
         """
         body: dict[str, Any] = {}
         if name is not None:
@@ -811,6 +872,10 @@ class Client:
             body["minZoom"] = min_zoom
         if max_zoom is not None:
             body["maxZoom"] = max_zoom
+        if not isinstance(basemap, _Unset):
+            body["basemap"] = basemap
+        if not isinstance(basemap_opacity, _Unset):
+            body["basemapOpacity"] = basemap_opacity
         return self._send("PATCH", f"/api/layers/{layer_id}", json=body)
 
     def update_layer_style(self, layer_id: str, style: dict[str, Any] | None) -> Any:
@@ -1151,5 +1216,6 @@ def _names(names: Iterable[str]) -> str:
 if TYPE_CHECKING:
     # Type checkers only. The runtime imports sit inside the methods above,
     # which is what keeps client, project and layer out of an import cycle.
+    from .basemap import Basemap
     from .layer import Layer
     from .project import Project

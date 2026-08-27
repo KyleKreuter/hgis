@@ -210,6 +210,17 @@ class Project:
         >>> project.update(center=(9.99, 53.55), zoom=16)
         >>> project.select(hits.fids(), layer=layer)
 
+        :param basemap: a catalog id (see :meth:`hgis.client.Client.basemaps`)
+            or this project's own tile URL template, in one of two forms --
+            with ``{z}``, ``{x}``, ``{y}`` (XYZ or WMTS), or with
+            ``{bbox-epsg-3857}`` in their place instead (a WMS ``GetMap``
+            URL, for a service such as the Hamburg aerial imagery -- see
+            :func:`hgis.mcp.write_tools.set_basemap` for the full example).
+            These are the two cases :attr:`basemap` reads back. A value that
+            is none of the above is refused, naming the valid catalog ids.
+            Unlike :meth:`hgis.layer.Layer.update`'s ``basemap``, a project
+            has no parent to fall back to, so there is no reset-to-None case
+            here -- None simply leaves the current basemap alone
         :param center: (lng, lat) in EPSG:4326
         :param zoom: 0 to 24, checked by the server
         """

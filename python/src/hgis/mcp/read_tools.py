@@ -27,7 +27,7 @@ from typing import Annotated
 
 from pydantic import Field
 
-from hgis import Layer, Project, Query, Style
+from hgis import Basemap, Layer, Project, Query, Style
 from hgis.errors import UnknownNameError
 from hgis.mcp.server import client, server
 from hgis.mcp.shapes import (
@@ -747,3 +747,121 @@ def get_selection(
         )
     except Exception as error:
         raise tool_error(error, doing=f"Lesen der Auswahl in {project!r}") from error
+
+
+@dataclass(frozen=True)
+class BasemapSummary:
+    """
+    Ein Eintrag des Hintergrundkarten-Katalogs, wie list_basemaps ihn zeigt --
+    ohne urlTemplate, attribution und paint, die für die Auswahl selbst nicht
+    gebraucht werden. Siehe hgis.Basemap für die vollständigen Felder.
+    """
+
+    id: str
+    title: str
+    hint: str
+    coverage: str
+    min_zoom: int
+    max_zoom: int
+    requires_account: bool = False
+    deprecated: bool = False
+
+
+@dataclass(frozen=True)
+class BasemapGroup:
+    """Eine Sektion des Katalogs (z.B. "Deutschland"), mit ihren Einträgen."""
+
+    group: str
+    basemaps: list[BasemapSummary]
+
+
+@dataclass(frozen=True)
+class BasemapCatalog:
+    """
+    Der ganze Hintergrundkarten-Katalog, wie list_basemaps ihn fand -- als
+    Struktur, gruppiert, und in text zusätzlich als fertiger Fließtext.
+    """
+
+    groups: list[BasemapGroup]
+    #: Dieselbe Antwort als druckfertiger Text, gruppiert -- siehe
+    #: hgis.layer.LayerDescription.to_text, das für dasselbe Kontextfenster
+    #: gebaut ist.
+    text: str
+
+
+#: Die Reihenfolge, in der auch die Auswahl im Frontend die Gruppen zeigt
+#: (VERTRAG.md, Hintergrundkarten-Katalog). Eine Gruppe, die in den Daten
+#: auftaucht, aber hier nicht genannt ist -- ein künftiger Zuwachs des
+#: Katalogs, den diese Liste noch nicht kennt --, landet ans Ende statt
+#: stillschweigend zu verschwinden.
+_GROUP_ORDER = (
+    "Standard",
+    "Deutschland",
+    "Luft- und Satellitenbild",
+    "Gelände",
+    "Thematisch",
+    "Bundesländer",
+)
+
+
+def _group_sort_key(group: str) -> tuple[int, str]:
+    try:
+        return (_GROUP_ORDER.index(group), group)
+    except ValueError:
+        return (len(_GROUP_ORDER), group)
+
+
+def _basemap_catalog_text(groups: list[BasemapGroup]) -> str:
+    """Der Katalog als druckfertiger Text, eine Gruppe je Absatz."""
+    lines: list[str] = []
+    for group in groups:
+        lines.append(f"{group.group}:")
+        for item in group.basemaps:
+            parts = [f"{item.id} — {item.title}: {item.hint}"]
+            if item.coverage != "world":
+                parts.append(f"Abdeckung {item.coverage}")
+            if item.requires_account:
+                parts.append("Konto erforderlich")
+            if item.deprecated:
+                parts.append("abgekündigt")
+            lines.append("  " + "  ".join(parts))
+        lines.append("")
+    return "\n".join(lines).rstrip("\n")
+
+
+@server.tool()
+def list_basemaps() -> BasemapCatalog:
+    """
+    Der Katalog der Hintergrundkarten, gruppiert -- jede Id, die set_basemap
+    als Katalog-Id entgegennimmt, mit einem erklärenden Hinweis.
+
+    Der übliche Aufruf vor set_basemap: zeigt, was es gibt, statt eine Id zu
+    raten. requires_account markiert Dienste, die ein eigenes Konto oder
+    einen eigenen Schlüssel brauchen -- sie werden trotzdem aufgeführt, nicht
+    versteckt oder blockiert. Ein selbst gehosteter oder sonst nicht
+    gelisteter Kachel-Dienst braucht hier keinen Eintrag: set_basemap nimmt
+    dafür auch eine eigene URL-Vorlage entgegen, siehe dessen Beschreibung.
+    """
+    try:
+        catalog: list[Basemap] = client().basemaps()
+        by_group: dict[str, list[BasemapSummary]] = {}
+        for item in catalog:
+            by_group.setdefault(item.group, []).append(
+                BasemapSummary(
+                    id=item.id,
+                    title=item.title,
+                    hint=item.hint,
+                    coverage=item.coverage,
+                    min_zoom=item.min_zoom,
+                    max_zoom=item.max_zoom,
+                    requires_account=item.requires_account,
+                    deprecated=item.deprecated,
+                )
+            )
+        groups = [
+            BasemapGroup(group=name, basemaps=entries)
+            for name, entries in sorted(by_group.items(), key=lambda pair: _group_sort_key(pair[0]))
+        ]
+        return BasemapCatalog(groups=groups, text=_basemap_catalog_text(groups))
+    except Exception as error:
+        raise tool_error(error, doing="Lesen des Hintergrundkarten-Katalogs") from error

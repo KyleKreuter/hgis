@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import TYPE_CHECKING, Any, Iterator, Sequence
 
+from .client import _UNSET, _Unset
 from .edits import EditResult, FeatureUpdate, NewFeature, _reject_scalar_iterable
 from .edits import apply_edits as _apply_edits
 from .errors import ApiError, InvalidArgumentError
@@ -299,7 +300,11 @@ class Layer:
         """
         This layer's own basemap, overriding its project's -- or None to
         follow the project's, which is the default for almost every layer.
-        See :attr:`hgis.project.Project.basemap`.
+        A catalog id (see :meth:`hgis.client.Client.basemaps`) or this
+        layer's own tile URL template, the same two cases
+        :attr:`hgis.project.Project.basemap` allows. What :meth:`update`'s
+        ``basemap`` writes -- and reads back None again once ``update``
+        resets it.
         """
         return self._data.get("basemap")
 
@@ -473,15 +478,31 @@ class Layer:
         z_index: int | None = None,
         min_zoom: int | None = None,
         max_zoom: int | None = None,
+        basemap: str | None | _Unset = _UNSET,
+        basemap_opacity: float | None | _Unset = _UNSET,
     ) -> "Layer":
         """
         Change this layer's ordinary properties in place and return it.
 
-        Every argument left at None keeps its current value. Style has its
-        own method, :meth:`set_style` -- it replaces the whole document
-        rather than merging in one property, so it does not fit this
-        signature. Basemap and clip mode are still not part of this stage --
-        change them, if you must, through the interface.
+        ``name``, ``visible``, ``z_index``, ``min_zoom`` and ``max_zoom``
+        left at None keep their current value. ``basemap`` and
+        ``basemap_opacity`` work differently, because None is itself
+        meaningful for them: it resets this layer to follow its project's
+        basemap/opacity again, instead of overriding either -- see
+        :attr:`basemap`. Leaving one of the two out entirely (their actual
+        default, the private sentinel :data:`hgis.client._UNSET`) is what
+        keeps it unchanged; only an explicit ``None`` resets it. ``basemap``
+        itself, given, is a catalog id or this layer's own tile URL
+        template, in one of two forms -- with ``{z}``, ``{x}``, ``{y}``
+        (XYZ or WMTS), or with ``{bbox-epsg-3857}`` in their place instead
+        (a WMS ``GetMap`` URL -- see
+        :func:`hgis.mcp.write_tools.set_basemap` for a full example). Style
+        has its own method, :meth:`set_style` -- it replaces the whole
+        document rather than merging in one property, so it does not fit
+        this signature. Clip mode is still not part of this stage.
+
+        >>> layer.update(basemap="opentopo", basemap_opacity=0.6)
+        >>> layer.update(basemap=None, basemap_opacity=None)  # zurück zum Projekt
         """
         self._data = self._client.update_layer(
             self.id,
@@ -490,6 +511,8 @@ class Layer:
             z_index=z_index,
             min_zoom=min_zoom,
             max_zoom=max_zoom,
+            basemap=basemap,
+            basemap_opacity=basemap_opacity,
         )
         self._fields = [_to_field(item) for item in self._data["fields"]]
         return self
