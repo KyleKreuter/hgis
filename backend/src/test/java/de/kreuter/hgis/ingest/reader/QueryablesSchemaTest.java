@@ -140,6 +140,38 @@ class QueryablesSchemaTest {
 		assertThat(fields.get(1).enumValues()).isEmpty();
 	}
 
+	@Test
+	@DisplayName("the primary-geometry property is never listed as an attribute field -- it would stay 100% NULL")
+	void primaryGeometryPropertyIsExcluded() {
+		// Shaped like hvv_einzugsbereiche/haltestellenbereiche_bus, measured live: "geom"
+		// carries x-ogc-role "primary-geometry" and no "type" at all, only "format".
+		JsonNode schema = readSchema("""
+				{"properties": {
+				  "id": {"title": "id", "type": "integer", "readOnly": true, "x-ogc-role": "id"},
+				  "geom": {"title": "geom", "x-ogc-role": "primary-geometry", "format": "geometry-point"},
+				  "name": {"title": "name", "type": "string"}
+				}}""");
+
+		List<QueryablesSchema.Field> fields = QueryablesSchema.parse(schema, Map.of());
+
+		assertThat(fields).extracting(QueryablesSchema.Field::technicalName)
+				.as("geom is the geometry, not an attribute -- it must not appear here")
+				.containsExactly("id", "name");
+	}
+
+	@Test
+	@DisplayName("a real attribute happens to be named 'geom' is kept -- only the role, not the name, decides")
+	void attributeNamedGeomWithoutThePrimaryGeometryRoleIsKept() {
+		JsonNode schema = readSchema("""
+				{"properties": {
+				  "geom": {"title": "geom", "type": "string"}
+				}}""");
+
+		List<QueryablesSchema.Field> fields = QueryablesSchema.parse(schema, Map.of());
+
+		assertThat(fields).extracting(QueryablesSchema.Field::technicalName).containsExactly("geom");
+	}
+
 	private static JsonNode readSchema(String json) {
 		return MAPPER.readTree(json);
 	}

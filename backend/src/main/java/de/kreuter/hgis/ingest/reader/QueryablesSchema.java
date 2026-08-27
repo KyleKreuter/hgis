@@ -58,11 +58,31 @@ public final class QueryablesSchema {
 		for (Map.Entry<String, JsonNode> entry : properties.properties()) {
 			String technicalName = entry.getKey();
 			JsonNode property = entry.getValue();
+			if (isPrimaryGeometry(property)) {
+				// The geometry itself, e.g. "geom" -- travels through
+				// OgcFeaturesSourceReader's own geometry column, never through a
+				// feature's "properties". Listing it here too would add an attribute
+				// field that stays 100% NULL, since nothing ever writes to it.
+				continue;
+			}
 			String title = resolveTitle(technicalName, property, germanLabels);
 			boolean idField = "id".equals(property.path("x-ogc-role").asString(null));
 			fields.add(new Field(technicalName, title, javaType(property), idField, enumValues(property)));
 		}
 		return deduplicateTitles(fields);
+	}
+
+	/**
+	 * OGC API - Features Part 3 (Filtering) reserves {@code x-ogc-role} for exactly two
+	 * well-known values: {@code id} and {@code primary-geometry} -- the queryables schema's
+	 * own, spec-defined way of naming which property is the geometry, confirmed live
+	 * against {@code hvv_einzugsbereiche/haltestellenbereiche_bus} and
+	 * {@code hvv_einzugsbereiche/hvv_bus_metro} (both name it {@code geom}, but the role,
+	 * not the name, is what this checks -- a collection is free to call its geometry
+	 * property anything).
+	 */
+	private static boolean isPrimaryGeometry(JsonNode property) {
+		return "primary-geometry".equals(property.path("x-ogc-role").asString(null));
 	}
 
 	/** CONTRACT.md 11.4's three-step rule: German label, then a distinct schema title, then the technical name. */
