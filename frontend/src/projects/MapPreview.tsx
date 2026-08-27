@@ -1,19 +1,23 @@
 import { Map as MapIcon } from 'lucide-react'
+import { useBasemaps } from '@/api/basemaps'
 import type { ProjectSummary } from '@/api/projects'
 import { previewTilesFor } from './previewTiles'
 
 /**
  * The background map's tiles at the project's saved position, laid out as a 2x2 grid --
  * see CONTRACT.md phase 22. This shows *where* a project is, never *what* is in it: no
- * MapLibre instance, no data layers. The calculation lives in `previewTiles.ts`, split
- * out because Vitest here only checks `.ts` files, not `.tsx` (no jsdom in this project).
+ * MapLibre instance, no data layers. The calculation lives in `previewTiles.ts`, kept
+ * pure and tested on its own.
  */
 export function MapPreview({
   project,
 }: {
   project: Pick<ProjectSummary, 'center' | 'zoom' | 'extent' | 'basemap'>
 }) {
-  const tiles = previewTilesFor(project)
+  // Already prefetched by the route loader (`ensureBasemapsLoaded`) -- this never fires
+  // a request of its own.
+  const { data: catalog = [] } = useBasemaps()
+  const tiles = previewTilesFor(project, catalog)
 
   if (tiles.length === 0) {
     return (

@@ -12,11 +12,24 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
+import { useBasemaps } from '@/api/basemaps'
 import { useUpdateLayer, type LayerSummary } from '@/api/layers'
 import { projectDetailQuery } from '@/api/projects'
-import { BASEMAPS, resolveBasemap, resolveBasemapId } from '@/map/basemap'
+import { isCustomBasemapUrl, resolveBasemap, resolveBasemapId, validateBasemapUrlTemplate } from '@/map/basemap'
+import { BasemapEntryDetails } from '@/map/BasemapEntryDetails'
+import { CUSTOM_BASEMAP_OPTION, CustomBasemapUrlField } from '@/map/CustomBasemapUrlField'
+import { groupBasemaps } from '@/map/groupBasemaps'
 
 /** Not a real basemap id, so it can never collide with one from the catalog. */
 const FOLLOWS_PROJECT = 'follows-project'
@@ -38,30 +51,59 @@ export function LayerBasemapDialog({ layer, projectId, onOpenChange }: LayerBase
   // request of its own, it only reads the project's current basemap for the "folgt
   // dem Projekt" option and for the opacity a reset falls back to.
   const { data: project } = useQuery({ ...projectDetailQuery(projectId), enabled: layer !== null })
+  // Likewise already prefetched by the workspace route's loader (`ensureBasemapsLoaded`).
+  const { data: catalog = [] } = useBasemaps()
+  const groups = groupBasemaps(catalog)
   const updateLayer = useUpdateLayer(layer?.id ?? '', projectId)
 
   const [basemapChoice, setBasemapChoice] = useState<string>(FOLLOWS_PROJECT)
   const [opacityOverride, setOpacityOverride] = useState<number | null>(null)
+  const [customUrl, setCustomUrl] = useState('')
+  const [customUrlSubmitted, setCustomUrlSubmitted] = useState(false)
 
   useEffect(() => {
     if (layer) {
-      setBasemapChoice(layer.basemap != null ? resolveBasemapId(layer.basemap) : FOLLOWS_PROJECT)
+      const stored = layer.basemap
+      if (isCustomBasemapUrl(stored)) {
+        setBasemapChoice(CUSTOM_BASEMAP_OPTION)
+        setCustomUrl(stored!)
+      }
+      else {
+        setBasemapChoice(stored != null ? resolveBasemapId(catalog, stored) : FOLLOWS_PROJECT)
+        setCustomUrl('')
+      }
       setOpacityOverride(layer.basemapOpacity ?? null)
+      setCustomUrlSubmitted(false)
     }
+    // `catalog` deliberately excluded: it never changes after the initial load
+    // (VERTRAG.md), and re-running this on every catalog reference would fight the
+    // user's own pick with the dialog's own "reset to the layer's stored value" logic.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layer])
 
-  const projectBasemap = resolveBasemap(project?.basemap)
+  const projectBasemap = resolveBasemap(catalog, project?.basemap)
   const projectOpacity = project?.basemapOpacity ?? 1
-  const selectedBasemap = basemapChoice === FOLLOWS_PROJECT ? projectBasemap : resolveBasemap(basemapChoice)
+  const isCustomChoice = basemapChoice === CUSTOM_BASEMAP_OPTION
+  const selectedBasemap = isCustomChoice
+    ? resolveBasemap(catalog, customUrl)
+    : basemapChoice === FOLLOWS_PROJECT
+      ? projectBasemap
+      : resolveBasemap(catalog, basemapChoice)
   const displayedOpacity = opacityOverride ?? projectOpacity
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (!layer) return
 
+    if (isCustomChoice) {
+      setCustomUrlSubmitted(true)
+      if (validateBasemapUrlTemplate(customUrl) !== null) return
+    }
+
     try {
       await updateLayer.mutateAsync({
-        basemap: basemapChoice === FOLLOWS_PROJECT ? null : basemapChoice,
+        basemap:
+          basemapChoice === FOLLOWS_PROJECT ? null : isCustomChoice ? customUrl : basemapChoice,
         basemapOpacity: opacityOverride,
       })
       onOpenChange(false)
@@ -91,7 +133,9 @@ export function LayerBasemapDialog({ layer, projectId, onOpenChange }: LayerBase
                     {(value: string) =>
                       value === FOLLOWS_PROJECT
                         ? `Karte des Projekts verwenden (${projectBasemap.label})`
-                        : resolveBasemap(value).label
+                        : value === CUSTOM_BASEMAP_OPTION
+                          ? 'Eigene Kachel-URL'
+                          : resolveBasemap(catalog, value).label
                     }
                   </SelectValue>
                 </SelectTrigger>
@@ -99,17 +143,30 @@ export function LayerBasemapDialog({ layer, projectId, onOpenChange }: LayerBase
                   <SelectItem value={FOLLOWS_PROJECT}>
                     Karte des Projekts verwenden ({projectBasemap.label})
                   </SelectItem>
-                  {BASEMAPS.map((basemap) => (
-                    <SelectItem key={basemap.id} value={basemap.id}>
-                      <span className="flex flex-col items-start">
-                        <span>{basemap.label}</span>
-                        <span className="text-xs text-muted-foreground">{basemap.hint}</span>
-                      </span>
-                    </SelectItem>
+                  {groups.map((group) => (
+                    <SelectGroup key={group.group}>
+                      <SelectLabel>{group.group}</SelectLabel>
+                      {group.entries.map((entry) => (
+                        <SelectItem key={entry.id} value={entry.id}>
+                          <BasemapEntryDetails entry={entry} />
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   ))}
+                  <SelectSeparator />
+                  <SelectItem value={CUSTOM_BASEMAP_OPTION}>Eigene Kachel-URL…</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {isCustomChoice && (
+              <CustomBasemapUrlField
+                value={customUrl}
+                onChange={setCustomUrl}
+                id="layer-basemap-custom-url"
+                showError={customUrlSubmitted}
+              />
+            )}
 
             {/* "Keine Hintergrundkarte" has no raster layer to carry an opacity, so the
                 slider would sit there without effect -- hidden instead. */}

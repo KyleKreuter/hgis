@@ -1,4 +1,5 @@
 import { resolveBasemap } from '@/map/basemap'
+import type { BasemapCatalogEntry } from '@/api/basemaps'
 import type { ProjectSummary } from '@/api/projects'
 
 /** Die vier Kachelbilder einer Vorschau, links oben beginnend. */
@@ -24,21 +25,27 @@ function latToTileY(lat: number, z: number): number {
 }
 
 /** The one raster source a basemap definition carries. Undefined only for 'none'. */
-function tileSource(basemapId: string | undefined) {
-  return Object.values(resolveBasemap(basemapId).sources)[0]
+function tileSource(catalog: readonly BasemapCatalogEntry[], basemapId: string | undefined) {
+  return Object.values(resolveBasemap(catalog, basemapId).sources)[0]
 }
 
 /**
- * The deepest zoom the basemap's own tiles go to -- read from the source definition in
- * `map/basemap.ts` (19 for the OSM variants, 17 for OpenTopoMap) instead of repeating
- * those numbers here.
+ * The deepest zoom the basemap's own tiles go to -- read from the catalog's own
+ * `maxZoom` (19 for the OSM variants, 17 for OpenTopoMap) instead of repeating those
+ * numbers here.
  */
-function maxZoomFor(basemapId: string | undefined): number {
-  return tileSource(basemapId)?.maxzoom ?? 19
+function maxZoomFor(catalog: readonly BasemapCatalogEntry[], basemapId: string | undefined): number {
+  return tileSource(catalog, basemapId)?.maxzoom ?? 19
 }
 
-function tileUrl(basemapId: string | undefined, x: number, y: number, z: number): string {
-  const template = tileSource(basemapId)?.tiles?.[0] ?? ''
+function tileUrl(
+  catalog: readonly BasemapCatalogEntry[],
+  basemapId: string | undefined,
+  x: number,
+  y: number,
+  z: number,
+): string {
+  const template = tileSource(catalog, basemapId)?.tiles?.[0] ?? ''
   return template
     .replace('{z}', String(z))
     .replace('{x}', String(x))
@@ -65,7 +72,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
-export function previewTilesFor(project: PreviewSource): PreviewTile[] {
+export function previewTilesFor(
+  project: PreviewSource,
+  catalog: readonly BasemapCatalogEntry[],
+): PreviewTile[] {
   const { center, zoom, extent, basemap } = project
 
   // 'none' has no tile source to draw from, and crediting OSM for an empty canvas
@@ -79,7 +89,7 @@ export function previewTilesFor(project: PreviewSource): PreviewTile[] {
   // grid would show an arbitrary point at a magnification chosen for a different one.
   // Taking both from `extent` stays internally consistent and reliably shows the
   // project's data, even if that means a zoomed-out overview for scattered layers.
-  const maxZoom = maxZoomFor(basemap)
+  const maxZoom = maxZoomFor(catalog, basemap)
   const z = extent ? fitZoom(extent, maxZoom) : clamp(Math.round(zoom ?? 12), 0, maxZoom)
   const [lng, lat] = extent ? extentCenter(extent) : center!
 
@@ -94,9 +104,9 @@ export function previewTilesFor(project: PreviewSource): PreviewTile[] {
   const y1 = clamp(y0 + 1, 0, tileMax)
 
   return [
-    { x: x0, y: y0, z, url: tileUrl(basemap, x0, y0, z) },
-    { x: x1, y: y0, z, url: tileUrl(basemap, x1, y0, z) },
-    { x: x0, y: y1, z, url: tileUrl(basemap, x0, y1, z) },
-    { x: x1, y: y1, z, url: tileUrl(basemap, x1, y1, z) },
+    { x: x0, y: y0, z, url: tileUrl(catalog, basemap, x0, y0, z) },
+    { x: x1, y: y0, z, url: tileUrl(catalog, basemap, x1, y0, z) },
+    { x: x0, y: y1, z, url: tileUrl(catalog, basemap, x0, y1, z) },
+    { x: x1, y: y1, z, url: tileUrl(catalog, basemap, x1, y1, z) },
   ]
 }

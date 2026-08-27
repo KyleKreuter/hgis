@@ -16,13 +16,20 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { ApiError } from '@/api/client'
+import { useBasemaps } from '@/api/basemaps'
 import { useCreateProject } from '@/api/projects'
-import { BASEMAPS, DEFAULT_BASEMAP_ID, resolveBasemap } from '@/map/basemap'
+import { DEFAULT_BASEMAP_ID, resolveBasemap, validateBasemapUrlTemplate } from '@/map/basemap'
+import { BasemapEntryDetails } from '@/map/BasemapEntryDetails'
+import { CUSTOM_BASEMAP_OPTION, CustomBasemapUrlField } from '@/map/CustomBasemapUrlField'
+import { groupBasemaps } from '@/map/groupBasemaps'
 
 /**
  * Common storage CRS. The backend validates against spatial_ref_sys, so any EPSG code
@@ -47,18 +54,27 @@ interface CreateProjectDialogProps {
 export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogProps) {
   const navigate = useNavigate()
   const createProject = useCreateProject()
+  // Already prefetched by the project browser route's loader (`ensureBasemapsLoaded`).
+  const { data: catalog = [] } = useBasemaps()
+  const groups = groupBasemaps(catalog)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [srid, setSrid] = useState('25832')
   const [basemap, setBasemap] = useState<string>(DEFAULT_BASEMAP_ID)
+  const [customUrl, setCustomUrl] = useState('')
+  const [customUrlSubmitted, setCustomUrlSubmitted] = useState(false)
   const [nameError, setNameError] = useState<string>()
+
+  const isCustomBasemap = basemap === CUSTOM_BASEMAP_OPTION
 
   function reset() {
     setName('')
     setDescription('')
     setSrid('25832')
     setBasemap(DEFAULT_BASEMAP_ID)
+    setCustomUrl('')
+    setCustomUrlSubmitted(false)
     setNameError(undefined)
   }
 
@@ -66,12 +82,17 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
     event.preventDefault()
     setNameError(undefined)
 
+    if (isCustomBasemap) {
+      setCustomUrlSubmitted(true)
+      if (validateBasemapUrlTemplate(customUrl) !== null) return
+    }
+
     try {
       const project = await createProject.mutateAsync({
         name,
         description: description.trim() || undefined,
         srid: Number(srid),
-        basemap,
+        basemap: isCustomBasemap ? customUrl : basemap,
       })
       toast.success(`Projekt „${project.name}" angelegt`)
       reset()
@@ -157,27 +178,44 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
               </p>
             </div>
 
-            {/* The same catalog the map's picker offers, so a project can start on the
-                right background instead of on OSM and being corrected afterwards.
-                Changeable at any time -- unlike the CRS above. */}
+            {/* The same catalog the map's picker offers (`GET /api/basemaps`), so a
+                project can start on the right background instead of on OSM and being
+                corrected afterwards. Changeable at any time -- unlike the CRS above. */}
             <div className="grid gap-1.5">
               <Label htmlFor="project-basemap">Hintergrundkarte</Label>
               <Select value={basemap} onValueChange={(value) => value && setBasemap(value)}>
                 <SelectTrigger id="project-basemap" className="w-full">
-                  <SelectValue>{(value: string) => resolveBasemap(value).label}</SelectValue>
+                  <SelectValue>
+                    {(value: string) =>
+                      value === CUSTOM_BASEMAP_OPTION ? 'Eigene Kachel-URL' : resolveBasemap(catalog, value).label
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {BASEMAPS.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      <span className="flex flex-col items-start">
-                        <span>{option.label}</span>
-                        <span className="text-xs text-muted-foreground">{option.hint}</span>
-                      </span>
-                    </SelectItem>
+                  {groups.map((group) => (
+                    <SelectGroup key={group.group}>
+                      <SelectLabel>{group.group}</SelectLabel>
+                      {group.entries.map((entry) => (
+                        <SelectItem key={entry.id} value={entry.id}>
+                          <BasemapEntryDetails entry={entry} />
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   ))}
+                  <SelectSeparator />
+                  <SelectItem value={CUSTOM_BASEMAP_OPTION}>Eigene Kachel-URL…</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {isCustomBasemap && (
+              <CustomBasemapUrlField
+                value={customUrl}
+                onChange={setCustomUrl}
+                id="project-basemap-custom-url"
+                showError={customUrlSubmitted}
+              />
+            )}
           </div>
 
           <DialogFooter>

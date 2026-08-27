@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useBasemaps } from '@/api/basemaps'
 import { projectListInfiniteQuery, type ProjectSummary } from '@/api/projects'
 import { resolveBasemap, type BasemapDefinition } from '@/map/basemap'
 import { Brand } from '@/layout/Brand'
@@ -97,16 +98,20 @@ export function ProjectBrowser() {
     // and has to be re-checked there.
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
+  // Already prefetched by this route's own loader (`ensureBasemapsLoaded`) -- never a
+  // request of its own.
+  const { data: catalog = [] } = useBasemaps()
+
   // One notice per background map actually in use among the loaded tiles, not one per
   // tile -- CONTRACT.md phase 22 asks for the credit once on the page.
   const attributions = useMemo(() => {
     const byId = new Map<string, BasemapDefinition>()
     for (const project of projects) {
-      const basemap = resolveBasemap(project.basemap)
+      const basemap = resolveBasemap(catalog, project.basemap)
       if (basemap.attribution.length > 0) byId.set(basemap.id, basemap)
     }
     return [...byId.values()]
-  }, [projects])
+  }, [projects, catalog])
 
   const isFirstLoad = isLoading && projects.length === 0
 

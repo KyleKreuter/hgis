@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 // maplibre-gl v6 ships pure named exports, no default -- `Map` is renamed on
 // import since it would otherwise shadow the global/DOM `Map` class.
 import { Map as MapLibreMap, prewarm } from 'maplibre-gl'
+import { useBasemaps } from '@/api/basemaps'
 import { MapContext } from './MapContext'
 import { buildBasemapStyle, resolveBasemap } from './basemap'
 import { applyBasemap, applyBasemapOpacity } from './applyBasemap'
@@ -63,7 +64,16 @@ export function MapCanvas({
   // change is handled by the effects below, on the live map.
   const initialBasemapRef = useRef(basemapId)
   const initialOpacityRef = useRef(basemapOpacity)
-  const basemap = resolveBasemap(basemapId)
+  // Already prefetched by the workspace route's loader (`ensureBasemapsLoaded`) --
+  // `MapCanvas` only ever mounts once that promise has resolved, so this is a cache
+  // read, never a request of its own. Read once into a ref for the same reason as
+  // `initialBasemapRef`: the constructor style below must come from the catalog that
+  // was actually there at mount, and the catalog itself never changes afterwards
+  // anyway (VERTRAG.md).
+  const { data: catalog = [] } = useBasemaps()
+  const catalogRef = useRef(catalog)
+  catalogRef.current = catalog
+  const basemap = resolveBasemap(catalog, basemapId)
 
   useEffect(() => {
     const container = containerRef.current
@@ -82,7 +92,7 @@ export function MapCanvas({
     const view = initialViewRef.current
     const map = new MapLibreMap({
       container,
-      style: buildBasemapStyle(initialBasemapRef.current, initialOpacityRef.current),
+      style: buildBasemapStyle(catalogRef.current, initialBasemapRef.current, initialOpacityRef.current),
       // Our own controls replace the MapLibre defaults (zoom buttons, scale,
       // attribution) -- see the `controls/` components rendered as children.
       attributionControl: false,

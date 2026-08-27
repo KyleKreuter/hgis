@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { BASEMAPS, attributionText, resolveBasemap } from '../basemap'
+import { attributionText, resolveBasemap } from '../basemap'
 import { combinedAttributionParts } from '../geoportalAttribution'
+import { TEST_BASEMAP_CATALOG } from '../testBasemapCatalog'
 import { buildFurniture, type FurnitureInput } from './furniture'
 import { exportZoom } from './exportView'
 import { computeImageSize, findPageChoice } from './pageFormat'
@@ -15,7 +16,7 @@ function input(overrides: Partial<FurnitureInput> = {}): FurnitureInput {
     bearing: 0,
     pitch: 0,
     cssWidth: 1122,
-    attribution: resolveBasemap('osm').attribution,
+    attribution: resolveBasemap(TEST_BASEMAP_CATALOG, 'osm').attribution,
     ...overrides,
   }
 }
@@ -59,7 +60,8 @@ describe('buildFurniture: Quellenangabe', () => {
    * added later cannot arrive without one either.
    */
   it('trägt die Angabe jeder Hintergrundkarte, die eine verlangt', () => {
-    for (const basemap of BASEMAPS) {
+    for (const entry of TEST_BASEMAP_CATALOG) {
+      const basemap = resolveBasemap(TEST_BASEMAP_CATALOG, entry.id)
       const plan = buildFurniture(input({ attribution: basemap.attribution }))
       expect(plan.attribution).toBe(attributionText(basemap.attribution))
       if (basemap.attribution.length > 0) {
@@ -73,7 +75,7 @@ describe('buildFurniture: Quellenangabe', () => {
   })
 
   it('nimmt die Angaben sichtbarer Geoportal-Layer mit auf', () => {
-    const attribution = combinedAttributionParts(resolveBasemap('osm').attribution, [
+    const attribution = combinedAttributionParts(resolveBasemap(TEST_BASEMAP_CATALOG, 'osm').attribution, [
       {
         attribution: 'Freie und Hansestadt Hamburg, LGV',
         licenseUrl: 'https://www.govdata.de/dl-de/by-2-0',
