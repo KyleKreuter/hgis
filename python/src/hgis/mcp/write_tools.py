@@ -996,7 +996,10 @@ def delete_field(
     """
     Löscht ein Attributfeld -- die Spalte und ihr Inhalt sind danach weg.
     Nur über das Änderungsprotokoll des Servers wiederherstellbar, nicht
-    über dieses Werkzeug oder diese Bibliothek.
+    über dieses Werkzeug oder diese Bibliothek. Rufen Sie field_usage vorher
+    auf: hängt der Stil des Layers an diesem Feld, passt der Server ihn im
+    selben Zug an -- die Klassifizierung oder Beschriftung selbst ist danach
+    trotzdem weg.
     """
     try:
         resolved = _layer(layer, project)
@@ -1005,6 +1008,44 @@ def delete_field(
         return WriteResult(summary=f"Feld '{resolved_field.name}' aus '{resolved.name}' gelöscht.")
     except Exception as error:
         raise tool_error(error, doing=f"Löschen des Felds '{field}' aus '{layer}'") from error
+
+
+@server.tool()
+def rename_field(
+    layer: Annotated[str, Field(description=_LAYER_HELP)],
+    field: Annotated[
+        str,
+        Field(
+            description="Name, Spaltenname oder Id des Felds. Ein Name, der zu "
+            "mehreren Feldern eines Layers passt, wird abgelehnt statt geraten -- "
+            "nennen Sie dann die Feld-Id."
+        ),
+    ],
+    name: Annotated[
+        str,
+        Field(description="Der neue Anzeigename. Nicht leer, höchstens 200 Zeichen."),
+    ],
+    project: Annotated[str | None, Field(description=_PROJECT_FOR_LAYER_HELP)] = None,
+) -> WriteResult:
+    """
+    Benennt den Anzeigenamen eines Attributfelds um. Spalte und Typ bleiben
+    unverändert -- deshalb gefahrlos: Stil und bereits gezeichnete Kacheln
+    verweisen auf die Spalte, nie auf diesen Namen, und bleiben unberührt.
+
+    Nicht mitgezogen wird eine gespeicherte Sortierung der Attributtabelle,
+    falls sie noch den alten Namen nennt -- sie meldet dann beim nächsten
+    Lesen "Unbekanntes Sortierfeld", statt lautlos falsch zu sortieren.
+    """
+    try:
+        resolved = _layer(layer, project)
+        resolved_field = resolved.field(field)
+        old_name = resolved_field.name
+        renamed = resolved.rename_field(resolved_field, name)
+        return WriteResult(
+            summary=f"Feld '{old_name}' in '{resolved.name}' umbenannt in '{renamed.name}'."
+        )
+    except Exception as error:
+        raise tool_error(error, doing=f"Umbenennen des Felds '{field}' in '{layer}'") from error
 
 
 # --- style: what is stored -----------------------------------------------
@@ -1184,3 +1225,71 @@ def set_basemap(
         return WriteResult(summary=summary)
     except Exception as error:
         raise tool_error(error, doing=f"Setzen der Hintergrundkarte für '{project}'") from error
+
+
+# --- map layers: what is stored --------------------------------------------
+
+
+@server.tool()
+def create_map_layer(
+    project: Annotated[str, Field(description="Name oder Id des Projekts.")],
+    service_url: Annotated[
+        str,
+        Field(
+            description="Adresse des WMS-Diensts, mit oder ohne Query-Parameter -- "
+            "siehe wms_capabilities, das dieselbe Adresse liest und sagt, was der "
+            "Dienst anbietet, bevor hier etwas gespeichert wird."
+        ),
+    ],
+    layers: Annotated[
+        list[str],
+        Field(
+            description="Die gewählten Layer-Namen des Diensts, von unten nach oben "
+            "-- aus wms_capabilities. Wird gegen dessen eigene Capabilities geprüft, "
+            "bevor irgendetwas gespeichert wird; ein unbekannter Name meldet der "
+            "Server mit den gültigen."
+        ),
+    ],
+    image_format: Annotated[
+        str,
+        Field(
+            description="GetMap FORMAT, gegen die Formatliste des Diensts geprüft, "
+            'z.B. "image/png" -- siehe wms_capabilities.image_formats.'
+        ),
+    ],
+    name: Annotated[
+        str | None,
+        Field(
+            description="Name des neuen Layers im Projekt. Weggelassen, übernimmt er "
+            "den Titel des ersten gewählten Layers."
+        ),
+    ] = None,
+    dataset_id: Annotated[
+        str | None,
+        Field(
+            description="Id aus dem Geoportal-Katalog, falls dieser Dienst von dort "
+            "stammt -- weggelassen für eine von Hand eingegebene Adresse."
+        ),
+    ] = None,
+) -> WriteResult:
+    """
+    Fügt einem Projekt ein WMS-Kartenbild hinzu -- ein vom Dienst gezeichnetes
+    Bild, keine Objekte mit eigenen Attributen (siehe describe_layer, Feld
+    kind). Antwortet sofort, ohne Job: der Layer besteht bereits, wenn dieser
+    Aufruf zurückkehrt.
+
+    Rufen Sie wms_capabilities zuerst auf -- service_url, layers und
+    image_format müssen Werte sein, die der Dienst selbst anbietet, sonst
+    lehnt der Server mit den gültigen Namen ab, statt sie zu raten.
+    """
+    try:
+        proj = _project(project)
+        created = proj.create_map_layer(
+            service_url, layers, image_format, name=name, dataset_id=dataset_id
+        )
+        return WriteResult(
+            summary=f"Kartenbild-Layer '{created.name}' in '{proj.name}' angelegt "
+            f"({len(layers)} Layer aus {service_url})."
+        )
+    except Exception as error:
+        raise tool_error(error, doing=f"Anlegen des Kartenbild-Layers in '{project}'") from error

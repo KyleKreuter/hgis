@@ -292,6 +292,53 @@ Endpunkt einmal mit einem leeren 204 statt einem Rumpf, liefert die
 Bibliothek `None`, statt eine Objektzahl aus dem zu raten, was sie vor dem
 Aufruf über den Layer wusste -- das könnte inzwischen nicht mehr stimmen.
 
+### Einen WMS-Kartenbild-Layer anlegen
+
+Der zweite Weg, einem Projekt einen Layer hinzuzufügen: kein Import, keine
+eigenen Objekte, sondern ein vom Dienst gezeichnetes Bild, an jeder Kachel neu
+angefragt. `project.create_map_layer()` antwortet sofort, ohne Job -- der
+Layer besteht bereits, wenn der Aufruf zurückkehrt.
+
+`serviceUrl` und `layers` lassen sich nicht raten; deshalb zuerst die
+Capabilities des Diensts lesen:
+
+```python
+eigenes = client.create_project("agent-wms-test")
+
+capabilities = client.get(
+    "/api/wms/capabilities",
+    url="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten",
+)
+[l["name"] for l in capabilities["layers"] if l["name"]][:3]
+
+karte = eigenes.create_map_layer(
+    capabilities["serviceUrl"], ["geobasiskarten_farbig"], "image/png",
+)
+karte.kind, karte.geometry_type, karte.srid
+
+client.delete_project(eigenes.id)
+```
+
+Ausgeführt gegen den echten Dienst der Hamburger Geobasiskarten: Die ersten
+drei Layer-Namen des Diensts sind `['geobasiskarten_farbig', 'm2500_farbig',
+'m5000_farbig']`; der angelegte Layer heißt `'Geobasiskarten (farbig)'` (vom
+Dienst übernommen, `name` war nicht angegeben), und
+`karte.kind, karte.geometry_type, karte.srid` ist `('WMS', None, None)` -- ein
+Kartenbild hat keine Geometrie und kein eigenes Speicher-CRS, siehe
+[Layer](#layer). `layer.set_style()`, `create_field()` und die
+Objekt-Schreibwege dieses Kapitels gelten nur für `kind == "VECTOR"`.
+
+Für die Capabilities gibt es in der Bibliothek keine eigene Methode -- Lesen
+ist ohnehin uneingeschränkt, `client.get(...)` genügt, aus demselben Grund,
+aus dem der Geoportal-Katalog weiter unten ebenfalls nur so erreichbar ist.
+Über MCP gibt es dafür ein eigenes Werkzeug, `wms_capabilities` (siehe [Die
+Werkzeuge](#die-werkzeuge)): Ein Agent hat kein `client.get`, deshalb braucht
+genau dieser Fall dort einen eigenen Aufruf, den die Bibliothek selbst nicht
+braucht. Der Dienst muss von der Maschine aus erreichbar sein, die dieses
+Beispiel ausführt -- genau wie beim Import [aus dem Geoportal
+Hamburg](#aus-dem-geoportal-hamburg): auch dort ist der Datensatz ein echter,
+öffentlicher Dienst und keine lokale Testdatei.
+
 ### Stil setzen
 
 Eine Heatmap in drei Zeilen:
@@ -371,12 +418,24 @@ Alles andere im Stil -- Farbformat, Wertebereiche, ob ein Feldname wirklich
 zu diesem Layer gehört -- prüft nur der Server; seine Meldung nennt dann,
 was gültig gewesen wäre.
 
-### Felder anlegen und löschen
+### Felder anlegen, umbenennen und löschen
 
 ```python
 feld = layer.create_field("Baujahr", "INTEGER")
+feld = layer.rename_field(feld, "Baujahr (geschätzt)")   # auch nach Name/Id: layer.rename_field("Baujahr", ...)
 layer.delete_field(feld)              # auch nach Name oder Id: layer.delete_field("Baujahr")
 ```
+
+`rename_field()` ändert nur `source_name` -- `feld.column` bleibt `baujahr`,
+unverändert und unveränderlich. Deshalb gefahrlos: Stil und bereits
+gezeichnete Kacheln verweisen auf die Spalte, nie auf diesen Anzeigenamen, und
+bleiben von einer Umbenennung unberührt. Was nicht mitgezogen wird, ist eine
+gespeicherte Sortierung der Attributtabelle (`project.select()`s Ansicht),
+falls sie noch den alten Namen nennt -- sie meldet dann beim nächsten Lesen
+"Unbekanntes Sortierfeld", statt lautlos falsch zu sortieren. Deshalb steht
+`rename_field()` auch nicht in der Tabelle [Was unwiederbringlich
+ist](#was-unwiederbringlich-ist): anders als `delete_field()` lässt sich eine
+Umbenennung mit einem weiteren `rename_field()`-Aufruf jederzeit zurücknehmen.
 
 ### Objekte schreiben
 
@@ -434,6 +493,7 @@ und 3 löschen. Die Bibliothek lehnt eine Zeichenkette hier mit
 | `layer.purge()` | **Nein.** Es gibt keinen Papierkorb hinter diesem Aufruf |
 | `layer.delete_field(...)` | **Nein**, nicht über diese Bibliothek |
 | `layer.delete_features(...)` / `layer.edit(deletes=...)` | **Nein**, nicht über diese Bibliothek |
+| `layer.rename_field(...)` | Ja -- ein erneuter Aufruf setzt den alten Namen zurück; Stil und Kacheln sind ohnehin nie betroffen, siehe [oben](#felder-anlegen-umbenennen-und-löschen) |
 
 Für gelöschte Felder und Objekte führt der Server ein Änderungsprotokoll
 (`GET /api/projects/{id}/changes`), das bei einer Objektlöschung die
@@ -1057,7 +1117,7 @@ Name: Höhe, dtype: float64
 
 ### Die Werkzeuge
 
-Elf lesende, dieselbe Oberfläche wie oben in dieser Datei, nur als
+Vierzehn lesende, dieselbe Oberfläche wie oben in dieser Datei, nur als
 Werkzeugaufruf statt als Methode:
 
 | Aufruf | Antwort |
@@ -1070,9 +1130,12 @@ Werkzeugaufruf statt als Methode:
 | `count_features(layer, where=, bbox=, search=, ...)` | nur die Anzahl, kein Datenrumpf |
 | `field_values(layer, field, limit=, ...)` | Werte eines Textfelds mit Häufigkeit, `truncated` |
 | `field_classes(layer, field, classes=, method=, ...)` | Klassengrenzen eines Zahlenfelds, `minimum`/`maximum`/`null_count` -- das Gegenstück zu `field_values` |
+| `field_usage(layer, field, project=)` | ob ein Feld gerade den Stil klassifiziert oder beschriftet, und wie viele Objekte einen Wert darin haben -- die übliche Prüfung vor `delete_field` |
 | `get_style(layer, ...)` | der aktuelle Stil (`hgis.Style`), unverändert an `set_style` zurückgebbar; `None` für die Standarddarstellung |
 | `get_view(project)` | Mitte, Zoom, Ausschnitt, aktiver Layer |
 | `get_selection(project, layer=)` | was gerade ausgewählt ist |
+| `list_basemaps()` | der Hintergrundkarten-Katalog, gruppiert -- jede Id, die `set_basemap` entgegennimmt |
+| `wms_capabilities(url)` | was ein WMS-Dienst anbietet: seine Layer-Namen und -Titel, Bildformate, wo jeder Layer liegt -- die übliche Prüfung vor `create_map_layer` |
 
 Am Layer "Gebäude Speicherstadt", Feld `Baujahr`, gemessen:
 
@@ -1086,7 +1149,7 @@ field_classes(layer="Gebäude Speicherstadt", project="Leitungsnetz Nord",
 `breaks` hat `classes + 1` Einträge -- jede Untergrenze plus das Maximum --,
 außer das Feld hat weniger unterschiedliche Werte, als `classes` verlangt.
 
-Neunzehn schreibende. Auswahl und Ansicht kosten nichts, wenn ein Aufruf
+Zweiundzwanzig schreibende. Auswahl und Ansicht kosten nichts, wenn ein Aufruf
 danebengeht -- der nächste setzt beides wieder zurecht. Projekte, Objekte,
 Layer, Felder und Stil sind unterschiedlich weit rückgängig zu machen,
 dieselbe Unterscheidung wie in
@@ -1106,13 +1169,16 @@ dieselbe Unterscheidung wie in
 | `update_features(layer, updates, ...)` | ändert Geometrie/Attribute | **nein**, nur über das Änderungsprotokoll |
 | `delete_features(layer, fids, ...)` | löscht Objekte | **nein**, nur über das Änderungsprotokoll |
 | `create_layer(project, name, geometry_type, fields=)` | legt einen leeren Layer an | ja, mit `delete_layer` |
+| `create_map_layer(project, service_url, layers, image_format, name=, dataset_id=)` | legt einen WMS-Kartenbild-Layer an -- kein Job, sofort da | ja, mit `delete_layer` |
 | `update_layer(layer, name=, visible=, ...)` | ändert Name/Sichtbarkeit | ja, jederzeit |
 | `delete_layer(layer, ...)` | Layer in den Papierkorb | ja, mit `restore_layer` -- bis `purge_layer` |
 | `restore_layer(layer_id)` | Layer aus dem Papierkorb zurück | -- |
 | `purge_layer(layer_id)` | Layer und Daten endgültig löschen | **nein** |
 | `create_field(layer, name, type, ...)` | neues Attributfeld | ja, mit `delete_field`, solange leer |
+| `rename_field(layer, field, name, ...)` | ändert den Anzeigenamen eines Felds | ja, mit einem erneuten `rename_field` |
 | `delete_field(layer, field, ...)` | löscht ein Feld samt Inhalt | **nein**, nur über das Änderungsprotokoll |
 | `set_style(layer, style, ...)` | ersetzt den Stil vollständig | ja, mit dem vorher über `get_style` gelesenen Stand |
+| `set_basemap(project, basemap=, layer=, opacity=)` | setzt die Hintergrundkarte des Projekts oder eines einzelnen Layers | ja, jederzeit |
 
 `layer_id` bei `restore_layer`/`purge_layer` ist ausdrücklich die Id, nicht
 Name-oder-Id wie sonst: Ein Layer im Papierkorb ist über seinen Namen nicht

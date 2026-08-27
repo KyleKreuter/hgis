@@ -38,7 +38,6 @@ def guarded(transport: FakeTransport) -> hgis.Client:
         ("PUT", f"/api/projects/{PROJECT_ID}/layers/order"),  # reordering: not opened
         ("POST", f"/api/layers/{LAYER_ID}/features/1/split"),  # split: not opened
         ("POST", f"/api/layers/{LAYER_ID}/features/merge"),  # merge: not opened
-        ("PATCH", f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}"),  # renaming a field: not opened
         ("DELETE", f"/api/layers/{LAYER_ID}/fields/x"),  # "x" is not a field id
     ],
 )
@@ -106,6 +105,8 @@ def test_there_is_no_generic_write_verb() -> None:
         "apply_edits",
         "create_field",
         "delete_field",
+        "rename_field",
+        "create_map_layer",
     ):
         assert hasattr(hgis.Client, named)
 
@@ -173,6 +174,8 @@ def test_the_view_state_write_still_works(transport) -> None:
         ("POST", f"/api/layers/{LAYER_ID}/edits"),
         ("POST", f"/api/layers/{LAYER_ID}/fields"),
         ("DELETE", f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}"),
+        ("PATCH", f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}"),
+        ("POST", f"/api/projects/{PROJECT_ID}/map-layers"),
     ],
 )
 def test_this_stages_write_paths_are_allowed(method, path) -> None:
@@ -380,6 +383,7 @@ def test_the_layer_write_paths_need_a_real_layer_id(guarded, transport, layer_id
         ("DELETE", f"/api/layers/{layer_id}/purge"),
         ("POST", f"/api/layers/{layer_id}/edits"),
         ("POST", f"/api/layers/{layer_id}/fields"),
+        ("PATCH", f"/api/layers/{layer_id}/fields/{OTHER_UUID}"),
     ):
         with pytest.raises(hgis.GuardError):
             guarded._send(method, path, json={})

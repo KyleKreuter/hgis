@@ -374,6 +374,59 @@ def test_create_layer_without_fields_omits_the_key() -> None:
     assert "fields" not in transport.bodies[-1]
 
 
+def test_create_map_layer_sends_the_required_fields_and_returns_a_wms_layer() -> None:
+    def handle(request: object) -> Response:
+        return Response(
+            201,
+            f'{{"id":"{LAYER_ID}","name":"Geobasiskarten","kind":"WMS",'
+            '"geometryType":null,"srid":null,"featureCount":0,"visible":true}',
+        )
+
+    client, transport = _client(handle)
+    layer = _project(client).create_map_layer(
+        "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten",
+        ["De_Basiskarte_HH"],
+        "image/png",
+    )
+
+    assert transport.requests[-1].method == "POST"
+    assert transport.requests[-1].path == f"/api/projects/{PROJECT_ID}/map-layers"
+    assert transport.bodies[-1] == {
+        "serviceUrl": "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten",
+        "layers": ["De_Basiskarte_HH"],
+        "imageFormat": "image/png",
+    }
+    assert isinstance(layer, hgis.Layer)
+    assert layer.kind == "WMS"
+    assert layer.name == "Geobasiskarten"
+
+
+def test_create_map_layer_sends_name_and_dataset_id_when_given() -> None:
+    def handle(request: object) -> Response:
+        return Response(
+            201,
+            f'{{"id":"{LAYER_ID}","name":"Eigener Name","kind":"WMS",'
+            '"geometryType":null,"srid":null,"featureCount":0,"visible":true}',
+        )
+
+    client, transport = _client(handle)
+    _project(client).create_map_layer(
+        "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten",
+        ["a", "b"],
+        "image/png",
+        name="Eigener Name",
+        dataset_id="ds-1",
+    )
+
+    assert transport.bodies[-1] == {
+        "serviceUrl": "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten",
+        "layers": ["a", "b"],
+        "imageFormat": "image/png",
+        "name": "Eigener Name",
+        "datasetId": "ds-1",
+    }
+
+
 def test_layer_update_sends_only_the_given_fields() -> None:
     def handle(request: object) -> Response:
         return Response(
@@ -626,6 +679,60 @@ def test_delete_field_resolves_a_name_first() -> None:
     layer.delete_field("Höhe")
 
     assert transport.requests[-1].path == f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}"
+
+
+def test_rename_field_sends_the_new_name_and_updates_the_cache() -> None:
+    def handle(request: object) -> Response:
+        return Response(
+            200,
+            f'{{"id":"{OTHER_UUID}","sourceName":"Gebäudehöhe","columnName":"hoehe",'
+            '"dataType":"double precision"}',
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+    field = layer.fields()[0]
+
+    renamed = layer.rename_field(field, "Gebäudehöhe")
+
+    assert transport.requests[-1].method == "PATCH"
+    assert transport.requests[-1].path == f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}"
+    assert transport.bodies[-1] == {"name": "Gebäudehöhe"}
+    assert renamed.name == "Gebäudehöhe"
+    assert renamed.column == "hoehe", "Die Spalte darf sich beim Umbenennen nicht ändern."
+    assert layer.fields() == [renamed], "Der Zwischenspeicher zeigt noch den alten Namen."
+
+
+def test_rename_field_resolves_a_name_first() -> None:
+    def handle(request: object) -> Response:
+        return Response(
+            200,
+            f'{{"id":"{OTHER_UUID}","sourceName":"Neu","columnName":"hoehe",'
+            '"dataType":"double precision"}',
+        )
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    layer.rename_field("Höhe", "Neu")
+
+    assert transport.requests[-1].path == f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}"
+
+
+def test_field_usage_reads_the_usage_of_the_resolved_field() -> None:
+    def handle(request: object) -> Response:
+        return Response(200, '{"valueCount":812,"usedByRenderer":true,"usedByLabels":false}')
+
+    client, transport = _client(handle)
+    layer = _layer(client)
+
+    usage = layer.field_usage("Höhe")
+
+    assert transport.requests[-1].method == "GET"
+    assert transport.requests[-1].path == f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}/usage"
+    assert usage.value_count == 812
+    assert usage.used_by_renderer is True
+    assert usage.used_by_labels is False
 
 
 # --- objects ---------------------------------------------------------------
@@ -1090,6 +1197,10 @@ def test_a_row_version_conflict_carries_the_current_row() -> None:
         lambda layer, project: layer.delete_features([1]),
         lambda layer, project: layer.create_field("Neu", "TEXT"),
         lambda layer, project: layer.delete_field(layer.fields()[0]),
+        lambda layer, project: layer.rename_field(layer.fields()[0], "Neu2"),
+        lambda layer, project: project.create_map_layer(
+            "https://example.org/wms", ["a"], "image/png"
+        ),
     ],
     ids=[
         "create_layer",
@@ -1101,6 +1212,8 @@ def test_a_row_version_conflict_carries_the_current_row() -> None:
         "delete_features",
         "create_field",
         "delete_field",
+        "rename_field",
+        "create_map_layer",
     ],
 )
 def test_every_write_carries_the_client_name(act) -> None:
@@ -1122,6 +1235,18 @@ def test_every_write_carries_the_client_name(act) -> None:
             return Response(
                 201,
                 f'{{"id":"{OTHER_UUID}","sourceName":"Neu","columnName":"neu","dataType":"text"}}',
+            )
+        if "/fields/" in path and request.method == "PATCH":
+            return Response(
+                200,
+                f'{{"id":"{OTHER_UUID}","sourceName":"Neu2","columnName":"hoehe",'
+                '"dataType":"double precision"}',
+            )
+        if path.endswith("/map-layers") and request.method == "POST":
+            return Response(
+                201,
+                f'{{"id":"{LAYER_ID}","name":"Kartenbild","kind":"WMS",'
+                '"geometryType":null,"srid":null,"featureCount":0,"visible":true}',
             )
         if request.method == "PATCH":
             return Response(

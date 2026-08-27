@@ -188,13 +188,15 @@ _EVENTS_PATH = "/api/events"
 #: (:meth:`hgis.project.Project.update`) -- and delete, for good
 #: (:meth:`Client.delete_project`); a layer's lifecycle -- create, change,
 #: delete (to the trash), restore, purge (out of the trash, for good); a
-#: batch of object edits; a field's own create and delete; and pulling data
-#: in -- inspecting a file or upload before anything is written
-#: (:meth:`Client.inspect_import`), importing one into a new layer
-#: (:meth:`Client.start_import`), and the same from the Geoportal Hamburg
-#: instead of a file (:meth:`Client.start_geoportal_import`). Every other
-#: method or path is refused before it reaches the network -- split, merge
-#: and layer reordering among them, which this stage does not open.
+#: batch of object edits; a field's own create, rename and delete; a WMS map
+#: image layer, added to a project from an existing service
+#: (:meth:`Client.create_map_layer`); and pulling data in -- inspecting a
+#: file or upload before anything is written (:meth:`Client.inspect_import`),
+#: importing one into a new layer (:meth:`Client.start_import`), and the same
+#: from the Geoportal Hamburg instead of a file
+#: (:meth:`Client.start_geoportal_import`). Every other method or path is
+#: refused before it reaches the network -- split, merge and layer
+#: reordering among them, which this stage does not open.
 #:
 #: A deleted project has no trash behind it, the same as a purged layer --
 #: :meth:`Client.delete_project` is as final as :meth:`Client.purge_layer`
@@ -228,6 +230,9 @@ _ALLOWED: tuple[tuple[str, str], ...] = (
     ("POST", rf"/api/layers/{_UUID}/edits"),
     ("POST", rf"/api/layers/{_UUID}/fields"),
     ("DELETE", rf"/api/layers/{_UUID}/fields/{_UUID}"),
+    # --- package C: renaming a field, adding a WMS map image layer --------
+    ("PATCH", rf"/api/layers/{_UUID}/fields/{_UUID}"),
+    ("POST", rf"/api/projects/{_UUID}/map-layers"),
 )
 
 
@@ -250,9 +255,11 @@ def _check_allowed(method: str, url: str) -> None:
         "Layer anlegen, ändern, löschen, wiederherstellen oder endgültig löschen "
         "(project.create_layer(), layer.update()/.delete()/.restore()/.purge()), "
         "ein Stapel Objekt-Änderungen (layer.edit(), layer.insert(), "
-        "layer.update_feature(), layer.delete_features()), ein Feld anlegen "
-        "oder löschen (layer.create_field(), layer.delete_field()) sowie Daten "
-        "hereinholen (project.inspect_import(), project.import_file(), "
+        "layer.update_feature(), layer.delete_features()), ein Feld anlegen, "
+        "umbenennen oder löschen (layer.create_field(), layer.rename_field(), "
+        "layer.delete_field()), einen WMS-Kartenbild-Layer anlegen "
+        "(project.create_map_layer()) sowie Daten hereinholen "
+        "(project.inspect_import(), project.import_file(), "
         "project.import_geoportal())."
     )
 
@@ -961,6 +968,19 @@ class Client:
         """Delete one attribute field. See :meth:`hgis.layer.Layer.delete_field`."""
         self._send("DELETE", f"/api/layers/{layer_id}/fields/{field_id}")
 
+    def rename_field(self, layer_id: str, field_id: str, name: str) -> Any:
+        """
+        Rename one attribute field's display name. See
+        :meth:`hgis.layer.Layer.rename_field`, which is how to call this.
+
+        Only ``source_name`` changes -- the column and its type are
+        immutable, so this never touches the style or any tile already
+        drawn, both of which key on the column rather than this name.
+        """
+        return self._send(
+            "PATCH", f"/api/layers/{layer_id}/fields/{field_id}", json={"name": name}
+        )
+
     # --- imports -------------------------------------------------------
 
     def inspect_import(
@@ -1075,6 +1095,53 @@ class Client:
         if name is not None:
             body["name"] = name
         return self._send("POST", f"/api/projects/{project_id}/geoportal-imports", json=body)
+
+    # --- map layers ------------------------------------------------------
+
+    def create_map_layer(
+        self,
+        project_id: str,
+        service_url: str,
+        layers: Iterable[str],
+        image_format: str,
+        *,
+        name: str | None = None,
+        dataset_id: str | None = None,
+    ) -> Any:
+        """
+        Add a WMS map image layer to a project. See
+        :meth:`hgis.project.Project.create_map_layer`, which is how to call
+        this and wraps the answer in a :class:`hgis.layer.Layer`.
+
+        No job: nothing is downloaded, so the layer exists by the time this
+        returns -- unlike :meth:`start_import` and
+        :meth:`start_geoportal_import`, both of which answer with a job to
+        poll instead.
+
+        :param service_url: the WMS service's own address, with or without
+            query parameters -- read again through the server the same way
+            ``client.get("/api/wms/capabilities", url=service_url)`` does,
+            which is the way to find out what ``layers`` and
+            ``image_format`` may be before calling this
+        :param layers: the chosen layer names, bottom first -- checked
+            against the service's own capabilities before anything is stored
+        :param image_format: GetMap ``FORMAT``, checked against the
+            service's own list, e.g. ``"image/png"``
+        :param name: this layer's name in the project, or None to take the
+            title of the first chosen layer
+        :param dataset_id: the Geoportal catalog id this dataset came from,
+            or None for an address typed in by hand
+        """
+        body: dict[str, Any] = {
+            "serviceUrl": service_url,
+            "layers": list(layers),
+            "imageFormat": image_format,
+        }
+        if name is not None:
+            body["name"] = name
+        if dataset_id is not None:
+            body["datasetId"] = dataset_id
+        return self._send("POST", f"/api/projects/{project_id}/map-layers", json=body)
 
     # --- the live channel ----------------------------------------------
 

@@ -186,6 +186,50 @@ class Project:
         )
         return Layer(self._client, data, project=self)
 
+    def create_map_layer(
+        self,
+        service_url: str,
+        layers: Sequence[str],
+        image_format: str,
+        *,
+        name: str | None = None,
+        dataset_id: str | None = None,
+    ) -> "Layer":
+        """
+        Add a WMS map image layer to this project -- a picture the service
+        draws, not objects with attributes of their own (see
+        :attr:`hgis.layer.Layer.kind`). No job: the layer exists by the time
+        this returns, unlike :meth:`import_file` and :meth:`import_geoportal`,
+        which both hand back one to poll instead.
+
+        Read the service's own capabilities first -- ``client.get(
+        "/api/wms/capabilities", url=service_url)``, or
+        :func:`hgis.mcp.read_tools.wms_capabilities` from an MCP client --
+        ``layers`` and ``image_format`` have to be names the service itself
+        offers, checked there before anything here is stored.
+
+        >>> caps = client.get("/api/wms/capabilities",
+        ...     url="https://geodienste.hamburg.de/HH_WMS_Geobasiskarten")
+        >>> project.create_map_layer(
+        ...     caps["serviceUrl"], [caps["layers"][0]["name"]], "image/png")
+
+        :param service_url: the service's own address, with or without query
+            parameters
+        :param layers: the chosen layer names, bottom first -- the order the
+            service draws them in
+        :param image_format: GetMap ``FORMAT``, e.g. ``"image/png"``
+        :param name: this layer's name in the project, or None to take the
+            title of the first chosen layer
+        :param dataset_id: the Geoportal catalog id this dataset came from,
+            or None for an address typed in by hand
+        """
+        from .layer import Layer
+
+        data = self._client.create_map_layer(
+            self.id, service_url, layers, image_format, name=name, dataset_id=dataset_id
+        )
+        return Layer(self._client, data, project=self)
+
     def update(
         self,
         *,
