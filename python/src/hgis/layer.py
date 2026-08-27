@@ -125,6 +125,53 @@ def _to_trash_entry(data: dict[str, Any]) -> TrashEntry:
 
 
 @dataclass(frozen=True)
+class LayerSource:
+    """
+    Where a layer's data came from, for one imported from the Hamburg
+    Geoportal (CONTRACT.md phase 23.7) -- what :attr:`Layer.source` answers.
+
+    ``license_name``, ``license_url``, ``dataset_uri`` and ``metadata_url``
+    are what the Datenlizenz Deutschland requires shown alongside the data.
+    ``attribution`` belongs with them but can be missing even here: the
+    Geoportal's own service directory leaves it blank for some datasets that
+    do carry a licence and a metadata record, so it stays optional rather
+    than dropping the whole notice over one empty field.
+
+    :param dataset_id: the catalog's own id for the imported dataset, kept
+        for a future re-import reconcile -- not shown anywhere in this
+        library today
+    :param feature_id_field: the field the Geoportal used as each object's
+        identity, kept for the same reconcile
+    :param fetched_at: ISO 8601, when this layer's data was last pulled from
+        the Geoportal
+    """
+
+    attribution: str | None
+    license_name: str | None
+    license_url: str | None
+    dataset_uri: str | None
+    metadata_url: str | None
+    dataset_id: str | None
+    feature_id_field: str | None
+    fetched_at: str | None
+
+
+def _to_layer_source(data: dict[str, Any] | None) -> "LayerSource | None":
+    if not data:
+        return None
+    return LayerSource(
+        attribution=data.get("attribution"),
+        license_name=data.get("licenseName"),
+        license_url=data.get("licenseUrl"),
+        dataset_uri=data.get("datasetUri"),
+        metadata_url=data.get("metadataUrl"),
+        dataset_id=data.get("datasetId"),
+        feature_id_field=data.get("featureIdField"),
+        fetched_at=data.get("fetchedAt"),
+    )
+
+
+@dataclass(frozen=True)
 class Classification:
     """
     Where a numeric field's class boundaries fall, as :meth:`Layer.classify`
@@ -210,6 +257,70 @@ class Layer:
         return self._data.get("visible", True)
 
     @property
+    def z_index(self) -> int | None:
+        """
+        Drawing order among the other layers of the same project -- higher
+        draws on top of lower. What :meth:`update`'s ``z_index`` writes.
+
+        None only if the server's answer left the field out, which no
+        endpoint reaching this class does today. Read as None rather than
+        guessing 0: 0 is itself a valid position, and a guessed default
+        would be indistinguishable from a real one -- unlike :attr:`visible`,
+        where True is a reasonable assumption about a layer nobody has
+        touched, there is no such reasonable guess for a position.
+        """
+        return self._data.get("zIndex")
+
+    @property
+    def min_zoom(self) -> int | None:
+        """
+        Lowest zoom level this layer draws at. What :meth:`update`'s
+        ``min_zoom`` writes.
+
+        None only if the server's answer left the field out -- see
+        :attr:`z_index` for why that beats guessing a number.
+        """
+        return self._data.get("minZoom")
+
+    @property
+    def max_zoom(self) -> int | None:
+        """
+        Highest zoom level this layer draws at. What :meth:`update`'s
+        ``max_zoom`` writes.
+
+        None only if the server's answer left the field out -- see
+        :attr:`z_index`. A guessed ceiling would look exactly like a value
+        someone actually set.
+        """
+        return self._data.get("maxZoom")
+
+    @property
+    def basemap(self) -> str | None:
+        """
+        This layer's own basemap, overriding its project's -- or None to
+        follow the project's, which is the default for almost every layer.
+        See :attr:`hgis.project.Project.basemap`.
+        """
+        return self._data.get("basemap")
+
+    @property
+    def basemap_opacity(self) -> float | None:
+        """Opacity of :attr:`basemap` itself, between 0 and 1 -- None along with it."""
+        return self._data.get("basemapOpacity")
+
+    @property
+    def clip_mode(self) -> str | None:
+        """
+        This layer's role as one of its project's clip masks: ``insideWhole``,
+        ``insideClipped``, ``outsideWhole`` or ``outsideClipped`` -- or None
+        for a layer that is not one.
+
+        Non-null even while :attr:`visible` is False -- the clip a mask
+        produces does not depend on whether the mask itself is drawn.
+        """
+        return self._data.get("clipMode")
+
+    @property
     def extent(self) -> tuple[float, float, float, float] | None:
         """(minLng, minLat, maxLng, maxLat) in EPSG:4326, or None if empty."""
         value = self._data.get("extent")
@@ -230,6 +341,15 @@ class Layer:
         whole document, there is no partial update.
         """
         return Style.from_json(self._data.get("style"))
+
+    @property
+    def source(self) -> "LayerSource | None":
+        """
+        Where this layer's data came from, when it was imported from the
+        Hamburg Geoportal -- or None for a layer imported any other way. See
+        :class:`LayerSource`.
+        """
+        return _to_layer_source(self._data.get("source"))
 
     def __repr__(self) -> str:
         return (

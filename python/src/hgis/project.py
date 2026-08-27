@@ -41,6 +41,32 @@ class Project:
         return self._data.get("description")
 
     @property
+    def basemap(self) -> str | None:
+        """
+        This project's basemap, e.g. ``"osm"`` -- what draws under every
+        layer that does not set its own, see
+        :attr:`hgis.layer.Layer.basemap`. What :meth:`update`'s ``basemap``
+        writes.
+
+        A real server always sets one; None here means only that this
+        particular object was built without the field.
+        """
+        return self._data.get("basemap")
+
+    @property
+    def basemap_opacity(self) -> float | None:
+        """
+        Opacity of :attr:`basemap` itself, between 0 and 1. What
+        :meth:`update`'s ``basemap_opacity`` writes.
+
+        Carried on a single project read (:meth:`hgis.client.Client.project`
+        by id, :meth:`view`, the result of :meth:`update`) but not on the
+        list :meth:`hgis.client.Client.projects` returns -- None there until
+        one of those reads this project in full.
+        """
+        return self._data.get("basemapOpacity")
+
+    @property
     def srid(self) -> int:
         """The CRS the project stores its geometries in, e.g. 25832."""
         return self._data["srid"]
