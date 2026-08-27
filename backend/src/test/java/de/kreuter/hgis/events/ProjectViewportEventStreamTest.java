@@ -138,7 +138,9 @@ class ProjectViewportEventStreamTest {
 
 		mockMvc.perform(patch("/api/projects/{id}", project.getId())
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"basemap\": \"satellite\"}"))
+						// A real basemap token since Befund 1 (Validierung, 27.08.) -- an
+						// unknown one such as the previous "satellite" is now a 400.
+						.content("{\"basemap\": \"opentopo\"}"))
 				.andExpect(status().isOk());
 
 		assertThat(viewportEventsOf(stream)).isEmpty();

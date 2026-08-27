@@ -4,6 +4,7 @@ import de.kreuter.hgis.catalog.dto.LayerDtos;
 import de.kreuter.hgis.changelog.ChangeLogAction;
 import de.kreuter.hgis.changelog.ChangeLogService;
 import de.kreuter.hgis.common.BadRequestException;
+import de.kreuter.hgis.common.Basemap;
 import de.kreuter.hgis.common.ConflictException;
 import de.kreuter.hgis.common.FieldType;
 import de.kreuter.hgis.common.FieldValidationException;
@@ -33,9 +34,6 @@ public class LayerService {
 
 	/** Matches the CONTRACT: enough for a genuine attribute schema, not enough to be a dump. */
 	private static final int MAX_FIELDS = 50;
-
-	/** The server does not know the basemap catalogue, only how long a token may be. */
-	private static final int MAX_BASEMAP_LENGTH = 64;
 
 	/** Only these can act as a clip mask (CONTRACT.md phase 19) -- a point or line mask would clip everything to nothing. */
 	private static final Set<String> CLIP_MASK_GEOMETRY_TYPES =
@@ -400,10 +398,10 @@ public class LayerService {
 			throw new FieldValidationException("fields", "Feldtyp fehlt");
 		}
 		try {
-			return FieldType.valueOf(raw);
+			return FieldType.fromToken(raw);
 		}
 		catch (IllegalArgumentException e) {
-			throw new FieldValidationException("fields", FieldType.unknownTypeMessage(raw));
+			throw new FieldValidationException("fields", e.getMessage());
 		}
 	}
 
@@ -497,9 +495,11 @@ public class LayerService {
 			throw new FieldValidationException("basemap", "Die Hintergrundkarte muss eine Zeichenkette sein");
 		}
 		String value = node.asString();
-		if (value.length() > MAX_BASEMAP_LENGTH) {
-			throw new FieldValidationException("basemap",
-					"Der Name der Hintergrundkarte darf höchstens " + MAX_BASEMAP_LENGTH + " Zeichen lang sein");
+		try {
+			Basemap.fromToken(value);
+		}
+		catch (IllegalArgumentException e) {
+			throw new FieldValidationException("basemap", e.getMessage());
 		}
 		return value;
 	}

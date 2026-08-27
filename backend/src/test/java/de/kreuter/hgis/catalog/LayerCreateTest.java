@@ -391,6 +391,36 @@ class LayerCreateTest {
 								+ "NUMERIC, BOOLEAN, DATE, TIME, TIMESTAMP."));
 	}
 
+	static Stream<Arguments> fieldTypeTokensAsDescribeLayerReportsThem() {
+		// Exactly the layer_field.data_type value describe_layer hands back for an
+		// existing field of this type -- see LayerField#getDataType and FieldType#pgType.
+		return Stream.of(
+				Arguments.of("text", FieldType.TEXT),
+				Arguments.of("bigint", FieldType.BIGINT),
+				Arguments.of("double precision", FieldType.DOUBLE),
+				Arguments.of("timestamptz", FieldType.TIMESTAMP));
+	}
+
+	/**
+	 * Befund 2 (Validierung, 27.08.): {@code describe_layer} reports a field's type
+	 * lower-case, in {@code layer_field.data_type}'s own spelling ({@code "double
+	 * precision"}, {@code "timestamptz"}, ...); {@code create_layer} used to demand the
+	 * upper-case constant name and nothing else. A caller reading a type off one field to
+	 * create another with the same type -- the exact round trip the MCP tools invite --
+	 * ran straight into that mismatch.
+	 */
+	@ParameterizedTest
+	@MethodSource("fieldTypeTokensAsDescribeLayerReportsThem")
+	@DisplayName("accepts a field type exactly as describe_layer would report it back")
+	void acceptsAFieldTypeSpelledAsDescribeLayerReportsIt(String token, FieldType expected) throws Exception {
+		JsonNode created = createLayer(createBody("Rundreise " + token, "MULTIPOINT",
+				fieldsArray(field("Wert", token))));
+		UUID layerId = UUID.fromString(created.get("id").asText());
+
+		LayerField field = fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId).get(0);
+		assertThat(field.getDataType()).isEqualTo(expected.pgType());
+	}
+
 	@Test
 	void rejectsABlankFieldName() throws Exception {
 		mockMvc.perform(post("/api/projects/{projectId}/layers", project.getId())

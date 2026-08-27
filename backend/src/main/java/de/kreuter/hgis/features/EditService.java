@@ -3,6 +3,7 @@ package de.kreuter.hgis.features;
 import de.kreuter.hgis.catalog.Layer;
 import de.kreuter.hgis.catalog.LayerField;
 import de.kreuter.hgis.catalog.LayerFieldRepository;
+import de.kreuter.hgis.catalog.LayerFields;
 import de.kreuter.hgis.catalog.LayerRepository;
 import de.kreuter.hgis.changelog.ChangeLogAction;
 import de.kreuter.hgis.changelog.ChangeLogService;
@@ -80,7 +81,7 @@ public class EditService {
 		}
 
 		String table = SqlIdentifier.quoteLayerTable(layer.getTableName());
-		Map<String, LayerField> fields = fieldsByColumn(layerId);
+		List<LayerField> fields = fieldsOf(layerId);
 
 		Map<Long, Long> createdFids = new LinkedHashMap<>();
 		for (EditDtos.Create create : request.creates()) {
@@ -101,7 +102,7 @@ public class EditService {
 		int deleted = 0;
 		if (!request.deletes().isEmpty()) {
 			FeatureDeleteCapture.Result capture =
-					deleteCapture.deleteAndCapture(table, fields.values(), request.deletes());
+					deleteCapture.deleteAndCapture(table, fields, request.deletes());
 			deleted = capture.count();
 			if (deleted > 0) {
 				log(layer, ChangeLogAction.FEATURE_DELETE, clientName, deleted, capture.rowsJson());
@@ -118,7 +119,7 @@ public class EditService {
 
 	// --- writes -----------------------------------------------------------------------
 
-	private long insert(String table, Layer layer, Map<String, LayerField> fields,
+	private long insert(String table, Layer layer, List<LayerField> fields,
 			EditDtos.Create create, boolean repairInvalid) {
 		if (create.geometry() == null) {
 			throw new BadRequestException("Neues Objekt " + create.clientId() + " hat keine Geometrie");
@@ -144,7 +145,7 @@ public class EditService {
 		return statement.query(Long.class).single();
 	}
 
-	private int update(String table, Layer layer, Map<String, LayerField> fields,
+	private int update(String table, Layer layer, List<LayerField> fields,
 			EditDtos.Update update, boolean repairInvalid) {
 		List<String> assignments = new ArrayList<>();
 		List<Object> values = new ArrayList<>();
@@ -313,32 +314,32 @@ public class EditService {
 
 	// --- attributes -------------------------------------------------------------------
 
-	private Map<String, LayerField> fieldsByColumn(UUID layerId) {
-		Map<String, LayerField> result = new LinkedHashMap<>();
-		for (LayerField field : fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId)) {
-			result.put(field.getColumnName(), field);
-		}
-		return result;
+	private List<LayerField> fieldsOf(UUID layerId) {
+		return fieldRepository.findByLayerIdOrderByOrdinalAsc(layerId);
 	}
 
 	/**
 	 * Resolves the client's property keys to real columns.
 	 *
 	 * <p>Every key has to be a field of this layer -- the resolved column_name is what
-	 * gets quoted, never the key itself. Same rule as {@link FilterParser}: identifiers
-	 * come from the catalog, values are bound.
+	 * gets quoted, never the key itself. Through {@link LayerFields#require}, the same
+	 * rule {@link FilterParser} and {@link QueryFields} already use, not a raw lookup by
+	 * column name: a client that read a field's display name off {@code describe_layer}
+	 * and writes it straight back -- exactly what a round trip through the catalog
+	 * invites -- used to be rejected the moment that name differed from its column name
+	 * in case or spelling (Befund 2, 27.08., point 3). {@code create_layer} always
+	 * lower-cases a field's name into its column ({@link de.kreuter.hgis.common.SqlIdentifier#toColumnName}),
+	 * so "Haltestelle" and its column "haltestelle" were never the same string to a plain
+	 * map lookup, even though {@code LayerFields} has treated that exact case as one name
+	 * for every other name a client sends since Aufgabe 18.
 	 */
-	private void collectProperties(Map<String, LayerField> fields, Map<String, Object> properties,
+	private void collectProperties(List<LayerField> fields, Map<String, Object> properties,
 			List<String> columns, List<Object> values) {
 		if (properties == null) {
 			return;
 		}
 		for (Map.Entry<String, Object> property : properties.entrySet()) {
-			LayerField field = fields.get(property.getKey());
-			if (field == null) {
-				throw new BadRequestException("Unbekanntes Feld: " + property.getKey()
-						+ ". Verfügbar: " + String.join(", ", fields.keySet()) + ".");
-			}
+			LayerField field = LayerFields.require(property.getKey(), fields);
 			columns.add(SqlIdentifier.quoteColumn(field.getColumnName()));
 			values.add(toColumnValue(field, property.getValue()));
 		}

@@ -3,6 +3,7 @@ package de.kreuter.hgis.catalog;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -94,5 +95,53 @@ class ProjectBasemapTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{ \"basemapOpacity\": -0.1 }"))
 				.andExpect(status().isBadRequest());
+	}
+
+	/**
+	 * Befund 1 (Validierung, 27.08.): {@code PATCH .../projects/{id}} with
+	 * {@code basemap: "grayscale"} used to be accepted with 200 and stored forever --
+	 * {@code frontend/src/map/basemap.ts:171} silently falls back to OSM for any token it
+	 * does not recognise, so the caller never learns the write did not do what it asked.
+	 */
+	@Test
+	void rejectsAnUnknownBasemapToken() throws Exception {
+		mockMvc.perform(patch("/api/projects/{id}", project.getId())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{ \"basemap\": \"grayscale\" }"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.errors.basemap").value(
+						"Unbekannte Hintergrundkarte: grayscale. Gültig sind "
+								+ "osm, osm-light, osm-dark, opentopo, none."));
+
+		Project reloaded = projectRepository.findById(project.getId()).orElseThrow();
+		assertThat(reloaded.getBasemap()).isEqualTo("osm");
+	}
+
+	@Test
+	void acceptsEveryKnownBasemapToken() throws Exception {
+		for (String token : new String[] { "osm", "osm-light", "osm-dark", "opentopo", "none" }) {
+			mockMvc.perform(patch("/api/projects/{id}", project.getId())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{ \"basemap\": \"" + token + "\" }"))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.basemap").value(token));
+		}
+	}
+
+	/**
+	 * The same check at creation time -- {@code ProjectService#create} passes {@code
+	 * request.basemap()} straight into the {@link Project} constructor, so an unknown
+	 * token there used to end up on row one, never even reaching {@code update}.
+	 */
+	@Test
+	void rejectsAnUnknownBasemapTokenAtCreation() throws Exception {
+		mockMvc.perform(post("/api/projects")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{ \"name\": \"Neues Projekt " + UUID.randomUUID()
+								+ "\", \"basemap\": \"grayscale\" }"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.errors.basemap").value(
+						"Unbekannte Hintergrundkarte: grayscale. Gültig sind "
+								+ "osm, osm-light, osm-dark, opentopo, none."));
 	}
 }

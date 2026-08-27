@@ -152,31 +152,34 @@ class LayerBasemapTest {
 				.andExpect(status().isBadRequest());
 	}
 
+	/**
+	 * Befund 1 (Validierung, 27.08.): a token that is not one of {@code Basemap}'s five
+	 * values used to be accepted with 200 and stored forever, silently falling back to
+	 * OSM on every client that ever read it -- see {@code doesNotValidateTheBasemapAgainstAnyCatalogue},
+	 * this test's predecessor, which asserted exactly that as the intended behaviour.
+	 */
 	@Test
-	void rejectsABasemapNameLongerThan64Characters() throws Exception {
-		String tooLong = "x".repeat(65);
-		mockMvc.perform(patch("/api/layers/{layerId}", layer.getId())
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("{ \"basemap\": \"" + tooLong + "\" }"))
-				.andExpect(status().isBadRequest());
-	}
-
-	@Test
-	void acceptsABasemapNameOfExactly64Characters() throws Exception {
-		String exact = "x".repeat(64);
-		mockMvc.perform(patch("/api/layers/{layerId}", layer.getId())
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("{ \"basemap\": \"" + exact + "\" }"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.basemap").value(exact));
-	}
-
-	@Test
-	void doesNotValidateTheBasemapAgainstAnyCatalogue() throws Exception {
+	void rejectsAnUnknownBasemapToken() throws Exception {
 		mockMvc.perform(patch("/api/layers/{layerId}", layer.getId())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{ \"basemap\": \"ein-unbekannter-dienst\" }"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.basemap").value("ein-unbekannter-dienst"));
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.errors.basemap").value(
+						"Unbekannte Hintergrundkarte: ein-unbekannter-dienst. Gültig sind "
+								+ "osm, osm-light, osm-dark, opentopo, none."));
+
+		Layer reloaded = layerRepository.findById(layer.getId()).orElseThrow();
+		assertThat(reloaded.getBasemap()).isNull();
+	}
+
+	@Test
+	void acceptsEveryKnownBasemapToken() throws Exception {
+		for (String token : new String[] { "osm", "osm-light", "osm-dark", "opentopo", "none" }) {
+			mockMvc.perform(patch("/api/layers/{layerId}", layer.getId())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{ \"basemap\": \"" + token + "\" }"))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.basemap").value(token));
+		}
 	}
 }
