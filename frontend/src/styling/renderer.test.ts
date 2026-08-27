@@ -41,6 +41,32 @@ describe('convertRenderer', () => {
     })
   })
 
+  /**
+   * The gap found on the running system: a stored categorized/graduated renderer can
+   * be missing `fallbackSymbol` (an older row, or a client that bypassed validation,
+   * from before the server started requiring it). `symbolOf` used to return it
+   * unguarded, so switching such a renderer to "single" produced a document whose
+   * `symbol` member was `undefined` -- the same crash `styleToMapLibre.ts`'s
+   * `dataDriven` has for the identical gap, just reachable one step earlier, by
+   * picking "Einzelsymbol" in the renderer-type dropdown.
+   */
+  it('wechselt einen Renderer ohne fallbackSymbol auf ein Symbol, statt undefined zu liefern', () => {
+    const style: LayerStyle = {
+      ...BASE,
+      renderer: {
+        type: 'categorized',
+        field: 'nutzungsart',
+        categories: [],
+      } as unknown as Extract<LayerStyle['renderer'], { type: 'categorized' }>,
+    }
+
+    const single = convertRenderer(style, 'single', 'MULTIPOLYGON', FIELDS)
+
+    expect(single.type).toBe('single')
+    expect(single.type === 'single' && single.symbol).toBeDefined()
+    expect(single.type === 'single' && primaryColorOf(single.symbol)).toBe('#404040')
+  })
+
   it('verwirft ein Textfeld beim Wechsel auf abgestuft -- /classify würde 400 antworten', () => {
     const style: LayerStyle = {
       ...BASE,

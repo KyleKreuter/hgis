@@ -23,6 +23,32 @@ function makeFields(): LayerField[] {
 }
 
 /**
+ * The crash found on the running system: a stored categorized renderer without
+ * `fallbackSymbol` at all -- an older row, or a client that bypassed validation, from
+ * before the server started requiring it (`LayerStyleService.validateRenderer`). The
+ * "Sonstige" row read `renderer.fallbackSymbol` unguarded during render
+ * (`primaryColorOf`, `defaults.ts`), so opening this panel for such a layer took the
+ * whole component down with `TypeError: Cannot read properties of undefined (reading
+ * 'kind')` -- the same failure `styleToMapLibre.ts`'s `dataDriven` has for the map
+ * itself, just reachable a different way.
+ */
+describe('CategorizedEditor ohne fallbackSymbol (Bestandsstil vor der Pflicht)', () => {
+  it('rendert die „Sonstige“-Zeile mit einer Ersatzfarbe, statt abzustürzen', () => {
+    const renderer = {
+      type: 'categorized',
+      field: 'kategorie',
+      categories: [],
+    } as unknown as Extract<Renderer, { type: 'categorized' }>
+
+    renderWithQueryClient(
+      <CategorizedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={renderer} fields={[]} onChange={vi.fn()} />,
+    )
+
+    expect(screen.getByLabelText('Farbe für alle übrigen Werte')).toBeInTheDocument()
+  })
+})
+
+/**
  * Team review, package 3 addendum: the button ("Farben neu über die Kategorien
  * verteilen") calls `recolor(palette)`, replaying whatever `palette` local state
  * currently holds -- and a style saved with a `palette` name that has since been renamed

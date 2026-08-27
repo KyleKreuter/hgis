@@ -14,6 +14,35 @@ function makeFields(): LayerField[] {
 }
 
 /**
+ * The crash found on the running system: a stored graduated renderer without
+ * `fallbackSymbol` at all -- an older row, or a client that bypassed validation, from
+ * before the server started requiring it (`LayerStyleService.validateRenderer`). The
+ * "Ohne Wert" row read `renderer.fallbackSymbol` unguarded during render
+ * (`primaryColorOf`, `defaults.ts`), so opening this panel for such a layer took the
+ * whole component down with `TypeError: Cannot read properties of undefined (reading
+ * 'kind')` -- the same failure `styleToMapLibre.ts`'s `dataDriven` has for the map
+ * itself, just reachable a different way.
+ */
+describe('GraduatedEditor ohne fallbackSymbol (Bestandsstil vor der Pflicht)', () => {
+  it('rendert die „Ohne Wert“-Zeile mit einer Ersatzfarbe, statt abzustürzen', () => {
+    const renderer = {
+      type: 'graduated',
+      field: '',
+      classes: [],
+    } as unknown as Extract<Renderer, { type: 'graduated' }>
+    // Kein Stub-Aufruf erwartet: ohne Klassen bleibt der Live-Check ungestartet, siehe
+    // die gleichnamige Begründung weiter unten in dieser Datei.
+    stubFetch([])
+
+    renderWithQueryClient(
+      <GraduatedEditor layerId="layer-1" geometryType="MULTIPOLYGON" renderer={renderer} fields={makeFields()} onChange={vi.fn()} />,
+    )
+
+    expect(screen.getByLabelText('Farbe für Objekte ohne Wert')).toBeInTheDocument()
+  })
+})
+
+/**
  * Team review, package 3 addendum, the `graduated`/`ramp` counterpart to
  * `CategorizedEditor.test.tsx`'s two suites. `GraduatedEditor` has no dedicated
  * "recolor" button -- `selectRamp` (the palette picker itself) is the closest
