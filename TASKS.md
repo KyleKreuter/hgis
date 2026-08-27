@@ -18,7 +18,7 @@ Phasenberichte. Diese Datei ersetzt ihn nicht.
 
 | Teil | Tests | Wie prüfen |
 |---|---|---|
-| Backend (Spring Boot 4.1, Java) | **1199** | `cd backend && ./mvnw test` |
+| Backend (Spring Boot 4.1, Java) | **1202** | `cd backend && ./mvnw test` |
 | Frontend (React 19, TypeScript) | **1306** | `cd frontend && npx vitest run` |
 | Python-Bibliothek und MCP-Server | **577** | `cd python && .venv/bin/python -m pytest -q` |
 
@@ -174,22 +174,34 @@ neu baut.
 
 ### Wie weit es heute trägt, in Zahlen
 
-Die Schranke `RequestGuard._ALLOWED` (`python/src/hgis/client.py`) lässt nach Stufe A
-**fünfzehn von 24 schreibenden Endpunkten** des Backends durch. Die neun geschlossenen:
+**Diese Zahl steht seit dem 27.08. nicht mehr hier, sondern in einem Test.**
+`backend/.../ParityTest.java` hält jeden schreibenden Endpunkt des Backends gegen die
+Schranke `RequestGuard._ALLOWED` (`python/src/hgis/client.py`). Ein Endpunkt, über den
+niemand entschieden hat, macht ihn rot.
 
-| Weg | Was dem Agenten fehlt | Aufgabe |
-|---|---|---|
-| `PATCH /api/layers/{id}/fields/{fid}` | ein Feld umbenennen | 21 |
-| `PUT /api/projects/{id}/layers/order` | Layer neu ordnen | 21 |
-| `POST .../features/{fid}/split` | ein Objekt teilen | 21 |
-| `POST .../features/merge` | Objekte zusammenführen | 21 |
-| `POST /api/projects/{id}/duplicate` | ein Projekt duplizieren | 21 |
-| `POST /api/projects/{id}/map-layers` | einen WMS-Layer anlegen | 21 |
-| `POST .../export.geojson` | Export mit Filter im Rumpf | 24 |
-| `POST /api/places/refresh` | Ortsverzeichnis auffrischen | — |
-| `POST /api/geoportal/catalog/refresh` | Katalog auffrischen | — |
+Die Endpunktliste kommt aus Spring, nicht aus einem Ausdruck über den Quelltext: Der
+Router ist das, was Anfragen tatsächlich bedient. Ein Muster über Quelltext ist eine
+Näherung, und sein Fehlschlag ist der schlechte — ein Endpunkt in ungewohnter Schreibweise
+fällt still aus dem Vergleich, und der Test bleibt grün über genau der Lücke, für die es
+ihn gibt.
 
-Die letzten zwei bleiben zu. Sie sind Wartung des Servers, nicht Arbeit an Daten.
+Wer einen Endpunkt hinzufügt, hat drei Möglichkeiten, und muss eine davon wählen:
+
+| Fall | Wohin |
+|---|---|
+| Ein Agent soll ihn erreichen | Eintrag in `_ALLOWED`, benannte Methode auf `Client`, MCP-Werkzeug |
+| Ein Agent soll ihn nie erreichen | `ParityTest.CLOSED_ON_PURPOSE`, mit einem Satz, warum |
+| Sein Verb schreibt, der Weg nicht | `ParityTest.NOT_A_WRITE`, mit einem Satz, was das Verb erzwang |
+
+Heute: **21 Wege erreichbar, zwei bewusst zu, einer schreibt nichts trotz POST.** Die
+beiden geschlossenen sind Wartung des Servers ohne Projekt dahinter — das Ortsverzeichnis
+und den Geoportal-Katalog neu einlesen. Der dritte ist der Export mit Auswahl im Rumpf:
+derselbe Export wie sein GET-Zwilling, den die Schranke ohnehin durchlässt, mit POST nur,
+weil tausende fids nicht in eine URL passen.
+
+Die vorherige Fassung dieses Abschnitts zählte neun geschlossene Wege von Hand. Sechs
+davon hat Aufgabe 21 am selben Tag geöffnet — die Handzählung war schon veraltet, als sie
+geschrieben wurde. Genau dagegen ist der Test gebaut.
 
 ---
 
@@ -518,6 +530,23 @@ mit echten Daten darin, ohne die Originale anzufassen. Antwortet mit einem Job, 
 also an Aufgabe 20.
 
 ### 22 — Die Paritätsliste als Test
+
+**Erledigt am 27.08.** `backend/src/test/java/de/kreuter/hgis/ParityTest.java`. Drei
+Tests: kein unentschiedener Endpunkt, kein Eintrag für einen Endpunkt, den es nicht mehr
+gibt, und keiner, der zugleich als geschlossen geführt und erreichbar ist. Der Stand
+steht in Abschnitt 4 unter „Wie weit es heute trägt".
+
+Drei Proben belegen, dass er greift, jede von Hand nachvollzogen: ein neuer Endpunkt ohne
+Entscheidung macht ihn rot; ein aus `_ALLOWED` entfernter Weg ebenso; und die verschobene
+Schranken-Datei meldet ihren erwarteten Pfad, statt an einer IOException zu scheitern.
+Die dritte Probe fand einen Fehler im Test selbst — er las die Datei, bevor er ihre
+Existenz prüfte, sodass die sorgfältige Meldung nie zum Zug gekommen wäre.
+
+**Zwei Ausnahmelisten statt einer**, weil sie verschiedene Fragen beantworten.
+`CLOSED_ON_PURPOSE` sagt „ein Agent soll das nicht", `NOT_A_WRITE` sagt „das ist kein
+Schreibweg". Der Export mit Auswahl im Rumpf war der Anlass: Sein Verb schreibt, er
+selbst nicht. Beides in einer Liste hätte eine echte Lücke hinter einer Formalie
+verstecken können.
 
 **Klein, und sie hält das Ergebnis von Stufe A und B.** Neu am 26.08.
 
