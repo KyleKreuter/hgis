@@ -26,20 +26,29 @@ if TYPE_CHECKING:
 #: once it reaches it -- see :attr:`Job.done`.
 TERMINAL_STATUSES = frozenset({"SUCCEEDED", "FAILED"})
 
+#: How often :meth:`Job._wait_by_polling` re-reads a ``DUPLICATE`` job. See
+#: that method for why this stage cannot simply listen on the channel here.
+_DUPLICATE_POLL_INTERVAL = 0.5
+
 
 class Job:
     """
     One row of the backend's ``job`` table, as :meth:`refresh` last read it.
 
-    Every field mirrors ``JobDtos.Response`` except :attr:`project_id`,
-    which that response does not carry for an import job at all --
-    ``outputProjectId`` there is only ever set for a project *duplication*
-    (see ``JobService.markDuplicateRunning`` on the backend), never for an
-    import. This class is handed the project id instead, by whichever call
-    started it (:meth:`hgis.project.Project.import_file` and
-    :meth:`hgis.project.Project.import_geoportal` both know it already,
-    since they are called on that project), because :meth:`wait` needs it
-    to know which project's catalog to listen for.
+    Every field mirrors ``JobDtos.Response``, plus the project this job was
+    started on -- ``JobDtos.Response`` itself carries no such field for an
+    import (only :attr:`output_project_id`, and only for a *duplication*, see
+    ``JobService.markDuplicateRunning`` on the backend). This class is handed
+    that project id instead, by whichever call started it
+    (:meth:`hgis.project.Project.import_file`,
+    :meth:`hgis.project.Project.import_geoportal` and
+    :meth:`hgis.project.Project.duplicate` all know it already, since they
+    are called on that project), because :meth:`wait` needs it to know which
+    project's catalog to listen for.
+
+    **A duplicate is the one job type that project does not help with,
+    though**, which is why :meth:`wait` polls for it instead of listening on
+    the channel -- see :meth:`wait`'s own docstring.
     """
 
     def __init__(self, client: "Client", data: dict[str, Any], *, project_id: str) -> None:
@@ -54,7 +63,8 @@ class Job:
     @property
     def type(self) -> str:
         """
-        ``IMPORT`` today; ``PROCESSING`` and ``DUPLICATE`` exist on the
+        ``IMPORT``, or ``DUPLICATE`` for a job started by
+        :meth:`hgis.project.Project.duplicate`. ``PROCESSING`` exists on the
         backend but nothing here starts one.
         """
         return self._data["type"]
@@ -113,6 +123,18 @@ class Job:
         return self._data.get("outputLayerId")
 
     @property
+    def output_project_id(self) -> str | None:
+        """
+        The project a :meth:`~hgis.project.Project.duplicate` job is
+        copying into -- None for every other job type, and None for a
+        duplicate too until the copy has actually started (see
+        :attr:`type`'s own note): the source project's id is known
+        immediately, but the *target* project this points at is created
+        only once the server picks the job up.
+        """
+        return self._data.get("outputProjectId")
+
+    @property
     def message(self) -> str | None:
         """
         The failure reason once :attr:`failed`, a warning on an otherwise
@@ -154,10 +176,16 @@ class Job:
         server's heartbeat, and past one longer than its
         ``stream-timeout`` -- apply here unchanged, for the same reason:
         this calls that method underneath.
+
+        **Except for a** ``DUPLICATE`` **job, which this polls instead --
+        see** :meth:`_wait_by_polling` **for why.**
         """
         self.refresh()
         if self.done:
             return self
+
+        if self.type == "DUPLICATE":
+            return self._wait_by_polling(timeout)
 
         deadline = None if timeout is None else time.monotonic() + timeout
         while True:
@@ -173,6 +201,44 @@ class Job:
                 # the state against -- and refresh() just did, and it is
                 # still not done.
                 return self
+
+    def _wait_by_polling(self, timeout: float | None) -> "Job":
+        """
+        Re-read this job at a short interval instead of listening on the
+        channel -- the fallback :meth:`wait` reaches for on a ``DUPLICATE``
+        job alone, for two reasons together, either one enough on its own:
+
+        * The project this class listens on (see the class docstring) is the
+          *source* project -- the one :meth:`hgis.project.Project.duplicate`
+          was called on. Only the *target* project's catalog is ever
+          announced (``ProjectDuplicateTransactions.complete`` on the
+          backend, the one exception ``CatalogTouch``'s own class docstring
+          names), and that target is not even known -- :attr:`output_project_id`
+          reads None -- until the job has already started running.
+        * A *failed* duplicate (``ProjectDuplicateTransactions.compensateAndFail``)
+          announces nothing on the channel at all: the half-built target
+          project is deleted outright, never touched. Waiting on an event
+          that a failure will never send would just be ``sleep(timeout)``
+          under another name.
+
+        Both gaps sit on the backend, and closing them is outside this
+        stage. Polling is the honest fallback rather than a channel wait that
+        would silently degrade to it anyway, only slower and only for the
+        success case.
+        """
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while not self.done:
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                return self
+            interval = (
+                _DUPLICATE_POLL_INTERVAL
+                if remaining is None
+                else min(_DUPLICATE_POLL_INTERVAL, remaining)
+            )
+            time.sleep(interval)
+            self.refresh()
+        return self
 
     def _matches_this_job(self, item: Any) -> bool:
         """

@@ -61,6 +61,12 @@ NEW_PROJECT_ID = "019ff9aa-4444-7555-8666-777788889999"
 NEW_UPLOAD_ID = "019ff9aa-aaaa-7bbb-8ccc-dddd11112222"
 NEW_JOB_ID = "019ff9aa-bbbb-7ccc-8ddd-eeee22223333"
 IMPORT_LAYER_ID = "019ff9aa-cccc-7ddd-8eee-ffff33334444"
+#: Paket 21-B: duplicate_project's own job, and the copy it produces.
+DUPLICATE_JOB_ID = "019ff9aa-dddd-7eee-8fff-000011112222"
+DUPLICATE_TARGET_ID = "019ff9aa-eeee-7fff-8000-111122223333"
+#: "hydranten" -- the fourth layer of PROJECT_ID in layers.json, named by no
+#: other constant in this file.
+HYDRANTEN_LAYER_ID = "019fed71-53b4-7775-a4c7-f471d43bbd98"
 
 
 def _json_response(status: int, body: Any) -> Response:
@@ -86,6 +92,31 @@ def _succeeded_job(*, filename: str, feature_count: int) -> dict[str, Any]:
         "skippedCount": 0,
         "outputLayerId": IMPORT_LAYER_ID,
         "outputProjectId": None,
+        "message": None,
+        "startedAt": "2026-01-01T00:00:01Z",
+        "finishedAt": "2026-01-01T00:00:02Z",
+        "createdAt": "2026-01-01T00:00:00Z",
+    }
+
+
+def _succeeded_duplicate_job(*, output_project_id: str) -> dict[str, Any]:
+    """
+    Like ``_succeeded_job``, but a ``DUPLICATE`` job -- already ``SUCCEEDED``
+    the moment it is read, so ``Job.wait()`` returns on its first
+    ``refresh()`` and never reaches ``_wait_by_polling`` (that fallback is
+    ``test_jobs.py``'s own concern, with a scripted transport, not
+    re-proven here).
+    """
+    return {
+        "id": DUPLICATE_JOB_ID,
+        "type": "DUPLICATE",
+        "status": "SUCCEEDED",
+        "filename": None,
+        "processedCount": 0,
+        "totalCount": None,
+        "skippedCount": 0,
+        "outputLayerId": None,
+        "outputProjectId": output_project_id,
         "message": None,
         "startedAt": "2026-01-01T00:00:01Z",
         "finishedAt": "2026-01-01T00:00:02Z",
@@ -212,6 +243,30 @@ def _write_stub(
             return _json_response(200, {"totalCount": len(existing), "features": []})
         if path == f"/api/jobs/{NEW_JOB_ID}":
             return _json_response(200, _succeeded_job(filename="baeume.geojson", feature_count=3))
+        if path == f"/api/jobs/{DUPLICATE_JOB_ID}":
+            return _json_response(
+                200, _succeeded_duplicate_job(output_project_id=DUPLICATE_TARGET_ID)
+            )
+        if path == f"/api/projects/{DUPLICATE_TARGET_ID}":
+            return _json_response(
+                200,
+                {
+                    "id": DUPLICATE_TARGET_ID,
+                    "name": "Leitungsnetz Nord (Kopie)",
+                    "description": "Trinkwasser und Abwasser",
+                    "srid": 25833,
+                    "basemap": "osm",
+                    "basemapOpacity": 1.0,
+                    "center": None,
+                    "zoom": None,
+                    "extent": None,
+                    "layerCount": 4,
+                    "featureCount": 3005,
+                    "lastOpenedAt": None,
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "updatedAt": "2026-01-01T00:00:00Z",
+                },
+            )
         if path == f"/api/layers/{IMPORT_LAYER_ID}":
             return _json_response(
                 200,
@@ -276,6 +331,15 @@ def _write_stub(
                 "updatedAt": "2026-08-15T18:00:00Z",
             },
         )
+
+    if method == "POST" and path == f"/api/projects/{PROJECT_ID}/duplicate":
+        return _json_response(
+            202, _succeeded_duplicate_job(output_project_id=DUPLICATE_TARGET_ID)
+        )
+
+    if method == "PUT" and path == f"/api/projects/{PROJECT_ID}/layers/order":
+        by_id = {item["id"]: item for item in json.loads(load("layers.json"))}
+        return _json_response(200, [by_id[layer_id] for layer_id in body["layerIdsBottomToTop"]])
 
     if method == "POST" and path == f"/api/projects/{PROJECT_ID}/layers":
         return _json_response(
@@ -1575,3 +1639,122 @@ def test_merge_features_with_a_lead_fid_outside_the_selection_sends_nothing(
         merge_features(LAYER_ID, [1, 2, 3], lead_fid=99)
 
     assert not any(r.path.endswith("/features/merge") for r in transport.requests)
+
+# --- Paket 21-B: Projekt duplizieren, Layer neu ordnen --------------------
+
+
+def test_duplicate_project_waits_and_reports_the_finished_copy(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import duplicate_project
+
+    result = duplicate_project(PROJECT_ID, timeout=5)
+
+    assert result.status == "SUCCEEDED"
+    assert result.job_id == DUPLICATE_JOB_ID
+    assert result.project_id == DUPLICATE_TARGET_ID
+    assert result.project_name == "Leitungsnetz Nord (Kopie)"
+    assert result.layer_count == 4
+    assert result.feature_count == 3005
+    assert "Leitungsnetz Nord (Kopie)" in result.summary
+    post = next(r for r in transport.requests if r.path == f"/api/projects/{PROJECT_ID}/duplicate")
+    assert transport.bodies[transport.requests.index(post)] == {}
+
+
+def test_duplicate_project_sends_the_given_name(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import duplicate_project
+
+    duplicate_project(PROJECT_ID, name="Testfläche", timeout=5)
+
+    post = next(r for r in transport.requests if r.path == f"/api/projects/{PROJECT_ID}/duplicate")
+    assert transport.bodies[transport.requests.index(post)] == {"name": "Testfläche"}
+
+
+def test_duplicate_wait_reads_the_named_job_and_reports_it(mcp_client, transport) -> None:
+    """The follow-up tool for a duplicate_project whose own timeout already elapsed once."""
+    from hgis.mcp.write_tools import duplicate_wait
+
+    result = duplicate_wait(job_id=DUPLICATE_JOB_ID, project=PROJECT_ID, timeout=5)
+
+    assert result.status == "SUCCEEDED"
+    assert result.project_id == DUPLICATE_TARGET_ID
+
+
+def test_job_wait_refuses_a_duplicate_job(mcp_client, transport) -> None:
+    """
+    job_wait is for import_file/import_geoportal jobs -- it would otherwise
+    read a DUPLICATE job's ``outputLayerId`` (always None for one) and
+    report "Import abgeschlossen" for a project that was never a layer.
+    duplicate_wait is the tool for this job type instead.
+    """
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import job_wait
+
+    with pytest.raises(ToolError, match="duplicate_wait"):
+        job_wait(job_id=DUPLICATE_JOB_ID, project=PROJECT_ID, timeout=5)
+
+
+def test_reorder_layers_sends_every_layer_resolved_by_name(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import reorder_layers
+
+    result = reorder_layers(
+        PROJECT_ID,
+        ["Flurstücke", "hydranten", OTHER_LAYER_ID, LAYER_ID],
+    )
+
+    put = next(
+        r for r in transport.requests if r.path == f"/api/projects/{PROJECT_ID}/layers/order"
+    )
+    assert transport.bodies[transport.requests.index(put)] == {
+        "layerIdsBottomToTop": [ACTIVE_LAYER_ID, HYDRANTEN_LAYER_ID, OTHER_LAYER_ID, LAYER_ID]
+    }
+    assert result.updated == 4
+    assert "Flurstücke" in result.summary and "Gebäude Speicherstadt" in result.summary
+
+
+def test_move_layer_to_top_reads_the_order_fresh_and_sends_it_whole(
+    mcp_client, transport
+) -> None:
+    """
+    The convenience the contract asks for: an agent names one layer, not
+    every layer of the project -- and what actually reaches the server is
+    still the complete order, built here, not by the agent.
+    """
+    from hgis.mcp.write_tools import move_layer
+
+    result = move_layer(PROJECT_ID, "Gebäude Speicherstadt", to_top=True)
+
+    put = next(
+        r for r in transport.requests if r.path == f"/api/projects/{PROJECT_ID}/layers/order"
+    )
+    assert transport.bodies[transport.requests.index(put)] == {
+        "layerIdsBottomToTop": [OTHER_LAYER_ID, HYDRANTEN_LAYER_ID, ACTIVE_LAYER_ID, LAYER_ID]
+    }
+    assert result.updated == 4
+    assert "ganz oben" in result.summary
+
+
+def test_move_layer_above_names_the_anchor_by_name(mcp_client, transport) -> None:
+    from hgis.mcp.write_tools import move_layer
+
+    result = move_layer(PROJECT_ID, "Gebäude Speicherstadt", above="hydranten")
+
+    put = next(
+        r for r in transport.requests if r.path == f"/api/projects/{PROJECT_ID}/layers/order"
+    )
+    assert transport.bodies[transport.requests.index(put)] == {
+        "layerIdsBottomToTop": [OTHER_LAYER_ID, HYDRANTEN_LAYER_ID, LAYER_ID, ACTIVE_LAYER_ID]
+    }
+    assert "über 'hydranten'" in result.summary
+
+
+def test_move_layer_rejects_zero_and_more_than_one_target(mcp_client, transport) -> None:
+    from hgis.mcp.shapes import ToolError
+    from hgis.mcp.write_tools import move_layer
+
+    with pytest.raises(ToolError):
+        move_layer(PROJECT_ID, LAYER_ID)
+    with pytest.raises(ToolError):
+        move_layer(PROJECT_ID, LAYER_ID, to_top=True, to_bottom=True)
+
+    assert not any(
+        r.path == f"/api/projects/{PROJECT_ID}/layers/order" for r in transport.requests
+    )

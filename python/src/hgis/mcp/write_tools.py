@@ -634,10 +634,18 @@ def job_wait(
     """
     Wartet weiter auf einen Job, dessen Frist bei import_file oder
     import_geoportal verstrichen ist, bevor er fertig war.
+
+    Nicht für einen duplicate_project-Job -- der liefert kein Layer, sondern
+    ein Projekt, eine andere Antwortform. Dafür duplicate_wait verwenden.
     """
     try:
         proj = _project(project)
         data = client().get(f"/api/jobs/{job_id}")
+        if data.get("type") == "DUPLICATE":
+            raise InvalidArgumentError(
+                f"Job {job_id} ist ein duplicate_project-Job, kein Import. "
+                "Dafür duplicate_wait verwenden, nicht job_wait."
+            )
         job = hgis.Job(client(), data, project_id=proj.id)
         job.wait(timeout=timeout)
         return _import_result(job)
@@ -1280,3 +1288,234 @@ def merge_features(
         )
     except Exception as error:
         raise tool_error(error, doing=f"Zusammenführen in '{layer}'") from error
+
+# --- projekt: duplizieren und layer neu ordnen (Paket 21-B) --------------
+
+
+@dataclass(frozen=True)
+class DuplicateResult:
+    """
+    Was duplicate_project erreicht hat -- unter Umständen noch nicht fertig,
+    wenn die Frist vor dem Job verstrichen ist.
+
+    status ist PENDING, RUNNING, SUCCEEDED oder FAILED. Bei SUCCEEDED sind
+    project_id/project_name/layer_count/feature_count gesetzt: die fertige
+    Kopie, ohne eigenen describe_project-Aufruf. Bei FAILED nennt message
+    den Grund. Bei PENDING/RUNNING ist job_id der Anknüpfpunkt für
+    duplicate_wait.
+    """
+
+    summary: str
+    job_id: str
+    status: str
+    project_id: str | None = None
+    project_name: str | None = None
+    layer_count: int | None = None
+    feature_count: int | None = None
+    message: str | None = None
+
+
+def _duplicate_result(job: "hgis.Job") -> DuplicateResult:
+    """Turn a waited-on :class:`hgis.Job` into the shape duplicate_project answers with."""
+    if job.succeeded:
+        copy = client().project(job.output_project_id) if job.output_project_id else None
+        note = f" -- {job.message}" if job.message else ""
+        summary = (
+            f"Projekt '{copy.name}' dupliziert (Id {copy.id}), {copy.layer_count} "
+            f"Layer, {copy.feature_count} Objekt(e){note}."
+            if copy is not None
+            else f"Duplizieren abgeschlossen{note}."
+        )
+        return DuplicateResult(
+            summary=summary,
+            job_id=job.id,
+            status=job.status,
+            project_id=copy.id if copy is not None else None,
+            project_name=copy.name if copy is not None else None,
+            layer_count=copy.layer_count if copy is not None else None,
+            feature_count=copy.feature_count if copy is not None else None,
+            message=job.message,
+        )
+    if job.failed:
+        return DuplicateResult(
+            summary=f"Duplizieren fehlgeschlagen: {job.message}",
+            job_id=job.id,
+            status=job.status,
+            message=job.message,
+        )
+    return DuplicateResult(
+        summary=(
+            f"Duplizieren läuft nach Ablauf der Frist noch (Job {job.id}, Status "
+            f"{job.status}). Nachfassen mit duplicate_wait(job_id='{job.id}', project=...)."
+        ),
+        job_id=job.id,
+        status=job.status,
+    )
+
+
+@server.tool()
+def duplicate_project(
+    project: Annotated[str, Field(description="Name oder Id des zu duplizierenden Projekts.")],
+    name: Annotated[
+        str | None,
+        Field(
+            description="Name der Kopie. Weggelassen: benannt wie der "
+            "Duplizieren-Knopf der Oberfläche es tut -- '<Name> (Kopie)', dann "
+            "'<Name> (Kopie 2)' und so fort."
+        ),
+    ] = None,
+    timeout: Annotated[float, Field(description=_IMPORT_TIMEOUT_HELP, ge=1)] = 120.0,
+) -> DuplicateResult:
+    """
+    Kopiert ein ganzes Projekt -- jeden Layer, jedes Objekt, Stil und
+    Eigenschaften -- in ein neues, unabhängiges Projekt und wartet, bis die
+    Kopie fertig ist. Das Original bleibt dabei unangetastet.
+
+    Der nützlichste Weg in diesem Werkzeugsatz für einen Agenten, der mit
+    echten Daten etwas ausprobieren will, ohne das Original zu riskieren:
+    duplizieren, auf der Kopie arbeiten, sie danach mit delete_project
+    wegwerfen.
+
+    Nicht mitkopiert werden der gespeicherte Kartenausschnitt samt Auswahl
+    (select_features/set_view) und der Papierkorb jedes Layers -- eine Kopie
+    startet sauber.
+
+    Läuft die Frist ab, bevor die Kopie fertig ist, kommt statt des fertigen
+    Projekts die Job-Id zum Nachfassen mit duplicate_wait zurück.
+    """
+    try:
+        proj = _project(project)
+        job = proj.duplicate(name, wait=False)
+        job.wait(timeout=timeout)
+        return _duplicate_result(job)
+    except Exception as error:
+        raise tool_error(error, doing=f"Duplizieren des Projekts '{project}'") from error
+
+
+@server.tool()
+def duplicate_wait(
+    job_id: Annotated[str, Field(description="Die Id, die duplicate_project zurückgegeben hat.")],
+    project: Annotated[
+        str,
+        Field(
+            description="Name oder Id genau des Quellprojekts, das an "
+            "duplicate_project ging, als dieser Job entstand -- der Job selbst "
+            "nennt es nicht."
+        ),
+    ],
+    timeout: Annotated[float, Field(description=_IMPORT_TIMEOUT_HELP, ge=1)] = 120.0,
+) -> DuplicateResult:
+    """
+    Wartet weiter auf einen duplicate_project-Job, dessen Frist beim ersten
+    Aufruf verstrichen ist, bevor die Kopie fertig war.
+    """
+    try:
+        proj = _project(project)
+        data = client().get(f"/api/jobs/{job_id}")
+        job = hgis.Job(client(), data, project_id=proj.id)
+        job.wait(timeout=timeout)
+        return _duplicate_result(job)
+    except Exception as error:
+        raise tool_error(error, doing=f"Warten auf Job {job_id}") from error
+
+
+@server.tool()
+def reorder_layers(
+    project: Annotated[str, Field(description="Name oder Id des Projekts.")],
+    layer_ids_bottom_to_top: Annotated[
+        list[str],
+        Field(
+            description="Jeder Layer dieses Projekts, per Name oder Id, genau "
+            "einmal, von unten nach oben. Fehlt einer oder ist einer unbekannt, "
+            "wird nichts geändert. Zum Verschieben eines einzelnen Layers, ohne "
+            "die vollständige Liste zu nennen, move_layer verwenden."
+        ),
+    ],
+) -> WriteResult:
+    """
+    Setzt die komplette Stapelreihenfolge der Layer eines Projekts neu, in
+    einem Schritt.
+
+    Verlangt jeden Layer des Projekts genau einmal -- der Server lehnt eine
+    unvollständige, unbekannte oder doppelte Liste vollständig ab, statt
+    teilweise zu schreiben; es geht dabei nie ein Layer verloren.
+    """
+    try:
+        proj = _project(project)
+        ids = [proj.layer(item).id for item in layer_ids_bottom_to_top]
+        layers = proj.reorder_layers(ids)
+        order = ", ".join(f"'{item.name}'" for item in layers)
+        return WriteResult(
+            summary=(
+                f"Reihenfolge von {len(layers)} Layer(n) in '{proj.name}' neu "
+                f"gesetzt, von unten nach oben: {order}."
+            ),
+            updated=len(layers),
+        )
+    except Exception as error:
+        raise tool_error(error, doing=f"Neuordnen der Layer in '{project}'") from error
+
+
+@server.tool()
+def move_layer(
+    project: Annotated[str, Field(description="Name oder Id des Projekts.")],
+    layer: Annotated[str, Field(description="Name oder Id des zu verschiebenden Layers.")],
+    to_top: Annotated[
+        bool, Field(description="Ganz nach oben, über jeden anderen Layer des Projekts.")
+    ] = False,
+    to_bottom: Annotated[
+        bool, Field(description="Ganz nach unten, unter jeden anderen Layer des Projekts.")
+    ] = False,
+    above: Annotated[
+        str | None,
+        Field(description="Direkt über diesem Layer einsortieren -- Name oder Id."),
+    ] = None,
+    below: Annotated[
+        str | None,
+        Field(description="Direkt unter diesem Layer einsortieren -- Name oder Id."),
+    ] = None,
+) -> WriteResult:
+    """
+    Verschiebt einen einzelnen Layer an eine neue Position in der
+    Stapelreihenfolge seines Projekts -- ohne die übrigen Layer zu nennen.
+
+    Liest die aktuelle Reihenfolge frisch und schreibt sie komplett neu;
+    dabei geht nie ein Layer verloren, anders als bei einem von Hand
+    zusammengestellten Aufruf von reorder_layers, dem versehentlich einer
+    fehlt. Genau eins von to_top, to_bottom, above, below angeben.
+    """
+    try:
+        proj = _project(project)
+        moving = proj.layer(layer)
+        anchor = None
+        if above is not None:
+            anchor = proj.layer(above)
+        elif below is not None:
+            anchor = proj.layer(below)
+
+        layers = proj.move_layer(
+            moving,
+            to_top=to_top,
+            to_bottom=to_bottom,
+            above=anchor if above is not None else None,
+            below=anchor if below is not None else None,
+        )
+
+        if to_top:
+            position = "ganz oben"
+        elif to_bottom:
+            position = "ganz unten"
+        elif above is not None:
+            position = f"über '{anchor.name}'"
+        else:
+            position = f"unter '{anchor.name}'"
+        order = ", ".join(f"'{item.name}'" for item in layers)
+        return WriteResult(
+            summary=(
+                f"Layer '{moving.name}' in '{proj.name}' verschoben ({position}). "
+                f"Reihenfolge von unten: {order}."
+            ),
+            updated=len(layers),
+        )
+    except Exception as error:
+        raise tool_error(error, doing=f"Verschieben des Layers '{layer}' in '{project}'") from error

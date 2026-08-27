@@ -23,6 +23,19 @@ from hgis.transport import Response
 
 OTHER_UUID = "019fecc1-48a2-76b7-8732-019e83d5532a"
 
+#: A negative example meant to stay refused for good, not just today.
+#:
+#: A path chosen from what this stage actually writes -- reordering, split,
+#: merge -- ages out the moment that write opens (Aufgabe 21 opened all
+#: three). ``POST /api/places/refresh`` never will: it reindexes Hamburg's
+#: streets, districts and house numbers for address search, a maintenance
+#: job with no project, layer or object behind it at all -- there is no
+#: shape "let an agent write to this" could ever take. See
+#: ``PlaceController``/``GeoportalCatalogController`` on the backend for the
+#: two endpoints of this kind; either would do, this is simply the shorter
+#: path.
+_PERMANENTLY_REFUSED_PATH = "/api/places/refresh"
+
 
 @pytest.fixture
 def guarded(transport: FakeTransport) -> hgis.Client:
@@ -35,17 +48,26 @@ def guarded(transport: FakeTransport) -> hgis.Client:
 @pytest.mark.parametrize(
     ("method", "path"),
     [
-        ("PUT", f"/api/projects/{PROJECT_ID}/layers/order"),  # reordering: not opened
-        ("PATCH", f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}"),  # renaming a field: not opened
+        # Wartungsendpunkte: kein Projekt, kein Layer, kein Objekt dahinter.
+        # Anders als jeder Weg, den diese Stufe schreibt, veralten sie als
+        # Beispiel nicht -- Aufgabe 21 hat die sechs, die hier vorher standen,
+        # allesamt geöffnet, und das Beispiel musste jedes Mal nachgezogen
+        # werden. Für diese beiden gibt es keine Form, in der "ein Agent darf
+        # hierher schreiben" je Sinn ergäbe.
+        ("POST", "/api/places/refresh"),
+        ("POST", "/api/geoportal/catalog/refresh"),
         ("DELETE", f"/api/layers/{LAYER_ID}/fields/x"),  # "x" is not a field id
     ],
 )
 def test_a_writing_request_outside_this_stage_is_refused(guarded, transport, method, path) -> None:
     """
     Every one of these is a real endpoint on the backend, none opened by this
-    stage. Deleting a project moved out of this list on 26.08. (Aufgabe 17,
-    ``_ALLOWED`` now names it) -- see the parametrized cases further down for
-    what still guards that path: a real project id, and nothing else.
+    stage, and none that a later stage would sensibly open either -- that is
+    what earns a place here. Six earlier entries did not last: deleting a
+    project left on 26.08. (Aufgabe 17), and splitting, merging, reordering,
+    renaming a field, duplicating and adding a map layer all left on 27.08.
+    (Aufgabe 21). A path this library is working towards makes a poor example
+    of one it refuses.
     """
     with pytest.raises(hgis.GuardError):
         guarded._send(method, path, json={})
@@ -60,7 +82,7 @@ def test_the_guard_also_covers_the_transport_itself(guarded, transport) -> None:
     reaching for ``client._transport`` -- which is one attribute away.
     """
     with pytest.raises(hgis.GuardError):
-        guarded._transport.request("PUT", f"http://stub/api/projects/{PROJECT_ID}/layers/order")
+        guarded._transport.request("POST", f"http://stub{_PERMANENTLY_REFUSED_PATH}")
 
     assert transport.count == 0
 
@@ -106,6 +128,8 @@ def test_there_is_no_generic_write_verb() -> None:
         "delete_field",
         "split_feature",
         "merge_features",
+        "duplicate_project",
+        "reorder_layers",
     ):
         assert hasattr(hgis.Client, named)
 
@@ -113,20 +137,22 @@ def test_there_is_no_generic_write_verb() -> None:
 def test_the_refusal_names_the_request_and_what_is_allowed(guarded) -> None:
     """The rule everywhere in this API: an error names the way that works."""
     with pytest.raises(hgis.GuardError) as error:
-        guarded._send("PUT", f"/api/projects/{PROJECT_ID}/layers/order")
+        guarded._send("POST", _PERMANENTLY_REFUSED_PATH)
 
     message = str(error.value)
-    assert f"PUT /api/projects/{PROJECT_ID}/layers/order" in message
+    assert f"POST {_PERMANENTLY_REFUSED_PATH}" in message
     assert "project.select()" in message
     assert "layer.edit()" in message
     assert "client.create_project()" in message
     assert "client.delete_project()" in message
+    assert "project.duplicate()" in message
+    assert "project.reorder_layers()" in message
 
 
 def test_the_refusal_is_an_hgis_error(guarded) -> None:
     """So ``except hgis.HgisError`` catches it like everything else."""
     with pytest.raises(hgis.HgisError):
-        guarded._send("PUT", f"/api/projects/{PROJECT_ID}/layers/order")
+        guarded._send("POST", _PERMANENTLY_REFUSED_PATH)
 
 
 # --- what must still get through --------------------------------------------
@@ -175,6 +201,8 @@ def test_the_view_state_write_still_works(transport) -> None:
         ("DELETE", f"/api/layers/{LAYER_ID}/fields/{OTHER_UUID}"),
         ("POST", f"/api/layers/{LAYER_ID}/features/1/split"),
         ("POST", f"/api/layers/{LAYER_ID}/features/merge"),
+        ("POST", f"/api/projects/{PROJECT_ID}/duplicate"),  # Paket 21-B
+        ("PUT", f"/api/projects/{PROJECT_ID}/layers/order"),  # Paket 21-B
     ],
 )
 def test_this_stages_write_paths_are_allowed(method, path) -> None:
@@ -194,6 +222,32 @@ def test_this_stages_write_paths_are_allowed(method, path) -> None:
     assert transport.count == 1
     assert transport.requests[0].method == method
     assert transport.requests[0].path == path
+
+
+def test_reorder_is_only_open_as_a_put_not_a_patch(guarded, transport) -> None:
+    """
+    ``PUT /api/projects/{id}/layers/order`` is the whole order at once, no
+    partial update -- see ``LayerController.reorder``'s own docstring on the
+    backend. A PATCH to the same path stays refused.
+    """
+    with pytest.raises(hgis.GuardError):
+        guarded._send("PATCH", f"/api/projects/{PROJECT_ID}/layers/order", json={})
+
+    assert transport.count == 0
+
+
+@pytest.mark.parametrize(
+    "project_id",
+    ["abc", "019fec3a", "019fec3a-ef0c-775c-a14f-7535e8a676eb-extra", "*"],
+)
+def test_duplicate_and_reorder_need_a_real_project_id(guarded, transport, project_id) -> None:
+    """The same UUID discipline every other project-scoped write already needs."""
+    with pytest.raises(hgis.GuardError):
+        guarded._send("POST", f"/api/projects/{project_id}/duplicate", json={})
+    with pytest.raises(hgis.GuardError):
+        guarded._send("PUT", f"/api/projects/{project_id}/layers/order", json={})
+
+    assert transport.count == 0
 
 
 def test_the_guard_is_not_a_lock(transport) -> None:
@@ -270,11 +324,19 @@ def test_a_real_project_id_is_accepted(transport, project_id) -> None:
 
 
 def test_the_view_state_write_must_end_at_the_view_state(guarded, transport) -> None:
-    """Not a prefix match: the entry names one resource, not a subtree."""
+    """
+    Not a prefix match: the entry names one resource, not a subtree.
+
+    ``.../layers/order`` used to stand in this list too, before Paket 21-B
+    opened it as its own, separate entry -- it made the same point (a
+    sibling path under the project is still refused for this one), but is
+    now a legitimate PUT in its own right, so a path one level further still
+    makes it: nothing beyond ``.../layers/order`` itself is open.
+    """
     for path in (
         f"/api/projects/{PROJECT_ID}/view-state/extra",
         f"/api/projects/{PROJECT_ID}/view-state2",
-        f"/api/projects/{PROJECT_ID}/layers/order",
+        f"/api/projects/{PROJECT_ID}/layers/order/extra",
         f"/api/projects/{PROJECT_ID}",
     ):
         with pytest.raises(hgis.GuardError):

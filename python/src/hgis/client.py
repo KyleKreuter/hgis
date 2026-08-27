@@ -194,9 +194,15 @@ _EVENTS_PATH = "/api/events"
 #: (:meth:`Client.start_import`), and the same from the Geoportal Hamburg
 #: instead of a file (:meth:`Client.start_geoportal_import`); one saved
 #: feature split along a line, and several saved features merged into one
-#: (:meth:`hgis.layer.Layer.split`, :meth:`hgis.layer.Layer.merge`). Every
-#: other method or path is refused before it reaches the network -- layer
-#: reordering among them, which this stage does not open.
+#: (:meth:`hgis.layer.Layer.split`, :meth:`hgis.layer.Layer.merge`); a
+#: project's own duplicate, as a job (:meth:`Client.duplicate_project`, see
+#: :meth:`hgis.project.Project.duplicate`); and a project's whole layer
+#: stacking order, written wholesale (:meth:`Client.reorder_layers`, see
+#: :meth:`hgis.project.Project.reorder_layers` and
+#: :meth:`hgis.project.Project.move_layer` for moving one layer without
+#: naming every other). Every other method or path is refused before it
+#: reaches the network -- the maintenance endpoints among them, which have
+#: no project, layer or object behind them and which no stage opens.
 #:
 #: A deleted project has no trash behind it, the same as a purged layer --
 #: :meth:`Client.delete_project` is as final as :meth:`Client.purge_layer`
@@ -233,6 +239,9 @@ _ALLOWED: tuple[tuple[str, str], ...] = (
     # --- Paket A (Aufgabe 21): Objekt teilen und Objekte zusammenführen ---
     ("POST", rf"/api/layers/{_UUID}/features/\d+/split"),
     ("POST", rf"/api/layers/{_UUID}/features/merge"),
+    # --- Paket B (Aufgabe 21): Projekt duplizieren, Layer neu ordnen ---
+    ("POST", rf"/api/projects/{_UUID}/duplicate"),
+    ("PUT", rf"/api/projects/{_UUID}/layers/order"),
 )
 
 
@@ -257,9 +266,11 @@ def _check_allowed(method: str, url: str) -> None:
         "ein Stapel Objekt-Änderungen (layer.edit(), layer.insert(), "
         "layer.update_feature(), layer.delete_features()), ein Objekt teilen "
         "oder mehrere zusammenführen (layer.split(), layer.merge()), ein Feld "
-        "anlegen oder löschen (layer.create_field(), layer.delete_field()) "
-        "sowie Daten hereinholen (project.inspect_import(), "
-        "project.import_file(), project.import_geoportal())."
+        "anlegen oder löschen (layer.create_field(), layer.delete_field()), "
+        "Daten hereinholen (project.inspect_import(), project.import_file(), "
+        "project.import_geoportal()), ein Projekt duplizieren "
+        "(project.duplicate()) sowie die Layer-Reihenfolge eines Projekts "
+        "neu setzen (project.reorder_layers(), project.move_layer())."
     )
 
 
@@ -1132,6 +1143,40 @@ class Client:
         if name is not None:
             body["name"] = name
         return self._send("POST", f"/api/projects/{project_id}/geoportal-imports", json=body)
+
+    # --- Paket 21-B: Projekt duplizieren, Layer neu ordnen -----------------
+
+    def duplicate_project(self, project_id: str, *, name: str | None = None) -> Any:
+        """
+        Start copying a whole project into a new, independent one. See
+        :meth:`hgis.project.Project.duplicate`, which wraps the answer in a
+        :class:`hgis.jobs.Job` -- this hands back the raw job body, PENDING,
+        the same shape :meth:`start_import` does for an import.
+
+        :param name: the new project's name. None names it the way the
+            duplicate button in the UI does -- ``"<Name> (Kopie)"``, then
+            ``"<Name> (Kopie 2)"`` and so on -- chosen by the server, not here
+        """
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        return self._send("POST", f"/api/projects/{project_id}/duplicate", json=body)
+
+    def reorder_layers(self, project_id: str, layer_ids_bottom_to_top: Iterable[str]) -> Any:
+        """
+        Write a whole project's layer stacking order in one call. See
+        :meth:`hgis.project.Project.reorder_layers`, which is how to call
+        this, and :meth:`hgis.project.Project.move_layer` for moving one
+        layer without naming every other.
+
+        :param layer_ids_bottom_to_top: every layer this project has, each
+            exactly once, lowest first. The server refuses the write
+            outright -- nothing changes -- for a list that leaves one out,
+            names an unknown id, or repeats one; there is no partial
+            reorder.
+        """
+        body = {"layerIdsBottomToTop": list(layer_ids_bottom_to_top)}
+        return self._send("PUT", f"/api/projects/{project_id}/layers/order", json=body)
 
     # --- the live channel ----------------------------------------------
 
