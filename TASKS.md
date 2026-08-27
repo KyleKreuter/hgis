@@ -85,6 +85,12 @@ grüne Probe bedeutet nichts.
 **Die Sicherung wird nach dem Fix angelegt**, nicht davor — sonst vergleicht der Diff
 gegen den unreparierten Stand.
 
+**Ein Frontend-Lauf sind drei Befehle, nicht zwei:** `npx tsc -b --noEmit`,
+`npm run lint` und `npx vitest run`. Der Lint-Schritt läuft als
+`oxlint --deny-warnings`, also bricht jede Warnung die CI. Am 27.08. hat er einen
+zweiten Export in einer Komponentendatei bemängelt, den Typprüfung und Tests beide
+durchgelassen hatten.
+
 **Ausführen statt lesen.** `python/README.md` ist ausführbar; jedes Beispiel darin läuft
 wirklich. Drei Stellen sind als Illustration gekennzeichnet
 (`grep -n "^# Illustration" python/README.md`) und laufen nicht.
