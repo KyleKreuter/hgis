@@ -29,8 +29,13 @@ const GERMAN_STATE_NAMES: Record<string, string> = {
  * covers the whole world needs no caveat. Falls back to the raw code for a value this
  * table does not know (a coverage list can grow; a missing name must not hide the
  * caveat entirely).
+ *
+ * Not exported: only `BasemapEntryDetails` below renders this, and a file that exports
+ * anything besides its components loses Fast Refresh (`oxlint --deny-warnings` fails
+ * the build over it). Should a second caller ever need it, it moves to its own module
+ * rather than becoming a second export here.
  */
-export function coverageHint(coverage: BasemapCoverage): string | null {
+function coverageHint(coverage: BasemapCoverage): string | null {
   if (coverage === 'world') return null
   if (coverage === 'DE') return 'Nur Deutschland'
   if (coverage === 'EU') return 'Nur EU'
