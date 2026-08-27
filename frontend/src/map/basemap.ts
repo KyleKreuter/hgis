@@ -9,13 +9,16 @@ import type {
  * works without an API key -- no account, no token, nothing to configure before the
  * app can draw a map.
  *
- * Two candidates for the light/dark pair were checked and rejected: CARTO's Positron
- * and Dark Matter serve without a key, but their terms require an Enterprise licence
- * for commercial use, and Stamen's tiles moved behind a Stadia Maps key in 2023.
- * Since neither is dependable, "hell" and "dunkel" are rendered from the very same OSM
- * raster tiles through MapLibre's raster paint properties. They are display variants,
- * not separate cartography -- labelled as such in the picker so nobody expects a
- * purpose-built grey or night style.
+ * Two candidates for the light/dark pair were checked and rejected. Stamen's tiles
+ * moved behind a Stadia Maps key in 2023. CARTO's Positron and Dark Matter still answer
+ * without a key, but no longer serve usable tiles: since a rate-limit change, every
+ * response carries a diagonal "API KEY REQUIRED" watermark across the whole tile
+ * (checked 27.08.) -- not an Enterprise-licence restriction as this comment used to
+ * say, an outright product change that makes the tiles unusable regardless of licence
+ * tier. Since neither is dependable, "hell" and "dunkel" are rendered from the very
+ * same OSM raster tiles through MapLibre's raster paint properties. They are display
+ * variants, not separate cartography -- labelled as such in the picker so nobody
+ * expects a purpose-built grey or night style.
  *
  * Attribution is rendered as our own element (see `MapCanvas`) instead of MapLibre's
  * default `AttributionControl`, in line with "eigene Bedienelemente statt der
