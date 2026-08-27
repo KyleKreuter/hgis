@@ -18,7 +18,7 @@ Phasenberichte. Diese Datei ersetzt ihn nicht.
 
 | Teil | Tests | Wie prüfen |
 |---|---|---|
-| Backend (Spring Boot 4.1, Java) | **1198** | `cd backend && ./mvnw test` |
+| Backend (Spring Boot 4.1, Java) | **1199** | `cd backend && ./mvnw test` |
 | Frontend (React 19, TypeScript) | **1306** | `cd frontend && npx vitest run` |
 | Python-Bibliothek und MCP-Server | **506** | `cd python && .venv/bin/python -m pytest -q` |
 
