@@ -43,6 +43,21 @@ class BasemapUrlTemplateTest {
 				.doesNotThrowAnyException();
 	}
 
+	/**
+	 * The exact shape {@code frontend/src/map/wmsTiles.ts#buildWmsGetMapUrl} already
+	 * builds for a Kartenbild layer (comma-joined {@code LAYERS}, {@code TRANSPARENT=TRUE},
+	 * unencoded) -- team lead's instruction 27.08.: this check must accept what that
+	 * function produces, not just the simplified form used elsewhere in this test class.
+	 */
+	@Test
+	void acceptsTheExactWmsTilesTsShape() {
+		assertThatCode(() -> BasemapUrlTemplate.requireValid(
+				"https://geodienste.hamburg.de/HH_WMS_Geobasiskarten?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap"
+						+ "&LAYERS=stadtplan,m2500_farbig&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}"
+						+ "&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE"))
+				.doesNotThrowAnyException();
+	}
+
 	/** Both placeholder sets at once is pointless but not rejected -- see the class doc. */
 	@Test
 	void acceptsATemplateWithBothPlaceholderForms() {

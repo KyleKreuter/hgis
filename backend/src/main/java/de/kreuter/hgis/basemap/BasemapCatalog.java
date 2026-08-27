@@ -398,6 +398,14 @@ public final class BasemapCatalog {
 							new AttributionPart(" – § 18 HVGG: „Jede Nutzung der Geobasisdaten und zugehörigen "
 									+ "Metadaten ist ohne Einschränkung oder Bedingung erlaubt.“")),
 					0, 19, COVERAGE_HE, false, false, null),
+			// mv-dop deliberately uses the service path "adv_dop", not "adv_dop20": both
+			// expose a layer literally named mv_dop, so the two are easy to confuse on a
+			// later "fix" pass that assumes the higher number is the newer/better one.
+			// basemap-recherche.md (feature/basemap-recherche, d2f7c10) checked both --
+			// adv_dop's own <Fees> says wörtlich "Es gelten keine Bedingungen" (free);
+			// adv_dop20's says "Nutzungsbedingungen: es gibt keine Eignungs-, nur
+			// Zugriffseinschränkungen. Für die Nutzung können Kosten anfallen." and links
+			// a fee schedule PDF. Only adv_dop belongs in this catalog.
 			new BasemapEntry("mv-dop", "Luftbild Mecklenburg-Vorpommern (DOP)", "Digitales Orthophoto",
 					GROUP_LUFT_UND_SATELLITENBILD,
 					"https://www.geodaten-mv.de/dienste/adv_dop?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=mv_dop&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png",
