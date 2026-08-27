@@ -370,6 +370,38 @@ class EditServiceTest {
 				.hasMessageContaining("Unbekanntes Feld: passwort");
 	}
 
+	/**
+	 * Befund 2 (Validierung, 27.08.), point 3: a property key is resolved by {@link
+	 * de.kreuter.hgis.catalog.LayerFields#require} now, the same case-insensitive, three
+	 * spellings rule the sort parameter and filter expressions already use -- not by an
+	 * exact match against the lower-cased column name a plain map lookup used to require.
+	 * The fixture's field is created as {@code LayerField(layer, "Straße", "strasse", ...)}
+	 * on purpose: display name and column name differ both in case and in spelling
+	 * ("ß" vs "ss"), so a fix that only lower-cased the key would still miss this.
+	 */
+	@Test
+	@DisplayName("a property key matches its field by column name regardless of case")
+	void createsAFeatureWithAPropertyKeyMatchingTheColumnNameInAnyCase() {
+		EditDtos.Response response = apply(creating(SQUARE, Map.of("STRASSE", "Obere Gasse")));
+
+		long fid = response.createdFids().get(-1L);
+		assertThat(queryService.get(layer.getId(), fid).properties()).containsEntry("strasse", "Obere Gasse");
+	}
+
+	/**
+	 * The exact round trip Befund 2 reports: a caller that reads {@code describe_layer}'s
+	 * {@code name} for an existing field -- here "Straße", not its column "strasse" -- and
+	 * writes a new feature back using that same spelling must not be rejected for it.
+	 */
+	@Test
+	@DisplayName("a property key matches its field by its display name, umlaut and all")
+	void createsAFeatureWithAPropertyKeyMatchingTheDisplayName() {
+		EditDtos.Response response = apply(creating(SQUARE, Map.of("Straße", "Untere Gasse")));
+
+		long fid = response.createdFids().get(-1L);
+		assertThat(queryService.get(layer.getId(), fid).properties()).containsEntry("strasse", "Untere Gasse");
+	}
+
 	@Test
 	void rejectsAnEmptyBatch() {
 		assertThatThrownBy(() -> apply(new EditDtos.Request(null, null, null, false)))
