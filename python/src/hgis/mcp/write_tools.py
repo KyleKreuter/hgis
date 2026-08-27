@@ -1019,9 +1019,13 @@ def set_style(
             description="Aufgebaut wie hgis.Style: renderer, wahlweise labels/opacity/"
             "min_zoom/max_zoom. Vier Renderer-Typen in renderer.type: \"single\" (ein "
             "Symbol für alle Objekte, braucht nur symbol), \"categorized\" (ein Symbol "
-            "je Attributwert, braucht field und categories), \"graduated\" (ein Symbol "
-            'je Wertebereich, braucht field und classes), "heatmap" (Dichte statt '
-            "einzelner Symbole, braucht field, radius und ramp). Muss angegeben werden, "
+            "je Attributwert, braucht field, categories und fallback_symbol), "
+            '"graduated" (ein Symbol je Wertebereich, braucht field, classes und '
+            'fallback_symbol), "heatmap" (Dichte statt einzelner Symbole, braucht '
+            "field, radius und ramp). fallback_symbol färbt jedes Objekt, das keine "
+            "Kategorie oder Klasse trifft, etwa bei fehlendem Attributwert -- der "
+            "Server lehnt categorized/graduated ohne fallback_symbol mit einem 400 ab. "
+            "Muss angegeben werden, "
             "darf aber ausdrücklich null sein -- das setzt den Layer auf die monochrome "
             'Standarddarstellung zurück. Heatmap-Beispiel: {"renderer": {"type": '
             '"heatmap", "field": "lautstaerke", "ramp": "inferno"}}.'

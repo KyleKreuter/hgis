@@ -162,7 +162,8 @@ class LayerStyleTest {
 
 		patchStyle("""
 				{ "style": { "renderer": { "type": "categorized", "field": "einwohner",
-				  "categories": [ { "value": 1, "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				  "categories": [ { "value": 1, "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ],
+				  "fallbackSymbol": { "kind": "fill", "fillColor": "#cccccc" } } } }
 				""")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.styleVersion").value((int) classified + 1));
@@ -297,7 +298,8 @@ class LayerStyleTest {
 		patchStyle("""
 				{ "style": { "renderer": { "type": "graduated", "field": "Gebäudehöhe",
 				  "classes": [ { "min": 0, "max": 10, "label": "0 – 10",
-				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ],
+				  "fallbackSymbol": { "kind": "fill", "fillColor": "#d4d4d4" } } } }
 				""")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.style.renderer.field").value("gebaeudehoehe"));
@@ -322,7 +324,8 @@ class LayerStyleTest {
 		patchStyle("""
 				{ "style": { "renderer": { "type": "graduated", "field": "Gebäudehöhe",
 				  "classes": [ { "min": 0, "max": 10, "label": "0 – 10",
-				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ],
+				  "fallbackSymbol": { "kind": "fill", "fillColor": "#d4d4d4" } } } }
 				""")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.style.renderer.field").value("gebaeudehoehe"));
@@ -471,7 +474,8 @@ class LayerStyleTest {
 				    { "value": "Wohnen", "symbol": { "kind": "fill", "fillColor": "#e74c3c" } },
 				    { "value": null, "label": "Ohne Angabe",
 				      "symbol": { "kind": "fill", "fillColor": "#999999" } },
-				    { "label": "Wert nie gewählt" } ] } } }
+				    { "label": "Wert nie gewählt" } ],
+				  "fallbackSymbol": { "kind": "fill", "fillColor": "#cccccc" } } } }
 				""")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.style.renderer.categories", Matchers.hasSize(3)))
@@ -491,7 +495,8 @@ class LayerStyleTest {
 	void anEmptyCategoryListIsKept() throws Exception {
 		patchStyle("""
 				{ "style": { "renderer": { "type": "categorized", "field": "nutzungsart",
-				  "categories": [] } } }
+				  "categories": [],
+				  "fallbackSymbol": { "kind": "fill", "fillColor": "#cccccc" } } } }
 				""")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.style.renderer.categories", Matchers.hasSize(0)));
@@ -502,7 +507,8 @@ class LayerStyleTest {
 	void numericCategoryValuesKeepTheirType() throws Exception {
 		patchStyle("""
 				{ "style": { "renderer": { "type": "categorized", "field": "einwohner",
-				  "categories": [ { "value": 100, "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				  "categories": [ { "value": 100, "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ],
+				  "fallbackSymbol": { "kind": "fill", "fillColor": "#cccccc" } } } }
 				""")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.style.renderer.categories[0].value").value(100))
@@ -531,7 +537,8 @@ class LayerStyleTest {
 				{ "style": { "renderer": { "type": "graduated", "field": "gebaeudehoehe",
 				  "method": "equalInterval", "classCount": 5, "ramp": "viridis",
 				  "classes": [ { "min": 0, "max": 10, "label": "0 – 10",
-				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ],
+				  "fallbackSymbol": { "kind": "fill", "fillColor": "#d4d4d4" } } } }
 				""")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.style.renderer.method").value("equalInterval"))
@@ -552,7 +559,8 @@ class LayerStyleTest {
 				{ "style": { "renderer": { "type": "categorized", "field": "nutzungsart",
 				  "palette": "categorical",
 				  "categories": [ { "value": "Wohnen",
-				                     "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				                     "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ],
+				  "fallbackSymbol": { "kind": "fill", "fillColor": "#cccccc" } } } }
 				""")
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.style.renderer.palette").value("categorical"));
@@ -632,7 +640,8 @@ class LayerStyleTest {
 				{ "style": { "renderer": { "type": "graduated", "field": "gebaeudehoehe",
 				  "ramp": "rainbow",
 				  "classes": [ { "min": 0, "max": 10,
-				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ],
+				  "fallbackSymbol": { "kind": "fill", "fillColor": "#d4d4d4" } } } }
 				""")
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.detail").value("Unbekannter Farbverlauf für ramp: rainbow. "
@@ -674,6 +683,33 @@ class LayerStyleTest {
 	void rejectsAnUnknownRendererType() throws Exception {
 		patchStyle("""
 				{ "style": { "renderer": { "type": "pie", "field": "einwohner" } } }
+				""").andExpect(status().isBadRequest());
+	}
+
+	/**
+	 * A stored renderer without {@code fallbackSymbol} used to reach the frontend, where
+	 * every object outside the classification reads {@code renderer.fallbackSymbol.kind}
+	 * -- costing not just the layer but the whole map (`styleToMapLibre.ts`). Rejecting it
+	 * here, the same way a missing {@code symbol} already is for "single", is what keeps
+	 * that document from ever being stored in the first place.
+	 */
+	@Test
+	@DisplayName("a categorized renderer without fallbackSymbol is rejected, not stored")
+	void rejectsACategorizedRendererWithoutAFallbackSymbol() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "categorized", "field": "nutzungsart",
+				  "categories": [ { "value": "Wohnen", "label": "Wohnbebauung",
+				                    "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
+				""").andExpect(status().isBadRequest());
+	}
+
+	@Test
+	@DisplayName("a graduated renderer without fallbackSymbol is rejected, not stored")
+	void rejectsAGraduatedRendererWithoutAFallbackSymbol() throws Exception {
+		patchStyle("""
+				{ "style": { "renderer": { "type": "graduated", "field": "einwohner",
+				  "classes": [ { "min": 0, "max": 10, "label": "0 – 10",
+				                 "symbol": { "kind": "fill", "fillColor": "#e74c3c" } } ] } } }
 				""").andExpect(status().isBadRequest());
 	}
 

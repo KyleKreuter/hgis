@@ -18,7 +18,7 @@ import {
   withSharedSymbolShape,
 } from './classification'
 import { ColorInput, Row } from './controls'
-import { primaryColorOf, withPrimaryColor } from './defaults'
+import { DEFAULT_FILL, primaryColorOf, withPrimaryColor } from './defaults'
 import { formatCategoryValue } from './fields'
 import { PaletteSelect } from './PaletteSelect'
 import { paletteColors, resolvePaletteId } from './palettes'
@@ -56,6 +56,12 @@ export function CategorizedEditor({
   // empty list may not arrive as `[]` at all. `undefined.length` here would take the
   // whole workspace down over an edge case that costs one line to survive.
   const categories = renderer.categories ?? []
+  // Same defensive fallback, for the same reason -- and the one `styleToMapLibre.ts`'s
+  // `dataDriven` already uses for the identical gap: an older stored style, or a client
+  // that bypassed validation, can still lack `fallbackSymbol` even though the schema
+  // requires it (`LayerStyleService.validateRenderer`). `renderer.fallbackSymbol` is
+  // never read directly below this line, only through this constant.
+  const fallbackSymbol = renderer.fallbackSymbol ?? DEFAULT_FILL
   const [values, setValues] = useState<ValuesState>({ isFetching: false, isError: false })
 
   // No `useEffect` here on purpose (CONTRACT.md, package B1), same as `GraduatedEditor`.
@@ -99,7 +105,7 @@ export function CategorizedEditor({
         nextField,
         resolved,
         existingCategories,
-        renderer.fallbackSymbol,
+        fallbackSymbol,
       )
       setValues({ isFetching: false, isError: false, data: result })
       setPalette(resolved)
@@ -165,7 +171,7 @@ export function CategorizedEditor({
       {
         ...renderer,
         categories: withSharedSymbol(categories, symbol),
-        fallbackSymbol: withSharedSymbolShape(renderer.fallbackSymbol, symbol),
+        fallbackSymbol: withSharedSymbolShape(fallbackSymbol, symbol),
       },
       options,
     )
@@ -233,7 +239,7 @@ export function CategorizedEditor({
         // Colour comes from the palette, per category below -- everything else (size,
         // width, ...) is one shared symbol, edited here for every category (and the
         // fallback) at once.
-        <SymbolEditor symbol={sharedSymbolOf(categories, renderer.fallbackSymbol)} onChange={setSharedSymbol} hideColor />
+        <SymbolEditor symbol={sharedSymbolOf(categories, fallbackSymbol)} onChange={setSharedSymbol} hideColor />
       )}
 
       {categories.length > 0 && (
@@ -274,10 +280,10 @@ export function CategorizedEditor({
 
       <Row label="Sonstige">
         <ColorInput
-          value={primaryColorOf(renderer.fallbackSymbol)}
+          value={primaryColorOf(fallbackSymbol)}
           onChange={(color, options) =>
             onChange(
-              { ...renderer, fallbackSymbol: withPrimaryColor(renderer.fallbackSymbol, color) },
+              { ...renderer, fallbackSymbol: withPrimaryColor(fallbackSymbol, color) },
               options,
             )
           }

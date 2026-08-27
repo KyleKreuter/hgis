@@ -64,6 +64,38 @@ def test_every_tool_has_a_description() -> None:
     assert not missing, f"Werkzeuge ohne Beschreibung: {missing}"
 
 
+def test_set_style_names_fallback_symbol_for_categorized_and_graduated() -> None:
+    """
+    The bug found on the running system: an agent following ``set_style``'s
+    own description built a ``categorized``/``graduated`` renderer without
+    ``fallback_symbol``, because the description only named ``field`` and
+    ``categories``/``classes`` as required. The server now refuses that
+    document with an HTTP 400 (``LayerStyleService.validateRenderer``), but a
+    document that never leaves this library because the description already
+    named the missing member is the better failure -- one round trip earlier,
+    with a docstring instead of a stack trace.
+    """
+    import asyncio
+
+    from hgis.mcp import read_tools, write_tools  # noqa: F401
+    from hgis.mcp.server import server
+
+    tools = asyncio.run(server.list_tools())
+    set_style = next(tool for tool in tools if tool.name == "set_style")
+    description = set_style.input_schema["properties"]["style"]["description"]
+
+    for renderer_type in ("categorized", "graduated"):
+        assert f'"{renderer_type}"' in description, (
+            f"set_style nennt den Renderer-Typ {renderer_type} nicht: {description}"
+        )
+        marker = description.index(f'"{renderer_type}"')
+        clause_end = description.index(")", marker)
+        clause = description[marker:clause_end]
+        assert "fallback_symbol" in clause, (
+            f"set_style nennt fallback_symbol nicht als Pflichtfeld für {renderer_type}: {clause}"
+        )
+
+
 def test_tool_names_are_unique() -> None:
     from hgis.mcp.server import registered_tool_names
 

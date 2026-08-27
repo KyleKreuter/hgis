@@ -1,5 +1,5 @@
 import type { GeometryType, LayerField } from '@/api/layers'
-import { DEFAULT_HEATMAP_INTENSITY, DEFAULT_HEATMAP_RADIUS, defaultSymbolFor, withPrimaryColor } from './defaults'
+import { DEFAULT_FILL, DEFAULT_HEATMAP_INTENSITY, DEFAULT_HEATMAP_RADIUS, defaultSymbolFor, withPrimaryColor } from './defaults'
 import { isNumericField } from './fields'
 import { DEFAULT_RAMP } from './palettes'
 import type { LayerStyle, LayerSymbol, Renderer, RendererType } from './types'
@@ -15,7 +15,12 @@ export const FALLBACK_COLOR = '#a3a3a3'
 function symbolOf(renderer: Renderer, geometryType: GeometryType): LayerSymbol {
   if (renderer.type === 'single') return renderer.symbol
   if (renderer.type === 'heatmap') return defaultSymbolFor(geometryType)
-  return renderer.fallbackSymbol
+  // A stored categorized/graduated renderer can still be missing fallbackSymbol -- an
+  // older row, or a client that bypassed validation, from before the server started
+  // requiring it (`LayerStyleService.validateRenderer`). Same fallback
+  // `styleToMapLibre.ts`'s `dataDriven` uses for the identical gap, so switching such a
+  // renderer to "single" degrades to the same grey instead of crashing the panel.
+  return renderer.fallbackSymbol ?? DEFAULT_FILL
 }
 
 /**

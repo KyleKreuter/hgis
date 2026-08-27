@@ -246,7 +246,9 @@ class Renderer:
         canonicalises it to the column name, the same as a filter would
     :param categories: value to symbol, for categorized
     :param classes: numeric ranges to symbol, for graduated
-    :param fallback_symbol: used for everything no category or class covers
+    :param fallback_symbol: used for everything no category or class covers.
+        Required for categorized and graduated -- the server refuses either one
+        without it with an HTTP 400
     :param method: graduated only -- which of ``/classify``'s methods
         computed ``classes``: quantile, equalInterval or naturalBreaks
     :param class_count: graduated only -- how many classes ``method`` was
