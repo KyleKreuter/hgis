@@ -95,6 +95,43 @@ class GoldFilterExpressionsTest {
 		assertThat(rejected).as("expressions the parser rejects").isEmpty();
 	}
 
+	/**
+	 * The training data is generated, and its own generator only checks the shape of an
+	 * expression against the grammar it emits. This runs a versioned sample of it through
+	 * the parser that actually serves the query, which is the only authority on what the
+	 * product accepts.
+	 */
+	@Test
+	@DisplayName("every expression in the training sample parses")
+	void everyTrainingSampleExpressionParses() throws IOException {
+		List<String> rejected = new ArrayList<>();
+
+		for (String line : Files.readAllLines(EVAL.resolve("train-sample.jsonl"), StandardCharsets.UTF_8)) {
+			if (line.isBlank()) {
+				continue;
+			}
+			JsonNode node = JSON.readTree(line);
+			// The sample carries its own field list: its schemas are generated and live
+			// in `ai/generator`, not in `schemas.json`.
+			List<LayerField> fields = new ArrayList<>();
+			int ordinal = 0;
+			for (JsonNode field : node.get("fields")) {
+				String name = field.get("name").asText();
+				fields.add(new LayerField(null, name, name.toLowerCase().replaceAll("[^a-z0-9]+", "_"),
+						field.get("type").asText(), ordinal++));
+			}
+			String expression = node.get("expression").asText();
+			try {
+				assertThat(FilterParser.parse(expression, fields)).isNotNull();
+			}
+			catch (RuntimeException ex) {
+				rejected.add(expression + "\n      " + ex.getMessage());
+			}
+		}
+
+		assertThat(rejected).as("training expressions the parser rejects").isEmpty();
+	}
+
 	@Test
 	@DisplayName("the set stays large enough and spread over every schema")
 	void theSetCoversEverySchema() throws IOException {
