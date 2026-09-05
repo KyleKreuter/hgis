@@ -144,6 +144,19 @@ class FilterParserTest {
 			assertThat(filter.parameters()).containsEntry("f0", 12.5);
 		}
 
+		/**
+		 * The quotes above are optional, and saying so in the class doc is not enough: an
+		 * umlaut is a letter to {@link Character#isLetter}, so {@code readWord} carries it
+		 * into the identifier like any other. Only a space forces the quoted form.
+		 */
+		@Test
+		void readsAFieldNameWithUmlautsWithoutQuotesToo() {
+			ParsedFilter filter = parse("Gebäudehöhe > 12.5");
+
+			assertThat(filter.sql()).isEqualTo("\"gebaeudehoehe\" > :f0");
+			assertThat(filter.parameters()).containsEntry("f0", 12.5);
+		}
+
 		@Test
 		void matchesFieldNamesRegardlessOfCase() {
 			assertThat(parse("NAME = 'A'").sql()).isEqualTo("\"name\" = :f0");

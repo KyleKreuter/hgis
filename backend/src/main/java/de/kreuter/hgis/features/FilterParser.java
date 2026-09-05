@@ -33,8 +33,10 @@ import java.util.regex.Pattern;
  *
  * <p>Supported: comparisons ({@code = <> != < <= > >=}), {@code LIKE}/{@code ILIKE},
  * {@code IS [NOT] NULL}, {@code IN (…)}, {@code AND}, {@code OR}, {@code NOT} and
- * parentheses. Field names containing spaces or umlauts go in double quotes, values in
- * single quotes: {@code "Gebäudehöhe" > 10 AND nutzung LIKE 'Wohn%'}.
+ * parentheses. Field names containing spaces go in double quotes, values in single
+ * quotes: {@code "Fläche in m2" > 10 AND nutzung LIKE 'Wohn%'}. Umlauts need no quotes --
+ * {@code readWord} reads any letter {@link Character#isLetter} accepts, so
+ * {@code Gebäudehöhe > 10} resolves like any other name. Quoting one anyway still works.
  *
  * <p>A field id may be written where a name may, and without quotes:
  * {@code 019ff731-1f0c-7de5-9100-b9022e19ea3f > 10}. That is what the message about an
